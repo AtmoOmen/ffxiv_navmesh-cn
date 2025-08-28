@@ -102,9 +102,10 @@ public class NavmeshQuery
         }
     }
 
-    public readonly DtNavMeshQuery MeshQuery;
-    public readonly VoxelPathfind? VolumeQuery;
-    private readonly IDtQueryFilter filter;
+    public readonly  DtNavMeshQuery MeshQuery;
+    public readonly  VoxelPathfind? VolumeQuery;
+    private readonly IDtQueryFilter obstacleFilter;
+    private readonly IDtQueryFilter defaultFilter = new DtQueryDefaultFilter();
 
     public  List<long> LastPath => lastPath;
     private List<long> lastPath = [];
@@ -112,7 +113,7 @@ public class NavmeshQuery
     public NavmeshQuery(Navmesh navmesh)
     {
         MeshQuery = new(navmesh.Mesh);
-        filter = new ObstacleAvoidanceFilter(navmesh.Mesh);
+        obstacleFilter = new ObstacleAvoidanceFilter(navmesh.Mesh);
         if (navmesh.Volume != null)
             VolumeQuery = new(navmesh.Volume);
     }
@@ -134,6 +135,12 @@ public class NavmeshQuery
         IDtQueryHeuristic heuristic    = range > 0 ? new ToleranceHeuristic(range) : DtDefaultQueryHeuristic.Default;
         var               options      = useRaycast ? DtFindPathOptions.DT_FINDPATH_ANY_ANGLE : 0;
         var               raycastLimit = useRaycast ? 10 : 0;
+
+        var filter = Service.Config.MeshFilterType switch
+        {
+            1 => obstacleFilter,
+            _ => defaultFilter
+        };
         
         var opt = new DtFindPathOption(heuristic, options, raycastLimit);
         MeshQuery.FindPath(startRef, endRef, from.SystemToRecast(), to.SystemToRecast(), filter, ref lastPath, opt);
@@ -150,23 +157,40 @@ public class NavmeshQuery
 
         if (useStringPulling)
         {
-            var pathPoints = new List<Vector3>(lastPath.Count);
-            foreach (var t in lastPath)
+            switch (Service.Config.PullStringType)
             {
-                var  polyCenter = MeshQuery.GetAttachedNavMesh().GetPolyCenter(t);
-                pathPoints.Add(polyCenter.RecastToSystem());
-            }
+                case 1:
+                    var pathPoints = new List<Vector3>(lastPath.Count);
+                    foreach (var t in lastPath)
+                    {
+                        var  polyCenter = MeshQuery.GetAttachedNavMesh().GetPolyCenter(t);
+                        pathPoints.Add(polyCenter.RecastToSystem());
+                    }
             
-            if (pathPoints.Count > 0)
-            {
-                // 确保起点和终点正确
-                pathPoints[0] = from;
-                if (pathPoints.Count > 1)
-                    pathPoints[^1] = to;
-                else
-                    pathPoints.Add(to);
+                    if (pathPoints.Count > 0)
+                    {
+                        // 确保起点和终点正确
+                        pathPoints[0] = from;
+                        if (pathPoints.Count > 1)
+                            pathPoints[^1] = to;
+                        else
+                            pathPoints.Add(to);
                     
-                return ApplyMeshStringPulling(pathPoints, to);
+                        return ApplyMeshStringPulling(pathPoints, to);
+                    }
+                    break;
+                default:
+                    var straightPath = new List<DtStraightPath>();
+                    var success      = MeshQuery.FindStraightPath(from.SystemToRecast(), endPos, lastPath, ref straightPath, 1024, 0);
+                    if (success.Failed())
+                        Service.Log.Error($"从 {from} ({startRef:X}) 到 {to} ({endRef:X}) 的路径查找失败：无法找到直线路径 ({success.Value:X})");
+                    else
+                    {
+                        var processed = straightPath.Select(p => p.pos.RecastToSystem()).ToList();
+                        processed.Add(endPos.RecastToSystem());
+                        return processed;
+                    }
+                    break;
             }
         }
         
@@ -275,30 +299,16 @@ public class NavmeshQuery
         if (pathPoints.Count <= 2)
             return pathPoints;
 
-        var result = new List<Vector3> { pathPoints[0] };
-        const int segmentSize = 8; // 每段的最大长度
-        
-        for (var segmentStart = 0; segmentStart < pathPoints.Count - 1; )
-        {
-            var segmentEnd = Math.Min(segmentStart + segmentSize, pathPoints.Count - 1);
-            
-            // 对当前段进行拉绳优化
-            var segmentOptimized = OptimizePathSegment(pathPoints, segmentStart, segmentEnd);
-            
-            // 添加优化后的段落点（跳过第一个点以避免重复）
-            for (var i = segmentStart == 0 ? 1 : 0; i < segmentOptimized.Count; i++)
-                result.Add(segmentOptimized[i]);
-            
-            segmentStart = segmentEnd;
-        }
-        
-        // 确保终点在路径中
+        List<Vector3> result = [pathPoints[0]];
+    
+        var optimizedPath = OptimizePathSegment(pathPoints, 0, pathPoints.Count - 1);
+        for (var i = 1; i < optimizedPath.Count; i++)
+            result.Add(optimizedPath[i]);
+    
         if ((result[^1] - destination).LengthSquared() > 0.01f)
             result.Add(destination);
-        
-        // 应用拐角插值以提升平滑度
+    
         result = ApplyCornerInterpolation(result);
-            
         return result;
     }
     
@@ -340,7 +350,7 @@ public class NavmeshQuery
             
         // 使用DtNavMeshQuery的射线检测
         var path = new List<long>();
-        var result = MeshQuery.Raycast(fromPoly, from.SystemToRecast(), to.SystemToRecast(), filter, out var t, out _, ref path);
+        var result = MeshQuery.Raycast(fromPoly, from.SystemToRecast(), to.SystemToRecast(), obstacleFilter, out var t, out _, ref path);
         
         // 如果射线检测成功且没有碰撞（t >= 1.0表示到达终点），则可以直接到达
         return result.Succeeded() && t >= 1.0f;
@@ -433,7 +443,7 @@ public class NavmeshQuery
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public long FindNearestMeshPoly(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5)
     {
-        MeshQuery.FindNearestPoly(p.SystemToRecast(), new(halfExtentXZ, halfExtentY, halfExtentXZ), filter, out var nearestRef, out _, out _);
+        MeshQuery.FindNearestPoly(p.SystemToRecast(), new(halfExtentXZ, halfExtentY, halfExtentXZ), obstacleFilter, out var nearestRef, out _, out _);
         return nearestRef;
     }
 
@@ -441,7 +451,7 @@ public class NavmeshQuery
     public List<long> FindIntersectingMeshPolys(Vector3 p, Vector3 halfExtent)
     {
         IntersectQuery query = new();
-        MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), filter, query);
+        MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), obstacleFilter, query);
         return query.Result;
     }
 

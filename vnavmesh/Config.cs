@@ -28,6 +28,8 @@ public class Config
     // 地面Mesh寻路自动重算配置
     public bool  EnableAutoRecalculateGroundPath;  // 是否启用自动重算
     public float AutoRecalculateIntervalMs = 500f; // 自动重算时间间隔(ms)
+    public int   PullStringType;
+    public int   MeshFilterType = 1;
 
     public event Action? Modified;
 
@@ -119,6 +121,24 @@ public class Config
             if (ImGui.IsItemHovered())
                 ImGui.SetTooltip("地面寻路过程中, 每隔固定时间发送一次重算请求, 这会导致已有的卡寻路检测完全失效并和某些插件的兼容性下降, 但在大部分时候会有相对更佳的表现, 如果你平时地面寻路时间就已经较长, 请勿开启本项");
         }
+        
+        ImGui.Text("拉绳处理类型 (地面)");
+        
+        if (ImGui.RadioButton("最短路径", ref PullStringType, 0))
+            NotifyModified();
+        
+        ImGui.SameLine();
+        if (ImGui.RadioButton("尝试与墙体保持距离", ref PullStringType, 1))
+            NotifyModified();
+        
+        ImGui.Text("路网计算类型");
+        
+        if (ImGui.RadioButton("默认", ref MeshFilterType, 0))
+            NotifyModified();
+        
+        ImGui.SameLine();
+        if (ImGui.RadioButton("自然避障", ref MeshFilterType, 1))
+            NotifyModified();
     }
 
     public void Save(FileInfo file)

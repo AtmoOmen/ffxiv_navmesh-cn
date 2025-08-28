@@ -393,12 +393,11 @@ public class FollowPath : IDisposable
         // 检查是否有有效路径
         if (Waypoints.Count <= 2)
             return;
-
+        
         LastAutoRecalculateTime = now;
 
         var destination = Waypoints.Last();
-        // Waypoints.Clear();
-        // Movement.Enabled = false;
+        Movement.Enabled = false;
         
         Service.Log.Debug($"自动重算地面路径: 从 {currentPos} 到 {destination}");
         RequestPathRecalculation?.Invoke(currentPos, destination, IgnoreDeltaY);
@@ -887,6 +886,7 @@ public class FollowPath : IDisposable
         if (player != null)
         {
             LastSignificantPosition     = player.Position;
+            Waypoints[0]                = player.Position;
             LastMovementTime            = DateTime.Now;
             LastSignificantMovementTime = DateTime.Now;
         }
