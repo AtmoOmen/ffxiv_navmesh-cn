@@ -83,14 +83,6 @@ public class NavmeshQuery
         {
             if (poly.GetPolyType() == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
                 return;
-
-            // 计算多边形到中心点的最小距离
-            var vertIndex = poly.verts[0];
-            var v0 = new RcVec3f(
-                tile.data.verts[vertIndex * 3],
-                tile.data.verts[vertIndex * 3 + 1],
-                tile.data.verts[vertIndex * 3 + 2]
-            );
             
             for (var i = 0; i < poly.vertCount; i++)
             {
@@ -139,10 +131,9 @@ public class NavmeshQuery
         var timer = Timer.Create();
         lastPath.Clear();
 
-        // 根据range参数选择合适的启发式算法，支持容差范围内的寻路优化
-        IDtQueryHeuristic heuristic = range > 0 ? new ToleranceHeuristic(range) : DtDefaultQueryHeuristic.Default;
-        var options = useRaycast ? DtFindPathOptions.DT_FINDPATH_ANY_ANGLE : 0;
-        var raycastLimit = useRaycast ? 10 : 0;
+        IDtQueryHeuristic heuristic    = range > 0 ? new ToleranceHeuristic(range) : DtDefaultQueryHeuristic.Default;
+        var               options      = useRaycast ? DtFindPathOptions.DT_FINDPATH_ANY_ANGLE : 0;
+        var               raycastLimit = useRaycast ? 10 : 0;
         
         var opt = new DtFindPathOption(heuristic, options, raycastLimit);
         MeshQuery.FindPath(startRef, endRef, from.SystemToRecast(), to.SystemToRecast(), filter, ref lastPath, opt);
@@ -159,23 +150,36 @@ public class NavmeshQuery
 
         if (useStringPulling)
         {
-            var straightPath = new List<DtStraightPath>();
-            var success      = MeshQuery.FindStraightPath(from.SystemToRecast(), endPos, lastPath, ref straightPath, 1024, 0);
-            if (success.Failed())
-                Service.Log.Error($"从 {from} ({startRef:X}) 到 {to} ({endRef:X}) 的路径查找失败：无法找到直线路径 ({success.Value:X})");
-
-            var res = straightPath.Select(p => p.pos.RecastToSystem()).ToList();
-            res.Add(endPos.RecastToSystem());
-
-            return res;
+            var pathPoints = new List<Vector3>(lastPath.Count);
+            foreach (var t in lastPath)
+            {
+                var  polyCenter = MeshQuery.GetAttachedNavMesh().GetPolyCenter(t);
+                pathPoints.Add(polyCenter.RecastToSystem());
+            }
+            
+            if (pathPoints.Count > 0)
+            {
+                // 确保起点和终点正确
+                pathPoints[0] = from;
+                if (pathPoints.Count > 1)
+                    pathPoints[^1] = to;
+                else
+                    pathPoints.Add(to);
+                    
+                return ApplyMeshStringPulling(pathPoints, to);
+            }
         }
-        else
+        
+        // 如果拉绳失败或未启用拉绳，返回基本路径
+        var res = new List<Vector3>(lastPath.Count + 1);
+        foreach (var t in lastPath)
         {
-            var res = lastPath.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).ToList();
-            res.Add(endPos.RecastToSystem());
-
-            return res;
+            var polyCenter = MeshQuery.GetAttachedNavMesh().GetPolyCenter(t);
+            res.Add(polyCenter.RecastToSystem());
         }
+
+        res.Add(endPos.RecastToSystem());
+        return res;
     }
 
     public List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, Action<float>? progressCallback, CancellationToken cancel)
@@ -264,6 +268,165 @@ public class NavmeshQuery
         if ((result[^1] - destination).LengthSquared() > 0.01f) result.Add(destination);
 
         return result;
+    }
+
+    private List<Vector3> ApplyMeshStringPulling(List<Vector3> pathPoints, Vector3 destination)
+    {
+        if (pathPoints.Count <= 2)
+            return pathPoints;
+
+        var result = new List<Vector3> { pathPoints[0] };
+        const int segmentSize = 8; // 每段的最大长度
+        
+        for (var segmentStart = 0; segmentStart < pathPoints.Count - 1; )
+        {
+            var segmentEnd = Math.Min(segmentStart + segmentSize, pathPoints.Count - 1);
+            
+            // 对当前段进行拉绳优化
+            var segmentOptimized = OptimizePathSegment(pathPoints, segmentStart, segmentEnd);
+            
+            // 添加优化后的段落点（跳过第一个点以避免重复）
+            for (var i = segmentStart == 0 ? 1 : 0; i < segmentOptimized.Count; i++)
+                result.Add(segmentOptimized[i]);
+            
+            segmentStart = segmentEnd;
+        }
+        
+        // 确保终点在路径中
+        if ((result[^1] - destination).LengthSquared() > 0.01f)
+            result.Add(destination);
+        
+        // 应用拐角插值以提升平滑度
+        result = ApplyCornerInterpolation(result);
+            
+        return result;
+    }
+    
+    private List<Vector3> OptimizePathSegment(List<Vector3> pathPoints, int startIndex, int endIndex)
+    {
+        if (endIndex - startIndex <= 1)
+            return [pathPoints[startIndex], pathPoints[endIndex]];
+            
+        var result = new List<Vector3> { pathPoints[startIndex] };
+        var currentIndex = startIndex;
+        
+        while (currentIndex < endIndex)
+        {
+            var farthestReachable = currentIndex + 1;
+            
+            // 查找当前点能直接到达的最远点
+            for (var i = currentIndex + 2; i <= endIndex; i++)
+            {
+                if (CanReachDirectly(pathPoints[currentIndex], pathPoints[i]))
+                    farthestReachable = i;
+                else
+                    break;
+            }
+            
+            result.Add(pathPoints[farthestReachable]);
+            currentIndex = farthestReachable;
+        }
+        
+        return result;
+    }
+    
+    private bool CanReachDirectly(Vector3 from, Vector3 to)
+    {
+        // 使用射线检测验证两点间是否可以直接连接
+        var fromPoly = FindNearestMeshPoly(from);
+        
+        if (fromPoly == 0)
+            return false;
+            
+        // 使用DtNavMeshQuery的射线检测
+        var path = new List<long>();
+        var result = MeshQuery.Raycast(fromPoly, from.SystemToRecast(), to.SystemToRecast(), filter, out var t, out _, ref path);
+        
+        // 如果射线检测成功且没有碰撞（t >= 1.0表示到达终点），则可以直接到达
+        return result.Succeeded() && t >= 1.0f;
+    }
+    
+    private static List<Vector3> ApplyCornerInterpolation(List<Vector3> pathPoints)
+    {
+        if (pathPoints.Count <= 2)
+            return pathPoints;
+            
+        var result = new List<Vector3> { pathPoints[0] };
+        
+        for (var i = 1; i < pathPoints.Count - 1; i++)
+        {
+            var prevPoint = pathPoints[i - 1];
+            var currentPoint = pathPoints[i];
+            var nextPoint = pathPoints[i + 1];
+            
+            // 检测是否为拐角
+            if (IsCorner(prevPoint, currentPoint, nextPoint))
+            {
+                // 在拐角处添加贝塞尔曲线插值点
+                var interpolatedPoints = GenerateBezierInterpolation(prevPoint, currentPoint, nextPoint);
+                result.AddRange(interpolatedPoints);
+            }
+            else
+            {
+                result.Add(currentPoint);
+            }
+        }
+        
+        result.Add(pathPoints[^1]);
+        return result;
+    }
+    
+    private static bool IsCorner(Vector3 prev, Vector3 current, Vector3 next)
+    {
+        // 计算两个向量的夹角
+        var vec1 = Vector3.Normalize(current - prev);
+        var vec2 = Vector3.Normalize(next - current);
+        
+        // 计算点积得到夹角余弦值
+        var dotProduct = Vector3.Dot(vec1, vec2);
+        
+        // 如果夹角小于150度（余弦值大于-0.866），认为是拐角
+        const float cornerThreshold = -0.866f; // cos(150°)
+        return dotProduct > cornerThreshold;
+    }
+    
+    private static List<Vector3> GenerateBezierInterpolation(Vector3 prev, Vector3 current, Vector3 next)
+    {
+        var result = new List<Vector3>();
+        
+        // 计算控制点
+        var dir1 = Vector3.Normalize(current - prev);
+        var dir2 = Vector3.Normalize(next - current);
+        
+        // 控制点距离为路径段长度的1/3
+        var dist1 = (current - prev).Length() * 0.33f;
+        var dist2 = (next - current).Length() * 0.33f;
+        
+        var controlPoint1 = current - dir1 * dist1;
+        var controlPoint2 = current + dir2 * dist2;
+        
+        // 生成贝塞尔曲线上的点（3个插值点）
+        const int interpolationPoints = 3;
+        for (var i = 1; i <= interpolationPoints; i++)
+        {
+            var t = i / (float)(interpolationPoints + 1);
+            var bezierPoint = CalculateBezierPoint(prev, controlPoint1, controlPoint2, next, t);
+            result.Add(bezierPoint);
+        }
+        
+        return result;
+    }
+    
+    private static Vector3 CalculateBezierPoint(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
+    {
+        // 三次贝塞尔曲线公式
+        var u = 1 - t;
+        var tt = t * t;
+        var uu = u * u;
+        var uuu = uu * u;
+        var ttt = tt * t;
+        
+        return (uuu * p0) + (3 * uu * t * p1) + (3 * u * tt * p2) + (ttt * p3);
     }
 
     // returns 0 if not found, otherwise polygon ref

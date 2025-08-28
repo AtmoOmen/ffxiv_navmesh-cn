@@ -19,11 +19,7 @@ public class DTRProvider(NavmeshManager Manager, AsyncMoveRequest AsyncMove, Fol
         var loadProgress = Manager.LoadTaskProgress;
         var status       = loadProgress >= 0 ? $"构建进度 {loadProgress * 100:f0}%" : Manager.Navmesh != null ? "就绪" : "未就绪";
         
-        if (FollowPath.Waypoints.Count > 0)
-        {
-            status = $"寻路中 (剩余点位: {FollowPath.Waypoints.Count})";
-        }
-        else if (AsyncMove.TaskInProgress)
+        if (AsyncMove.TaskInProgress)
         {
             var pathfindProgress = Manager.PathfindProgress;
             if (pathfindProgress >= 0)
@@ -37,6 +33,10 @@ public class DTRProvider(NavmeshManager Manager, AsyncMoveRequest AsyncMove, Fol
                 var queuedRequests = Manager.NumQueuedPathfindRequests;
                 status = queuedRequests > 0 ? $"路径计算中 (队列: {queuedRequests})" : "路径计算中";
             }
+        }
+        else if (FollowPath.Waypoints.Count is var count and > 0)
+        {
+            status = $"寻路中 (剩余点位: {MathF.Max(1, count - 1)})";
         }
         
         DtrBarEntry.Text = "导航: " + status;

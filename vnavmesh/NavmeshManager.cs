@@ -176,7 +176,7 @@ public sealed class NavmeshManager : IDisposable
             Log($"启动从 {from} 到 {to} 的寻路");
             
             // 创建进度回调委托
-            Action<float> progressCallback = (progress) => UpdatePathfindProgressAtomically(progress);
+            var progressCallback = UpdatePathfindProgressAtomically;
             
             var path = await Task.Run(() =>
             {
@@ -247,13 +247,13 @@ public sealed class NavmeshManager : IDisposable
         var filter    = LayoutUtils.FindFilter(layout);
         var filterKey = filter != null ? filter->Key : 0;
 
-        var terrRow = Service.LuminaRow<Lumina.Excel.Sheets.TerritoryType>(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
+        var terrRow = Service.LuminaRow<TerritoryType>(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
 
         // CE always has a festival layer (i hope). the non-festival layout is briefly loaded when entering the zone, which triggers a useless mesh build since the uninitialized zone is still the same size
         if (terrRow?.TerritoryIntendedUse.RowId == 60)
         {
             var fest = layout->ActiveFestivals[0];
-            if (fest.Id == 0 && fest.Phase == 0)
+            if (fest is { Id: 0, Phase: 0 })
                 return string.Empty;
         }
 
