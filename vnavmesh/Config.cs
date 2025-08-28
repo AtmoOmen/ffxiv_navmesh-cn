@@ -117,7 +117,7 @@ public class Config
             if (ImGui.SliderFloat("重算间隔 (毫秒)", ref AutoRecalculateIntervalMs, 10f, 2000f, "%.0f"))
                 NotifyModified();
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("地面寻路过程中, 每隔固定时间发送一次重算请求, 这会导致已有的卡寻路检测完全失效并和某些插件的兼容性下降, 但在大部分时候会有相对更佳的表现");
+                ImGui.SetTooltip("地面寻路过程中, 每隔固定时间发送一次重算请求, 这会导致已有的卡寻路检测完全失效并和某些插件的兼容性下降, 但在大部分时候会有相对更佳的表现, 如果你平时地面寻路时间就已经较长, 请勿开启本项");
         }
     }
 
