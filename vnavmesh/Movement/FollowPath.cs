@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin;
@@ -52,6 +53,9 @@ public class FollowPath : IDisposable
     private          DateTime LastPathRecalculationTime;                            // 上次重新计算路径的时间
     private readonly TimeSpan PathRecalculationCooldown = TimeSpan.FromSeconds(5f); // 路径重新计算冷却时间
     private          bool     IsFlying;                                             // 当前是否处于飞行状态
+    
+    private DateTime LastAutoRecalculateTime;                                       // 上次自动重算时间
+    private readonly TimeSpan AutoRecalculateCooldown = TimeSpan.FromMilliseconds(50); // 自动重算冷却时间
 
     public event Action<Vector3, Vector3, bool>? RequestPathRecalculation;
     
@@ -73,6 +77,7 @@ public class FollowPath : IDisposable
         NextRecoveryTime            = DateTime.Now;
         LastSignificantMovementTime = DateTime.Now;
         LastPathRecalculationTime   = DateTime.Now;
+        LastAutoRecalculateTime     = DateTime.Now;
     }
 
     public void Dispose()
@@ -300,6 +305,10 @@ public class FollowPath : IDisposable
                 TryRecalculatePath(currentPos, now, true);
             }
         }
+        
+        // 在非卡住状态下，检查是否需要自动重算地面路径
+        if (!IsStuck && !inRecoveryProcess)
+            AutoRecalculateGroundPath(currentPos, now);
     }
 
     private void TryRecalculatePath(Vector3 currentPos, DateTime now, bool forceFindAlternative = false)
@@ -359,6 +368,42 @@ public class FollowPath : IDisposable
             // 重置卡住检测的计时器，避免在计算路径期间触发卡住判定
             LastMovementTime = now;
         }
+    }
+
+    // 自动重算地面路径的方法
+    private void AutoRecalculateGroundPath(Vector3 currentPos, DateTime now)
+    {
+        // 检查是否启用自动重算
+        if (!Service.Config.EnableAutoRecalculateGroundPath)
+            return;
+        
+        // 只在地面模式下重算
+        if (IsFlying)
+            return;
+
+        // 如果当前正在重算，返回
+        if (Plugin.Instance().AsyncMove.TaskInBusy || PathRecalculationRequested)
+            return;
+
+        // 检查时间间隔
+        var interval = TimeSpan.FromMilliseconds(Service.Config.AutoRecalculateIntervalMs);
+        if (now - LastAutoRecalculateTime < interval)
+            return;
+
+        // 检查是否有有效路径
+        if (Waypoints.Count == 0)
+            return;
+
+        LastAutoRecalculateTime = now;
+
+        var destination = Waypoints.Last();
+        Waypoints.Clear();
+        
+        Movement.Enabled = false;
+        
+        Service.Log.Debug($"自动重算地面路径: 从 {currentPos} 到 {destination}");
+        RequestPathRecalculation?.Invoke(currentPos, destination, IgnoreDeltaY);
+        PathRecalculationRequested = true;
     }
 
     // 路径计算完成的回调方法

@@ -24,6 +24,10 @@ public class Config
     public float VoxelPathfindEarlyTerminationDistance = 2.0f;    // 早期终止距离阈值
     public int   VoxelPathfindMinSteps                 = 5000;    // 最小步数保证
     public float VoxelPathfindMaxStepsMultiplier       = 1000.0f; // 距离步数乘数
+    
+    // 地面Mesh寻路自动重算配置
+    public bool  EnableAutoRecalculateGroundPath;  // 是否启用自动重算
+    public float AutoRecalculateIntervalMs = 500f; // 自动重算时间间隔(ms)
 
     public event Action? Modified;
 
@@ -96,6 +100,25 @@ public class Config
         ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
         if (ImGui.SliderFloat("距离步数乘数", ref VoxelPathfindMaxStepsMultiplier, 100.0f, 5000.0f, "%.0f"))
             NotifyModified();
+
+        ImGui.NewLine();
+        
+        ImGui.Text("路网导航 (地面)");
+        
+        ImGui.Separator();
+        ImGui.Spacing();
+        
+        if (ImGui.Checkbox("启用自动重算", ref EnableAutoRecalculateGroundPath))
+            NotifyModified();
+        
+        if (EnableAutoRecalculateGroundPath)
+        {
+            ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+            if (ImGui.SliderFloat("重算间隔 (毫秒)", ref AutoRecalculateIntervalMs, 10f, 2000f, "%.0f"))
+                NotifyModified();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("地面寻路过程中, 每隔固定时间发送一次重算请求, 这会导致已有的卡寻路检测完全失效并和某些插件的兼容性下降, 但在大部分时候会有相对更佳的表现");
+        }
     }
 
     public void Save(FileInfo file)
