@@ -1,9 +1,10 @@
 ﻿using Dalamud.Game.Gui.Dtr;
+using Navmesh.Movement;
 using System;
 
 namespace Navmesh;
 
-public class DTRProvider(NavmeshManager Manager, AsyncMoveRequest AsyncMove) : IDisposable
+public class DTRProvider(NavmeshManager Manager, AsyncMoveRequest AsyncMove, FollowPath FollowPath) : IDisposable
 {
     private IDtrBarEntry DtrBarEntry { get; } = Service.DtrBar.Get("vnavmesh");
 
@@ -18,7 +19,11 @@ public class DTRProvider(NavmeshManager Manager, AsyncMoveRequest AsyncMove) : I
         var loadProgress = Manager.LoadTaskProgress;
         var status       = loadProgress >= 0 ? $"构建进度 {loadProgress * 100:f0}%" : Manager.Navmesh != null ? "就绪" : "未就绪";
         
-        if (AsyncMove.TaskInProgress)
+        if (FollowPath.Waypoints.Count > 0)
+        {
+            status = $"寻路中 (剩余点位: {FollowPath.Waypoints.Count})";
+        }
+        else if (AsyncMove.TaskInProgress)
         {
             var pathfindProgress = Manager.PathfindProgress;
             if (pathfindProgress >= 0)

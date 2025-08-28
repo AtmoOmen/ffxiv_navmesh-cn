@@ -1,14 +1,14 @@
-﻿using ImGuiNET;
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
 using Dalamud.Interface.Utility;
+using ImGuiNET;
 
 namespace Navmesh;
 
 public class Config
 {
-    private const int _version = 1;
+    private const int version = 1;
 
     public bool AutoLoadNavmesh = true;
     public bool EnableDTR       = true;
@@ -20,10 +20,10 @@ public class Config
     public float VoxelPathfindRandomFactor = 0.5f;
     
     // 体素路径查找性能优化参数
-    public float VoxelPathfindMaxStepsBaseFactor = 2.0f;        // 基础步数倍数因子
-    public float VoxelPathfindEarlyTerminationDistance = 2.0f;  // 早期终止距离阈值
-    public int   VoxelPathfindMinSteps = 5000;                  // 最小步数保证
-    public float VoxelPathfindMaxStepsMultiplier = 1000.0f;     // 距离步数乘数
+    public float VoxelPathfindMaxStepsBaseFactor       = 2.0f;    // 基础步数倍数因子
+    public float VoxelPathfindEarlyTerminationDistance = 2.0f;    // 早期终止距离阈值
+    public int   VoxelPathfindMinSteps                 = 5000;    // 最小步数保证
+    public float VoxelPathfindMaxStepsMultiplier       = 1000.0f; // 距离步数乘数
 
     public event Action? Modified;
 
@@ -43,7 +43,7 @@ public class Config
         
         if (ImGui.Checkbox("在服务器状态栏显示导航信息", ref EnableDTR))
             NotifyModified();
-        
+
         ImGui.NewLine();
         
         ImGui.Text("操控");
@@ -104,7 +104,7 @@ public class Config
         {
             JObject jContents = new()
             {
-                { "Version", _version },
+                { "Version", version },
                 { "Payload", JObject.FromObject(this) }
             };
             File.WriteAllText(file.FullName, jContents.ToString());
@@ -119,12 +119,12 @@ public class Config
     {
         try
         {
-            var contents = File.ReadAllText(file.FullName);
-            var json = JObject.Parse(contents);
-            var version = (int?)json["Version"] ?? 0;
+            var contents       = File.ReadAllText(file.FullName);
+            var json           = JObject.Parse(contents);
+            var currentVersion = (int?)json["Version"] ?? 0;
             if (json["Payload"] is JObject payload)
             {
-                payload = ConvertConfig(payload, version);
+                payload = ConvertConfig(payload, currentVersion);
                 var thisType = GetType();
                 foreach (var (f, data) in payload)
                 {
@@ -146,5 +146,5 @@ public class Config
         }
     }
 
-    private static JObject ConvertConfig(JObject payload, int version) => payload;
+    private static JObject ConvertConfig(JObject payload, int toVersion) => payload;
 }

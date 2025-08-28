@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Navmesh.Utilities;
 
@@ -16,19 +17,19 @@ public class FollowPath : IDisposable
     private const float SIGNIFICANT_MOVEMENT_THRESHOLD = 3f; // 显著移动阈值
     private const int   STUCK_COUNTER_THRESHOLD        = 3;  // 连续几次检测卡住才判定为真卡住
 
-    public bool          MovementAllowed     { get; set; } = true;
-    public bool          IgnoreDeltaY        { get; set; }
-    public float         Tolerance           { get; set; } = 1f;
-    public float         DestinationTolerance { get; set; } = 0;
-    public List<Vector3> Waypoints           { get; set; } = [];
-    public bool          IsStuck             { get; set; }
+    public bool          MovementAllowed      { get; set; } = true;
+    public bool          IgnoreDeltaY         { get; set; }
+    public float         Tolerance            { get; set; } = 1f;
+    public float         DestinationTolerance { get; set; }
+    public List<Vector3> Waypoints            { get; set; } = [];
+    public bool          IsStuck              { get; set; }
 
     private readonly IDalamudPluginInterface PI;
     private readonly NavmeshManager          NavmeshManager;
     private readonly OverrideCamera          Camera   = new();
     private readonly OverrideMovement        Movement = new();
-    
-    private          DateTime                NextJump;
+
+    private DateTime NextJump;
 
     private Vector3? posPreviousFrame;
 
@@ -53,17 +54,18 @@ public class FollowPath : IDisposable
     private          bool     IsFlying;                                             // 当前是否处于飞行状态
 
     public event Action<Vector3, Vector3, bool>? RequestPathRecalculation;
-
+    
     // entries in dalamud shared data cache must be reference types, so we use an array
-    private readonly bool[] _sharedPathIsRunning;
+    private readonly bool[] sharedPathIsRunning;
 
     private const string _sharedPathTag = "vnav.PathIsRunning";
 
     public FollowPath(IDalamudPluginInterface dalamud, NavmeshManager manager)
     {
-        PI                  =  dalamud;
-        _sharedPathIsRunning      =  PI.GetOrCreateData<bool[]>(_sharedPathTag, () => [false]);
-        NavmeshManager                  =  manager;
+        PI                  = dalamud;
+        sharedPathIsRunning = PI.GetOrCreateData<bool[]>(_sharedPathTag, () => [false]);
+        NavmeshManager      = manager;
+        
         NavmeshManager.OnNavmeshChanged += OnNavmeshChanged;
         OnNavmeshChanged(NavmeshManager.Navmesh, NavmeshManager.Query);
         LastMovementTime            = DateTime.Now;
@@ -82,9 +84,9 @@ public class FollowPath : IDisposable
         Movement.Dispose();
     }
 
-    private void UpdateSharedState(bool isRunning) => _sharedPathIsRunning[0] = isRunning;
+    private void UpdateSharedState(bool isRunning) => sharedPathIsRunning[0] = isRunning;
 
-    public void Update()
+    public void Update(IFramework fwk)
     {
         var player = Service.ClientState.LocalPlayer;
         if (player == null) return;
@@ -164,6 +166,8 @@ public class FollowPath : IDisposable
         }
         else
         {
+            posPreviousFrame = player.Position;
+
             if (Service.Config.CancelMoveOnUserInput && Movement.UserInput)
             {
                 Stop();
@@ -811,8 +815,8 @@ public class FollowPath : IDisposable
     public void Stop()
     {
         UpdateSharedState(false);
-        Waypoints.Clear();
         ResetStuckState();
+        Waypoints.Clear();
     }
 
     private unsafe void ExecuteJump()

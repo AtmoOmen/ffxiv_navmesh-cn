@@ -1,10 +1,10 @@
 ﻿using Dalamud.Interface.Utility;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using ImGuiNET;
 using Navmesh.Render;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using ImGuiNET;
 using Navmesh.Utilities;
 
 namespace Navmesh.Debug;
@@ -212,13 +212,6 @@ public unsafe class DebugDrawer : IDisposable
         var delta = b - a;
         var len = delta.Length();
         h *= len;
-        Vector3 Eval(Vector3 from, Vector3 delta, float u)
-        {
-            var res = from + u * delta;
-            var coeff = u * 2 - 1;
-            res.Y += h * (1 - coeff * coeff);
-            return res;
-        };
 
         const int NumPoints = 8;
         const float u0 = 0.05f;
@@ -237,6 +230,16 @@ public unsafe class DebugDrawer : IDisposable
 
         if (arrowB > 1)
             DrawWorldArrowPoint(from, Eval(a, delta, 1 - 2 * u0), arrowB, color, thickness);
+        
+        return;
+
+        Vector3 Eval(Vector3 from, Vector3 delta, float u)
+        {
+            var res   = from + u * delta;
+            var coeff = u        * 2 - 1;
+            res.Y += h * (1          - coeff * coeff);
+            return res;
+        }
     }
 
     private unsafe SharpDX.Matrix ReadMatrix(nint address)

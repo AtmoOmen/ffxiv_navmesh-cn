@@ -1,8 +1,8 @@
 ﻿using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
 using DotRecast.Recast;
-using ImGuiNET;
 using System;
+using ImGuiNET;
 
 namespace Navmesh;
 

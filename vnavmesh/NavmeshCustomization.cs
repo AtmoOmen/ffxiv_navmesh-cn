@@ -26,6 +26,8 @@ public class NavmeshCustomization
     public virtual void CustomizeScene(SceneExtractor scene) { }
 
     public virtual void CustomizeSettings(DtNavMeshCreateParams config) { }
+
+    public virtual void CustomizeMesh(DtNavMesh mesh) { }
 }
 
 // attribute that defines which territories particular customization applies to
@@ -108,7 +110,11 @@ public static class CreateParamsExtensions
         var bInside = insideTile(ptB);
 
         if (aInside != bInside)
-            throw new ArgumentException("Requested off-mesh connection spans two tiles, but Recast does not support this. Please adjust the endpoints, or change the mesh tile size so that both points are inside one tile.");
+        {
+            Service.Log.Error("This off-mesh connection would span two tiles, but Recast doesn't support these. Please adjust the endpoints or customize the mesh tile size so that both points are inside one tile.");
+            Service.Log.Error($"Bounding box of matched tile: {config.bmin} <=> {config.bmax}");
+            throw new ArgumentException("Invalid inter-tile off-mesh connection");
+        }
 
         if (!aInside && !bInside)
             return;

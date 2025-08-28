@@ -1,5 +1,5 @@
-﻿using ImGuiNET;
-using System;
+﻿using System;
+using ImGuiNET;
 
 namespace Navmesh;
 

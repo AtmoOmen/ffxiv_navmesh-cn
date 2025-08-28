@@ -37,8 +37,8 @@ public sealed class Plugin : IDalamudPlugin
         NavmeshManager = new(new($"{dalamud.ConfigDirectory.FullName}/meshcache"));
         FollowPath     = new(dalamud, NavmeshManager);
         AsyncMove      = new(NavmeshManager, FollowPath);
-        DtrProvider    = new(NavmeshManager, AsyncMove);
-        MainWindow     = new(NavmeshManager, FollowPath, AsyncMove, dalamud.ConfigDirectory.FullName);
+        DtrProvider    = new(NavmeshManager, AsyncMove, FollowPath);
+        MainWindow     = new(NavmeshManager, FollowPath, AsyncMove, dalamud.ConfigDirectory.FullName) { IsOpen = dalamud.IsDev };
         IPCProvider    = new(NavmeshManager, FollowPath, AsyncMove, MainWindow, DtrProvider);
 
         WindowSystem.AddWindow(MainWindow);
@@ -109,7 +109,7 @@ public sealed class Plugin : IDalamudPlugin
     private void OnUpdate(IFramework fwk)
     {
         NavmeshManager.Update();
-        FollowPath.Update();
+        FollowPath.Update(fwk);
         AsyncMove.Update();
         DtrProvider.Update();
     }

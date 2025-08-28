@@ -1,12 +1,12 @@
 ﻿using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
-using ImGuiNET;
 using Navmesh.Render;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using ImGuiNET;
 using Navmesh.Utilities;
 
 namespace Navmesh.Debug;

@@ -113,7 +113,7 @@ public sealed class NavmeshManager : IDisposable
                     return (cacheKey, scene);
                 }, cancel);
 
-                Log($"开始构建导航网格 '{cacheKey}'");
+                Log($"开始构建导航网格 '{cacheKey}' (重载: {allowLoadFromCache})");
                 var navmesh = await Task.Run(async () => await BuildNavmeshAsync(scene, cacheKey, allowLoadFromCache, cancel), cancel);
                 Log($"导航网格加载完成: '{cacheKey}'");
 
@@ -246,7 +246,17 @@ public sealed class NavmeshManager : IDisposable
 
         var filter    = LayoutUtils.FindFilter(layout);
         var filterKey = filter != null ? filter->Key : 0;
-        var terrRow   = Service.LuminaRow<TerritoryType>(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
+
+        var terrRow = Service.LuminaRow<Lumina.Excel.Sheets.TerritoryType>(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
+
+        // CE always has a festival layer (i hope). the non-festival layout is briefly loaded when entering the zone, which triggers a useless mesh build since the uninitialized zone is still the same size
+        if (terrRow?.TerritoryIntendedUse.RowId == 60)
+        {
+            var fest = layout->ActiveFestivals[0];
+            if (fest.Id == 0 && fest.Phase == 0)
+                return string.Empty;
+        }
+
         return $"{terrRow?.Bg}//{filterKey:X}//{LayoutUtils.FestivalsString(layout->ActiveFestivals)}";
     }
 
@@ -285,6 +295,7 @@ public sealed class NavmeshManager : IDisposable
     {
         Log($"异步构建任务开始: '{cacheKey}'");
         var customization = NavmeshCustomizationRegistry.ForTerritory(scene.TerritoryID);
+        Log($"Customization for '{scene.TerritoryID}': {customization.GetType()}");
 
         // 尝试读取缓存
         var cachePath = $"{cacheDirectory.FullName}/{cacheKey}.navmesh";
@@ -298,6 +309,29 @@ public sealed class NavmeshManager : IDisposable
 
         var builder       = new NavmeshBuilder(scene, customization);
         var deltaProgress = 1.0f / (builder.NumTilesX * builder.NumTilesZ);
+        builder.BuildTiles(() =>
+        {
+            unsafe
+            {
+                fixed (float* progressPtr = &loadTaskProgress)
+                {
+                    var intPtr = (int*)progressPtr;
+                    int originalInt, newInt;
+        
+                    do
+                    {
+                        originalInt = *intPtr;
+                        var originalValue = BitConverter.Int32BitsToSingle(originalInt);
+                        var newValue      = originalValue + deltaProgress;
+                        newInt = BitConverter.SingleToInt32Bits(newValue);
+            
+                    } while (Interlocked.CompareExchange(ref *intPtr, newInt, originalInt) != originalInt);
+                }
+            }
+            cancel.ThrowIfCancellationRequested();
+        });
+        customization.CustomizeMesh(builder.Navmesh.Mesh);
+        builder.Navmesh.Mesh.ConnectCrossTileLinks();
 
         loadTaskProgress = 0;
         Interlocked.Exchange(ref loadTaskProgressBits, BitConverter.SingleToInt32Bits(0f));

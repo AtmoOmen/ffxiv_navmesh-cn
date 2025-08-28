@@ -4,7 +4,6 @@ using Dalamud.Interface.Utility.Raii;
 using ImGuiNET;
 using Navmesh.Movement;
 using Navmesh.NavVolume;
-using Navmesh.Utilities;
 
 namespace Navmesh.Debug;
 
