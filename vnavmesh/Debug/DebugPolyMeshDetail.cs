@@ -2,6 +2,7 @@
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Navmesh.Render;
 using System.Numerics;
+using Navmesh.Utilities;
 
 namespace Navmesh.Debug;
 

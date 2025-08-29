@@ -1,6 +1,7 @@
 ﻿using DotRecast.Recast;
 using System.Linq;
 using System.Numerics;
+using Navmesh.Utilities;
 
 namespace Navmesh.Debug;
 

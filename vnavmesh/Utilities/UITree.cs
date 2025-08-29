@@ -1,38 +1,31 @@
 ﻿using System;
 using ImGuiNET;
 
-namespace Navmesh;
+namespace Navmesh.Utilities;
 
 public class UITree
 {
-    private uint _selectedId;
+    private uint selectedID;
 
-    public struct NodeRaii : IDisposable
+    public struct NodeRaii(bool selected, bool opened, bool hovered, bool realOpened) : IDisposable
     {
-        public bool Selected { get; init; }
-        public bool Opened { get; init; }
-        public bool Hovered { get; init; }
-        private bool _disposed;
-        private bool _realOpened;
+        public bool RealOpened { get; init; } = realOpened;
+        public bool Selected   { get; init; } = selected;
+        public bool Opened     { get; init; } = opened;
+        public bool Hovered    { get; init; } = hovered;
+        
+        private bool disposed;
 
         public bool SelectedOrHovered => Selected || Hovered;
 
-        public NodeRaii(bool selected, bool opened, bool hovered, bool realOpened)
-        {
-            Selected = selected;
-            Opened = opened;
-            Hovered = hovered;
-            _realOpened = realOpened;
-        }
-
         public void Dispose()
         {
-            if (_disposed)
+            if (disposed)
                 return;
-            if (_realOpened)
+            if (RealOpened)
                 ImGui.TreePop();
             ImGui.PopID();
-            _disposed = true;
+            disposed = true;
         }
     }
 
@@ -40,20 +33,20 @@ public class UITree
     {
         var id = ImGui.GetID(text);
         var flags = ImGuiTreeNodeFlags.None;
-        if (id == _selectedId)
+        if (id == selectedID)
             flags |= ImGuiTreeNodeFlags.Selected;
         if (leaf)
             flags |= ImGuiTreeNodeFlags.Leaf;
 
         ImGui.PushID((int)id);
         ImGui.PushStyleColor(ImGuiCol.Text, color);
-        bool open = ImGui.TreeNodeEx(text, flags);
+        var open = ImGui.TreeNodeEx(text, flags);
         ImGui.PopStyleColor();
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
-            _selectedId = id;
+            selectedID = id;
         if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
             ImGui.SetClipboardText(text);
-        return new(id == _selectedId, open && !leaf, ImGui.IsItemHovered(), open);
+        return new(id == selectedID, open && !leaf, ImGui.IsItemHovered(), open);
     }
 
     // returned node is auto disposed

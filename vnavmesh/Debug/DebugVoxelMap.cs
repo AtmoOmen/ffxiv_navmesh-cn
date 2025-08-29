@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using Navmesh.Utilities;
 
 namespace Navmesh.Debug;
 

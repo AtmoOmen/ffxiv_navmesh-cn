@@ -311,23 +311,16 @@ public sealed class NavmeshManager : IDisposable
         var deltaProgress = 1.0f / (builder.NumTilesX * builder.NumTilesZ);
         builder.BuildTiles(() =>
         {
-            unsafe
+            int currentBits, newBits;
+            do
             {
-                fixed (float* progressPtr = &loadTaskProgress)
-                {
-                    var intPtr = (int*)progressPtr;
-                    int originalInt, newInt;
-        
-                    do
-                    {
-                        originalInt = *intPtr;
-                        var originalValue = BitConverter.Int32BitsToSingle(originalInt);
-                        var newValue      = originalValue + deltaProgress;
-                        newInt = BitConverter.SingleToInt32Bits(newValue);
+                currentBits = Interlocked.CompareExchange(ref loadTaskProgressBits, 0, 0);
+                var currentValue = BitConverter.Int32BitsToSingle(currentBits);
+                var newValue     = currentValue + deltaProgress;
+                newBits = BitConverter.SingleToInt32Bits(newValue);
+            } 
+            while (Interlocked.CompareExchange(ref loadTaskProgressBits, newBits, currentBits) != currentBits);
             
-                    } while (Interlocked.CompareExchange(ref *intPtr, newInt, originalInt) != originalInt);
-                }
-            }
             cancel.ThrowIfCancellationRequested();
         });
         customization.CustomizeMesh(builder.Navmesh.Mesh);

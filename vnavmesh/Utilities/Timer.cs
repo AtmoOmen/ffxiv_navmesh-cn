@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Navmesh;
+namespace Navmesh.Utilities;
 
 // very simple stopwatch timer
 public struct Timer

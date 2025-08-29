@@ -2,7 +2,7 @@
 using System;
 using System.IO;
 using Dalamud.Interface.Utility;
-using ImGuiNET;
+using Dalamud.Interface.Utility.Raii;
 
 namespace Navmesh;
 
@@ -38,107 +38,132 @@ public class Config
     public void Draw()
     {
         ImGui.Spacing();
-        
-        ImGui.Text("一般");
-        
-        ImGui.Separator();
-        ImGui.Spacing();
-        
-        if (ImGui.Checkbox("切换区域时, 自动加载/构建区域导航数据", ref AutoLoadNavmesh))
-            NotifyModified();
-        
-        if (ImGui.Checkbox("在服务器状态栏显示导航信息", ref EnableDTR))
-            NotifyModified();
 
-        ImGui.NewLine();
-        
-        ImGui.Text("操控");
-        
-        ImGui.Separator();
-        ImGui.Spacing();
-        
-        if (ImGui.Checkbox("将镜头面向对齐前进方向", ref AlignCameraToMovement))
-            NotifyModified();
-        
-        if (ImGui.Checkbox("当尝试操控游戏角色时, 自动取消寻路任务", ref CancelMoveOnUserInput))
-            NotifyModified();
-        
-        ImGui.NewLine();
-        
-        ImGui.Text("显示");
-        
-        ImGui.Separator();
-        ImGui.Spacing();
-        
-        if (ImGui.Checkbox("显示导航路径点", ref ShowWaypoints))
-            NotifyModified();
-        
-        if (ImGui.Checkbox("强制显示游戏内碰撞体", ref ForceShowGameCollision))
-            NotifyModified();
-        
-        ImGui.NewLine();
-        
-        ImGui.Text("体素导航 (飞行)");
-        
-        ImGui.Separator();
-        ImGui.Spacing();
+        using var tab = ImRaii.TabBar("###Config");
+        if (!tab) return;
 
-        ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-        if (ImGui.SliderFloat("路线随机性", ref VoxelPathfindRandomFactor, 0.1f, 1f, "%.1f"))
-            NotifyModified();
-        
-        ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-        if (ImGui.SliderFloat("最大步数基础因子", ref VoxelPathfindMaxStepsBaseFactor, 1.0f, 5.0f, "%.1f"))
-            NotifyModified();
-            
-        ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-        if (ImGui.SliderFloat("早期终止距离", ref VoxelPathfindEarlyTerminationDistance, 0.5f, 10.0f, "%.1f"))
-            NotifyModified();
-            
-        ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-        if (ImGui.SliderInt("最小保证步数", ref VoxelPathfindMinSteps, 1000, 20000, "%d"))
-            NotifyModified();
-            
-        ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-        if (ImGui.SliderFloat("距离步数乘数", ref VoxelPathfindMaxStepsMultiplier, 100.0f, 5000.0f, "%.0f"))
-            NotifyModified();
-
-        ImGui.NewLine();
-        
-        ImGui.Text("路网导航 (地面)");
-        
-        ImGui.Separator();
-        ImGui.Spacing();
-        
-        if (ImGui.Checkbox("启用自动重算", ref EnableAutoRecalculateGroundPath))
-            NotifyModified();
-        
-        if (EnableAutoRecalculateGroundPath)
+        using (var generalTab = ImRaii.TabItem("一般"))
         {
-            ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-            if (ImGui.SliderFloat("重算间隔 (毫秒)", ref AutoRecalculateIntervalMs, 10f, 2000f, "%.0f"))
-                NotifyModified();
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("地面寻路过程中, 每隔固定时间发送一次重算请求, 这会导致已有的卡寻路检测完全失效并和某些插件的兼容性下降, 但在大部分时候会有相对更佳的表现, 如果你平时地面寻路时间就已经较长, 请勿开启本项");
+            if (generalTab)
+            {
+                ImGui.Spacing();
+                
+                if (ImGui.Checkbox("切换区域时, 自动加载/构建区域导航数据", ref AutoLoadNavmesh))
+                    NotifyModified();
+        
+                if (ImGui.Checkbox("在服务器状态栏显示导航信息", ref EnableDTR))
+                    NotifyModified();
+            }
         }
         
-        ImGui.Text("拉绳处理类型 (地面)");
+        using (var controlTab = ImRaii.TabItem("控制"))
+        {
+            if (controlTab)
+            {
+                ImGui.Spacing();
+                
+                if (ImGui.Checkbox("寻路时, 将镜头面向对齐前进方向", ref AlignCameraToMovement))
+                    NotifyModified();
+                
+                if (ImGui.Checkbox("寻路时, 当尝试操控角色时, 自动取消当前寻路", ref CancelMoveOnUserInput))
+                    NotifyModified();
+            }
+        }
         
-        if (ImGui.RadioButton("最短路径", ref PullStringType, 0))
-            NotifyModified();
+        using (var displayTab = ImRaii.TabItem("显示"))
+        {
+            if (displayTab)
+            {
+                ImGui.Spacing();
+                
+                if (ImGui.Checkbox("寻路过程中, 显示导航路径点", ref ShowWaypoints))
+                    NotifyModified();
+                
+                if (ImGui.Checkbox("强制显示游戏内碰撞体", ref ForceShowGameCollision))
+                    NotifyModified();
+            }
+        }
         
-        ImGui.SameLine();
-        if (ImGui.RadioButton("尝试与墙体保持距离", ref PullStringType, 1))
-            NotifyModified();
+        using (var voxelTab = ImRaii.TabItem("体素导航 (飞行)"))
+        {
+            if (voxelTab)
+            {
+                ImGui.Spacing();
+
+                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                if (ImGui.SliderFloat("路线随机性", ref VoxelPathfindRandomFactor, 0.1f, 1f, "%.1f"))
+                    NotifyModified();
+                
+                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                if (ImGui.SliderFloat("最大步数基础因子", ref VoxelPathfindMaxStepsBaseFactor, 1.0f, 5.0f, "%.1f"))
+                    NotifyModified();
+                    
+                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                if (ImGui.SliderFloat("早期终止距离", ref VoxelPathfindEarlyTerminationDistance, 0.5f, 10.0f, "%.1f"))
+                    NotifyModified();
+                    
+                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                if (ImGui.SliderInt("最小保证步数", ref VoxelPathfindMinSteps, 1000, 20000, "%d"))
+                    NotifyModified();
+                    
+                ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                if (ImGui.SliderFloat("距离步数乘数", ref VoxelPathfindMaxStepsMultiplier, 100.0f, 5000.0f, "%.0f"))
+                    NotifyModified();
+            }
+        }
         
-        ImGui.Text("路网计算类型");
-        
-        if (ImGui.RadioButton("默认", ref MeshFilterType, 0))
-            NotifyModified();
-        
-        ImGui.SameLine();
-        if (ImGui.RadioButton("自然避障", ref MeshFilterType, 1))
-            NotifyModified();
+        using (var meshTab = ImRaii.TabItem("路网导航 (地面)"))
+        {
+            if (meshTab)
+            {
+                ImGui.Spacing();
+                
+                if (ImGui.Checkbox("自动重算", ref EnableAutoRecalculateGroundPath))
+                    NotifyModified();
+                ImGuiOm.TooltipHover("每隔固定时间发送一次重算请求, 这会导致已有的卡寻路检测完全失效并和某些插件的兼容性下降, 但在大部分时候会有相对更佳的表现, 如果你平时寻路时间就已经较长, 请勿开启本项");
+                
+                if (EnableAutoRecalculateGroundPath)
+                {
+                    ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                    if (ImGui.SliderFloat("重算间隔 (毫秒)", ref AutoRecalculateIntervalMs, 10f, 10_000f, "%.0f"))
+                        NotifyModified();
+                    ImGuiOm.TooltipHover("按住 Ctrl 单击可以直接填写数值");
+                }
+                
+                ImGui.NewLine();
+                
+                ImGui.Text("计算类型");
+
+                using (ImRaii.PushId("MeshCalculationType"))
+                using (ImRaii.PushIndent())
+                {
+                    if (ImGui.RadioButton("默认", ref MeshFilterType, 0))
+                        NotifyModified();
+
+                    ImGui.SameLine();
+                    if (ImGui.RadioButton("障碍物临近惩罚", ref MeshFilterType, 1))
+                        NotifyModified();
+                    ImGuiOm.TooltipHover("为每个非障碍物的网格计算它到最近障碍物的距离, 形成危险系数, 在计算过程中除了加上基础移动成本，还要乘以或加上该网格的危险系数, 使最终路径更加倾向远离障碍物, 而非贴边");
+                }
+                
+                ImGui.NewLine();
+                
+                ImGui.Text("拉绳算法类型 (后处理)");
+
+                using (ImRaii.PushId("MeshPullStringType"))
+                using (ImRaii.PushIndent())
+                {
+                    if (ImGui.RadioButton("默认", ref PullStringType, 0))
+                        NotifyModified();
+                    ImGuiOm.TooltipHover("路径拉直效果最好, 但会让路径更加倾向紧贴障碍物");
+
+                    ImGui.SameLine();
+                    if (ImGui.RadioButton("保持障碍距离", ref PullStringType, 1))
+                        NotifyModified();
+                    ImGuiOm.TooltipHover("路径拉直效果较差, 水平距离抖动可能较多, 但会尝试让路径保持与障碍物之间的距离, 建议同时开启自动重算功能");
+                }
+            }
+        }
     }
 
     public void Save(FileInfo file)

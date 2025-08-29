@@ -7,6 +7,7 @@ using System.Threading;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using Navmesh.NavVolume;
+using Timer = Navmesh.Utilities.Timer;
 
 namespace Navmesh;
 
@@ -158,7 +159,7 @@ public class NavmeshQuery
 
         // 支持弦拉优化
         if (useStringPulling && voxelPath.Count > 2)
-            res = ApplyStringPulling(voxelPath.Select(r => r.p).ToList(), to);
+            res = ApplyVoxelStringPulling(voxelPath.Select(r => r.p).ToList(), to);
         else
         {
             res = voxelPath.Select(r => r.p).ToList();
@@ -168,7 +169,7 @@ public class NavmeshQuery
         return res;
     }
 
-    private List<Vector3> ApplyStringPulling(List<Vector3> pathPoints, Vector3 destination)
+    private List<Vector3> ApplyVoxelStringPulling(List<Vector3> pathPoints, Vector3 destination)
     {
         if (pathPoints.Count <= 2)
             return pathPoints;
