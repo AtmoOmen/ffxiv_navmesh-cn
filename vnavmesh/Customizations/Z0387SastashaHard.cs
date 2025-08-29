@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using Navmesh.Utilities;
+
+namespace Navmesh.Customizations;
 
 [CustomizationTerritory(387)]
 class Z0387SastashaHard : NavmeshCustomization

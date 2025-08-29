@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using Navmesh.Utilities;
+
+namespace Navmesh.Customizations;
 
 [CustomizationTerritory(1110)]
 class Z1110AetherochemicalResearchFacility : NavmeshCustomization

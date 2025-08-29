@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using Navmesh.Utilities;
+
+namespace Navmesh.Customizations;
 
 [CustomizationTerritory(399)]
 internal class Z0399DravanianHinterlands : NavmeshCustomization

@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using Navmesh.Utilities;
+
+namespace Navmesh.Customizations;
 
 [CustomizationTerritory(132)]
 internal class Z0132NewGridania : NavmeshCustomization

@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using Navmesh.Utilities;
+
+namespace Navmesh.Customizations;
 
 [CustomizationTerritory(827)]
 class Z0827EurekaHydatos : NavmeshCustomization

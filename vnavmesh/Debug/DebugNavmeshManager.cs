@@ -4,6 +4,7 @@ using Dalamud.Interface.Utility.Raii;
 using ImGuiNET;
 using Navmesh.Movement;
 using Navmesh.NavVolume;
+using Navmesh.Utilities;
 
 namespace Navmesh.Debug;
 
@@ -65,7 +66,7 @@ internal class DebugNavmeshManager : IDisposable
                 {
                     ImGui.SameLine();
                     if (ImGui.Button("导出位图"))
-                        ExportBitmap(NavmeshManager.Navmesh!, NavmeshManager.Query!, playerPos);
+                        ExportBitmap(playerPos);
                 }
             }
         }
@@ -171,7 +172,7 @@ internal class DebugNavmeshManager : IDisposable
             DrawVoxelMap?.VisualizeVoxel(voxel);
     }
 
-    private void ExportBitmap(Navmesh navmesh, NavmeshQuery query, Vector3 startingPos) => 
+    private void ExportBitmap(Vector3 startingPos) => 
         NavmeshManager.BuildBitmap(startingPos, "D:\\navmesh.bmp", 0.5f);
 
     private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query)

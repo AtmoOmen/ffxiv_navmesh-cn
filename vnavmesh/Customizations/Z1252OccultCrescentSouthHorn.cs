@@ -1,6 +1,7 @@
 ﻿using DotRecast.Detour;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Navmesh.Utilities;
 
 namespace Navmesh.Customizations;
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using Navmesh.Utilities;
 
 namespace Navmesh.Customizations;
 

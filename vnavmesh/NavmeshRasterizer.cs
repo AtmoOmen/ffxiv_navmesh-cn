@@ -4,6 +4,7 @@ using Navmesh.NavVolume;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Navmesh.Utilities;
 
 namespace Navmesh;
 

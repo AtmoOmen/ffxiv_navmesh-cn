@@ -1,12 +1,11 @@
-﻿using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
-using Navmesh.Utilities;
+using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
+using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
+using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 
-namespace Navmesh;
+namespace Navmesh.Utilities;
 
 // extract geometry from scene definition; does not interact with game state, so safe to run in background
 public class SceneExtractor

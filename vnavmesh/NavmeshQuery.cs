@@ -12,96 +12,6 @@ namespace Navmesh;
 
 public class NavmeshQuery
 {
-    private class IntersectQuery : IDtPolyQuery
-    {
-        public readonly List<long> Result = [];
-
-        public void Process(DtMeshTile tile, DtPoly poly, long refs) => Result.Add(refs);
-    }
-
-    private class ToleranceHeuristic(float tolerance) : IDtQueryHeuristic
-    {
-        float IDtQueryHeuristic.GetCost(RcVec3f neighbourPos, RcVec3f endPos)
-        {
-            var dist = RcVec3f.Distance(neighbourPos, endPos) * DtDefaultQueryHeuristic.H_SCALE;
-            return dist < tolerance ? -1 : dist;
-        }
-    }
-
-    private class ObstacleAvoidanceFilter(DtNavMesh navMesh) : IDtQueryFilter
-    {
-        private readonly DtQueryDefaultFilter baseFilter = new();
-        
-        private const float obstacleProximityWeight = 2.0f;
-        private const float maxPenaltyDistance      = 5.0f;
-
-        public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => 
-            baseFilter.PassFilter(refs, tile, poly);
-
-        public float GetCost(
-            RcVec3f    pa,
-            RcVec3f    pb,
-            long       prevRef,
-            DtMeshTile prevTile,
-            DtPoly     prevPoly,
-            long       curRef,
-            DtMeshTile curTile,
-            DtPoly     curPoly,
-            long       nextRef,
-            DtMeshTile nextTile,
-            DtPoly     nextPoly)
-        {
-            var baseCost = baseFilter.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
-
-            // 计算障碍物邻近惩罚
-            var obstaclePenalty = CalculateObstacleProximityPenalty(curRef, RcVec3f.Lerp(pa, pb, 0.5f));
-
-            return baseCost + obstaclePenalty;
-        }
-
-        private float CalculateObstacleProximityPenalty(long polyRef, RcVec3f position)
-        {
-            if (navMesh == null || polyRef == 0)
-                return 0;
-
-            // 获取当前多边形周围的区域进行搜索
-            var halfExtents = new RcVec3f(maxPenaltyDistance * 2, maxPenaltyDistance, maxPenaltyDistance * 2);
-            var query       = new ObstacleDistanceQuery(position);
-
-            var navQuery = new DtNavMeshQuery(navMesh);
-            navQuery.QueryPolygons(position, halfExtents, this, query);
-
-            return query.MinDistance < maxPenaltyDistance ? (maxPenaltyDistance - query.MinDistance) * obstacleProximityWeight : 0;
-        }
-    }
-
-    private class ObstacleDistanceQuery(RcVec3f center) : IDtPolyQuery
-    {
-        public float MinDistance = float.MaxValue;
-
-        public void Process(DtMeshTile tile, DtPoly poly, long refs)
-        {
-            if (poly.GetPolyType() == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
-                return;
-            
-            for (var i = 0; i < poly.vertCount; i++)
-            {
-                var idx = poly.verts[i];
-                var v = new RcVec3f(
-                    tile.data.verts[idx * 3],
-                    tile.data.verts[(idx * 3) + 1],
-                    tile.data.verts[(idx * 3) + 2]
-                );
-                var dist = RcVec3f.Distance(v, center);
-                if (dist < MinDistance)
-                    MinDistance = dist;
-                
-                if (MinDistance < 0.1f) // 如果已经非常接近，提前返回
-                    return;
-            }
-        }
-    }
-
     public readonly  DtNavMeshQuery MeshQuery;
     public readonly  VoxelPathfind? VolumeQuery;
     private readonly IDtQueryFilter obstacleFilter;
@@ -502,5 +412,95 @@ public class NavmeshQuery
         }
 
         return result;
+    }
+    
+    private class IntersectQuery : IDtPolyQuery
+    {
+        public readonly List<long> Result = [];
+
+        public void Process(DtMeshTile tile, DtPoly poly, long refs) => Result.Add(refs);
+    }
+
+    private class ToleranceHeuristic(float tolerance) : IDtQueryHeuristic
+    {
+        float IDtQueryHeuristic.GetCost(RcVec3f neighbourPos, RcVec3f endPos)
+        {
+            var dist = RcVec3f.Distance(neighbourPos, endPos) * DtDefaultQueryHeuristic.H_SCALE;
+            return dist < tolerance ? -1 : dist;
+        }
+    }
+
+    private class ObstacleAvoidanceFilter(DtNavMesh navMesh) : IDtQueryFilter
+    {
+        private readonly DtQueryDefaultFilter baseFilter = new();
+        
+        private const float obstacleProximityWeight = 2.0f;
+        private const float maxPenaltyDistance      = 5.0f;
+
+        public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => 
+            baseFilter.PassFilter(refs, tile, poly);
+
+        public float GetCost(
+            RcVec3f    pa,
+            RcVec3f    pb,
+            long       prevRef,
+            DtMeshTile prevTile,
+            DtPoly     prevPoly,
+            long       curRef,
+            DtMeshTile curTile,
+            DtPoly     curPoly,
+            long       nextRef,
+            DtMeshTile nextTile,
+            DtPoly     nextPoly)
+        {
+            var baseCost = baseFilter.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
+
+            // 计算障碍物邻近惩罚
+            var obstaclePenalty = CalculateObstacleProximityPenalty(curRef, RcVec3f.Lerp(pa, pb, 0.5f));
+
+            return baseCost + obstaclePenalty;
+        }
+
+        private float CalculateObstacleProximityPenalty(long polyRef, RcVec3f position)
+        {
+            if (navMesh == null || polyRef == 0)
+                return 0;
+
+            // 获取当前多边形周围的区域进行搜索
+            var halfExtents = new RcVec3f(maxPenaltyDistance * 2, maxPenaltyDistance, maxPenaltyDistance * 2);
+            var query       = new ObstacleDistanceQuery(position);
+
+            var navQuery = new DtNavMeshQuery(navMesh);
+            navQuery.QueryPolygons(position, halfExtents, this, query);
+
+            return query.MinDistance < maxPenaltyDistance ? (maxPenaltyDistance - query.MinDistance) * obstacleProximityWeight : 0;
+        }
+    }
+
+    private class ObstacleDistanceQuery(RcVec3f center) : IDtPolyQuery
+    {
+        public float MinDistance = float.MaxValue;
+
+        public void Process(DtMeshTile tile, DtPoly poly, long refs)
+        {
+            if (poly.GetPolyType() == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
+                return;
+            
+            for (var i = 0; i < poly.vertCount; i++)
+            {
+                var idx = poly.verts[i];
+                var v = new RcVec3f(
+                    tile.data.verts[idx * 3],
+                    tile.data.verts[(idx * 3) + 1],
+                    tile.data.verts[(idx * 3) + 2]
+                );
+                var dist = RcVec3f.Distance(v, center);
+                if (dist < MinDistance)
+                    MinDistance = dist;
+                
+                if (MinDistance < 0.1f) // 如果已经非常接近，提前返回
+                    return;
+            }
+        }
     }
 }
