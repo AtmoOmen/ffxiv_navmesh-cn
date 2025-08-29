@@ -29,8 +29,8 @@ public class Config
     public bool  EnableAutoRecalculateGroundPath;  // 是否启用自动重算
     public float AutoRecalculateIntervalMs = 500f; // 自动重算时间间隔(ms)
     public int   MeshFilterType = 1;
-    
-    public int   PullStringType;
+
+    public int PullStringType = 2;
     
     public float PullStringDefaultImprovedBasedSafeMargin = 1f;
     public float PullStringDefaultImprovedSafeMargin      = 2f;

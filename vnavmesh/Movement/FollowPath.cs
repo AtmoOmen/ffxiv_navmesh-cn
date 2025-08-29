@@ -378,7 +378,7 @@ public class FollowPath : IDisposable
             return;
         
         // 只在地面模式下重算
-        if (IsFlying)
+        if (IsFlying || Service.Condition[ConditionFlag.Jumping])
             return;
 
         // 如果当前正在重算，返回
