@@ -8,8 +8,14 @@ namespace Navmesh.Customizations;
 [CustomizationTerritory(1252)]
 internal class Z1252OccultCrescentSouthHorn : NavmeshCustomization
 {
-    public override int Version => 3;
+    public override int Version => 4;
 
+    public Z1252OccultCrescentSouthHorn()
+    {
+        Settings.AgentMaxSlopeDeg = 75f;
+        Settings.AgentMaxClimb    = 1f;
+    }
+    
     public override void CustomizeScene(SceneExtractor scene)
     {
         if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b1/collision/o6b1_a5_stc02.pcb", out var mesh))

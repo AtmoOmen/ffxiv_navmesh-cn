@@ -169,11 +169,11 @@ public class Config
                     ImGui.SameLine();
                     if (ImGui.RadioButton("默认 (简化 / 自适应)", ref PullStringType, 2))
                         NotifyModified();
-                    ImGuiOm.TooltipHover("在默认基础上增加的障碍物检测, 拉直效果较好, 自适应检测安全通道宽度");
+                    ImGuiOm.TooltipHover("在默认基础上增加的障碍物检测, 拉直效果较好, 保持障碍物距离效果一般, 自适应检测安全通道宽度");
                     
                     if (ImGui.RadioButton("默认 (简化 / 手动)", ref PullStringType, 3))
                         NotifyModified();
-                    ImGuiOm.TooltipHover("在默认基础上增加的障碍物检测, 拉直效果较好, 需要自行指定安全通道宽度");
+                    ImGuiOm.TooltipHover("在默认基础上增加的障碍物检测, 拉直效果较好, 保持障碍物距离效果一般, 需要自行指定安全通道宽度");
 
                     switch (PullStringType)
                     {
