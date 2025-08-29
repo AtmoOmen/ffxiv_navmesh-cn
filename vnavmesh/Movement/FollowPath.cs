@@ -391,7 +391,7 @@ public class FollowPath : IDisposable
             return;
 
         // 检查是否有有效路径
-        if (Waypoints.Count <= 2)
+        if (Waypoints.Count < 1)
             return;
         
         LastAutoRecalculateTime = now;

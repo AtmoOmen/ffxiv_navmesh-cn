@@ -28,8 +28,12 @@ public class Config
     // 地面Mesh寻路自动重算配置
     public bool  EnableAutoRecalculateGroundPath;  // 是否启用自动重算
     public float AutoRecalculateIntervalMs = 500f; // 自动重算时间间隔(ms)
-    public int   PullStringType;
     public int   MeshFilterType = 1;
+    
+    public int   PullStringType;
+    
+    public float PullStringDefaultImprovedBasedSafeMargin = 1f;
+    public float PullStringDefaultImprovedSafeMargin      = 2f;
 
     public event Action? Modified;
 
@@ -161,6 +165,31 @@ public class Config
                     if (ImGui.RadioButton("保持障碍距离", ref PullStringType, 1))
                         NotifyModified();
                     ImGuiOm.TooltipHover("路径拉直效果较差, 水平距离抖动可能较多, 但会尝试让路径保持与障碍物之间的距离, 建议同时开启自动重算功能");
+                    
+                    ImGui.SameLine();
+                    if (ImGui.RadioButton("默认 (简化 / 自适应)", ref PullStringType, 2))
+                        NotifyModified();
+                    ImGuiOm.TooltipHover("在默认基础上增加的障碍物检测, 拉直效果较好, 自适应检测安全通道宽度");
+                    
+                    if (ImGui.RadioButton("默认 (简化 / 手动)", ref PullStringType, 3))
+                        NotifyModified();
+                    ImGuiOm.TooltipHover("在默认基础上增加的障碍物检测, 拉直效果较好, 需要自行指定安全通道宽度");
+
+                    switch (PullStringType)
+                    {
+                        case 2:
+                            ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                            if (ImGui.SliderFloat("基础安全宽度", ref PullStringDefaultImprovedBasedSafeMargin, 0.1f, 10f, "%.2f"))
+                                NotifyModified();
+                            ImGuiOm.TooltipHover("按住 Ctrl 单击可以直接填写数值");
+                            break;
+                        case 3:
+                            ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
+                            if (ImGui.SliderFloat("安全宽度", ref PullStringDefaultImprovedSafeMargin, 0.1f, 10f, "%.2f"))
+                                NotifyModified();
+                            ImGuiOm.TooltipHover("按住 Ctrl 单击可以直接填写数值");
+                            break;
+                    }
                 }
             }
         }
