@@ -88,20 +88,14 @@ public class NavmeshQuery
                             pathPoints[^1] = to;
                         else
                             pathPoints.Add(to);
-                        
+
                         var pulled = Service.Config.PullStringType switch
                         {
                             1 => ApplyMeshStringPulling(pathPoints, to),
                             3 => ApplyImprovedStringPulling(pathPoints, Service.Config.PullStringDefaultImprovedSafeMargin),
                             _ => ApplyAdaptiveStringPulling(pathPoints)
                         };
-
-                        // 如果启用路径平滑，在拉绳后处理后应用拐点插值平滑
-                        if (Service.Config.EnablePathSmoothing && Service.Config.PathSmoothingInterpolationPoints > 0)
-                        {
-                            pulled = ApplyCornerSmoothing(pulled, Service.Config.PathSmoothingInterpolationPoints);
-                        }
-
+                        
                         return pulled;
                     }
 
@@ -472,12 +466,10 @@ public class NavmeshQuery
                     // 跳过当前点，直接连接
                     continue;
                 }
-                else
-                {
-                    // 使用加权平滑
-                    smoothedPoint = (prev * 0.3f + current * 0.4f + next * 0.3f);
-                    smoothed.Add(CanReachDirectly(smoothed[^1], smoothedPoint) ? smoothedPoint : current);
-                }
+
+                // 使用加权平滑
+                smoothedPoint = (prev * 0.3f + current * 0.4f + next * 0.3f);
+                smoothed.Add(CanReachDirectly(smoothed[^1], smoothedPoint) ? smoothedPoint : current);
             }
             else
             {
@@ -657,58 +649,6 @@ public class NavmeshQuery
 
         result.Add(pathPoints[^1]);
         return result;
-    }
-
-    /// <summary>
-    /// 使用简单的线性插值对路径拐点进行平滑处理
-    /// </summary>
-    /// <param name="pathPoints">原始路径点</param>
-    /// <param name="interpolationPoints">每个拐点的插值点数</param>
-    /// <returns>平滑后的路径</returns>
-    private List<Vector3> ApplyCornerSmoothing(List<Vector3> pathPoints, int interpolationPoints)
-    {
-        if (pathPoints.Count <= 2 || interpolationPoints <= 0)
-            return pathPoints;
-
-        var result = new List<Vector3> { pathPoints[0] };
-
-        for (var i = 1; i < pathPoints.Count - 1; i++)
-        {
-            var prevPoint = pathPoints[i - 1];
-            var currentPoint = pathPoints[i];
-            var nextPoint = pathPoints[i + 1];
-
-            // 检测是否为需要平滑的拐点
-            if (IsSharpCorner(prevPoint, currentPoint, nextPoint))
-            {
-                // 使用简单的线性插值在拐点周围添加平滑点
-                var interpolatedPoints = GenerateLinearInterpolation(prevPoint, currentPoint, nextPoint, interpolationPoints);
-                result.AddRange(interpolatedPoints);
-            }
-            else
-            {
-                result.Add(currentPoint);
-            }
-        }
-
-        result.Add(pathPoints[^1]);
-        return result;
-    }
-
-    /// <summary>
-    /// 检测是否为锐角拐点
-    /// </summary>
-    private static bool IsSharpCorner(Vector3 prev, Vector3 current, Vector3 next)
-    {
-        var vec1 = Vector3.Normalize(current - prev);
-        var vec2 = Vector3.Normalize(next - current);
-        
-        // 计算夹角余弦值
-        var dotProduct = Vector3.Dot(vec1, vec2);
-        
-        // 如果夹角小于120度（余弦值大于-0.5），认为是需要平滑的锐角
-        const float cornerThreshold = -0.5f;
-        return dotProduct > cornerThreshold;
     }
 
     /// <summary>

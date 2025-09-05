@@ -310,34 +310,17 @@ public sealed class NavmeshManager : IDisposable
         loadTaskProgressBits = 0;
         var builder       = new NavmeshBuilder(scene, customization);
         var deltaProgress = 1.0f / (builder.NumTilesX * builder.NumTilesZ);
-
-        var parallelOptions = new ParallelOptions
-        {
-            CancellationToken = cancel,
-            MaxDegreeOfParallelism = Environment.ProcessorCount <= 8
-                                         ? Math.Max(1, Environment.ProcessorCount / 2)
-                                         : Math.Max(1, Environment.ProcessorCount - 1)
-        };
-
-        var tileTasks = new List<(int X, int Z)>();
-        for (var z = 0; z < builder.NumTilesZ; ++z)
-        for (var x = 0; x < builder.NumTilesX; ++x)
-            tileTasks.Add((x, z));
-
-        await Task.Run(() =>
-        {
-            Parallel.ForEach(tileTasks, parallelOptions, tile =>
-            {
-                builder.BuildTile(tile.X, tile.Z);
-
-                UpdateProgressAtomically(deltaProgress);
-
-                cancel.ThrowIfCancellationRequested();
-            });
-        }, cancel);
         
+        builder.BuildTiles(() =>
+        {
+            UpdateProgressAtomically(deltaProgress);
+            cancel.ThrowIfCancellationRequested();
+        });
         customization.CustomizeMesh(builder.Navmesh.Mesh);
         builder.Navmesh.Mesh.ConnectCrossTileLinks();
+
+        loadTaskProgress = 0;
+        Interlocked.Exchange(ref loadTaskProgressBits, BitConverter.SingleToInt32Bits(0f));
 
         // 异步写入缓存
         await WriteToCacheAsync(builder.Navmesh, cachePath, cancel);

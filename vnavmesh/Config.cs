@@ -35,10 +35,6 @@ public class Config
     public float PullStringDefaultImprovedBasedSafeMargin = 1f;
     public float PullStringDefaultImprovedSafeMargin      = 2f;
 
-    // 路径平滑配置
-    public bool EnablePathSmoothing = true;  // 是否启用路径平滑
-    public int PathSmoothingInterpolationPoints = 3;  // 拐点插值点数 (1-5)
-
     public event Action? Modified;
 
     public void NotifyModified() => Modified?.Invoke();
@@ -193,20 +189,6 @@ public class Config
                                 NotifyModified();
                             ImGuiOm.TooltipHover("按住 Ctrl 单击可以直接填写数值");
                             break;
-                    }
-                    
-                    ImGui.NewLine();
-                    
-                    if (ImGui.Checkbox("启用路径平滑", ref EnablePathSmoothing))
-                        NotifyModified();
-                    ImGuiOm.TooltipHover("在拉绳算法后对路径拐点进行插值平滑, 使路径更自然流畅");
-                    
-                    if (EnablePathSmoothing)
-                    {
-                        ImGui.SetNextItemWidth(200f * ImGuiHelpers.GlobalScale);
-                        if (ImGui.SliderInt("插值点数", ref PathSmoothingInterpolationPoints, 1, 5, "%d"))
-                            NotifyModified();
-                        ImGuiOm.TooltipHover("每个拐点添加的插值点数, 数值越大路径越平滑但计算量也会增加");
                     }
                 }
             }
