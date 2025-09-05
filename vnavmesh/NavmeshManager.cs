@@ -307,27 +307,9 @@ public sealed class NavmeshManager : IDisposable
 
         cancel.ThrowIfCancellationRequested();
 
+        loadTaskProgressBits = 0;
         var builder       = new NavmeshBuilder(scene, customization);
         var deltaProgress = 1.0f / (builder.NumTilesX * builder.NumTilesZ);
-        builder.BuildTiles(() =>
-        {
-            int currentBits, newBits;
-            do
-            {
-                currentBits = Interlocked.CompareExchange(ref loadTaskProgressBits, 0, 0);
-                var currentValue = BitConverter.Int32BitsToSingle(currentBits);
-                var newValue     = currentValue + deltaProgress;
-                newBits = BitConverter.SingleToInt32Bits(newValue);
-            } 
-            while (Interlocked.CompareExchange(ref loadTaskProgressBits, newBits, currentBits) != currentBits);
-            
-            cancel.ThrowIfCancellationRequested();
-        });
-        customization.CustomizeMesh(builder.Navmesh.Mesh);
-        builder.Navmesh.Mesh.ConnectCrossTileLinks();
-
-        loadTaskProgress = 0;
-        Interlocked.Exchange(ref loadTaskProgressBits, BitConverter.SingleToInt32Bits(0f));
 
         var parallelOptions = new ParallelOptions
         {
@@ -353,6 +335,9 @@ public sealed class NavmeshManager : IDisposable
                 cancel.ThrowIfCancellationRequested();
             });
         }, cancel);
+        
+        customization.CustomizeMesh(builder.Navmesh.Mesh);
+        builder.Navmesh.Mesh.ConnectCrossTileLinks();
 
         // 异步写入缓存
         await WriteToCacheAsync(builder.Navmesh, cachePath, cancel);
@@ -369,7 +354,6 @@ public sealed class NavmeshManager : IDisposable
 
             var newValue = currentValue + deltaProgress;
 
-            // 尝试原子更新
             var newBits = BitConverter.SingleToInt32Bits(newValue);
             if (Interlocked.CompareExchange(ref loadTaskProgressBits, newBits, currentBits) == currentBits)
             {

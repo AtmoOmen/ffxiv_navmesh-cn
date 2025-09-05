@@ -89,12 +89,20 @@ public class NavmeshQuery
                         else
                             pathPoints.Add(to);
                         
-                        return Service.Config.PullStringType switch
+                        var pulled = Service.Config.PullStringType switch
                         {
                             1 => ApplyMeshStringPulling(pathPoints, to),
                             3 => ApplyImprovedStringPulling(pathPoints, Service.Config.PullStringDefaultImprovedSafeMargin),
                             _ => ApplyAdaptiveStringPulling(pathPoints)
                         };
+
+                        // 如果启用路径平滑，在拉绳后处理后应用拐点插值平滑
+                        if (Service.Config.EnablePathSmoothing && Service.Config.PathSmoothingInterpolationPoints > 0)
+                        {
+                            pulled = ApplyCornerSmoothing(pulled, Service.Config.PathSmoothingInterpolationPoints);
+                        }
+
+                        return pulled;
                     }
 
                     break;
@@ -648,6 +656,95 @@ public class NavmeshQuery
         }
 
         result.Add(pathPoints[^1]);
+        return result;
+    }
+
+    /// <summary>
+    /// 使用简单的线性插值对路径拐点进行平滑处理
+    /// </summary>
+    /// <param name="pathPoints">原始路径点</param>
+    /// <param name="interpolationPoints">每个拐点的插值点数</param>
+    /// <returns>平滑后的路径</returns>
+    private List<Vector3> ApplyCornerSmoothing(List<Vector3> pathPoints, int interpolationPoints)
+    {
+        if (pathPoints.Count <= 2 || interpolationPoints <= 0)
+            return pathPoints;
+
+        var result = new List<Vector3> { pathPoints[0] };
+
+        for (var i = 1; i < pathPoints.Count - 1; i++)
+        {
+            var prevPoint = pathPoints[i - 1];
+            var currentPoint = pathPoints[i];
+            var nextPoint = pathPoints[i + 1];
+
+            // 检测是否为需要平滑的拐点
+            if (IsSharpCorner(prevPoint, currentPoint, nextPoint))
+            {
+                // 使用简单的线性插值在拐点周围添加平滑点
+                var interpolatedPoints = GenerateLinearInterpolation(prevPoint, currentPoint, nextPoint, interpolationPoints);
+                result.AddRange(interpolatedPoints);
+            }
+            else
+            {
+                result.Add(currentPoint);
+            }
+        }
+
+        result.Add(pathPoints[^1]);
+        return result;
+    }
+
+    /// <summary>
+    /// 检测是否为锐角拐点
+    /// </summary>
+    private static bool IsSharpCorner(Vector3 prev, Vector3 current, Vector3 next)
+    {
+        var vec1 = Vector3.Normalize(current - prev);
+        var vec2 = Vector3.Normalize(next - current);
+        
+        // 计算夹角余弦值
+        var dotProduct = Vector3.Dot(vec1, vec2);
+        
+        // 如果夹角小于120度（余弦值大于-0.5），认为是需要平滑的锐角
+        const float cornerThreshold = -0.5f;
+        return dotProduct > cornerThreshold;
+    }
+
+    /// <summary>
+    /// 使用线性插值在拐点周围生成平滑点
+    /// </summary>
+    private static List<Vector3> GenerateLinearInterpolation(Vector3 prev, Vector3 current, Vector3 next, int points)
+    {
+        var result = new List<Vector3>();
+        
+        // 计算拐点的入向量和出向量
+        var incoming = Vector3.Normalize(current - prev);
+        var outgoing = Vector3.Normalize(next - current);
+        
+        // 计算平滑区域的起点和终点（在当前点前后各一段距离）
+        var segmentLength1 = (current - prev).Length();
+        var segmentLength2 = (next - current).Length();
+        
+        var smoothDistance1 = Math.Min(segmentLength1 * 0.3f, 2.0f);
+        var smoothDistance2 = Math.Min(segmentLength2 * 0.3f, 2.0f);
+        
+        var startPoint = current - incoming * smoothDistance1;
+        var endPoint = current + outgoing * smoothDistance2;
+        
+        // 在平滑区域内生成插值点
+        for (var i = 1; i <= points; i++)
+        {
+            var t = i / (float)(points + 1);
+            
+            // 使用简单的二次插值（类似圆弧）
+            var linearPoint = Vector3.Lerp(startPoint, endPoint, t);
+            var curveOffset = Vector3.Lerp(Vector3.Zero, current - linearPoint, 0.5f * (1.0f - Math.Abs(2.0f * t - 1.0f)));
+            
+            var smoothedPoint = linearPoint + curveOffset;
+            result.Add(smoothedPoint);
+        }
+        
         return result;
     }
 
