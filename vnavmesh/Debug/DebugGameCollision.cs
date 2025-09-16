@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Hooking;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
@@ -64,19 +64,19 @@ public unsafe class DebugGameCollision : IDisposable
         if (_raycastHook != null)
         {
             bool hook = _raycastHook.IsEnabled;
-            if (ImGui.Checkbox("Log raycasts", ref hook))
+            if (ImGui.Checkbox("记录射线检测", ref hook))
                 if (hook)
                     _raycastHook.Enable();
                 else
                     _raycastHook.Disable();
         }
 
-        if (_savedHit != null && ImGui.Button("Reset remembered raycast hit"))
+        if (_savedHit != null && ImGui.Button("重置记住的射线检测结果"))
             _savedHit = null;
 
         var module = Framework.Instance()->BGCollisionModule;
-        ImGui.TextUnformatted($"Module: {(nint)module:X}->{(nint)module->SceneManager:X} ({module->SceneManager->NumScenes} scenes, {module->LoadInProgressCounter} loads)");
-        ImGui.TextUnformatted($"Streaming: {SphereStr(module->ForcedStreamingSphere)} / {SphereStr(module->SceneManager->StreamingSphere)}");
+        ImGui.TextUnformatted($"模块: {(nint)module:X}->{(nint)module->SceneManager:X} ({module->SceneManager->NumScenes} 场景 {module->LoadInProgressCounter} 加载中)");
+        ImGui.TextUnformatted($"流式: {SphereStr(module->ForcedStreamingSphere)} / {SphereStr(module->SceneManager->StreamingSphere)}");
         //module->ForcedStreamingSphere.W = 10000;
 
         GatherInfo();
@@ -158,20 +158,20 @@ public unsafe class DebugGameCollision : IDisposable
 
     private void DrawSettings()
     {
-        using var n = _tree.Node("Settings");
+        using var n = _tree.Node("设置");
         if (!n.Opened)
             return;
 
-        ImGui.Checkbox("Show objects with zero layer", ref _showZeroLayer);
+        ImGui.Checkbox("显示零层对象", ref _showZeroLayer);
         {
             var shownLayers = _availableLayers & _shownLayers;
-            using var layers = ImRaii.Combo("Shown layers", shownLayers == _availableLayers ? "All" : shownLayers.None() ? "None" : string.Join(", ", shownLayers.SetBits()));
+            using var layers = ImRaii.Combo("显示层", shownLayers == _availableLayers ? "全部" : shownLayers.None() ? "无" : string.Join(", ", shownLayers.SetBits()));
             if (layers)
             {
                 foreach (var i in _availableLayers.SetBits())
                 {
                     var shown = _shownLayers[i];
-                    if (ImGui.Checkbox($"Layer {i}", ref shown))
+                    if (ImGui.Checkbox($"层 {i}", ref shown))
                         _shownLayers[i] = shown;
                 }
             }
@@ -179,13 +179,13 @@ public unsafe class DebugGameCollision : IDisposable
 
         {
             var matMask = _materialMask & _availableMaterials;
-            using var materials = ImRaii.Combo("Material mask", matMask.None() ? "None" : matMask.Raw.ToString("X"));
+            using var materials = ImRaii.Combo("材质遮罩", matMask.None() ? "无" : matMask.Raw.ToString("X"));
             if (materials)
             {
                 foreach (var i in _availableMaterials.SetBits())
                 {
                     var filter = _materialMask[i];
-                    if (ImGui.Checkbox($"Material {1u << i:X16}", ref filter))
+                    if (ImGui.Checkbox($"材质 {1u << i:X16}", ref filter))
                         _materialMask[i] = filter;
                 }
             }
@@ -193,31 +193,31 @@ public unsafe class DebugGameCollision : IDisposable
 
         {
             var matId = _materialId & _availableMaterials;
-            using var materials = ImRaii.Combo("Material id", matId.None() ? "None" : matId.Raw.ToString("X"));
+            using var materials = ImRaii.Combo("材质 ID", matId.None() ? "无" : matId.Raw.ToString("X"));
             if (materials)
             {
                 foreach (var i in _availableMaterials.SetBits())
                 {
                     var filter = _materialId[i];
-                    if (ImGui.Checkbox($"Material {1u << i:X16}", ref filter))
+                    if (ImGui.Checkbox($"材质 {1u << i:X16}", ref filter))
                         _materialId[i] = filter;
                 }
             }
         }
 
         {
-            using var flags = ImRaii.Combo("Flag filter", _showOnlyFlagRaycast ? _showOnlyFlagVisit ? "Only when both flags are set" : "Only if raycast flag is set" : _showOnlyFlagVisit ? "Only if global visit flag is set" : "Show everything");
+            using var flags = ImRaii.Combo("标志过滤", _showOnlyFlagRaycast ? _showOnlyFlagVisit ? "仅当两个标志都设置" : "仅当射线检测标志设置" : _showOnlyFlagVisit ? "仅当全局访问标志设置" : "显示全部");
             if (flags)
             {
-                ImGui.Checkbox("Hide objects without raycast flag (0x1)", ref _showOnlyFlagRaycast);
-                ImGui.Checkbox("Hide objects without global viist flag (0x2)", ref _showOnlyFlagVisit);
+                ImGui.Checkbox("隐藏无射线检测标志对象 (0x1)", ref _showOnlyFlagRaycast);
+                ImGui.Checkbox("隐藏无全局访问标志对象 (0x2)", ref _showOnlyFlagVisit);
             }
         }
     }
 
     private void DrawSceneColliders(Scene* s, int index)
     {
-        using var n = _tree.Node($"Scene {index}: {s->NumColliders} colliders, {s->NumLoading} loading, streaming={SphereStr(s->StreamingSphere)}###scene_{index}");
+        using var n = _tree.Node($"场景 {index}: {s->NumColliders} 碰撞体 {s->NumLoading} 加载中 流式={SphereStr(s->StreamingSphere)}###scene_{index}");
         if (n.SelectedOrHovered || Service.Config.ForceShowGameCollision)
             foreach (var coll in s->Colliders)
                 if (FilterCollider(coll))
@@ -229,7 +229,7 @@ public unsafe class DebugGameCollision : IDisposable
 
     private void DrawSceneQuadtree(Quadtree* tree, int index)
     {
-        using var n = _tree.Node($"Quadtree {index}: {tree->NumLevels} levels ([{tree->MinX}, {tree->MaxX}]x[{tree->MinZ}, {tree->MaxZ}], leaf {tree->LeafSizeX}x{tree->LeafSizeZ}), {tree->NumNodes} nodes###tree_{index}");
+        using var n = _tree.Node($"四叉树 {index}: {tree->NumLevels} 层 ([{tree->MinX} {tree->MaxX}]x[{tree->MinZ} {tree->MaxZ}] 叶 {tree->LeafSizeX}x{tree->LeafSizeZ}) {tree->NumNodes} 节点###tree_{index}");
         if (!n.Opened)
             return;
 
@@ -237,7 +237,7 @@ public unsafe class DebugGameCollision : IDisposable
         {
             var cellSizeX = (tree->MaxX - tree->MinX + 1) / (1 << level);
             var cellSizeZ = (tree->MaxZ - tree->MinZ + 1) / (1 << level);
-            using var ln = _tree.Node($"Level {level}, {cellSizeX}x{cellSizeZ} cells ({Quadtree.NumNodesAtLevel(level)} nodes starting at {Quadtree.StartingNodeForLevel(level)})");
+            using var ln = _tree.Node($"层级 {level} {cellSizeX}x{cellSizeZ} 单元 ({Quadtree.NumNodesAtLevel(level)} 节点起始于 {Quadtree.StartingNodeForLevel(level)})");
             if (!ln.Opened)
                 continue;
 
@@ -251,7 +251,7 @@ public unsafe class DebugGameCollision : IDisposable
                 var coord = Quadtree.CellCoords((uint)i);
                 var cellX = tree->MinX + coord.x * cellSizeX;
                 var cellZ = tree->MinZ + coord.z * cellSizeZ;
-                using var cn = _tree.Node($"[{coord.x}, {coord.z}] ([{cellX}x{cellZ}]-[{cellX + cellSizeX}x{cellZ + cellSizeZ}])###node_{level}_{i}", node.Node.NodeLink.Next == null);
+                using var cn = _tree.Node($"[{coord.x} {coord.z}] ([{cellX}x{cellZ}]-[{cellX + cellSizeX}x{cellZ + cellSizeZ}])###node_{level}_{i}", node.Node.NodeLink.Next == null);
 
                 if (cn.Opened)
                     foreach (var coll in node.Colliders)
@@ -269,7 +269,7 @@ public unsafe class DebugGameCollision : IDisposable
 
     private void DrawSceneRaycasts(SceneWrapper* s, int index)
     {
-        using var n = _tree.Node($"Scene {index}: raycasts");
+        using var n = _tree.Node($"场景 {index}: 射线检测");
         if (!n.Opened)
             return;
 
@@ -277,7 +277,7 @@ public unsafe class DebugGameCollision : IDisposable
         var windowSize = ImGuiHelpers.MainViewport.Size;
         if (screenPos.X < 0 || screenPos.X > windowSize.X || screenPos.Y < 0 || screenPos.Y > windowSize.Y)
         {
-            _tree.LeafNode("Mouse is outside window");
+            _tree.LeafNode("鼠标在窗口外");
             return;
         }
 
@@ -285,22 +285,22 @@ public unsafe class DebugGameCollision : IDisposable
         if (res1 != null)
         {
             var res = res1.Value;
-            _tree.LeafNode($"Raycast: {_dd.Origin} + {res.Distance} = {res.Point}");
+            _tree.LeafNode($"射线检测: {_dd.Origin} + {res.Distance} = {res.Point}");
             var ab = res.V2 - res.V1;
             var ac = res.V3 - res.V1;
             var normal = Vector3.Normalize(Vector3.Cross(ab, ac));
-            _tree.LeafNode($"Normal: {normal} (slope={Angle.Acos(normal.Y)})");
-            _tree.LeafNode($"Material: {res.Material:X}");
+            _tree.LeafNode($"法线: {normal} (坡度={Angle.Acos(normal.Y)})");
+            _tree.LeafNode($"材质: {res.Material:X}");
             DrawCollider(res.Object);
             VisualizeCollider(res.Object, _materialId, _materialMask);
-            _tree.LeafNode($"Vertices: {res.V1}, {res.V2}, {res.V3}");
+            _tree.LeafNode($"顶点: {res.V1} {res.V2} {res.V3}");
             _dd.DrawWorldLine(res.V1, res.V2, 0xff0000ff, 2);
             _dd.DrawWorldLine(res.V2, res.V3, 0xff0000ff, 2);
             _dd.DrawWorldLine(res.V3, res.V1, 0xff0000ff, 2);
         }
         else
         {
-            _tree.LeafNode($"Raycast: N/A");
+            _tree.LeafNode($"射线检测: 无");
         }
     }
 

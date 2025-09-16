@@ -184,8 +184,9 @@ public class FollowPath : IDisposable
     public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0)
     {
         UpdateSharedState(true);
-        Waypoints = waypoints;
-        IgnoreDeltaY = ignoreDeltaY;
+        waypoints[0]         = Service.ClientState.LocalPlayer?.Position ?? default;
+        Waypoints            = waypoints;
+        IgnoreDeltaY         = ignoreDeltaY;
         DestinationTolerance = destTolerance;
     }
 

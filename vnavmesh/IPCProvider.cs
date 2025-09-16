@@ -31,8 +31,13 @@ class IPCProvider : IDisposable
         RegisterFunc("Query.Mesh.NearestPoint", (Vector3 p, float halfExtentXZ, float halfExtentY) => navmeshManager.Query?.FindNearestPointOnMesh(p, halfExtentXZ, halfExtentY));
         RegisterFunc("Query.Mesh.PointOnFloor", (Vector3 p, bool allowUnlandable, float halfExtentXZ) => navmeshManager.Query?.FindPointOnFloor(p, halfExtentXZ));
 
-        RegisterAction("Path.MoveTo", (List<Vector3> waypoints, bool fly) => followPath.Move(waypoints, !fly));
-        RegisterAction("Path.Stop", followPath.Stop);
+        RegisterAction("Path.MoveTo", (List<Vector3> waypoints, bool fly) =>
+        {
+            var finalPath = new List<Vector3> { default };
+            finalPath.AddRange(waypoints);
+            followPath.Move(finalPath, !fly);
+        });
+        RegisterAction("Path.Stop",   followPath.Stop);
         RegisterFunc("Path.IsRunning", () => followPath.Waypoints.Count > 0);
         RegisterFunc("Path.NumWaypoints", () => followPath.Waypoints.Count);
         RegisterFunc("Path.ListWaypoints", () => followPath.Waypoints);

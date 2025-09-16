@@ -32,48 +32,48 @@ public class Config
 
     public void Draw()
     {
-        if (ImGui.Checkbox("Automatically load/build navigation data when changing zones", ref AutoLoadNavmesh))
+        if (ImGui.Checkbox("切换区域时自动加载导航数据", ref AutoLoadNavmesh))
             NotifyModified();
-        if (ImGui.Checkbox("Enable DTR bar", ref EnableDTR))
+        if (ImGui.Checkbox("启用服务器信息栏", ref EnableDTR))
             NotifyModified();
-        if (ImGui.Checkbox("Show detailed query status in DTR", ref ShowQueryStatusInDTR))
+        if (ImGui.Checkbox("在服务器信息栏中显示详细查询状态", ref ShowQueryStatusInDTR))
             NotifyModified();
-        if (ImGui.Checkbox("Align camera to movement direction", ref AlignCameraToMovement))
+        if (ImGui.Checkbox("镜头跟随移动方向", ref AlignCameraToMovement))
             NotifyModified();
-        if (ImGui.Checkbox("Show active waypoints", ref ShowWaypoints))
+        if (ImGui.Checkbox("显示活动路径点", ref ShowWaypoints))
             NotifyModified();
-        if (ImGui.Checkbox("Always visualize game collision", ref ForceShowGameCollision))
+        if (ImGui.Checkbox("始终显示游戏碰撞体积", ref ForceShowGameCollision))
             NotifyModified();
-        if (ImGui.Checkbox("Cancel current path on player movement input", ref CancelMoveOnUserInput))
+        if (ImGui.Checkbox("玩家移动输入时取消当前路径", ref CancelMoveOnUserInput))
             NotifyModified();
-        if (ImGui.Checkbox("Stop pathing when stuck", ref StopOnStuck))
+        if (ImGui.Checkbox("卡住时停止寻路", ref StopOnStuck))
             NotifyModified();
 
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderInt("Max cores used during mesh build", ref BuildMaxCores, -8, realMaxCores))
+        if (ImGui.SliderInt("路网构建最大使用核心数", ref BuildMaxCores, -8, realMaxCores))
             NotifyModified();
-        ImGuiComponents.HelpMarker("0 = use all available; positive number = use that many cores; negative number = leave that many cores idle");
+        ImGuiComponents.HelpMarker("0 为使用全部核心\n正数为使用指定数量核心\n负数为保留指定数量核心");
 
         if (StopOnStuck)
         {
-            if (ImGui.SliderFloat("Stuck tolerance (yalms/second)", ref StuckTolerance, 0.5f, 3f))
+            if (ImGui.SliderFloat("卡寻路阈值 (米/秒)", ref StuckTolerance, 0.5f, 3f))
                 NotifyModified();
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("The minimum distance the object must move each frame to avoid being considered stuck.");
+                ImGui.SetTooltip("每帧最小移动距离 低于此值视为卡寻路");
 
-            if (ImGui.SliderInt("Stuck timeout (ms)", ref StuckTimeoutMs, 100, 10_000))
+            if (ImGui.SliderInt("卡寻路超时时间 (毫秒)", ref StuckTimeoutMs, 100, 10_000))
                 NotifyModified();
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("How long you can remain under the stuck threshold before stopping.");
+                ImGui.SetTooltip("低于卡寻路阈值持续多久后停止");
 
-            if (ImGui.Checkbox("Retry pathing after stop", ref RetryOnStuck))
+            if (ImGui.Checkbox("停止后重新寻路", ref RetryOnStuck))
                 NotifyModified();
             if (ImGui.IsItemHovered())
-                ImGui.SetTooltip("If enabled, the agent will attempt to re-path after being considered stuck.");
+                ImGui.SetTooltip("启用后 被视为卡寻路时会尝试重新寻路");
         }
 
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderFloat("Randomness Multiplier", ref RandomnessMultiplier, 0f, 1.0f, "%.2f"))
+        if (ImGui.SliderFloat("随机性", ref RandomnessMultiplier, 0f, 1.0f, "%.2f"))
             NotifyModified();
     }
 

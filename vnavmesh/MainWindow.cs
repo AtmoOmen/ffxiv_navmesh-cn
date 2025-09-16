@@ -16,7 +16,7 @@ public class MainWindow : Window, IDisposable
     private DebugLayout _debugLayout;
     private string _configDirectory;
 
-    public MainWindow(NavmeshManager manager, FollowPath path, AsyncMoveRequest move, DTRProvider dtr, string configDir) : base("Navmesh")
+    public MainWindow(NavmeshManager manager, FollowPath path, AsyncMoveRequest move, DTRProvider dtr, string configDir) : base("vnavmesh 寻路导航")
     {
         _path = path;
         _configDirectory = configDir;
@@ -68,19 +68,19 @@ public class MainWindow : Window, IDisposable
         {
             if (tabs)
             {
-                using (var tab = ImRaii.TabItem("Config"))
+                using (var tab = ImRaii.TabItem("配置"))
                     if (tab)
                         Service.Config.Draw();
-                using (var tab = ImRaii.TabItem("Layout"))
+                using (var tab = ImRaii.TabItem("布局"))
                     if (tab)
                         _debugLayout.Draw();
-                using (var tab = ImRaii.TabItem("Collision"))
+                using (var tab = ImRaii.TabItem("碰撞"))
                     if (tab)
                         _debugGameColl.Draw();
-                using (var tab = ImRaii.TabItem("Navmesh manager"))
+                using (var tab = ImRaii.TabItem("管理"))
                     if (tab)
                         _debugNavmeshManager.Draw();
-                using (var tab = ImRaii.TabItem("Navmesh custom"))
+                using (var tab = ImRaii.TabItem("自定义"))
                     if (tab)
                         _debugNavmeshCustom.Draw();
             }

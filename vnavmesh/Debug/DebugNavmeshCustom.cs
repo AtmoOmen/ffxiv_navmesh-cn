@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using DotRecast.Core;
 using DotRecast.Core.Numerics;
@@ -198,31 +198,31 @@ class DebugNavmeshCustom : IDisposable
 
     public void Draw()
     {
-        using (var nsettings = _tree.Node("Navmesh properties"))
+        using (var nsettings = _tree.Node("导航网格属性"))
         {
             if (nsettings.Opened)
             {
-                ImGui.Checkbox("Support flying", ref _settings.Flyable);
-                ImGui.Checkbox("Load existing territory customization", ref _settings.LoadExisting);
+                ImGui.Checkbox("支持飞行", ref _settings.Flyable);
+                ImGui.Checkbox("加载现有区域自定义", ref _settings.LoadExisting);
                 _settings.Settings.Draw();
             }
         }
 
         using (var d = ImRaii.Disabled(_navmesh.CurrentState == AsyncBuilder.State.InProgress))
         {
-            if (ImGui.Button("Rebuild navmesh"))
+            if (ImGui.Button("重建导航网格"))
             {
                 Clear();
                 _navmesh.Rebuild(_settings, true);
             }
             ImGui.SameLine();
-            if (ImGui.Button("Rebuild scene extract only"))
+            if (ImGui.Button("仅重建场景提取"))
             {
                 Clear();
                 _navmesh.Rebuild(_settings, false);
             }
             ImGui.SameLine();
-            ImGui.TextUnformatted($"State: {_navmesh.CurrentState}");
+            ImGui.TextUnformatted($"状态: {_navmesh.CurrentState}");
         }
 
         if (_navmesh.CurrentState != AsyncBuilder.State.Ready)
@@ -231,7 +231,7 @@ class DebugNavmeshCustom : IDisposable
         ImGui.InputFloat("X", ref _dest.X);
         ImGui.InputFloat("Y", ref _dest.Y);
         ImGui.InputFloat("Z", ref _dest.Z);
-        if (ImGui.Button("Pathfind"))
+        if (ImGui.Button("寻路"))
         {
             var player = Service.ClientState.LocalPlayer;
             var playerPos = player?.Position ?? default;
@@ -240,7 +240,7 @@ class DebugNavmeshCustom : IDisposable
 
         var navmesh = _navmesh.Navmesh!;
         navmesh.CalcTileLoc((Service.ClientState.LocalPlayer?.Position ?? default).SystemToRecast(), out var playerTileX, out var playerTileZ);
-        _tree.LeafNode($"Player tile: {playerTileX}x{playerTileZ}");
+        _tree.LeafNode($"玩家瓦片: {playerTileX}x{playerTileZ}");
 
         _drawExtracted ??= new(_navmesh.Scene!, _navmesh.Extractor!, _tree, _dd, _coll, _configDirectory);
         _drawExtracted.Draw();
@@ -251,14 +251,14 @@ class DebugNavmeshCustom : IDisposable
             if (n.Opened)
             {
                 _debugTiles ??= new PerTile[intermediates.NumTilesX, intermediates.NumTilesZ];
-                using (var ng = _tree.Node("Global"))
+                using (var ng = _tree.Node("全局"))
                 {
                     if (ng.Opened)
                     {
                         _globalHFC ??= CompareAllHeightfields(_navmesh.Extractor!);
-                        _tree.LeafNode($"Old: {_globalHFC.Value.DurationOld:f3}");
-                        _tree.LeafNode($"New: {_globalHFC.Value.DurationNew:f3}");
-                        _tree.LeafNode($"Match: {_globalHFC.Value.Identical}");
+                        _tree.LeafNode($"旧: {_globalHFC.Value.DurationOld:f3}");
+                        _tree.LeafNode($"新: {_globalHFC.Value.DurationNew:f3}");
+                        _tree.LeafNode($"匹配: {_globalHFC.Value.Identical}");
                     }
                 }
 
@@ -270,7 +270,7 @@ class DebugNavmeshCustom : IDisposable
                         if (inter == null)
                             continue;
 
-                        using var nt = _tree.Node($"Tile {x}x{z}");
+                        using var nt = _tree.Node($"瓦片 {x}x{z}");
                         if (!nt.Opened)
                             continue;
 
@@ -289,14 +289,14 @@ class DebugNavmeshCustom : IDisposable
                             debug.DrawPolyMeshDetail.Draw();
                         }
 
-                        using (var nhfc = _tree.Node("HF comparison"))
+                        using (var nhfc = _tree.Node("高度场对比"))
                         {
                             if (nhfc.Opened)
                             {
                                 debug.HFC ??= CompareHeightfields(x, z, _navmesh.Extractor!);
-                                _tree.LeafNode($"Old: {debug.HFC.Value.DurationOld:f3}");
-                                _tree.LeafNode($"New: {debug.HFC.Value.DurationNew:f3}");
-                                _tree.LeafNode($"Match: {debug.HFC.Value.Identical}");
+                                _tree.LeafNode($"旧: {debug.HFC.Value.DurationOld:f3}");
+                                _tree.LeafNode($"新: {debug.HFC.Value.DurationNew:f3}");
+                                _tree.LeafNode($"匹配: {debug.HFC.Value.Identical}");
                             }
                         }
                     }
@@ -304,9 +304,9 @@ class DebugNavmeshCustom : IDisposable
             }
         }
 
-        using var dt = _tree.Node("Detour navmesh");
+        using var dt = _tree.Node("Detour 导航网格");
         if (dt.Opened)
-            _tree.LeafNode("Loaded mesh replaced with custom build, check Navmesh Manager tab");
+            _tree.LeafNode("已加载网格替换为自定义构建 请检查导航网格管理器标签页");
     }
 
     private void Clear()
