@@ -10,7 +10,7 @@ namespace Navmesh.Customizations;
 [CustomizationTerritory(1291)]
 internal class Z1291Phaenna : NavmeshCustomization
 {
-    public override int Version => 1;
+    public override int Version => 3;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -20,6 +20,13 @@ internal class Z1291Phaenna : NavmeshCustomization
         {
             if (scene.Meshes.TryGetValue(liner, out var cl))
             {
+                // prevent agent from trying to climb the side of the ramp of a green cosmoliner - can cause issues if idiots set a very high path tolerance
+                var departVerts = CollectionsMarshal.AsSpan(cl.Parts[29].Vertices);
+                departVerts[129].Y += 1;
+                departVerts[130].Y += 1;
+                departVerts[132].Y += 1;
+                departVerts[133].Y += 1;
+
                 var box = SceneExtractor.BuildBoxMesh()[0];
                 foreach (ref var vert in CollectionsMarshal.AsSpan(box.Vertices))
                 {
@@ -28,6 +35,17 @@ internal class Z1291Phaenna : NavmeshCustomization
                 }
                 cl.Parts.Add(box);
             }
+        }
+
+        if (scene.Meshes.TryGetValue("bg/ffxiv/cos_c1/hou/c1w2/collision/c1w2_t0_roc31.pcb", out var rock))
+        {
+            var p = SceneExtractor.BuildBoxMesh()[0];
+            foreach (ref var vert in CollectionsMarshal.AsSpan(p.Vertices))
+            {
+                vert *= new Vector3(0.5f, 2, 0.5f);
+                vert += new Vector3(-1, 0, -0.5f);
+            }
+            rock.Parts.Add(p);
         }
     }
 
@@ -55,7 +73,7 @@ internal class Z1291Phaenna : NavmeshCustomization
 
         var festivalVersion = festivalLayers.FirstOrDefault() >> 16;
 
-        if (festivalVersion < 6)
+        if (festivalVersion < 0x06)
             return;
 
         #region base liners
@@ -102,6 +120,72 @@ internal class Z1291Phaenna : NavmeshCustomization
 
         // soda-lime float <-> SW
         addCosmoliner(new(231, -9.5f, 132), new(0, hpi, 0), new(26.971f, -10, -110.029f), new(pi, 0.785f, pi));
+        #endregion
+
+        if (festivalVersion < 0x0F)
+            return;
+
+        #region peninsula
+        // soda-lime float <-> peninsula E
+        addCosmoliner(new(255, -9.5f, 156), new(pi, 0, pi), new(185, -5.5f, 406), default);
+
+        // peninsula E <-> peninsula SW
+        addCosmoliner(new(185, -5.5f, 454), new(pi, 0, pi), new(-64, 34, 660), new(0, -hpi, 0));
+
+        // peninsula E <-> peninsula NW
+        addCosmoliner(new(161, -5.5f, 430), new(0, hpi, 0), new(-136, 28.5f, 305), new(0, -hpi, 0));
+
+        // peninsula SW <-> peninsula NW
+        addCosmoliner(new(-88, 34, 636), default, new(-160, 28.5f, 329), new(pi, 0, pi));
+        #endregion
+
+        #region scoresheen sands
+        // N sands <-> NW
+        addCosmoliner(new(-623.029f, -2, -656.971f), new(0, -0.785f, 0), new(-156.909f, 62.5f, -752.908f), new(-pi, -1.484f, -pi));
+
+        // N sands <-> E1 sands
+        addCosmoliner(new(-623.029f, -2, -623.029f), new(pi, 0.785f, -pi), new(-422, -2, -430.785f), new(0, 0.524f, 0));
+
+        // N sands <-> W sands
+        addCosmoliner(new(-656.971f, -2, -623.029f), new(pi, -0.785f, pi), new(-768, 13.5f, -294), default);
+
+        // E1 sands <-> W
+        addCosmoliner(new(-389.215f, -2, -422), new(0, -1.047f, 0), new(-100, 25.5f, -402), new(0, hpi, 0));
+
+        // E1 sands <-> W sands
+        addCosmoliner(new(-430.785f, -2, -398), new(pi, -1.047f, pi), new(-744, 13.5f, -270), new(0, -hpi, 0));
+
+        // E1 sands <-> E2 sands
+        addCosmoliner(new(-398, -2, -389.215f), new(-pi, 0.524f, -pi), new(-326.971f, -5, -151.971f), new(0, 0.785f, 0));
+
+        // E2 sands <-> SW
+        addCosmoliner(new(-293.029f, -5, -151.971f), new(0, -0.785f, 0), new(-6.971f, -10, -110.029f), new(pi, -0.785f, pi));
+
+        // E2 sands <-> peninsula NW
+        addCosmoliner(new(-293.029f, -5, -118.029f), new(pi, 0.785f, pi), new(-160, 28.5f, 281), default);
+
+        // E2 sands <-> S sands
+        addCosmoliner(new(-326.971f, -5, -118.029f), new(pi, -0.785f, pi), new(-556, 24.5f, 50), new(0, -hpi, 0));
+
+        // W sands <-> S sands
+        addCosmoliner(new(-768, 13.5f, -246), new(pi, 0, pi), new(-604, 24.5f, 50), new(0, hpi, 0));
+        #endregion
+
+        if (festivalVersion < 0x14)
+            return;
+
+        #region pools
+        // soda-lime float <-> pools E
+        addCosmoliner(new(279, -9.5f, 132), new(0, -hpi, 0), new(830, -168, 415), new(0, 0.349f, 0));
+
+        // pools E <-> pools S
+        addCosmoliner(new(830, -168, 455), new(pi, -0.349f, pi), new(549.696f, -220, 748.473f), new(0, -1.396f, 0));
+
+        // pools S <-> chasm
+        addCosmoliner(new(510.304f, -220, 741.527f), new(0, 1.047f, 0), new(405.832f, -230, 253.635f), new(-pi, -0.175f, pi));
+
+        // chasm <-> pools middle
+        addCosmoliner(new(433.635f, -230, 234.168f), new(pi, 1.396f, pi), new(660, -242, 420), new(0, 0.785f, 0));
         #endregion
     }
 }

@@ -1,5 +1,6 @@
 ﻿using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility.Raii;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
@@ -14,6 +15,7 @@ public class Config
     public bool EnableDTR = true;
     public bool ShowQueryStatusInDTR = true;
     public bool AlignCameraToMovement;
+    public float AlignCameraHeight = -15;
     public bool ShowWaypoints;
     public bool ForceShowGameCollision;
     public bool CancelMoveOnUserInput;
@@ -40,7 +42,13 @@ public class Config
             NotifyModified();
         if (ImGui.Checkbox("镜头跟随移动方向", ref AlignCameraToMovement))
             NotifyModified();
-        if (ImGui.Checkbox("显示活动路径点", ref ShowWaypoints))
+        using (ImRaii.Disabled(!AlignCameraToMovement))
+        {
+            ImGui.SetNextItemWidth(200);
+            if (ImGui.SliderFloat("相机高度 (角度)", ref AlignCameraHeight, -75, 75))
+                NotifyModified();
+        }
+        if (ImGui.Checkbox("显示路径点", ref ShowWaypoints))
             NotifyModified();
         if (ImGui.Checkbox("始终显示游戏碰撞体积", ref ForceShowGameCollision))
             NotifyModified();
