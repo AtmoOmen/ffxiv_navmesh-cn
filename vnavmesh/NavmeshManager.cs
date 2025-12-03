@@ -3,6 +3,7 @@ using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -34,7 +35,7 @@ public sealed class NavmeshManager : IDisposable
 
     private DirectoryInfo _cacheDir;
 
-    public NavmeshManager(DirectoryInfo cacheDir)
+    public unsafe NavmeshManager(DirectoryInfo cacheDir)
     {
         _cacheDir = cacheDir;
         cacheDir.Create(); // ensure directory exists
@@ -211,7 +212,9 @@ public sealed class NavmeshManager : IDisposable
                 return "";
         }
 
-        return $"{terrRow?.Bg}//{filterKey:X}//{LayoutUtils.FestivalsString(layout->ActiveFestivals)}";
+        var sgs = LayoutUtils.GetZoneSharedGroupsEnabled(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
+
+        return $"{terrRow?.Bg}//{filterKey:X}//{LayoutUtils.FestivalsString(layout->ActiveFestivals)}//{string.Join('.', sgs)}";
     }
 
     internal static unsafe string GetCacheKey(SceneDefinition scene)
@@ -220,8 +223,12 @@ public sealed class NavmeshManager : IDisposable
         var layout = LayoutWorld.Instance()->ActiveLayout;
         var filter = LayoutUtils.FindFilter(layout);
         var filterKey = filter != null ? filter->Key : 0;
-        var terrRow = Service.LuminaRow<Lumina.Excel.Sheets.TerritoryType>(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
-        return $"{terrRow?.Bg.ToString().Replace('/', '_')}__{filterKey:X}__{string.Join('.', scene.FestivalLayers.Select(id => id.ToString("X")))}";
+        var terrId = filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId;
+        var terrRow = Service.LuminaRow<Lumina.Excel.Sheets.TerritoryType>(terrId);
+
+        static string numbers<T>(IEnumerable<T> nums) where T : INumber<T> => string.Join('.', nums.Select(n => n.ToString("X", CultureInfo.InvariantCulture)));
+
+        return $"{terrRow?.Bg.ToString().Replace('/', '_')}__{filterKey:X}__{numbers(scene.FestivalLayers)}__{numbers(scene.ZoneSGs)}";
     }
 
     private void ClearState()
@@ -273,9 +280,8 @@ public sealed class NavmeshManager : IDisposable
         cancel.ThrowIfCancellationRequested();
 
         // cache doesn't exist or can't be used for whatever reason - build navmesh from scratch
-        // TODO: we can build multiple tiles concurrently
         var builder = new NavmeshBuilder(scene, customization);
-        var deltaProgress = 0.95f / (builder.NumTilesX * builder.NumTilesZ);
+        var deltaProgress = 0.99f / (builder.NumTilesX * builder.NumTilesZ);
         builder.BuildTiles(() =>
         {
             _loadTaskProgress += deltaProgress;
@@ -290,7 +296,7 @@ public sealed class NavmeshManager : IDisposable
             builder.Navmesh.Serialize(writer);
         }
         customization.CustomizeMesh(builder.Navmesh.Mesh, layers);
-        _loadTaskProgress += 0.05f;
+        deltaProgress += 0.01f;
         return builder.Navmesh;
     }
 
