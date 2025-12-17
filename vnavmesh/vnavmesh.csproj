@@ -35,4 +35,8 @@
     <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
   </ItemGroup>
 
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <MakeZIP>true</MakeZIP>
+  </PropertyGroup>
+
 </Project>
