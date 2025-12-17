@@ -1,4 +1,3 @@
-using Dalamud.Common;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
@@ -187,8 +186,8 @@ public sealed class Plugin : IDalamudPlugin
 
     private void MoveToCommand(string[] args, bool relativeToPlayer, bool fly)
     {
-        var originActor = relativeToPlayer ? Service.ClientState.LocalPlayer : null;
-        var origin = originActor?.Position ?? new();
+        var originActor = relativeToPlayer ? Service.ObjectTable.LocalPlayer : null;
+        var origin      = originActor?.Position ?? new();
         var offset = new Vector3(
             float.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture),

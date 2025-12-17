@@ -233,13 +233,13 @@ class DebugNavmeshCustom : IDisposable
         ImGui.InputFloat("Z", ref _dest.Z);
         if (ImGui.Button("寻路"))
         {
-            var player = Service.ClientState.LocalPlayer;
+            var player    = Service.ObjectTable.LocalPlayer;
             var playerPos = player?.Position ?? default;
             _navmesh.Query!.PathfindMesh(playerPos, _dest, true, true, new());
         }
 
         var navmesh = _navmesh.Navmesh!;
-        navmesh.CalcTileLoc((Service.ClientState.LocalPlayer?.Position ?? default).SystemToRecast(), out var playerTileX, out var playerTileZ);
+        navmesh.CalcTileLoc((Service.ObjectTable.LocalPlayer?.Position ?? default).SystemToRecast(), out var playerTileX, out var playerTileZ);
         _tree.LeafNode($"玩家瓦片: {playerTileX}x{playerTileZ}");
 
         _drawExtracted ??= new(_navmesh.Scene!, _navmesh.Extractor!, _tree, _dd, _coll, _configDirectory);
