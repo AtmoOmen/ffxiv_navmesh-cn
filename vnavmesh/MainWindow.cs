@@ -74,9 +74,10 @@ public class MainWindow : Window, IDisposable
                 using (var tab = ImRaii.TabItem("布局"))
                     if (tab)
                         _debugLayout.Draw();
-                using (var tab = ImRaii.TabItem("碰撞"))
-                    if (tab)
-                        _debugGameColl.Draw();
+                // 临时屏蔽
+                // using (var tab = ImRaii.TabItem("碰撞"))
+                //     if (tab)
+                //         _debugGameColl.Draw();
                 using (var tab = ImRaii.TabItem("管理"))
                     if (tab)
                         _debugNavmeshManager.Draw();
