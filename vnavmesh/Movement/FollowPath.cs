@@ -54,7 +54,7 @@ public class FollowPath : IDisposable
 
     public void Update(IFramework fwk)
     {
-        var player = Service.ClientState.LocalPlayer;
+        var player = Service.ObjectTable.LocalPlayer;
         if (player == null)
             return;
 
@@ -184,8 +184,9 @@ public class FollowPath : IDisposable
     public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0)
     {
         UpdateSharedState(true);
-        Waypoints = waypoints;
-        IgnoreDeltaY = ignoreDeltaY;
+        waypoints[0]         = Service.ObjectTable.LocalPlayer?.Position ?? default;
+        Waypoints            = waypoints;
+        IgnoreDeltaY         = ignoreDeltaY;
         DestinationTolerance = destTolerance;
     }
 

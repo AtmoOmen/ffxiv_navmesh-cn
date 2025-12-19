@@ -1,13 +1,10 @@
-﻿using Dalamud.Common;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Navmesh.Movement;
 using System;
-using System.IO;
 using System.Numerics;
-using System.Reflection;
 
 namespace Navmesh;
 
@@ -25,13 +22,6 @@ public sealed class Plugin : IDalamudPlugin
     {
         if (!dalamud.ConfigDirectory.Exists)
             dalamud.ConfigDirectory.Create();
-        var dalamudRoot = dalamud.GetType().Assembly.
-                GetType("Dalamud.Service`1", true)!.MakeGenericType(dalamud.GetType().Assembly.GetType("Dalamud.Dalamud", true)!).
-                GetMethod("Get")!.Invoke(null, BindingFlags.Default, null, Array.Empty<object>(), null);
-        var dalamudStartInfo = (DalamudStartInfo)dalamudRoot?.GetType().GetProperty("StartInfo", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(dalamudRoot)!;
-        InteropGenerator.Runtime.Resolver.GetInstance.Setup(0, dalamudStartInfo.GameVersion?.ToString() ?? "", new(Path.Combine(dalamud.ConfigDirectory.FullName, "cs.json")));
-        FFXIVClientStructs.Interop.Generated.Addresses.Register();
-        InteropGenerator.Runtime.Resolver.GetInstance.Resolve();
 
         dalamud.Create<Service>();
         Service.Config.Load(dalamud.ConfigFile);
@@ -53,23 +43,23 @@ public sealed class Plugin : IDalamudPlugin
         var cmd = new CommandInfo(OnCommand)
         {
             HelpMessage = """
-            Opens the debug menu.
-            /vnav moveto <X> <Y> <Z> → move to raw coordinates
-            /vnav movedir <X> <Y> <Z> → move this many units over (relative to player facing)
-            /vnav movetarget → move to target's position
-            /vnav moveflag → move to flag position
-            /vnav flyto <X> <Y> <Z> → fly to raw coordinates
-            /vnav flydir <X> <Y> <Z> → fly this many units over (relative to player facing)
-            /vnav flytarget → fly to target's position
-            /vnav flyflag → fly to flag position
-            /vnav stop → stop all movement
-            /vnav reload → reload current territory's navmesh from cache
-            /vnav rebuild → rebuild current territory's navmesh from scratch
-            /vnav aligncamera → toggle aligning camera to movement direction
-            /vnav aligncamera true|yes|enable → enable aligning camera to movement direction
-            /vnav aligncamera false|no|disable → disable aligning camera to movement direction
-            /vnav dtr → toggle dtr status
-            /vnav collider → toggle collision debug visualization
+            打开调试菜单
+            /vnav moveto <X> <Y> <Z> → 移动到原始坐标
+            /vnav movedir <X> <Y> <Z> → 按玩家面向移动指定单位
+            /vnav movetarget → 移动到目标位置
+            /vnav moveflag → 移动到标记位置
+            /vnav flyto <X> <Y> <Z> → 飞行到原始坐标
+            /vnav flydir <X> <Y> <Z> → 按玩家面向飞行指定单位
+            /vnav flytarget → 飞行到目标位置
+            /vnav flyflag → 飞行到标记位置
+            /vnav stop → 停止所有移动
+            /vnav reload → 从缓存重新加载当前区域导航网格
+            /vnav rebuild → 从头重建当前区域导航网格
+            /vnav aligncamera → 切换相机跟随移动方向
+            /vnav aligncamera true|yes|enable → 启用相机跟随移动方向
+            /vnav aligncamera false|no|disable → 禁用相机跟随移动方向
+            /vnav dtr → 切换服务器信息栏状态
+            /vnav collider → 切换碰撞调试可视化
             """,
 
             ShowInHelp = true,
@@ -196,8 +186,8 @@ public sealed class Plugin : IDalamudPlugin
 
     private void MoveToCommand(string[] args, bool relativeToPlayer, bool fly)
     {
-        var originActor = relativeToPlayer ? Service.ClientState.LocalPlayer : null;
-        var origin = originActor?.Position ?? new();
+        var originActor = relativeToPlayer ? Service.ObjectTable.LocalPlayer : null;
+        var origin      = originActor?.Position ?? new();
         var offset = new Vector3(
             float.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture),
@@ -215,12 +205,12 @@ public sealed class Plugin : IDalamudPlugin
         _asyncMove.MoveTo(pt.Value, fly);
     }
 
-    private void AlignCameraCommand(string arg)
+    private static void AlignCameraCommand(string arg)
     {
         arg = arg.ToLower();
-        if (arg == "true" || arg == "yes" || arg == "enable")
+        if (arg is "true" or "yes" or "enable")
             Service.Config.AlignCameraToMovement = true;
-        else if (arg == "false" || arg == "no" || arg == "disable")
+        else if (arg is "false" or "no" or "disable")
             Service.Config.AlignCameraToMovement = false;
         return;
     }

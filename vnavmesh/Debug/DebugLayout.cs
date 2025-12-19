@@ -224,7 +224,7 @@ public unsafe class DebugLayout : IDisposable
 
     private void DrawWorld(LayoutWorld* w)
     {
-        using var nw = DrawManagerBase("World", &w->IManagerBase, $"t={w->MillisecondsSinceLastUpdate}ms");
+        using var nw = DrawManagerBase("世界", &w->IManagerBase, $"耗时={w->MillisecondsSinceLastUpdate}ms");
         if (!nw.Opened)
             return;
 
@@ -262,18 +262,18 @@ public unsafe class DebugLayout : IDisposable
         if (!nr.Opened)
             return;
 
-        _tree.LeafNode($"Init state: {manager->InitState}");
-        _tree.LeafNode($"Init args: type={manager->Type}, terrType={manager->TerritoryTypeId}, cfc={manager->CfcId}, filter-key={manager->LayerFilterKey:X}");
-        _tree.LeafNode($"Festivals: status={manager->FestivalStatus} [{LayoutUtils.FestivalsString(manager->ActiveFestivals)}]");
-        _tree.LeafNode($"Streaming mgr: {(nint)manager->StreamingManager:X}");
-        _tree.LeafNode($"Env mgr: {(nint)manager->Environment:X}");
-        _tree.LeafNode($"OBSet mgr: {(nint)manager->OBSetManager:X}");
-        _tree.LeafNode($"Streaming params: force-update={manager->ForceUpdateAllStreaming}, skip-terrain-coll={manager->SkipAddingTerrainCollider}");
-        _tree.LeafNode($"Streaming origin: forced={manager->ForcedStreamingOrigin}, last={manager->LastUpdatedStreamingOrigin}, type={manager->StreamingOriginType}");
-        _tree.LeafNode($"Last-update: time={manager->LastUpdateDT:f3}, flip={manager->LastUpdateOdd}");
+        _tree.LeafNode($"初始化状态: {manager->InitState}");
+        _tree.LeafNode($"初始化参数: 类型={manager->Type} 区域类型={manager->TerritoryTypeId} cfc={manager->CfcId} 过滤键={manager->LayerFilterKey:X}");
+        _tree.LeafNode($"节日: 状态={manager->FestivalStatus} [{LayoutUtils.FestivalsString(manager->ActiveFestivals)}]");
+        _tree.LeafNode($"流式管理器: {(nint)manager->StreamingManager:X}");
+        _tree.LeafNode($"环境管理器: {(nint)manager->Environment:X}");
+        _tree.LeafNode($"OBSet 管理器: {(nint)manager->OBSetManager:X}");
+        _tree.LeafNode($"流式参数: 强制更新={manager->ForceUpdateAllStreaming} 跳过地形碰撞体={manager->SkipAddingTerrainCollider}");
+        _tree.LeafNode($"流式原点: 强制={manager->ForcedStreamingOrigin} 最后={manager->LastUpdatedStreamingOrigin} 类型={manager->StreamingOriginType}");
+        _tree.LeafNode($"最后更新: 时间={manager->LastUpdateDT:f3} 翻转={manager->LastUpdateOdd}");
         DrawStringTable(ref manager->ResourcePaths);
 
-        using (var n = _tree.Node("Resources"))
+        using (var n = _tree.Node("资源"))
         {
             if (n.Opened)
             {
@@ -287,19 +287,19 @@ public unsafe class DebugLayout : IDisposable
             }
         }
 
-        using (var n = _tree.Node($"Terrain ({manager->Terrains.Count})###terrains", manager->Terrains.Count == 0))
+        using (var n = _tree.Node($"地形 ({manager->Terrains.Count})###terrains", manager->Terrains.Count == 0))
         {
             if (n.Opened)
             {
                 foreach (var (k, v) in manager->Terrains)
                 {
-                    var nterr = _tree.LeafNode($"{k:X8} = {(nint)v.Value:X}, path={v.Value->PathString}, coll={(nint)v.Value->Collider:X}");
+                    var nterr = _tree.LeafNode($"{k:X8} = {(nint)v.Value:X} 路径={v.Value->PathString} 碰撞体={(nint)v.Value->Collider:X}");
                     if (nterr.SelectedOrHovered && v.Value->Collider != null)
                         _coll.VisualizeCollider(&v.Value->Collider->Collider, default, default);
                 }
             }
         }
-        using (var n = _tree.Node($"Layers ({manager->Layers.Count})###layers", manager->Layers.Count == 0))
+        using (var n = _tree.Node($"层 ({manager->Layers.Count})###layers", manager->Layers.Count == 0))
         {
             if (n.Opened)
             {
@@ -309,13 +309,13 @@ public unsafe class DebugLayout : IDisposable
                 }
             }
         }
-        using (var n = _tree.Node($"Instances ({manager->InstancesByType.Count} types)###insts", manager->InstancesByType.Count == 0))
+        using (var n = _tree.Node($"实例 ({manager->InstancesByType.Count} 类型)###insts", manager->InstancesByType.Count == 0))
         {
             if (n.Opened)
             {
                 foreach (var (itk, itv) in manager->InstancesByType)
                 {
-                    using var nt = _tree.Node($"{itk} ({itv.Value->Count} instances)##{itk}");
+                    using var nt = _tree.Node($"{itk} ({itv.Value->Count} 实例)##{itk}");
                     if (nt.Opened)
                     {
                         foreach (var (ik, iv) in *itv.Value)
@@ -327,7 +327,7 @@ public unsafe class DebugLayout : IDisposable
             }
         }
 
-        using (var n = _tree.Node($"Paths ({manager->CrcToPath.Count})###paths", manager->CrcToPath.Count == 0))
+        using (var n = _tree.Node($"路径 ({manager->CrcToPath.Count})###paths", manager->CrcToPath.Count == 0))
         {
             if (n.Opened)
             {
@@ -337,7 +337,7 @@ public unsafe class DebugLayout : IDisposable
                 }
             }
         }
-        using (var n = _tree.Node($"Analytic shapes ({manager->CrcToAnalyticShapeData.Count})###shapes", manager->CrcToAnalyticShapeData.Count == 0))
+        using (var n = _tree.Node($"分析形状 ({manager->CrcToAnalyticShapeData.Count})###shapes", manager->CrcToAnalyticShapeData.Count == 0))
         {
             if (n.Opened)
             {
@@ -348,14 +348,14 @@ public unsafe class DebugLayout : IDisposable
             }
         }
 
-        using (var n = _tree.Node($"Filters ({manager->Filters.Count})", manager->Filters.Count == 0))
+        using (var n = _tree.Node($"过滤器 ({manager->Filters.Count})", manager->Filters.Count == 0))
         {
             if (n.Opened)
             {
                 var activeFilter = LayoutUtils.FindFilter(manager);
                 foreach (var (k, v) in manager->Filters)
                 {
-                    _tree.LeafNode($"{k:X} = terr={v.Value->TerritoryTypeId} cfc={v.Value->CfcId}{(v.Value == activeFilter ? " (active)" : "")}");
+                    _tree.LeafNode($"{k:X} = 区域={v.Value->TerritoryTypeId} cfc={v.Value->CfcId}{(v.Value == activeFilter ? " (激活)" : "")}");
                 }
             }
         }
@@ -364,7 +364,7 @@ public unsafe class DebugLayout : IDisposable
     private void DrawLayer(string tag, LayoutManager* layout, LayerManager* layer)
     {
         var unks = ""; // $", u1F={layer->u1F}, u20={layer->u20:X4}";
-        using var nl = _tree.Node($"[{tag}] LG{layer->LayerGroupId}, festival={layer->FestivalId}/{layer->FestivalSubId}, flags={layer->Flags:X}{unks}, {layer->Instances.Count} instances == {(nint)layer:X}", layer->Instances.Count == 0);
+        using var nl = _tree.Node($"[{tag}] 层组{layer->LayerGroupId} 节日={layer->FestivalId}/{layer->FestivalSubId} 标志={layer->Flags:X}{unks} {layer->Instances.Count} 实例 == {(nint)layer:X}", layer->Instances.Count == 0);
         if (!nl.Opened)
             return;
         foreach (var (ik, iv) in layer->Instances)
@@ -428,7 +428,7 @@ public unsafe class DebugLayout : IDisposable
 
     private void DrawFileData(FileHeader* header)
     {
-        using var n = _tree.Node($"{(char)(header->Magic & 0xFF)}{(char)((header->Magic >> 8) & 0xFF)}{(char)((header->Magic >> 16) & 0xFF)}{(char)((header->Magic >> 24) & 0xFF)} (size={header->TotalSize}): {header->NumSections} sections");
+        using var n = _tree.Node($"{(char)(header->Magic & 0xFF)}{(char)((header->Magic >> 8) & 0xFF)}{(char)((header->Magic >> 16) & 0xFF)}{(char)((header->Magic >> 24) & 0xFF)} (大小={header->TotalSize}): {header->NumSections} 部分");
         if (!n.Opened)
             return;
 
@@ -446,16 +446,16 @@ public unsafe class DebugLayout : IDisposable
 
     private bool DrawFileSectionScene(string tag, FileSceneHeader* header)
     {
-        using var n = _tree.Node($"{tag}: general at +{header->OffsetGeneral}");
+        using var n = _tree.Node($"{tag}: 常规位于 +{header->OffsetGeneral}");
         if (!n.Opened)
             return false;
         var general = header->General;
-        _tree.LeafNode($"Have layer groups: {general->HaveLayerGroups}");
-        _tree.LeafNode($"Terrain: {LayoutUtils.ReadString(general->PathTerrain)}");
-        _tree.LeafNode($"Env spaces: {general->NumEnvSpaces} at +{general->OffsetEnvSpaces}");
-        _tree.LeafNode($"Sky visibility: {LayoutUtils.ReadString(general->PathSkyVisibility)}");
+        _tree.LeafNode($"拥有层组: {general->HaveLayerGroups}");
+        _tree.LeafNode($"地形: {LayoutUtils.ReadString(general->PathTerrain)}");
+        _tree.LeafNode($"环境空间: {general->NumEnvSpaces} 位于 +{general->OffsetEnvSpaces}");
+        _tree.LeafNode($"天空可见性: {LayoutUtils.ReadString(general->PathSkyVisibility)}");
         _tree.LeafNode($"LCB: {LayoutUtils.ReadString(general->PathLCB)} (uw={general->HaveLCBUW})");
-        using (var ng = _tree.Node($"Embedded layer groups ({header->NumEmbeddedLayerGroups} at +{header->OffsetEmbeddedLayerGroups})", header->NumEmbeddedLayerGroups == 0))
+        using (var ng = _tree.Node($"嵌入层组 ({header->NumEmbeddedLayerGroups} 位于 +{header->OffsetEmbeddedLayerGroups})", header->NumEmbeddedLayerGroups == 0))
         {
             if (ng.Opened)
             {
@@ -465,13 +465,13 @@ public unsafe class DebugLayout : IDisposable
                 }
             }
         }
-        using (var ng = _tree.Node($"Layer group resources ({header->NumLayerGroupResources} at +{header->OffsetLayerGroupResources})", header->NumLayerGroupResources == 0))
+        using (var ng = _tree.Node($"层组资源 ({header->NumLayerGroupResources} 位于 +{header->OffsetLayerGroupResources})", header->NumLayerGroupResources == 0))
         {
             if (ng.Opened)
             {
                 for (int i = 0; i < header->NumLayerGroupResources; ++i)
                 {
-                    DrawFile($"Layer group {i}", LayoutUtils.ReadString(header->LayerGroupResource(header->LayerGroupResourceOffsets[i])));
+                    DrawFile($"层组 {i}", LayoutUtils.ReadString(header->LayerGroupResource(header->LayerGroupResourceOffsets[i])));
                 }
             }
         }
@@ -787,7 +787,7 @@ public unsafe class DebugLayout : IDisposable
                     if (inst.Instance != null)
                     {
                         var trans = inst.Instance->GetTranslationImpl();
-                        _dd.DrawWorldLine(Service.ClientState.LocalPlayer?.Position ?? default, *trans, 0xFFFF00FF);
+                        _dd.DrawWorldLine(Service.ObjectTable.LocalPlayer?.Position ?? default, *trans, 0xFFFF00FF);
                     }
                 }
                 else

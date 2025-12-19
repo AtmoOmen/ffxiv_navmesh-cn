@@ -30,9 +30,9 @@ public class DTRProvider : IDisposable
         if (_dtrBarEntry.Shown)
         {
             var loadProgress = _manager.LoadTaskProgress;
-            var meshStatus = loadProgress >= 0 ? $"{loadProgress * 100:f0}%" : _manager.Navmesh != null ? "Ready" : "Not Ready";
+            var meshStatus = loadProgress >= 0 ? $"{loadProgress * 100:f0}%" : _manager.Navmesh != null ? "就绪" : "未就绪";
             
-            var statusText = "Mesh: " + meshStatus;
+            var statusText = "导航: " + meshStatus;
             
             if (Service.Config.ShowQueryStatusInDTR)
             {
@@ -45,22 +45,22 @@ public class DTRProvider : IDisposable
                 if (pathfindInProgress || numQueued > 0)
                 {
                     var activeCount = pathfindInProgress ? 1 : 0;
-                    statusText += $" | Queries: {activeCount}";
+                    statusText += $" | 算路: {activeCount}";
                     if (numQueued > 0)
-                        statusText += $" (+{numQueued} queued)";
+                        statusText += $" (等待中: {numQueued})";
                 }
                 
                 // Show current operations
                 if (asyncMoveActive)
-                    statusText += " | Pathfinding";
+                    statusText += " | 算路中";
                 if (isMoving)
-                    statusText += " | Moving";
+                    statusText += " | 移动中";
             }
             else
             {
                 // Fallback to original simple status for backward compatibility
                 if (_asyncMove.TaskInProgress || _followPath.Waypoints.Count > 0)
-                    statusText = "Mesh: Pathfinding";
+                    statusText = "导航: 算路中";
             }
             
             _dtrBarEntry.Text = statusText;
