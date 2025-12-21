@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.CN.NET.Sdk/14.0.1">
   <PropertyGroup>
-    <Version>0.3.0.0</Version>
+    <Version>0.3.1.0</Version>
     <PackageProjectUrl>https://github.com/AtmoOmen/ffxiv_navmesh</PackageProjectUrl>
   </PropertyGroup>
 
