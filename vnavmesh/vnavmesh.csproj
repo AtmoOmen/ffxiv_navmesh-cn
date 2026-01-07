@@ -4,20 +4,7 @@
     <Version>0.3.1.0</Version>
     <PackageProjectUrl>https://github.com/AtmoOmen/ffxiv_navmesh</PackageProjectUrl>
   </PropertyGroup>
-
-  <PropertyGroup>
-    <Platforms>x64</Platforms>
-    <Nullable>enable</Nullable>
-    <LangVersion>preview</LangVersion>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <UseWpf>true</UseWpf>
-    <RootNamespace>Navmesh</RootNamespace>
-  </PropertyGroup>
-
+  
   <ItemGroup>
     <ProjectReference Include="..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj" />
     <ProjectReference Include="..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj" />
@@ -29,6 +16,7 @@
     <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
     <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
     <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
+    <Reference Include="Dalamud.Common" Private="false" />
   </ItemGroup>
 
 </Project>
