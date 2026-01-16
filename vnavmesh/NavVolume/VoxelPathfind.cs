@@ -352,10 +352,9 @@ public class VoxelPathfind
         }
     }
 
-    private Random _rng = new();
     private float CalculateGScore(ref Node parent, ulong destVoxel, Vector3 destPos, ref int parentIndex)
     {
-        float randomFactor = (float)_rng.NextDouble() * Service.Config.RandomnessMultiplier;
+        float randomFactor = (float)Random.Shared.NextDouble() * Service.Config.RandomnessMultiplier;
 
         float baseDistance;
         float parentBaseG;

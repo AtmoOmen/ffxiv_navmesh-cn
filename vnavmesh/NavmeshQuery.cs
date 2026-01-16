@@ -16,6 +16,40 @@ public class NavmeshQuery
         public void Process(DtMeshTile tile, DtPoly poly, long refs) => Result.Add(refs);
     }
 
+    private sealed class RandomnessFilter(IDtQueryFilter inner) : IDtQueryFilter
+    {
+        public float RandomnessMultiplier;
+        public ulong RandomSeed;
+
+        public float GetCost(RcVec3f pa, RcVec3f pb, long prevRef, DtMeshTile prevTile, DtPoly prevPoly, long curRef, DtMeshTile curTile, DtPoly curPoly, long nextRef, DtMeshTile nextTile, DtPoly nextPoly)
+        {
+            var cost = inner.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
+            var mult = RandomnessMultiplier;
+            if (mult <= 0 || nextPoly == null)
+                return cost;
+
+            if (curPoly.GetArea() == Navmesh.AREAID_TELEPORT && nextPoly.GetArea() == Navmesh.AREAID_TELEPORT)
+                return cost;
+
+            var a = (ulong)System.Math.Min(curRef, nextRef);
+            var b = (ulong)System.Math.Max(curRef, nextRef);
+            var noise = HashToUnitFloat(RandomSeed, a, b);
+            return cost + noise * mult;
+        }
+
+        public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => inner.PassFilter(refs, tile, poly);
+
+        private static float HashToUnitFloat(ulong seed, ulong a, ulong b)
+        {
+            var x = seed ^ (a + 0x9E3779B97F4A7C15UL) ^ (b * 0xBF58476D1CE4E5B9UL);
+            x += 0x9E3779B97F4A7C15UL;
+            x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9UL;
+            x = (x ^ (x >> 27)) * 0x94D049BB133111EBUL;
+            x ^= x >> 31;
+            return ((x >> 40) & 0xFFFFFF) * (1.0f / 16777216.0f);
+        }
+    }
+
     public class GoalRadiusHeuristic(float tolerance) : IDtQueryHeuristic
     {
         float IDtQueryHeuristic.GetCost(RcVec3f neighbourPos, RcVec3f endPos)
@@ -53,7 +87,8 @@ public class NavmeshQuery
     public DtNavMeshQuery MeshQuery;
     public VoxelPathfind? VolumeQuery;
     private readonly IDtQueryFilter _filter = new DtQueryDefaultFilter();
-    private readonly IDtQueryFilter _pathFilter = new TeleportAwareFilter();
+    private readonly TeleportAwareFilter _teleportFilter = new();
+    private readonly RandomnessFilter _randomnessFilter;
     private readonly IDtQueryFilter _reachableFilter = new FloodFillAwareFilter();
 
     public List<long> LastPath => _lastPath;
@@ -64,6 +99,7 @@ public class NavmeshQuery
         MeshQuery = new(navmesh.Mesh/*, s => Service.Log.Debug(s)*/);
         if (navmesh.Volume != null)
             VolumeQuery = new(navmesh.Volume);
+        _randomnessFilter = new(_teleportFilter);
     }
 
     public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
@@ -80,7 +116,14 @@ public class NavmeshQuery
         var timer = Timer.Create();
         _lastPath.Clear();
         var opt = new DtFindPathOption(range > 0 ? new GoalRadiusHeuristic(range) : DtDefaultQueryHeuristic.Default, useRaycast ? DtFindPathOptions.DT_FINDPATH_ANY_ANGLE : 0, useRaycast ? 5 : 0);
-        MeshQuery.FindPath(startRef, endRef, from.SystemToRecast(), to.SystemToRecast(), _pathFilter, ref _lastPath, opt);
+        var randomness = Service.Config.RandomnessMultiplier;
+        IDtQueryFilter filter = randomness > 0 ? _randomnessFilter : _teleportFilter;
+        if (randomness > 0)
+        {
+            _randomnessFilter.RandomnessMultiplier = randomness;
+            _randomnessFilter.RandomSeed = (ulong)System.Random.Shared.NextInt64();
+        }
+        MeshQuery.FindPath(startRef, endRef, from.SystemToRecast(), to.SystemToRecast(), filter, ref _lastPath, opt);
         if (_lastPath.Count == 0)
         {
             Service.Log.Error($"Failed to find a path from {from} ({startRef:X}) to {to} ({endRef:X}): failed to find path on mesh");
