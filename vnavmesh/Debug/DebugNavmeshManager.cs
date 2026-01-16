@@ -80,11 +80,11 @@ class DebugNavmeshManager : IDisposable
 
         ImGui.Checkbox("允许移动", ref _path.MovementAllowed);
         ImGui.Checkbox("使用射线检测", ref _manager.UseRaycasts);
-        ImGui.Checkbox("使用字符串拉直", ref _manager.UseStringPulling);
-        if (ImGui.Button("使用导航网格寻路至目标"))
+        ImGui.Checkbox("使用拉绳算法", ref _manager.UseStringPulling);
+        if (ImGui.Button("地面寻路至目标"))
             _asyncMove.MoveTo(_target, false);
         ImGui.SameLine();
-        if (ImGui.Button("使用体积寻路至目标"))
+        if (ImGui.Button("空间寻路至目标"))
             _asyncMove.MoveTo(_target, true);
 
         DrawPosition("玩家", playerPos);

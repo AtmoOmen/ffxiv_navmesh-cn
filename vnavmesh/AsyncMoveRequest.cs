@@ -52,7 +52,7 @@ public class AsyncMoveRequest : IDisposable
             }
             catch (Exception ex)
             {
-                Plugin.DuoLog(ex, "Failed to find path");
+                Plugin.DuoLog(ex, "算路失败");
             }
             _pendingTask.Dispose();
             _pendingTask = null;
