@@ -20,8 +20,8 @@ public class Config
     public bool CameraSmoothingEnabled = true;
     public float CameraSmoothTimeH = 1.5f;
     public float CameraSmoothTimeV = 1.5f;
-    public float CameraTurnSpeedH = 180f;
-    public float CameraTurnSpeedV = 180f;
+    public float CameraTurnSpeedH = 240f;
+    public float CameraTurnSpeedV = 240f;
     public bool CameraPitchFollowEnabled = true;
     public float CameraPitchFollowStrength = 0.75f;
     public float CameraPitchMaxOffsetDeg = 30f;
