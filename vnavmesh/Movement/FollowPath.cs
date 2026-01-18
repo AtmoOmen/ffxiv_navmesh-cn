@@ -120,9 +120,14 @@ public class FollowPath : IDisposable
             }
 
             _camera.Enabled = Service.Config.AlignCameraToMovement;
-            _camera.SpeedH = _camera.SpeedV = 360.Degrees();
-            _camera.DesiredAzimuth = Angle.FromDirectionXZ(_movement.DesiredPosition - playerPosition) + 180.Degrees();
-            _camera.DesiredAltitude = Service.Config.AlignCameraHeight.Degrees();
+            _camera.EnableSmoothing = Service.Config.CameraSmoothingEnabled;
+            _camera.SmoothTimeH = Service.Config.CameraSmoothTimeH;
+            _camera.SmoothTimeV = Service.Config.CameraSmoothTimeV;
+            _camera.SpeedH = Service.Config.CameraTurnSpeedH.Degrees();
+            _camera.SpeedV = Service.Config.CameraTurnSpeedV.Degrees();
+            var cameraTargetPosition = SelectPositionAlongPath(playerPosition, Service.Config.CameraLookAheadDistance);
+            _camera.DesiredAzimuth = Angle.FromDirectionXZ(cameraTargetPosition - playerPosition) + 180.Degrees();
+            _camera.DesiredAltitude = CalculateDesiredAltitude(playerPosition, cameraTargetPosition);
 
             if (!MovementAllowed)
                 _millisecondsWithNoSignificantMovement = 0;
@@ -145,6 +150,12 @@ public class FollowPath : IDisposable
                     {
                         var destination = Waypoints[^1];
                         Stop();
+
+                        unsafe
+                        {
+                            ActionManager.Instance()->UseAction(ActionType.GeneralAction, 2);
+                        }
+                        
                         OnStuck?.Invoke(destination, !IgnoreDeltaY, DestinationTolerance);
                         return;
                     }
@@ -474,5 +485,81 @@ public class FollowPath : IDisposable
 
         var closest = a2 + ab * t;
         return (p2 - closest).LengthSquared();
+    }
+
+    private Vector3 SelectPositionAlongPath(Vector3 playerPosition, float lookAhead)
+    {
+        if (Waypoints.Count == 0)
+            return playerPosition;
+
+        if (Waypoints.Count == 1 || lookAhead <= 0)
+            return Waypoints[0];
+
+        var remaining = lookAhead;
+        var from = playerPosition;
+        var startIndex = 0;
+
+        var waypointPassTolerance = GetWaypointPassTolerance();
+        var waypointPassToleranceSquared = waypointPassTolerance * waypointPassTolerance;
+        var startSegmentDistanceSquared = IgnoreDeltaY
+            ? DistanceToLineSegmentSquaredXZ(playerPosition, Waypoints[0], Waypoints[1])
+            : DistanceToLineSegmentSquared(playerPosition, Waypoints[0], Waypoints[1]);
+        if (startSegmentDistanceSquared <= waypointPassToleranceSquared)
+        {
+            from = IgnoreDeltaY
+                ? ClosestPointOnSegmentXZ(playerPosition, Waypoints[0], Waypoints[1])
+                : ClosestPointOnSegment(playerPosition, Waypoints[0], Waypoints[1]);
+            startIndex = 1;
+        }
+
+        for (int i = startIndex; i < Waypoints.Count; i++)
+        {
+            var to = Waypoints[i];
+            var segmentLength = Distance(from, to, IgnoreDeltaY);
+            if (segmentLength <= float.Epsilon)
+            {
+                from = to;
+                continue;
+            }
+
+            if (remaining <= segmentLength)
+                return LerpByDistance(from, to, remaining, IgnoreDeltaY);
+
+            remaining -= segmentLength;
+            from = to;
+        }
+
+        return Waypoints[^1];
+    }
+
+    private Angle CalculateDesiredAltitude(Vector3 playerPosition, Vector3 cameraTargetPosition)
+    {
+        var baseAltitude = Service.Config.AlignCameraHeight.Degrees();
+        if (IgnoreDeltaY)
+            return baseAltitude;
+
+        var pitchFollowEnabled = Service.Config.CameraPitchFollowEnabled;
+        if (!pitchFollowEnabled)
+            return baseAltitude;
+
+        var isFlying = Service.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.InFlight]
+            || Service.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.Diving];
+        if (!isFlying)
+            return baseAltitude;
+
+        var d = cameraTargetPosition - playerPosition;
+        var horizontal = new Vector2(d.X, d.Z).Length();
+        if (horizontal <= float.Epsilon)
+            return baseAltitude;
+
+        var pitch = Angle.FromDirection(new Vector2(d.Y, horizontal));
+        var deadzoneRad = Service.Config.CameraPitchDeadzoneDeg * Angle.DegToRad;
+        if (Math.Abs(pitch.Rad) <= deadzoneRad)
+            return baseAltitude;
+
+        var strength = Service.Config.CameraPitchFollowStrength;
+        var maxOffsetRad = Service.Config.CameraPitchMaxOffsetDeg * Angle.DegToRad;
+        var offset = Math.Clamp(pitch.Rad * strength, -maxOffsetRad, maxOffsetRad);
+        return (baseAltitude + offset.Radians()).Normalized();
     }
 }

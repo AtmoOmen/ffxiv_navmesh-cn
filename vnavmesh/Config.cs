@@ -16,6 +16,16 @@ public class Config
     public bool ShowQueryStatusInDTR = true;
     public bool AlignCameraToMovement;
     public float AlignCameraHeight = -15;
+    public float CameraLookAheadDistance = 50f;
+    public bool CameraSmoothingEnabled = true;
+    public float CameraSmoothTimeH = 1.5f;
+    public float CameraSmoothTimeV = 1.5f;
+    public float CameraTurnSpeedH = 180f;
+    public float CameraTurnSpeedV = 180f;
+    public bool CameraPitchFollowEnabled = true;
+    public float CameraPitchFollowStrength = 0.75f;
+    public float CameraPitchMaxOffsetDeg = 30f;
+    public float CameraPitchDeadzoneDeg = 2f;
     public bool ShowWaypoints;
     public bool ForceShowGameCollision;
     public bool CancelMoveOnUserInput;
@@ -47,6 +57,50 @@ public class Config
             ImGui.SetNextItemWidth(200);
             if (ImGui.SliderFloat("相机高度 (角度)", ref AlignCameraHeight, -75, 75))
                 NotifyModified();
+
+            ImGui.SetNextItemWidth(200);
+            if (ImGui.SliderFloat("镜头提前量 (米)", ref CameraLookAheadDistance, 0f, 30f, "%.1f"))
+                NotifyModified();
+
+            if (ImGui.Checkbox("平滑镜头运动", ref CameraSmoothingEnabled))
+                NotifyModified();
+
+            using (ImRaii.Disabled(!CameraSmoothingEnabled))
+            {
+                ImGui.SetNextItemWidth(200);
+                if (ImGui.SliderFloat("水平平滑时间 (秒)", ref CameraSmoothTimeH, 0.02f, 1.5f, "%.2f"))
+                    NotifyModified();
+
+                ImGui.SetNextItemWidth(200);
+                if (ImGui.SliderFloat("俯仰平滑时间 (秒)", ref CameraSmoothTimeV, 0.02f, 1.5f, "%.2f"))
+                    NotifyModified();
+            }
+
+            ImGui.SetNextItemWidth(200);
+            if (ImGui.SliderFloat("水平转向速度 (度/秒)", ref CameraTurnSpeedH, 30f, 720f, "%.0f"))
+                NotifyModified();
+
+            ImGui.SetNextItemWidth(200);
+            if (ImGui.SliderFloat("俯仰转向速度 (度/秒)", ref CameraTurnSpeedV, 30f, 720f, "%.0f"))
+                NotifyModified();
+
+            if (ImGui.Checkbox("飞行时镜头俯仰跟随爬升/俯冲", ref CameraPitchFollowEnabled))
+                NotifyModified();
+
+            using (ImRaii.Disabled(!CameraPitchFollowEnabled))
+            {
+                ImGui.SetNextItemWidth(200);
+                if (ImGui.SliderFloat("俯仰跟随强度", ref CameraPitchFollowStrength, 0f, 1.5f, "%.2f"))
+                    NotifyModified();
+
+                ImGui.SetNextItemWidth(200);
+                if (ImGui.SliderFloat("俯仰最大偏移 (角度)", ref CameraPitchMaxOffsetDeg, 0f, 60f, "%.0f"))
+                    NotifyModified();
+
+                ImGui.SetNextItemWidth(200);
+                if (ImGui.SliderFloat("俯仰死区 (角度)", ref CameraPitchDeadzoneDeg, 0f, 10f, "%.1f"))
+                    NotifyModified();
+            }
         }
         if (ImGui.Checkbox("显示路径点", ref ShowWaypoints))
             NotifyModified();
