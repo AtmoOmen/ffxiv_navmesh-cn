@@ -5,7 +5,7 @@ namespace Navmesh.Customizations;
 [CustomizationTerritory(155)]
 class Z0155CoerthasCentralHighlands : NavmeshCustomization
 {
-    public override int Version => 5;
+    public override int Version => 7;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
