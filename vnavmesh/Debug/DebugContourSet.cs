@@ -1,4 +1,4 @@
-﻿using DotRecast.Recast;
+using DotRecast.Recast;
 using System.Linq;
 using System.Numerics;
 
@@ -23,14 +23,14 @@ public class DebugContourSet : DebugRecast
 
     public void Draw()
     {
-        using var nr = _tree.Node("Contour set");
+        using var nr = _tree.Node("轮廓集 (Contour Set)");
         if (!nr.Opened)
             return;
 
         DrawBaseInfo(_tree, _cset.width, _cset.height, _cset.bmin, _cset.bmax, _cset.cs, _cset.ch);
-        _tree.LeafNode($"Misc: border size={_cset.borderSize}, max error={_cset.maxError}");
+        _tree.LeafNode($"杂项：边界大小={_cset.borderSize}，最大误差={_cset.maxError}");
 
-        using (var nc = _tree.Node($"Contours ({_cset.conts.Count})###contours"))
+        using (var nc = _tree.Node($"轮廓 ({_cset.conts.Count})###contours"))
         {
             if (nc.SelectedOrHovered)
                 VisualizeContours();
@@ -40,12 +40,12 @@ public class DebugContourSet : DebugRecast
                 foreach (var c in _cset.conts)
                 {
                     var hOffset = (i & 1) + 1; // i assume this is just for better visualization?..
-                    using var ncont = _tree.Node($"Contour {i++}: area={c.area}, region={c.reg}");
+                    using var ncont = _tree.Node($"轮廓 {i++}：面积类型={c.area}，区域={c.reg}");
 
                     bool contourDrawn = false;
                     if (ncont.Opened)
                     {
-                        using (var ns = _tree.Node($"Simplified vertices ({c.nverts})###simp"))
+                        using (var ns = _tree.Node($"简化顶点 ({c.nverts})###simp"))
                         {
                             if (ns.SelectedOrHovered)
                             {
@@ -63,7 +63,7 @@ public class DebugContourSet : DebugRecast
                             }
                         }
 
-                        using (var nraw = _tree.Node($"Raw vertices ({c.nrverts})###raw"))
+                        using (var nraw = _tree.Node($"原始顶点 ({c.nrverts})###raw"))
                         {
                             if (nraw.SelectedOrHovered)
                             {
@@ -91,7 +91,7 @@ public class DebugContourSet : DebugRecast
             }
         }
 
-        if (_tree.LeafNode("Region connections").SelectedOrHovered)
+        if (_tree.LeafNode("区域连接").SelectedOrHovered)
             VisualizeConnections();
     }
 

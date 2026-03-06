@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using Navmesh.Render;
@@ -43,11 +43,11 @@ public class DebugExtractedCollision : IDisposable
 
     private unsafe void DrawDefinition()
     {
-        using var nr = _tree.Node("Scene definition");
+        using var nr = _tree.Node("场景定义");
         if (!nr.Opened)
             return;
 
-        using (var nt = _tree.Node($"Terrain ({_scene.Terrains.Count})###terrain", _scene.Terrains.Count == 0))
+        using (var nt = _tree.Node($"地形 ({_scene.Terrains.Count})###terrain", _scene.Terrains.Count == 0))
         {
             if (nt.Opened)
             {
@@ -58,7 +58,7 @@ public class DebugExtractedCollision : IDisposable
             }
         }
 
-        using (var np = _tree.Node($"BGParts ({_scene.BgParts.Count})###bgparts", _scene.BgParts.Count == 0))
+        using (var np = _tree.Node($"场景组件 (BGParts) ({_scene.BgParts.Count})###bgparts", _scene.BgParts.Count == 0))
         {
             if (np.Opened)
             {
@@ -79,19 +79,19 @@ public class DebugExtractedCollision : IDisposable
                     }
                     if (n.Opened)
                     {
-                        DrawTransform("Part", p.transform);
+                        DrawTransform("组件 (Part)", p.transform);
                         if (haveShape)
                         {
-                            DrawTransform("Shape", shape.transform);
-                            _tree.LeafNode($"Shape min: {shape.bbMin}");
-                            _tree.LeafNode($"Shape max: {shape.bbMax}");
+                            DrawTransform("形状 (Shape)", shape.transform);
+                            _tree.LeafNode($"形状最小值：{shape.bbMin}");
+                            _tree.LeafNode($"形状最大值：{shape.bbMax}");
                         }
                     }
                 }
             }
         }
 
-        using (var nc = _tree.Node($"Colliders ({_scene.Colliders.Count})###coll", _scene.Colliders.Count == 0))
+        using (var nc = _tree.Node($"碰撞体 ({_scene.Colliders.Count})###coll", _scene.Colliders.Count == 0))
         {
             if (nc.Opened)
             {
@@ -108,7 +108,7 @@ public class DebugExtractedCollision : IDisposable
                     }
                     if (n.Opened)
                     {
-                        DrawTransform("Part", c.transform);
+                        DrawTransform("组件 (Part)", c.transform);
                     }
                 }
             }
@@ -117,24 +117,24 @@ public class DebugExtractedCollision : IDisposable
 
     private void DrawTransform(string tag, Transform transform)
     {
-        _tree.LeafNode($"{tag} position: {transform.Translation}");
-        _tree.LeafNode($"{tag} rotation: {transform.Rotation}");
-        _tree.LeafNode($"{tag} scale: {transform.Scale}");
+        _tree.LeafNode($"{tag} 位置：{transform.Translation}");
+        _tree.LeafNode($"{tag} 旋转：{transform.Rotation}");
+        _tree.LeafNode($"{tag} 缩放：{transform.Scale}");
     }
 
     private string _meshFilter = "";
 
     private void DrawExtractor()
     {
-        using var nr = _tree.Node("Extracted geometry");
+        using var nr = _tree.Node("提取的几何体");
         if (nr.SelectedOrHovered)
             Visualize();
         if (!nr.Opened)
             return;
 
-        ImGui.InputText("Filter", ref _meshFilter);
+        ImGui.InputText("筛选", ref _meshFilter);
 
-        if (ImGui.Button("Export to DotRecast obj file"))
+        if (ImGui.Button("导出为 DotRecast OBJ 文件"))
             ExportMesh();
 
         int meshIndex = 0;
@@ -152,7 +152,7 @@ public class DebugExtractedCollision : IDisposable
 
             if (nm.Opened)
             {
-                using (var np = _tree.Node($"Parts ({mesh.Parts.Count})###parts", mesh.Parts.Count == 0))
+                using (var np = _tree.Node($"组件 (Parts) ({mesh.Parts.Count})###parts", mesh.Parts.Count == 0))
                 {
                     if (np.Opened)
                     {
@@ -165,7 +165,7 @@ public class DebugExtractedCollision : IDisposable
 
                             if (npi.Opened)
                             {
-                                using (var nv = _tree.Node($"Vertices ({p.Vertices.Count})###verts"))
+                                using (var nv = _tree.Node($"顶点 ({p.Vertices.Count})###verts"))
                                 {
                                     if (nv.Opened)
                                     {
@@ -176,7 +176,7 @@ public class DebugExtractedCollision : IDisposable
                                     }
                                 }
 
-                                using (var nt = _tree.Node($"Primitives ({p.Primitives.Count})###prims"))
+                                using (var nt = _tree.Node($"图元 ({p.Primitives.Count})###prims"))
                                 {
                                     if (nt.Opened)
                                     {
@@ -198,7 +198,7 @@ public class DebugExtractedCollision : IDisposable
                     }
                 }
 
-                using (var ni = _tree.Node($"Instances ({mesh.Instances.Count})###instances", mesh.Instances.Count == 0))
+                using (var ni = _tree.Node($"实例 ({mesh.Instances.Count})###instances", mesh.Instances.Count == 0))
                 {
                     if (ni.Opened)
                     {
@@ -259,7 +259,7 @@ public class DebugExtractedCollision : IDisposable
                 np += npm;
                 ni += mesh.Instances.Count;
             }
-            Service.Log.Debug($"mesh visualization build time: {timer.Value().TotalMilliseconds:f3}ms");
+            Service.Log.Debug($"网格可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
         return _visu;
     }

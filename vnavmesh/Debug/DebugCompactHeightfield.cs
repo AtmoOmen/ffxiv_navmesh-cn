@@ -1,4 +1,4 @@
-﻿using DotRecast.Recast;
+using DotRecast.Recast;
 using Navmesh.Render;
 using System;
 using System.Collections.Generic;
@@ -47,14 +47,14 @@ public class DebugCompactHeightfield : DebugRecast
 
     public void Draw()
     {
-        using var nr = _tree.Node("Compact heightfield");
+        using var nr = _tree.Node("紧凑高度场 (Compact Heightfield)");
         if (!nr.Opened)
             return;
 
         DrawBaseInfo(_tree, _chf.width, _chf.height, _chf.bmin, _chf.bmax, _chf.cs, _chf.ch);
-        _tree.LeafNode($"Config: walkable height={_chf.walkableHeight}, walkable climb={_chf.walkableClimb}, border={_chf.borderSize}");
+        _tree.LeafNode($"配置：可步行高度={_chf.walkableHeight}，可步行攀爬高度={_chf.walkableClimb}，边界={_chf.borderSize}");
 
-        using (var nc = _tree.Node($"Cells ({_chf.spanCount} spans total)###cells"))
+        using (var nc = _tree.Node($"单元格 (共 {_chf.spanCount} 个跨度)###cells"))
         {
             if (nc.SelectedOrHovered)
                 VisualizeSolid();
@@ -73,7 +73,7 @@ public class DebugCompactHeightfield : DebugRecast
                         if (!nz.Value.Opened)
                             break;
 
-                        using var nx = _tree.Node($"[{x}x{z}]: {cell.count} spans starting from {cell.index}");
+                        using var nx = _tree.Node($"[{x}x{z}]: {cell.count} 个跨度，起始索引 {cell.index}");
                         if (nx.SelectedOrHovered)
                             VisualizeSolidCell(x, z, true);
                         if (nx.Opened)
@@ -81,7 +81,7 @@ public class DebugCompactHeightfield : DebugRecast
                             for (int i = 0; i < cell.count; ++i)
                             {
                                 ref var span = ref _chf.spans[cell.index + i];
-                                if (_tree.LeafNode($"y={span.y}+{span.h}, conn={RcCommons.GetCon(ref span, 0)} {RcCommons.GetCon(ref span, 1)} {RcCommons.GetCon(ref span, 2)} {RcCommons.GetCon(ref span, 3)}, reg={span.reg & ~RcConstants.RC_BORDER_REG} ({((span.reg & RcConstants.RC_BORDER_REG) == 0 ? "normal" : "border")}), dist={_chf.dist[i]}, area={_chf.areas[i]}").SelectedOrHovered)
+                                if (_tree.LeafNode($"y={span.y}+{span.h}，连接={RcCommons.GetCon(ref span, 0)} {RcCommons.GetCon(ref span, 1)} {RcCommons.GetCon(ref span, 2)} {RcCommons.GetCon(ref span, 3)}，区域 (Reg)={span.reg & ~RcConstants.RC_BORDER_REG} ({((span.reg & RcConstants.RC_BORDER_REG) == 0 ? "常规" : "边界")})，距离 (Dist)={_chf.dist[i]}，面积类型 (Area)={_chf.areas[i]}").SelectedOrHovered)
                                     VisualizeSolidSpan(x, z, cell.index + i, true);
                             }
                         }
@@ -91,10 +91,10 @@ public class DebugCompactHeightfield : DebugRecast
             }
         }
 
-        if (_tree.LeafNode($"Distance field (max distance = {_chf.maxDistance})###dist").SelectedOrHovered && _chf.dist != null)
+        if (_tree.LeafNode($"距离场 (最大距离 = {_chf.maxDistance})###dist").SelectedOrHovered && _chf.dist != null)
             VisualizeDistance();
 
-        using (var nregs = _tree.Node($"Regions ({_chf.maxRegions + 1})###regions"))
+        using (var nregs = _tree.Node($"区域 (Regions) ({_chf.maxRegions + 1})###regions"))
         {
             if (nregs.SelectedOrHovered)
                 VisualizeRegions();
@@ -102,7 +102,7 @@ public class DebugCompactHeightfield : DebugRecast
             {
                 for (int i = 0; i < _chf.maxRegions; ++i)
                 {
-                    using var nreg = _tree.Node($"Region {i}: {_regionsNumSpans[i]} spans, offset {_regionsStartOffset[i]}###reg_{i}");
+                    using var nreg = _tree.Node($"区域 {i}：{_regionsNumSpans[i]} 个跨度，偏移量 {_regionsStartOffset[i]}###reg_{i}");
                     if (nreg.SelectedOrHovered)
                         VisualizeRegion(i);
                     if (!nreg.Opened)
@@ -149,7 +149,7 @@ public class DebugCompactHeightfield : DebugRecast
                 if (cell.count != 0)
                 {
                     if (cell.index != ispan)
-                        throw new Exception($"Unexpected gap in compact heightfield spans: cell {x}x{z} has starting index {cell.index}, where {ispan} was expected");
+                        throw new Exception($"紧凑高度场跨度中存在异常间隙：单元格 {x}x{z} 的起始索引为 {cell.index}，预期为 {ispan}");
                     for (int i = 0; i < cell.count; ++i)
                     {
                         yield return (new(cx, _chf.bmin.Y + (_chf.spans[ispan].y + _heightOffset) * _chf.ch, cz), ispan);
@@ -175,7 +175,7 @@ public class DebugCompactHeightfield : DebugRecast
             var wz = new Vector3(0, 0, -_chf.cs * 0.5f);
             foreach (var (center, index) in EnumerateSpanPositions())
                 quad.Add(center, wx, wz, AreaColor(_chf.areas[index]));
-            Service.Log.Debug($"chf solid visualization build time: {timer.Value().TotalMilliseconds:f3}ms");
+            Service.Log.Debug($"CHF 实体可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
         return _visuSolid;
     }
@@ -197,7 +197,7 @@ public class DebugCompactHeightfield : DebugRecast
                 var c = _chf.dist[index] * dscale;
                 quad.Add(center, wx, wz, new(c, c, c, 0.7f));
             }
-            Service.Log.Debug($"chf distance visualization build time: {timer.Value().TotalMilliseconds:f3}ms");
+            Service.Log.Debug($"CHF 距离可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
         return _visuDistance;
     }
@@ -228,7 +228,7 @@ public class DebugCompactHeightfield : DebugRecast
                 builder.AddMesh(quad.FirstVertex, quad.FirstPrimitive, quad.NumPrimitives, i++, 1);
             }
 
-            Service.Log.Debug($"chf region visualization build time: {timer.Value().TotalMilliseconds:f3}ms");
+            Service.Log.Debug($"CHF 区域可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
         return _visuRegion;
     }

@@ -1,4 +1,4 @@
-﻿using DotRecast.Recast;
+using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Navmesh.Render;
 using System;
@@ -31,53 +31,52 @@ public class DebugPolyMesh : DebugRecast
 
     public void Draw()
     {
-        using var nr = _tree.Node("Poly mesh");
+        using var nr = _tree.Node("多边形网格 (Poly Mesh)");
         if (!nr.Opened)
             return;
 
         DrawBaseInfo(_tree, _mesh.bmin, _mesh.bmax, _mesh.cs, _mesh.ch);
-        _tree.LeafNode($"Misc: border size={_mesh.borderSize}, max edge error={_mesh.maxEdgeError}, max vertices/poly={_mesh.nvp}");
+        _tree.LeafNode($"杂项：边界大小={_mesh.borderSize}，最大边缘误差={_mesh.maxEdgeError}，最大顶点数/多边形={_mesh.nvp}");
 
-        using (var nv = _tree.Node($"Vertices ({_mesh.nverts})###verts"))
+        using (var nv = _tree.Node($"顶点 ({_mesh.nverts})###verts", _mesh.nverts == 0))
         {
             if (nv.Opened)
             {
                 for (int i = 0; i < _mesh.nverts; ++i)
-                {
                     if (_tree.LeafNode($"{i}: {_mesh.verts[3 * i]}x{_mesh.verts[3 * i + 1]}x{_mesh.verts[3 * i + 2]}").SelectedOrHovered)
                         VisualizeVertex(i);
-                }
             }
         }
 
-        using (var np = _tree.Node($"Polygons ({_mesh.npolys})###polys"))
+        using (var np = _tree.Node($"多边形 ({_mesh.npolys})###polys", _mesh.npolys == 0))
         {
             if (np.SelectedOrHovered)
-            {
-                Visualize();
-            }
+                VisualizeMesh();
             if (np.Opened)
             {
                 for (int i = 0; i < _mesh.npolys; ++i)
                 {
-                    using var nprim = _tree.Node(i.ToString());
-                    if (nprim.SelectedOrHovered)
+                    using var npoly = _tree.Node($"{i}: 区域={_mesh.regs[i]}, 标志={_mesh.flags[i]:X}, 面积={_mesh.areas[i]}");
+                    if (npoly.SelectedOrHovered)
                         VisualizePolygon(i);
-                    if (!nprim.Opened)
-                        continue;
-                    var off = i * 2 * _mesh.nvp;
-                    for (int j = 0; j < _mesh.nvp; ++j)
+                    if (npoly.Opened)
                     {
-                        var vertex = _mesh.polys[off + j];
-                        if (vertex != RcConstants.RC_MESH_NULL_IDX)
-                            if (_tree.LeafNode($"Vertex {j}: #{vertex} = {_mesh.verts[3 * vertex]}x{_mesh.verts[3 * vertex + 1]}x{_mesh.verts[3 * vertex + 2]}").SelectedOrHovered && vertex != RcConstants.RC_MESH_NULL_IDX)
+                        for (int j = 0; j < _mesh.nvp; ++j)
+                        {
+                            var vertex = _mesh.polys[i * 2 * _mesh.nvp + j];
+                            if (vertex == RcConstants.RC_MESH_NULL_IDX)
+                                break;
+                            if (_tree.LeafNode($"顶点 {j}：#{vertex} = {_mesh.verts[3 * vertex]}x{_mesh.verts[3 * vertex + 1]}x{_mesh.verts[3 * vertex + 2]}").SelectedOrHovered)
                                 VisualizeVertex(vertex);
-                    }
-                    for (int j = 0; j < _mesh.nvp; ++j)
-                    {
-                        var adj = _mesh.polys[off + _mesh.nvp + j];
-                        if (_tree.LeafNode($"Adjacency {j}: {adj}").SelectedOrHovered && adj != RcConstants.RC_MESH_NULL_IDX)
-                            VisualizePolygon(adj);
+                        }
+                        for (int j = 0; j < _mesh.nvp; ++j)
+                        {
+                            var adj = _mesh.polys[i * 2 * _mesh.nvp + _mesh.nvp + j];
+                            if (adj == RcConstants.RC_MESH_NULL_IDX)
+                                break;
+                            if (_tree.LeafNode($"邻接 {j}：{adj}").SelectedOrHovered)
+                                VisualizePolygon(adj);
+                        }
                     }
                 }
             }
@@ -121,7 +120,7 @@ public class DebugPolyMesh : DebugRecast
         return _visu;
     }
 
-    public void Visualize()
+    public void VisualizeMesh()
     {
         _dd.EffectMesh?.Draw(_dd.RenderContext, GetOrInitVisualizer());
         for (int i = 0; i < _mesh.npolys; ++i)

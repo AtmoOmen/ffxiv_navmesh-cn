@@ -1,4 +1,4 @@
-﻿using DotRecast.Detour;
+using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Navmesh.Render;
 using System;
@@ -55,15 +55,15 @@ public class DebugDetourNavmesh : DebugRecast
 
     private void DrawMesh()
     {
-        using var nr = _tree.Node("Detour navmesh");
+        using var nr = _tree.Node("Detour 导航网格");
         if (!nr.Opened)
             return;
 
         ref readonly var param = ref _navmesh.GetParams();
-        _tree.LeafNode($"Origin: {param.orig}");
-        _tree.LeafNode($"Tile size: {param.tileWidth:f3}x{param.tileHeight:f3} (max {param.maxPolys} polys per tile)");
+        _tree.LeafNode($"原点：{param.orig}");
+        _tree.LeafNode($"区块大小：{param.tileWidth:f3}x{param.tileHeight:f3} (每区块最多 {param.maxPolys} 个多边形)");
 
-        using var nt = _tree.Node($"Tiles (max {param.maxTiles})###tiles");
+        using var nt = _tree.Node($"区块 (最多 {param.maxTiles} 个)###tiles");
         if (nt.SelectedOrHovered)
             VisualizeWithClosedList();
         if (nt.Opened)
@@ -73,14 +73,14 @@ public class DebugDetourNavmesh : DebugRecast
                 var tile = _navmesh.GetTile(i);
                 if (tile.data == null)
                     continue;
-                using var ntile = _tree.Node($"Tile {i} at {tile.data.header.x}x{tile.data.header.y}x{tile.data.header.layer}: flags={tile.flags:X}, salt={tile.salt}, base poly ref={_navmesh.GetPolyRefBase(tile):X}###{i}");
+                using var ntile = _tree.Node($"区块 {i} (位于 {tile.data.header.x}x{tile.data.header.y}x{tile.data.header.layer})：标志={tile.flags:X}，Salt={tile.salt}，基础多边形引用={_navmesh.GetPolyRefBase(tile):X}###{i}");
                 if (!ntile.Opened)
                     continue;
 
-                _tree.LeafNode($"Header: magic={tile.data.header.magic:X}, version={tile.data.header.version}, user-id={tile.data.header.userId}");
-                _tree.LeafNode($"Bounds: [{tile.data.header.bmin}]-[{tile.data.header.bmax}] (quant={tile.data.header.bvQuantFactor})");
+                _tree.LeafNode($"头部：Magic={tile.data.header.magic:X}，版本={tile.data.header.version}，用户 ID={tile.data.header.userId}");
+                _tree.LeafNode($"边界：[{tile.data.header.bmin}]-[{tile.data.header.bmax}] (量化因子={tile.data.header.bvQuantFactor})");
 
-                using (var np = _tree.Node($"Polygons ({tile.data.header.polyCount})"))
+                using (var np = _tree.Node($"多边形 ({tile.data.header.polyCount})"))
                 {
                     if (np.SelectedOrHovered)
                         VisualizeRoughPolygons(tile, true);
@@ -89,19 +89,19 @@ public class DebugDetourNavmesh : DebugRecast
                         for (int j = 0; j < tile.data.header.polyCount; ++j)
                         {
                             var p = tile.data.polys[j];
-                            using var ntri = _tree.Node($"{p.index} (0x{p.index:X}): {p.vertCount} vertices, flags={p.flags:X}, area={p.GetArea()}, polytype={p.GetPolyType()}");
+                            using var ntri = _tree.Node($"{p.index} (0x{p.index:X})：{p.vertCount} 个顶点，标志={p.flags:X}，面积类型={p.GetArea()}，多边形类型={p.GetPolyType()}");
                             if (ntri.SelectedOrHovered)
                                 VisualizeRoughPolygon(tile, p, true);
                             if (ntri.Opened)
                             {
                                 for (int k = 0; k < p.vertCount; ++k)
-                                    if (_tree.LeafNode($"{p.verts[k]} ({GetVertex(tile, p.verts[k])}), neighbours={p.neis[k]:X}").SelectedOrHovered)
+                                    if (_tree.LeafNode($"{p.verts[k]} ({GetVertex(tile, p.verts[k])})，邻接={p.neis[k]:X}").SelectedOrHovered)
                                         VisualizeVertex(GetVertex(tile, p.verts[k]));
 
                                 for (int k = tile.polyLinks[p.index]; k != DtNavMesh.DT_NULL_LINK; k = tile.links[k].next)
                                 {
                                     var link = tile.links[k];
-                                    if (_tree.LeafNode($"Link {k}: refs={link.refs:X}, edge={link.edge}, side={link.side}, bmin={link.bmin}, bmax={link.bmax}").SelectedOrHovered)
+                                    if (_tree.LeafNode($"链接 {k}：引用={link.refs:X}，边缘={link.edge}，侧面={link.side}，bmin={link.bmin}，bmax={link.bmax}").SelectedOrHovered)
                                         VisualizeRoughPolygon(link.refs, true);
                                 }
                             }
@@ -109,7 +109,7 @@ public class DebugDetourNavmesh : DebugRecast
                     }
                 }
 
-                using (var nv = _tree.Node($"Vertices ({tile.data.header.vertCount})"))
+                using (var nv = _tree.Node($"顶点 ({tile.data.header.vertCount})"))
                 {
                     if (nv.Opened)
                     {
@@ -119,7 +119,7 @@ public class DebugDetourNavmesh : DebugRecast
                     }
                 }
 
-                using (var nd = _tree.Node($"Detail ({tile.data.header.detailMeshCount} submeshes, {tile.data.header.detailVertCount} total verts, {tile.data.header.detailTriCount} total prims)"))
+                using (var nd = _tree.Node($"细节网格 ({tile.data.header.detailMeshCount} 个子网格，共 {tile.data.header.detailVertCount} 个顶点，共 {tile.data.header.detailTriCount} 个图元)"))
                 {
                     if (nd.SelectedOrHovered)
                         VisualizeDetailPolygons(tile, true);
@@ -129,13 +129,13 @@ public class DebugDetourNavmesh : DebugRecast
                         {
                             var poly = tile.data.polys[j];
                             ref var sub = ref tile.data.detailMeshes[j];
-                            using var nsub = _tree.Node($"{j}: base verts={poly.vertCount}");
+                            using var nsub = _tree.Node($"{j}：基础顶点={poly.vertCount}");
                             if (nsub.SelectedOrHovered)
                                 VisualizeDetailSubmesh(tile, j, true);
                             if (!nsub.Opened)
                                 continue;
 
-                            using (var np = _tree.Node($"Triangles ({sub.triCount} triangles starting from {sub.triBase})"))
+                            using (var np = _tree.Node($"三角形 ({sub.triCount} 个三角形，起始于 {sub.triBase})"))
                             {
                                 if (np.Opened)
                                 {
@@ -149,13 +149,13 @@ public class DebugDetourNavmesh : DebugRecast
                                         var v1 = GetDetailVertex(tile, poly, v1i);
                                         var v2 = GetDetailVertex(tile, poly, v2i);
                                         var v3 = GetDetailVertex(tile, poly, v3i);
-                                        if (_tree.LeafNode($"{k}: {v1i}x{v2i}x{v3i} ({v1:f3}x{v2:f3}x{v3:f3}), flags={flags:X}").SelectedOrHovered)
+                                        if (_tree.LeafNode($"{k}: {v1i}x{v2i}x{v3i} ({v1:f3}x{v2:f3}x{v3:f3})，标志={flags:X}").SelectedOrHovered)
                                             VisualizeTriangle(v1, v2, v3, 0xff000000, 2);
                                     }
                                 }
                             }
 
-                            using (var nv = _tree.Node($"Vertices ({sub.vertCount} starting from {sub.vertBase})"))
+                            using (var nv = _tree.Node($"顶点 ({sub.vertCount} 个顶点，起始于 {sub.vertBase})"))
                             {
                                 if (nv.Opened)
                                 {
@@ -171,16 +171,16 @@ public class DebugDetourNavmesh : DebugRecast
                     }
                 }
 
-                _tree.LeafNode($"Links ({tile.data.header.maxLinkCount} max)");
-                _tree.LeafNode($"Bounding volumes ({tile.data.header.bvNodeCount})");
-                _tree.LeafNode($"Off-mesh connections ({tile.data.header.offMeshConCount} starting from primitive #{tile.data.header.offMeshBase})");
+                _tree.LeafNode($"链接 ({tile.data.header.maxLinkCount} 个上限)");
+                _tree.LeafNode($"包围体 ({tile.data.header.bvNodeCount} 个节点)");
+                _tree.LeafNode($"离网链接 ({tile.data.header.offMeshConCount} 个，起始于图元 #{tile.data.header.offMeshBase})");
             }
         }
     }
 
     private void DrawQuery()
     {
-        using var nr = _tree.Node("Detour query", _query == null || _query.GetNodePool().GetNodeCount() == 0);
+        using var nr = _tree.Node("Detour 查询", _query == null || _query.GetNodePool().GetNodeCount() == 0);
         if (!nr.Opened)
             return;
 
@@ -188,7 +188,7 @@ public class DebugDetourNavmesh : DebugRecast
         foreach (var n in _query!.GetNodePool().AsEnumerable())
         {
             var queried = _path.Any(p => p == n.id);
-            var node = _tree.LeafNode($"{i++}: {n.id:X}, parent={n.pidx}, enter={n.pos}, cost={n.cost}, total={n.total}, state={n.state}, flags={n.flags}", queried ? 0xff808000 : 0xffffffff);
+            var node = _tree.LeafNode($"{i++}: {n.id:X}, 父节点={n.pidx}, 进入={n.pos}, 消耗={n.cost}, 总计={n.total}, 状态={n.state}, 标志={n.flags}", queried ? 0xff808000 : 0xffffffff);
             if (node.SelectedOrHovered || queried)
             {
                 VisualizeRoughPolygon(n.id, true, node.SelectedOrHovered);
@@ -236,7 +236,7 @@ public class DebugDetourNavmesh : DebugRecast
                     builder.AddMesh(0, startingPrimitive, 0, 0, 0);
                 }
             }
-            Service.Log.Debug($"navmesh rough visualization tile #{tileIndex} build time: {timer.Value().TotalMilliseconds:f3}ms");
+            Service.Log.Debug($"导航网格粗略可视化区块 #{tileIndex} 构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
         return perTile.VisuRough;
     }
@@ -283,7 +283,7 @@ public class DebugDetourNavmesh : DebugRecast
                 builder.AddMesh(0, startingPrimitive, sub.triCount, 0, 1);
                 startingPrimitive += sub.triCount;
             }
-            Service.Log.Debug($"navmesh detail visualization tile #{tileIndex} build time: {timer.Value().TotalMilliseconds:f3}ms");
+            Service.Log.Debug($"导航网格细节可视化区块 #{tileIndex} 构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
         return perTile.VisuDetail;
     }

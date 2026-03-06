@@ -1,4 +1,4 @@
-﻿using Navmesh.NavVolume;
+using Navmesh.NavVolume;
 using Navmesh.Render;
 using System;
 using System.Collections.Generic;
@@ -37,22 +37,22 @@ public class DebugVoxelMap : IDisposable
 
     public void Draw()
     {
-        using var nr = _tree.Node("Voxel map");
+        using var nr = _tree.Node("体素图 (Voxel Map)");
         if (!nr.Opened)
             return;
 
         var playerVoxel = _vm.FindLeafVoxel(Service.ObjectTable.LocalPlayer?.Position ?? default);
-        _tree.LeafNode($"Player's voxel: {playerVoxel.voxel:X} (empty={playerVoxel.empty})");
+        _tree.LeafNode($"玩家所在体素：{playerVoxel.voxel:X} (是否为空={playerVoxel.empty})");
 
         for (int level = 0; level < _vm.Levels.Length; ++level)
         {
             var l = _vm.Levels[level];
-            _tree.LeafNode($"Level {level}: {_numSubdivPerLevel[level]} subdivided, {_numLeavesPerLevel[level]} leaves, size={l.CellSize:f3}, nc={l.NumCellsX}x{l.NumCellsY}x{l.NumCellsZ}");
+            _tree.LeafNode($"层级 {level}：{_numSubdivPerLevel[level]} 个细分节点，{_numLeavesPerLevel[level]} 个叶节点，大小={l.CellSize:f3}，数量={l.NumCellsX}x{l.NumCellsY}x{l.NumCellsZ}");
         }
 
-        DrawTile(_vm.RootTile, "Root tile");
+        DrawTile(_vm.RootTile, "根瓦片 (Root tile)");
 
-        using (var nv = _tree.Node($"Query nodes ({_query?.NodeSpan.Length})###query", _query == null || _query.NodeSpan.Length == 0))
+        using (var nv = _tree.Node($"查询节点 ({_query?.NodeSpan.Length})###query", _query == null || _query.NodeSpan.Length == 0))
         {
             if (nv.SelectedOrHovered)
                 VisualizeQuery();
@@ -63,7 +63,7 @@ public class DebugVoxelMap : IDisposable
                 {
                     ref var n = ref ns[i];
                     var bounds = _vm.VoxelBounds(n.Voxel, 0);
-                    if (_tree.LeafNode($"[{i}] {n.Voxel:X} ({bounds.min:f3}-{bounds.max:f3}), parent={n.ParentIndex}, g={n.GScore:f4}, h={n.HScore:f4}").SelectedOrHovered)
+                    if (_tree.LeafNode($"[{i}] {n.Voxel:X} ({bounds.min:f3}-{bounds.max:f3}), 父节点={n.ParentIndex}, 消耗={n.GScore:f4}, 总计={n.HScore:f4}").SelectedOrHovered)
                     {
                         VisualizeVoxel(n.Voxel);
                         ref var parent = ref ns[n.ParentIndex];
@@ -151,7 +151,7 @@ public class DebugVoxelMap : IDisposable
 
             var timer = Timer.Create();
             InitTileVisualizer(_vm.RootTile, builder, box);
-            Service.Log.Debug($"voxel map visualization build time: {timer.Value().TotalMilliseconds:f3}ms");
+            Service.Log.Debug($"体素图可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
         return _visu;
     }

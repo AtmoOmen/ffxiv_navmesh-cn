@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine.Group;
@@ -224,22 +224,22 @@ public unsafe class DebugLayout : IDisposable
 
 	private void DrawWorld(LayoutWorld* w)
 	{
-		using var nw = DrawManagerBase("World", &w->IManagerBase, $"t={w->MillisecondsSinceLastUpdate}ms");
+		using var nw = DrawManagerBase("世界 (World)", &w->IManagerBase, $"t={w->MillisecondsSinceLastUpdate}ms");
 		if (!nw.Opened)
 			return;
 
-		DrawLayout("Global", w->GlobalLayout);
-		DrawLayout("Active", w->ActiveLayout);
+		DrawLayout("全局", w->GlobalLayout);
+		DrawLayout("激活", w->ActiveLayout);
 		//DrawLayout("u28", w->UnkLayout28);
 		//DrawLayout("u30", w->UnkLayout30);
 
-		using (var n = _tree.Node($"Loaded layouts: {w->LoadedLayouts.Count}###loaded", w->LoadedLayouts.Count == 0))
+		using (var n = _tree.Node($"已加载布局：{w->LoadedLayouts.Count}###loaded", w->LoadedLayouts.Count == 0))
 		{
 			if (n.Opened)
 			{
 				foreach (var (k, v) in w->LoadedLayouts)
 				{
-					DrawLayout($"Terr {(int)k} (lvb crc={k >> 32:X})", v);
+					DrawLayout($"领地 {(int)k} (lvb crc={k >> 32:X})", v);
 				}
 			}
 		}
@@ -258,22 +258,22 @@ public unsafe class DebugLayout : IDisposable
 
 	private void DrawLayout(string tag, LayoutManager* manager)
 	{
-		using var nr = DrawManagerBase($"{tag} layout", &manager->IManagerBase, "");
+		using var nr = DrawManagerBase($"{tag} 布局", &manager->IManagerBase, "");
 		if (!nr.Opened)
 			return;
 
-		_tree.LeafNode($"Init state: {manager->InitState}");
-		_tree.LeafNode($"Init args: type={manager->Type}, terrType={manager->TerritoryTypeId}, cfc={manager->CfcId}, filter-key={manager->LayerFilterKey:X}");
-		_tree.LeafNode($"Festivals: status={manager->FestivalStatus} [{LayoutUtils.FestivalsString(manager->ActiveFestivals)}]");
-		_tree.LeafNode($"Streaming mgr: {(nint)manager->StreamingManager:X}");
-		_tree.LeafNode($"Env mgr: {(nint)manager->Environment:X}");
-		_tree.LeafNode($"OBSet mgr: {(nint)manager->OBSetManager:X}");
-		_tree.LeafNode($"Streaming params: force-update={manager->ForceUpdateAllStreaming}, skip-terrain-coll={manager->SkipAddingTerrainCollider}");
-		_tree.LeafNode($"Streaming origin: forced={manager->ForcedStreamingOrigin}, last={manager->LastUpdatedStreamingOrigin}, type={manager->StreamingOriginType}");
-		_tree.LeafNode($"Last-update: time={manager->LastUpdateDT:f3}, flip={manager->LastUpdateOdd}");
+		_tree.LeafNode($"初始化状态：{manager->InitState}");
+		_tree.LeafNode($"初始化参数：类型={manager->Type}，领地 ID={manager->TerritoryTypeId}，CFC={manager->CfcId}，筛选键={manager->LayerFilterKey:X}");
+		_tree.LeafNode($"季节/节日 (Festivals)：状态={manager->FestivalStatus} [{LayoutUtils.FestivalsString(manager->ActiveFestivals)}]");
+		_tree.LeafNode($"流式加载管理器：{(nint)manager->StreamingManager:X}");
+		_tree.LeafNode($"环境管理器：{(nint)manager->Environment:X}");
+		_tree.LeafNode($"OBSet 管理器：{(nint)manager->OBSetManager:X}");
+		_tree.LeafNode($"流式加载参数：强制更新={manager->ForceUpdateAllStreaming}，跳过地形碰撞={manager->SkipAddingTerrainCollider}");
+		_tree.LeafNode($"流式加载原点：强制={manager->ForcedStreamingOrigin}，最后更新={manager->LastUpdatedStreamingOrigin}，类型={manager->StreamingOriginType}");
+		_tree.LeafNode($"最后更新：耗时={manager->LastUpdateDT:f3}，翻转={manager->LastUpdateOdd}");
 		DrawStringTable(ref manager->ResourcePaths);
 
-		using (var n = _tree.Node("Resources"))
+		using (var n = _tree.Node("资源"))
 		{
 			if (n.Opened)
 			{
@@ -287,19 +287,19 @@ public unsafe class DebugLayout : IDisposable
 			}
 		}
 
-		using (var n = _tree.Node($"Terrain ({manager->Terrains.Count})###terrains", manager->Terrains.Count == 0))
+		using (var n = _tree.Node($"地形 ({manager->Terrains.Count})###terrains", manager->Terrains.Count == 0))
 		{
 			if (n.Opened)
 			{
 				foreach (var (k, v) in manager->Terrains)
 				{
-					var nterr = _tree.LeafNode($"{k:X8} = {(nint)v.Value:X}, path={v.Value->PathString}, coll={(nint)v.Value->Collider:X}");
+					var nterr = _tree.LeafNode($"{k:X8} = {(nint)v.Value:X}，路径={v.Value->PathString}，碰撞={(nint)v.Value->Collider:X}");
 					if (nterr.SelectedOrHovered && v.Value->Collider != null)
 						_coll.VisualizeCollider(&v.Value->Collider->Collider, default, default);
 				}
 			}
 		}
-		using (var n = _tree.Node($"Layers ({manager->Layers.Count})###layers", manager->Layers.Count == 0))
+		using (var n = _tree.Node($"层级 ({manager->Layers.Count})###layers", manager->Layers.Count == 0))
 		{
 			if (n.Opened)
 			{
@@ -309,13 +309,13 @@ public unsafe class DebugLayout : IDisposable
 				}
 			}
 		}
-		using (var n = _tree.Node($"Instances ({manager->InstancesByType.Count} types)###insts", manager->InstancesByType.Count == 0))
+		using (var n = _tree.Node($"实例 ({manager->InstancesByType.Count} 种类型)###insts", manager->InstancesByType.Count == 0))
 		{
 			if (n.Opened)
 			{
 				foreach (var (itk, itv) in manager->InstancesByType)
 				{
-					using var nt = _tree.Node($"{itk} ({itv.Value->Count} instances)##{itk}");
+					using var nt = _tree.Node($"{itk} ({itv.Value->Count} 个实例)##{itk}");
 					if (nt.Opened)
 					{
 						foreach (var (ik, iv) in *itv.Value)
@@ -327,7 +327,7 @@ public unsafe class DebugLayout : IDisposable
 			}
 		}
 
-		using (var n = _tree.Node($"Paths ({manager->CrcToPath.Count})###paths", manager->CrcToPath.Count == 0))
+		using (var n = _tree.Node($"路径 ({manager->CrcToPath.Count})###paths", manager->CrcToPath.Count == 0))
 		{
 			if (n.Opened)
 			{
@@ -337,7 +337,7 @@ public unsafe class DebugLayout : IDisposable
 				}
 			}
 		}
-		using (var n = _tree.Node($"Analytic shapes ({manager->CrcToAnalyticShapeData.Count})###shapes", manager->CrcToAnalyticShapeData.Count == 0))
+		using (var n = _tree.Node($"解析形状 (Analytic Shapes) ({manager->CrcToAnalyticShapeData.Count})###shapes", manager->CrcToAnalyticShapeData.Count == 0))
 		{
 			if (n.Opened)
 			{
@@ -348,14 +348,14 @@ public unsafe class DebugLayout : IDisposable
 			}
 		}
 
-		using (var n = _tree.Node($"Filters ({manager->Filters.Count})", manager->Filters.Count == 0))
+		using (var n = _tree.Node($"过滤器 ({manager->Filters.Count})", manager->Filters.Count == 0))
 		{
 			if (n.Opened)
 			{
 				var activeFilter = LayoutUtils.FindFilter(manager);
 				foreach (var (k, v) in manager->Filters)
 				{
-					_tree.LeafNode($"{k:X} = terr={v.Value->TerritoryTypeId} cfc={v.Value->CfcId}{(v.Value == activeFilter ? " (active)" : "")}");
+					_tree.LeafNode($"{k:X} = terr={v.Value->TerritoryTypeId} cfc={v.Value->CfcId}{(v.Value == activeFilter ? " (激活)" : "")}");
 				}
 			}
 		}
@@ -397,7 +397,7 @@ public unsafe class DebugLayout : IDisposable
 
 	private void DrawStringTable(ref StringTable strings)
 	{
-		using var n = _tree.Node($"Strings ({strings.Strings.Count}, {strings.NumNulls} nulls)###strings", strings.Strings.Count == 0);
+		using var n = _tree.Node($"字符串表 ({strings.Strings.Count} 个，其中 {strings.NumNulls} 个为空)###strings", strings.Strings.Count == 0);
 		if (!n.Opened)
 			return;
 		foreach (var str in strings.Strings)
@@ -571,7 +571,7 @@ public unsafe class DebugLayout : IDisposable
 		if (terr == null || layout == null)
 			return;
 
-		using var n = _tree.Node($"Comparison: Territory {terrId}/{cfcId} '{terr.Value.Bg}'###comparison");
+		using var n = _tree.Node($"对比：领地 {terrId}/{cfcId} '{terr.Value.Bg}'###comparison");
 		if (!n.Opened)
 			return;
 
@@ -582,11 +582,11 @@ public unsafe class DebugLayout : IDisposable
 
 		FillInstancesFromGame(layout);
 
-		ImGui.Checkbox("Group by layer group", ref _groupByLayerGroup);
-		ImGui.Checkbox("Group by layer", ref _groupByLayer);
-		ImGui.Checkbox("Group by instance type", ref _groupByInstanceType);
-		ImGui.Checkbox("Group by material", ref _groupByMaterial);
-		ImGui.InputText("Filter by ID", ref _filterById, 255);
+		ImGui.Checkbox("按层级组分组", ref _groupByLayerGroup);
+		ImGui.Checkbox("按层级分组", ref _groupByLayer);
+		ImGui.Checkbox("按实例类型分组", ref _groupByInstanceType);
+		ImGui.Checkbox("按材质分组", ref _groupByMaterial);
+		ImGui.InputText("按 ID 筛选", ref _filterById, 255);
 		DrawInstancesByLayerGroup(_insts.Values);
 	}
 
@@ -694,7 +694,7 @@ public unsafe class DebugLayout : IDisposable
 		{
 			foreach (var g in insts.GroupBy(i => i.LayerGroupId))
 			{
-				using var n = _tree.Node($"Layer group {g.Key}");
+				using var n = _tree.Node($"层级组 {g.Key}");
 				if (n.Opened)
 				{
 					DrawInstancesByLayer(g);
@@ -713,7 +713,7 @@ public unsafe class DebugLayout : IDisposable
 		{
 			foreach (var g in insts.GroupBy(i => i.LayerId))
 			{
-				using var n = _tree.Node($"Layer {g.Key:X}");
+				using var n = _tree.Node($"层级 {g.Key:X}");
 				if (n.Opened)
 				{
 					DrawInstancesByType(g);
@@ -732,7 +732,7 @@ public unsafe class DebugLayout : IDisposable
 		{
 			foreach (var g in insts.GroupBy(i => i.Type))
 			{
-				using var n = _tree.Node($"Type {g.Key}");
+				using var n = _tree.Node($"类型 {g.Key}");
 				if (n.Opened)
 				{
 					DrawInstancesByMaterial(g);
@@ -755,7 +755,7 @@ public unsafe class DebugLayout : IDisposable
 				return $"{m1:X}/{m2:X}";
 			}))
 			{
-				using var n = _tree.Node($"Material {m.Key}");
+				using var n = _tree.Node($"材质 {m.Key}");
 				if (n.Opened)
 					DrawInstances(m);
 			}

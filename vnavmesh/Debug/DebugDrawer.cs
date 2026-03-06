@@ -1,4 +1,4 @@
-﻿using Dalamud.Bindings.ImGui;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Navmesh.Render;
@@ -34,7 +34,7 @@ public unsafe class DebugDrawer : IDisposable
         }
         catch (Exception ex)
         {
-            Service.Log.Error($"Failed to set up renderer; some debug visualization will be unavailable: {ex}");
+            Service.Log.Error($"渲染器设置失败；部分调试可视化将不可用：{ex}");
         }
     }
 

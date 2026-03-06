@@ -1,4 +1,4 @@
-﻿using DotRecast.Recast;
+using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Navmesh.Render;
 using System.Numerics;
@@ -26,12 +26,12 @@ public class DebugPolyMeshDetail : DebugRecast
 
     public void Draw()
     {
-        using var nr = _tree.Node("Detail poly mesh");
+        using var nr = _tree.Node("细节多边形网格 (Detail Poly Mesh)");
         if (!nr.Opened)
             return;
 
-        _tree.LeafNode($"Total size: {_mesh.nverts} vertices, {_mesh.ntris} triangles");
-        using var nm = _tree.Node($"Meshes ({_mesh.nmeshes})###meshes");
+        _tree.LeafNode($"总大小：{_mesh.nverts} 个顶点，{_mesh.ntris} 个三角形");
+        using var nm = _tree.Node($"网格 ({_mesh.nmeshes})###meshes");
         if (nm.SelectedOrHovered)
             Visualize();
         if (!nm.Opened)
@@ -43,7 +43,7 @@ public class DebugPolyMeshDetail : DebugRecast
             var vertexCount = _mesh.meshes[i * 4 + 1];
             var triBase = _mesh.meshes[i * 4 + 2];
             var triCount = _mesh.meshes[i * 4 + 3];
-            using var nmesh = _tree.Node($"Mesh {i}: {vertexCount} vertices starting at {vertexBase}, {triCount} triangles starting at {triBase}");
+            using var nmesh = _tree.Node($"网格 {i}：{vertexCount} 个顶点 (起始于 {vertexBase})，{triCount} 个三角形 (起始于 {triBase})");
             if (nmesh.SelectedOrHovered)
                 VisualizeMesh(i);
             if (!nmesh.Opened)
@@ -55,7 +55,7 @@ public class DebugPolyMeshDetail : DebugRecast
                 var v2 = _mesh.tris[(triBase + j) * 4 + 1];
                 var v3 = _mesh.tris[(triBase + j) * 4 + 2];
                 var flags = _mesh.tris[(triBase + j) * 4 + 3];
-                using var ntri = _tree.Node($"Triangle {j}: {v1}x{v2}x{v3} ({GetVertex(vertexBase + v1):f3}x{GetVertex(vertexBase + v2):f3}x{GetVertex(vertexBase + v3):f3}), flags={flags:X}");
+                using var ntri = _tree.Node($"三角形 {j}：{v1}x{v2}x{v3} ({GetVertex(vertexBase + v1):f3}x{GetVertex(vertexBase + v2):f3}x{GetVertex(vertexBase + v3):f3})，标志={flags:X}");
                 if (ntri.SelectedOrHovered)
                     VisualizeTriangle(triBase + j, vertexBase, 3, 3);
             }

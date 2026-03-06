@@ -1,4 +1,4 @@
-﻿using DotRecast.Core.Numerics;
+using DotRecast.Core.Numerics;
 using System;
 using System.Numerics;
 
@@ -10,16 +10,16 @@ public abstract class DebugRecast : IDisposable
 
     public static void DrawBaseInfo(UITree _tree, int gridW, int gridH, RcVec3f bbMin, RcVec3f bbMax, float cellSize, float cellHeight)
     {
-        _tree.LeafNode($"Num cells: {gridW}x{gridH}");
+        _tree.LeafNode($"单元格数量：{gridW}x{gridH}");
         DrawBaseInfo(_tree, bbMin, bbMax, cellSize, cellHeight);
     }
 
     public static void DrawBaseInfo(UITree _tree, RcVec3f bbMin, RcVec3f bbMax, float cellSize, float cellHeight)
     {
         var playerPos = Service.ObjectTable.LocalPlayer?.Position ?? default;
-        _tree.LeafNode($"Bounds: [{bbMin}] - [{bbMax}]");
-        _tree.LeafNode($"Cell size: {cellSize}x{cellHeight}");
-        _tree.LeafNode($"Player's cell: {(int)((playerPos.X - bbMin.X) / cellSize)}x{(int)((playerPos.Y - bbMin.Y) / cellHeight)}x{(int)((playerPos.Z - bbMin.Z) / cellSize)}");
+        _tree.LeafNode($"边界：[{bbMin}] - [{bbMax}]");
+        _tree.LeafNode($"单元格大小：{cellSize}x{cellHeight}");
+        _tree.LeafNode($"玩家所在单元格：{(int)((playerPos.X - bbMin.X) / cellSize)}x{(int)((playerPos.Y - bbMin.Y) / cellHeight)}x{(int)((playerPos.Z - bbMin.Z) / cellSize)}");
     }
 
     public static Vector4 IntColor(int v, float a)

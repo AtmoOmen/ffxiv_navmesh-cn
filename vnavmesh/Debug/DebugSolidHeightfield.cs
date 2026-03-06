@@ -1,4 +1,4 @@
-﻿using DotRecast.Recast;
+using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Navmesh.Render;
 using System.Numerics;
@@ -53,14 +53,14 @@ public class DebugSolidHeightfield : DebugRecast
 
     public void Draw()
     {
-        using var nr = _tree.Node("Solid heightfield");
+        using var nr = _tree.Node("实体高度场 (Solid Heightfield)");
         if (!nr.Opened)
             return;
 
         DrawBaseInfo(_tree, _hf.width, _hf.height, _hf.bmin, _hf.bmax, _hf.cs, _hf.ch);
-        _tree.LeafNode($"Border size: {_hf.borderSize}");
+        _tree.LeafNode($"边界大小：{_hf.borderSize}");
 
-        using var nc = _tree.Node("Cells");
+        using var nc = _tree.Node("单元格");
         if (nc.SelectedOrHovered)
             Visualize();
         if (!nc.Opened)
@@ -88,7 +88,7 @@ public class DebugSolidHeightfield : DebugRecast
                     while (spanIndex != 0)
                     {
                         ref var span = ref _hf.Span(spanIndex);
-                        if (_tree.LeafNode($"{span.smin}-{span.smax} = {span.area:X}").SelectedOrHovered)
+                        if (_tree.LeafNode($"{ispan}: y={span.smin}-{span.smax}, area={span.area:X}").SelectedOrHovered)
                             VisualizeSpan(_spanCellOffsets[x, z] + ispan);
                         spanIndex = span.next;
                         ++ispan;

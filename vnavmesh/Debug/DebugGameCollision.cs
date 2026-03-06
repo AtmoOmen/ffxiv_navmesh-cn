@@ -74,19 +74,19 @@ public unsafe class DebugGameCollision : IDisposable
 		if (_raycastHook != null)
 		{
 			bool hook = _raycastHook.IsEnabled;
-			if (ImGui.Checkbox("Log raycasts", ref hook))
+			if (ImGui.Checkbox("记录射线检测 (Raycasts)", ref hook))
 				if (hook)
 					_raycastHook.Enable();
 				else
 					_raycastHook.Disable();
 		}
 
-		if (_savedHit != null && ImGui.Button("Reset remembered raycast hit"))
+		if (_savedHit != null && ImGui.Button("重置记录的射线检测命中"))
 			_savedHit = null;
 
 		var module = Framework.Instance()->BGCollisionModule;
-		ImGui.TextUnformatted($"Module: {(nint)module:X}->{(nint)module->SceneManager:X} ({module->SceneManager->NumScenes} scenes, {module->LoadInProgressCounter} loads)");
-		ImGui.TextUnformatted($"Streaming: {SphereStr(module->ForcedStreamingSphere)} / {SphereStr(module->SceneManager->StreamingSphere)}");
+		ImGui.TextUnformatted($"模块：{(nint)module:X}->{(nint)module->SceneManager:X} ({module->SceneManager->NumScenes} 个场景，{module->LoadInProgressCounter} 次加载)");
+		ImGui.TextUnformatted($"流式加载 (Streaming)：{SphereStr(module->ForcedStreamingSphere)} / {SphereStr(module->SceneManager->StreamingSphere)}");
 		//module->ForcedStreamingSphere.W = 10000;
 
 		GatherInfo();
@@ -168,20 +168,20 @@ public unsafe class DebugGameCollision : IDisposable
 
 	private void DrawSettings()
 	{
-		using var n = _tree.Node("Settings");
+		using var n = _tree.Node("设置");
 		if (!n.Opened)
 			return;
 
-		ImGui.Checkbox("Show objects with zero layer", ref _showZeroLayer);
+		ImGui.Checkbox("显示零层级 (Zero Layer) 对象", ref _showZeroLayer);
 		{
 			var shownLayers = _availableLayers & _shownLayers;
-			using var layers = ImRaii.Combo("Shown layers", shownLayers == _availableLayers ? "All" : shownLayers.None() ? "None" : string.Join(", ", shownLayers.SetBits()));
+			using var layers = ImRaii.Combo("显示的层级", shownLayers == _availableLayers ? "全选" : shownLayers.None() ? "无" : string.Join(", ", shownLayers.SetBits()));
 			if (layers)
 			{
 				foreach (var i in _availableLayers.SetBits())
 				{
 					var shown = _shownLayers[i];
-					if (ImGui.Checkbox($"Layer {i}", ref shown))
+					if (ImGui.Checkbox($"层级 {i}", ref shown))
 						_shownLayers[i] = shown;
 				}
 			}
@@ -189,13 +189,13 @@ public unsafe class DebugGameCollision : IDisposable
 
 		{
 			var matMask = _materialMask & _availableMaterials;
-			using var materials = ImRaii.Combo("Material mask", matMask.None() ? "None" : matMask.Raw.ToString("X"));
+			using var materials = ImRaii.Combo("材质掩码 (Material Mask)", matMask.None() ? "无" : matMask.Raw.ToString("X"));
 			if (materials)
 			{
 				foreach (var i in _availableMaterials.SetBits())
 				{
 					var filter = _materialMask[i];
-					if (ImGui.Checkbox($"Material {1u << i:X16}", ref filter))
+					if (ImGui.Checkbox($"材质 {1u << i:X16}", ref filter))
 						_materialMask[i] = filter;
 				}
 			}
@@ -203,31 +203,31 @@ public unsafe class DebugGameCollision : IDisposable
 
 		{
 			var matId = _materialId & _availableMaterials;
-			using var materials = ImRaii.Combo("Material id", matId.None() ? "None" : matId.Raw.ToString("X"));
+			using var materials = ImRaii.Combo("材质 ID", matId.None() ? "无" : matId.Raw.ToString("X"));
 			if (materials)
 			{
 				foreach (var i in _availableMaterials.SetBits())
 				{
 					var filter = _materialId[i];
-					if (ImGui.Checkbox($"Material {1u << i:X16}", ref filter))
+					if (ImGui.Checkbox($"材质 {1u << i:X16}", ref filter))
 						_materialId[i] = filter;
 				}
 			}
 		}
 
 		{
-			using var flags = ImRaii.Combo("Flag filter", _showOnlyFlagRaycast ? _showOnlyFlagVisit ? "Only when both flags are set" : "Only if raycast flag is set" : _showOnlyFlagVisit ? "Only if global visit flag is set" : "Show everything");
+			using var flags = ImRaii.Combo("标志筛选", _showOnlyFlagRaycast ? _showOnlyFlagVisit ? "仅当两个标志均设置时" : "仅当射线检测标志设置时" : _showOnlyFlagVisit ? "仅当全局访问标志设置时" : "显示全部");
 			if (flags)
 			{
-				ImGui.Checkbox("Hide objects without raycast flag (0x1)", ref _showOnlyFlagRaycast);
-				ImGui.Checkbox("Hide objects without global viist flag (0x2)", ref _showOnlyFlagVisit);
+				ImGui.Checkbox("隐藏无射线检测标志的对象 (0x1)", ref _showOnlyFlagRaycast);
+				ImGui.Checkbox("隐藏无全局访问标志的对象 (0x2)", ref _showOnlyFlagVisit);
 			}
 		}
 	}
 
 	private void DrawSceneColliders(Scene* s, int index)
 	{
-		using var n = _tree.Node($"Scene {index}: {s->NumColliders} colliders, {s->NumLoading} loading, streaming={SphereStr(s->StreamingSphere)}###scene_{index}");
+		using var n = _tree.Node($"场景 {index}：{s->NumColliders} 个碰撞体，{s->NumLoading} 个正在加载，流式加载={SphereStr(s->StreamingSphere)}###scene_{index}");
 		if (n.SelectedOrHovered || Service.Config.ForceShowGameCollision)
 			foreach (var coll in s->Colliders)
 				if (FilterCollider(coll))
@@ -239,7 +239,7 @@ public unsafe class DebugGameCollision : IDisposable
 
 	private void DrawSceneQuadtree(Quadtree* tree, int index)
 	{
-		using var n = _tree.Node($"Quadtree {index}: {tree->NumLevels} levels ([{tree->MinX}, {tree->MaxX}]x[{tree->MinZ}, {tree->MaxZ}], leaf {tree->LeafSizeX}x{tree->LeafSizeZ}), {tree->NumNodes} nodes###tree_{index}");
+		using var n = _tree.Node($"四叉树 (Quadtree) {index}：{tree->NumLevels} 层级 ([{tree->MinX}, {tree->MaxX}]x[{tree->MinZ}, {tree->MaxZ}]，叶节点 {tree->LeafSizeX}x{tree->LeafSizeZ})，{tree->NumNodes} 个节点###tree_{index}");
 		if (!n.Opened)
 			return;
 
@@ -247,7 +247,7 @@ public unsafe class DebugGameCollision : IDisposable
 		{
 			var cellSizeX = (tree->MaxX - tree->MinX + 1) / (1 << level);
 			var cellSizeZ = (tree->MaxZ - tree->MinZ + 1) / (1 << level);
-			using var ln = _tree.Node($"Level {level}, {cellSizeX}x{cellSizeZ} cells ({Quadtree.NumNodesAtLevel(level)} nodes starting at {Quadtree.StartingNodeForLevel(level)})");
+			using var ln = _tree.Node($"层级 {level}，{cellSizeX}x{cellSizeZ} 单元格 (共 {Quadtree.NumNodesAtLevel(level)} 个节点，起始于 {Quadtree.StartingNodeForLevel(level)})");
 			if (!ln.Opened)
 				continue;
 
@@ -279,7 +279,7 @@ public unsafe class DebugGameCollision : IDisposable
 
 	private void DrawSceneRaycasts(SceneWrapper* s, int index)
 	{
-		using var n = _tree.Node($"Scene {index}: raycasts");
+		using var n = _tree.Node($"场景 {index}：射线检测");
 		if (!n.Opened)
 			return;
 
@@ -287,7 +287,7 @@ public unsafe class DebugGameCollision : IDisposable
 		var windowSize = ImGuiHelpers.MainViewport.Size;
 		if (screenPos.X < 0 || screenPos.X > windowSize.X || screenPos.Y < 0 || screenPos.Y > windowSize.Y)
 		{
-			_tree.LeafNode("Mouse is outside window");
+			_tree.LeafNode("鼠标在窗口外");
 			return;
 		}
 
@@ -295,22 +295,22 @@ public unsafe class DebugGameCollision : IDisposable
 		if (res1 != null)
 		{
 			var res = res1.Value;
-			_tree.LeafNode($"Raycast: {_dd.Origin} + {res.Distance} = {res.Point}");
+			_tree.LeafNode($"射线检测：{_dd.Origin} + {res.Distance} = {res.Point}");
 			var ab = res.V2 - res.V1;
 			var ac = res.V3 - res.V1;
 			var normal = Vector3.Normalize(Vector3.Cross(ab, ac));
-			_tree.LeafNode($"Normal: {normal} (slope={Angle.Acos(normal.Y)})");
-			_tree.LeafNode($"Material: {res.Material:X}");
+			_tree.LeafNode($"法线：{normal} (坡度={Angle.Acos(normal.Y)})");
+			_tree.LeafNode($"材质：{res.Material:X}");
 			DrawCollider(res.Object);
 			VisualizeCollider(res.Object, _materialId, _materialMask);
-			_tree.LeafNode($"Vertices: {res.V1}, {res.V2}, {res.V3}");
+			_tree.LeafNode($"顶点：{res.V1}, {res.V2}, {res.V3}");
 			_dd.DrawWorldLine(res.V1, res.V2, 0xff0000ff, 2);
 			_dd.DrawWorldLine(res.V2, res.V3, 0xff0000ff, 2);
 			_dd.DrawWorldLine(res.V3, res.V1, 0xff0000ff, 2);
 		}
 		else
 		{
-			_tree.LeafNode($"Raycast: N/A");
+			_tree.LeafNode($"射线检测：无");
 		}
 	}
 
@@ -347,7 +347,7 @@ public unsafe class DebugGameCollision : IDisposable
 
 		var raycastFlag = (coll->VisibilityFlags & 1) != 0;
 		var globalVisitFlag = (coll->VisibilityFlags & 2) != 0;
-		var flagsText = raycastFlag ? globalVisitFlag ? "raycast, global visit" : "raycast" : globalVisitFlag ? "global visit" : "none";
+		var flagsText = raycastFlag ? globalVisitFlag ? "射线检测, 全局访问" : "射线检测" : globalVisitFlag ? "全局访问" : "无";
 
 		var type = coll->GetColliderType();
 		var layoutInstance = LayoutUtils.FindInstance(LayoutWorld.Instance()->ActiveLayout, (coll->LayoutObjectId << 32) | (coll->LayoutObjectId >> 32));
@@ -465,7 +465,7 @@ public unsafe class DebugGameCollision : IDisposable
 		if (_tree.LeafNode($"Bounding box: {AABBStr(coll->WorldBoundingBox)}").SelectedOrHovered)
 			VisualizeOBB(ref coll->WorldBoundingBox, ref Matrix4x3.Identity, 0xff00ff00);
 		_tree.LeafNode($"Total size: {coll->TotalPrimitives} prims, {coll->TotalChildren} nodes");
-		_tree.LeafNode($"Mesh type: {(coll->MeshIsSimple ? "simple" : coll->MemoryData != null ? "PCB in-memory" : "PCB from file")} {(coll->Loaded ? "" : "(loading)")}");
+		_tree.LeafNode($"网格类型：{(coll->MeshIsSimple ? "简单 (simple)" : coll->MemoryData != null ? "内存 PCB (PCB in-memory)" : "文件 PCB (PCB from file)")} {(coll->Loaded ? "" : "(正在加载)")}");
 		if (coll->Mesh == null || coll->MeshIsSimple)
 			return;
 
@@ -739,11 +739,11 @@ public unsafe class DebugGameCollision : IDisposable
 		}
 
 		var raycast = (coll->VisibilityFlags & 1) != 0;
-		if (ImGui.Checkbox("Flag: raycast", ref raycast))
+		if (ImGui.Checkbox("标志：射线检测 (Raycast)", ref raycast))
 			coll->VisibilityFlags ^= 1;
 
 		var globalVisit = (coll->VisibilityFlags & 2) != 0;
-		if (ImGui.Checkbox("Flag: global visit", ref globalVisit))
+		if (ImGui.Checkbox("标志：全局访问 (Global Visit)", ref globalVisit))
 			coll->VisibilityFlags ^= 2;
 	}
 
@@ -751,7 +751,7 @@ public unsafe class DebugGameCollision : IDisposable
 
 	private bool RaycastDetour(SceneWrapper* self, RaycastHit* result, ulong layerMask, RaycastParams* param)
 	{
-		Service.Log.Debug($"Raycast: layer={layerMask:X}, algo={param->Algorithm}, origin={*param->Origin}, dir={*param->Direction}, maxnorm={param->MaxPlaneNormalY}, maxdist={*param->MaxDistance}, filter={param->MaterialFilter->Value:X}/{param->MaterialFilter->Mask:X}");
+		Service.Log.Debug($"射线检测 (Raycast)：层级={layerMask:X}, 算法={param->Algorithm}, 原点={*param->Origin}, 方向={*param->Direction}, 最大法线={param->MaxPlaneNormalY}, 最大距离={*param->MaxDistance}, 过滤器={param->MaterialFilter->Value:X}/{param->MaterialFilter->Mask:X}");
 		return _raycastHook!.Original(self, result, layerMask, param);
 	}
 }

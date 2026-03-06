@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 namespace Navmesh.Debug;
 
@@ -8,7 +8,7 @@ public class DebugLinks(Navmesh mesh, DebugDrawer dd)
 
 	public void Draw()
 	{
-		using var n = _tree.Node($"Links ({mesh.Links.Count})###links");
+		using var n = _tree.Node($"连接 ({mesh.Links.Count})###links", mesh.Links.Count == 0);
 		if (n.SelectedOrHovered)
 			foreach (var (from, to) in mesh.Links)
 				DrawLink(from, to);
