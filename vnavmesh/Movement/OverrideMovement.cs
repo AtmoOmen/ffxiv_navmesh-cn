@@ -133,9 +133,5 @@ public unsafe class OverrideMovement : IDisposable
     }
 
     private void OnConfigChanged(object? sender, ConfigChangeEvent evt) => UpdateLegacyMode();
-    private void UpdateLegacyMode()
-    {
-        _legacyMode = Service.GameConfig.UiControl.TryGetUInt("MoveMode", out var mode) && mode == 1;
-        Service.Log.Info($"Legacy mode is now {(_legacyMode ? "enabled" : "disabled")}");
-    }
+    private void UpdateLegacyMode() => _legacyMode = Service.GameConfig.UiControl.TryGetUInt("MoveMode", out var mode) && mode == 1;
 }
