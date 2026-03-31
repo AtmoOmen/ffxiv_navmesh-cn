@@ -63,7 +63,7 @@ public class AsyncMoveRequest : IDisposable
     {
         if (_pendingTask != null)
         {
-            Service.Log.Error($"Pathfinding task is in progress...");
+            Service.Log.Warning($"Pathfinding task is in progress...");
             return false;
         }
 
