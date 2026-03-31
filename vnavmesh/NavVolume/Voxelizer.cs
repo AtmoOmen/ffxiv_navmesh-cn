@@ -42,9 +42,14 @@ public class Voxelizer
             Contents[idx] = true;
     }
 
-    public Voxelizer Downsample(int dx, int dy, int dz)
+    public void Clear()
     {
-        var result = new Voxelizer(NumX / dx, NumY / dy, NumZ / dz, true);
+        Contents.SetAll(false);
+    }
+
+    public void DownsampleInto(Voxelizer result, int dx, int dy, int dz)
+    {
+        result.Clear();
         var shiftX = BitOperations.Log2((uint)dx);
         var shiftY = BitOperations.Log2((uint)dy);
         var shiftZ = BitOperations.Log2((uint)dz);
@@ -55,13 +60,20 @@ public class Voxelizer
             {
                 for (int y = 0; y < NumY; ++y, idx += NumW)
                 {
-                    var (solid, empty) = Get(idx);
+                    var solid = Contents[idx];
+                    var empty = NumW > 1 ? Contents[idx + 1] : !solid;
                     var resIndex = result.VoxelToIndex(x >> shiftX, y >> shiftY, z >> shiftZ);
                     result.Contents[resIndex] |= solid;
                     result.Contents[resIndex + 1] |= empty;
                 }
             }
         }
+    }
+
+    public Voxelizer Downsample(int dx, int dy, int dz)
+    {
+        var result = new Voxelizer(NumX / dx, NumY / dy, NumZ / dz, true);
+        DownsampleInto(result, dx, dy, dz);
         return result;
     }
 }

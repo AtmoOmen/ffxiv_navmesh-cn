@@ -3,6 +3,8 @@ using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
 using DotRecast.Recast;
 using System;
+using System.Globalization;
+using System.Text;
 
 namespace Navmesh;
 
@@ -27,7 +29,7 @@ public class NavmeshSettings
     public Filter Filtering = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
     public float RegionMinSize = 8;
     public float RegionMergeSize = 20;
-    public RcPartition Partitioning = RcPartition.WATERSHED;
+    public RcPartition Partitioning = RcPartition.LAYERS;
     public float PolyMaxEdgeLen = 12f;
     public float PolyMaxSimplificationError = 1.5f;
     public int PolyMaxVerts = 6;
@@ -49,6 +51,51 @@ public class NavmeshSettings
     // there is some code that relies on tiling being power-of-2
     // current values mean 128x128x128 L1 tiles -> 16x16x16 L2 tiles -> 2x2x2 voxels
     public int[] NumTiles = [16, 8, 8];
+
+    public NavmeshSettings Clone()
+    {
+        var clone = (NavmeshSettings)MemberwiseClone();
+        clone.NumTiles = (int[])NumTiles.Clone();
+        return clone;
+    }
+
+    public string BuildSignature(bool flyable)
+    {
+        var sb = new StringBuilder(256);
+        appendFloat(nameof(CellSize), CellSize);
+        appendFloat(nameof(CellHeight), CellHeight);
+        appendFloat(nameof(AgentHeight), AgentHeight);
+        appendFloat(nameof(AgentRadius), AgentRadius);
+        appendFloat(nameof(AgentMaxClimb), AgentMaxClimb);
+        appendFloat(nameof(AgentMaxSlopeDeg), AgentMaxSlopeDeg);
+        appendInt(nameof(Filtering), (int)Filtering);
+        appendFloat(nameof(RegionMinSize), RegionMinSize);
+        appendFloat(nameof(RegionMergeSize), RegionMergeSize);
+        appendInt(nameof(Partitioning), (int)Partitioning);
+        appendFloat(nameof(PolyMaxEdgeLen), PolyMaxEdgeLen);
+        appendFloat(nameof(PolyMaxSimplificationError), PolyMaxSimplificationError);
+        appendInt(nameof(PolyMaxVerts), PolyMaxVerts);
+        appendFloat(nameof(DetailSampleDist), DetailSampleDist);
+        appendFloat(nameof(DetailMaxSampleError), DetailMaxSampleError);
+        appendBool(nameof(GenerateEdgeClimbLinks), GenerateEdgeClimbLinks);
+        appendBool(nameof(GenerateEdgeJumpLinks), GenerateEdgeJumpLinks);
+        appendFloat(nameof(GroundTolerance), GroundTolerance);
+        appendFloat(nameof(ClimbDownDistance), ClimbDownDistance);
+        appendFloat(nameof(ClimbDownMaxHeight), ClimbDownMaxHeight);
+        appendFloat(nameof(ClimbDownMinHeight), ClimbDownMinHeight);
+        appendFloat(nameof(EdgeJumpEndDistance), EdgeJumpEndDistance);
+        appendFloat(nameof(EdgeJumpHeight), EdgeJumpHeight);
+        appendFloat(nameof(EdgeJumpMaxDrop), EdgeJumpMaxDrop);
+        appendFloat(nameof(EdgeJumpMinDrop), EdgeJumpMinDrop);
+        appendBool("Flyable", flyable);
+        appendText(nameof(NumTiles), string.Join(',', NumTiles));
+        return sb.ToString();
+
+        void appendFloat(string key, float value) => sb.Append(key).Append('=').Append(value.ToString("R", CultureInfo.InvariantCulture)).Append(';');
+        void appendInt(string key, int value) => sb.Append(key).Append('=').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
+        void appendBool(string key, bool value) => sb.Append(key).Append('=').Append(value ? '1' : '0').Append(';');
+        void appendText(string key, string value) => sb.Append(key).Append('=').Append(value).Append(';');
+    }
 
 
     public void Draw()

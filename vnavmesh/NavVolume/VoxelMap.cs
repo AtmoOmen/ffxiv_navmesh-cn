@@ -153,6 +153,12 @@ public class VoxelMap
         }
     }
 
+    public sealed class RootColumnBuildResult
+    {
+        public required ushort[] Contents { get; init; }
+        public required List<Tile> Subdivision { get; init; }
+    }
+
     public Level[] Levels { get; init; }
     public Tile RootTile { get; init; }
 
@@ -240,59 +246,86 @@ public class VoxelMap
 
     public void Build(Voxelizer vox, int tx, int tz)
     {
-        // downsample
-        var voxelizers = new Voxelizer[Levels.Length];
-        voxelizers[Levels.Length - 1] = vox;
+        var column = BuildRootColumn(vox, tx, tz);
+        var ny = Levels[0].NumCellsY;
+        var idx = Levels[0].VoxelToIndex(tx, 0, tz);
+        Array.Copy(column.Contents, 0, RootTile.Contents, idx, ny);
+        RootTile.Subdivision.AddRange(column.Subdivision);
+    }
+
+    public RootColumnBuildResult BuildRootColumn(Voxelizer vox, int tx, int tz)
+    {
+        var scratch = new Voxelizer[Levels.Length - 1];
+        var chain = new Voxelizer[Levels.Length];
+        int nx = vox.NumX;
+        int ny = vox.NumY;
+        int nz = vox.NumZ;
         for (int i = Levels.Length - 1; i > 0; --i)
         {
             ref var l = ref Levels[i];
-            voxelizers[i - 1] = voxelizers[i].Downsample(l.NumCellsX, l.NumCellsY, l.NumCellsZ);
+            nx /= l.NumCellsX;
+            ny /= l.NumCellsY;
+            nz /= l.NumCellsZ;
+            scratch[i - 1] = new Voxelizer(nx, ny, nz, true);
         }
-
-        // subdivide L0
-        var ny = Levels[0].NumCellsY;
-        var idx = Levels[0].VoxelToIndex(tx, 0, tz);
-        for (int ty = 0; ty < ny; ++ty, ++idx)
-        {
-            BuildTile(RootTile, idx, 0, ty, 0, voxelizers);
-        }
+        return BuildRootColumn(vox, tx, tz, scratch, chain);
     }
 
-    private void BuildTile(Tile parent, ushort index, int x0, int y0, int z0, Span<Voxelizer> source)
+    public RootColumnBuildResult BuildRootColumn(Voxelizer vox, int tx, int tz, Voxelizer[] scratch, Voxelizer[] chain)
+    {
+        chain[Levels.Length - 1] = vox;
+        var current = vox;
+        for (int i = Levels.Length - 1; i > 0; --i)
+        {
+            ref var l = ref Levels[i];
+            var target = scratch[i - 1];
+            current.DownsampleInto(target, l.NumCellsX, l.NumCellsY, l.NumCellsZ);
+            chain[i - 1] = target;
+            current = target;
+        }
+
+        var ny = Levels[0].NumCellsY;
+        var contents = new ushort[ny];
+        var subdivision = new List<Tile>();
+        for (int ty = 0; ty < ny; ++ty)
+            contents[ty] = BuildTileContent(RootTile, subdivision, tx, ty, tz, 0, ty, 0, chain);
+        return new() { Contents = contents, Subdivision = subdivision };
+    }
+
+    private ushort BuildTileContent(Tile parent, List<Tile> rootSubdivision, int rootX, int rootY, int rootZ, int x0, int y0, int z0, Span<Voxelizer> source)
     {
         var (solid, empty) = source[0].Get(x0, y0, z0);
         if (!solid)
         {
-            // fully empty => nothing to do
+            return 0;
         }
-        else if (!empty)
+        if (!empty)
         {
-            // fully solid
-            parent.Contents[index] = VoxelOccupiedBit | VoxelIdMask;
+            return VoxelOccupiedBit | VoxelIdMask;
         }
-        else
-        {
-            parent.Contents[index] = (ushort)(VoxelOccupiedBit | parent.Subdivision.Count);
-            var (min, max) = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel(index));
-            var tile = new Tile(this, min, max, parent.Level + 1);
-            parent.Subdivision.Add(tile);
 
-            // subdivide
-            ref var l = ref Levels[tile.Level];
-            int xOff = x0 * l.NumCellsX;
-            int yOff = y0 * l.NumCellsY;
-            int zOff = z0 * l.NumCellsZ;
-            ushort i = 0;
-            for (int z = 0; z < l.NumCellsZ; ++z)
+        var index = parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ);
+        var (min, max) = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel(index));
+        var tile = new Tile(this, min, max, parent.Level + 1);
+        var localId = rootSubdivision.Count;
+        rootSubdivision.Add(tile);
+
+        ref var l = ref Levels[tile.Level];
+        int xOff = x0 * l.NumCellsX;
+        int yOff = y0 * l.NumCellsY;
+        int zOff = z0 * l.NumCellsZ;
+        ushort i = 0;
+        for (int z = 0; z < l.NumCellsZ; ++z)
+        {
+            for (int x = 0; x < l.NumCellsX; ++x)
             {
-                for (int x = 0; x < l.NumCellsX; ++x)
+                for (int y = 0; y < l.NumCellsY; ++y, ++i)
                 {
-                    for (int y = 0; y < l.NumCellsY; ++y, ++i)
-                    {
-                        BuildTile(tile, i, xOff + x, yOff + y, zOff + z, source.Slice(1));
-                    }
+                    tile.Contents[i] = BuildTileContent(tile, tile.Subdivision, x, y, z, xOff + x, yOff + y, zOff + z, source.Slice(1));
                 }
             }
         }
+
+        return (ushort)(VoxelOccupiedBit | localId);
     }
 }

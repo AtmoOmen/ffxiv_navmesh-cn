@@ -2,6 +2,7 @@
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -15,6 +16,8 @@ namespace Navmesh;
 // manager that loads navmesh matching current zone and performs async pathfinding queries
 public sealed class NavmeshManager : IDisposable
 {
+	private sealed record BuildNavmeshResult(Navmesh Navmesh, FileInfo? CacheFile);
+
 	public bool UseRaycasts = true;
 	public bool UseStringPulling = true;
 
@@ -34,6 +37,7 @@ public sealed class NavmeshManager : IDisposable
 	public int NumQueuedPathfindRequests => _numActivePathfinds > 0 ? _numActivePathfinds - 1 : 0;
 
 	private DirectoryInfo _cacheDir;
+	private readonly ConcurrentDictionary<string, Task> _cacheWriteTasks = new();
 
 	public unsafe NavmeshManager(DirectoryInfo cacheDir)
 	{
@@ -93,6 +97,7 @@ public sealed class NavmeshManager : IDisposable
 					await Service.Framework.DelayTicks(1, cancel);
 				}
 
+				var snapshotTimer = Timer.Create();
 				var (cacheKey, scene) = await Service.Framework.Run(() =>
 				{
 					var scene = new SceneDefinition();
@@ -100,9 +105,11 @@ public sealed class NavmeshManager : IDisposable
 					var cacheKey = GetCacheKey(scene);
 					return (cacheKey, scene);
 				}, cancel);
+				Log($"场景快照耗时 {snapshotTimer.Value().TotalMilliseconds:f1} ms");
 
 				Log($"Kicking off build for '{cacheKey}' (reload={allowLoadFromCache})");
-				var navmesh = await Task.Run(() => BuildNavmesh(scene, cacheKey, allowLoadFromCache, cancel), cancel);
+				var buildResult = await Task.Run(() => BuildNavmesh(scene, cacheKey, allowLoadFromCache, cancel), cancel);
+				var navmesh = buildResult.Navmesh;
 				Log($"Mesh loaded: '{cacheKey}'");
 				Navmesh = navmesh;
 				Query = new(Navmesh);
@@ -112,6 +119,8 @@ public sealed class NavmeshManager : IDisposable
 					Prune(points);
 
 				OnNavmeshChanged?.Invoke(Navmesh, Query);
+				if (buildResult.CacheFile != null)
+					QueueCacheWrite(cacheKey, buildResult.CacheFile, navmesh);
 			}, cts.Token);
 		}
 		return true;
@@ -256,13 +265,15 @@ public sealed class NavmeshManager : IDisposable
 		}, default);
 	}
 
-	private Navmesh BuildNavmesh(SceneDefinition scene, string cacheKey, bool allowLoadFromCache, CancellationToken cancel)
+	private BuildNavmeshResult BuildNavmesh(SceneDefinition scene, string cacheKey, bool allowLoadFromCache, CancellationToken cancel)
 	{
+		var totalTimer = Timer.Create();
 		Log($"Build task started: '{cacheKey}'");
 		var customization = NavmeshCustomizationRegistry.ForTerritory(scene.TerritoryID);
 		Log($"Customization for '{scene.TerritoryID}': {customization.GetType()}");
 
 		var layers = scene.FestivalLayers.ToList();
+		var buildSignature = customization.GetBuildSettings(scene).BuildSignature(customization.IsFlyingSupported(scene));
 
 		// try reading from cache
 		var cache = new FileInfo($"{_cacheDir.FullName}/{cacheKey}.navmesh");
@@ -270,12 +281,19 @@ public sealed class NavmeshManager : IDisposable
 		{
 			try
 			{
+				var cacheReadTimer = Timer.Create();
 				Log($"Loading cache: {cache.FullName}");
 				using var stream = cache.OpenRead();
 				using var reader = new BinaryReader(stream);
-				var mesh = Navmesh.Deserialize(reader, customization.Version);
-				customization.CustomizeMesh(mesh, layers);
-				return mesh;
+				var cacheResult = Navmesh.Deserialize(reader, customization.Version, buildSignature);
+				var mesh = cacheResult.Navmesh;
+				Log($"缓存读取耗时 {cacheReadTimer.Value().TotalMilliseconds:f1} ms");
+				LogCacheSegment("读取", cacheResult.Telemetry.Mesh);
+				LogCacheSegment("读取", cacheResult.Telemetry.Volume);
+				if (!mesh.CustomizationApplied)
+					customization.CustomizeMesh(mesh, layers);
+				Log($"缓存命中，总耗时 {totalTimer.Value().TotalMilliseconds:f1} ms");
+				return new(mesh, null);
 			}
 			catch (Exception ex)
 			{
@@ -285,24 +303,82 @@ public sealed class NavmeshManager : IDisposable
 		cancel.ThrowIfCancellationRequested();
 
 		// cache doesn't exist or can't be used for whatever reason - build navmesh from scratch
+		var buildTimer = Timer.Create();
 		var builder = new NavmeshBuilder(scene, customization);
 		var deltaProgress = 0.99f / (builder.NumTilesX * builder.NumTilesZ);
-		builder.BuildTiles(() =>
+		builder.Build(() =>
 		{
 			_loadTaskProgress += deltaProgress;
 			cancel.ThrowIfCancellationRequested();
 		});
+		Log($"冷构建耗时 {buildTimer.Value().TotalMilliseconds:f1} ms");
 
-		// write results to cache
-		{
-			Service.Log.Debug($"Writing cache: {cache.FullName}");
-			using var stream = cache.Open(FileMode.Create, FileAccess.Write, FileShare.None);
-			using var writer = new BinaryWriter(stream);
-			builder.Navmesh.Serialize(writer);
-		}
 		customization.CustomizeMesh(builder.Navmesh, layers);
+		var runtimeMesh = builder.Navmesh with { CustomizationApplied = true };
+		Log($"总构建耗时 {totalTimer.Value().TotalMilliseconds:f1} ms");
 		deltaProgress += 0.01f;
-		return builder.Navmesh;
+		return new(runtimeMesh, cache);
+	}
+
+	private void QueueCacheWrite(string cacheKey, FileInfo cache, Navmesh navmesh)
+	{
+		if (_cacheWriteTasks.TryGetValue(cacheKey, out var existing) && !existing.IsCompleted)
+		{
+			Log($"后台缓存写入已在进行，跳过重复调度: {cacheKey}");
+			return;
+		}
+
+		var writeTask = Task.Run(() => WriteCache(cacheKey, cache, navmesh));
+		_cacheWriteTasks[cacheKey] = writeTask;
+		_ = writeTask.ContinueWith(t =>
+		{
+			_cacheWriteTasks.TryRemove(cacheKey, out _);
+			LogTaskError(t);
+		}, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+	}
+
+	private void WriteCache(string cacheKey, FileInfo cache, Navmesh navmesh)
+	{
+		var timer = Timer.Create();
+		var tempPath = $"{cache.FullName}.{Environment.ProcessId}.{Environment.CurrentManagedThreadId}.tmp";
+		try
+		{
+			cache.Directory?.Create();
+			Service.Log.Debug($"[vnavmesh] 后台写入缓存: {cache.FullName}");
+			var serializeTimer = Timer.Create();
+			Navmesh.CacheTelemetry telemetry;
+			using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 22, FileOptions.SequentialScan))
+			using (var writer = new BinaryWriter(stream))
+			{
+				telemetry = navmesh.Serialize(writer);
+				writer.Flush();
+				stream.Flush();
+			}
+			var serializeDuration = serializeTimer.Value();
+			var sizeBytes = new FileInfo(tempPath).Length;
+
+			var replaceTimer = Timer.Create();
+			File.Move(tempPath, cache.FullName, true);
+			var replaceDuration = replaceTimer.Value();
+			LogCacheSegment("写入", telemetry.Mesh);
+			LogCacheSegment("写入", telemetry.Volume);
+			Log($"后台缓存写入完成 '{cacheKey}'，总耗时 {timer.Value().TotalMilliseconds:f1} ms，序列化 {serializeDuration.TotalMilliseconds:f1} ms，替换 {replaceDuration.TotalMilliseconds:f1} ms，大小 {sizeBytes / 1024.0 / 1024.0:f2} MiB");
+		}
+		catch (Exception ex)
+		{
+			Log($"后台缓存写入失败 '{cacheKey}': {ex}");
+		}
+		finally
+		{
+			try
+			{
+				if (File.Exists(tempPath))
+					File.Delete(tempPath);
+			}
+			catch
+			{
+			}
+		}
 	}
 
 	private void ExecuteWhenIdle(Action task, CancellationToken token)
@@ -347,6 +423,19 @@ public sealed class NavmeshManager : IDisposable
 
 	private static void Log(string message) => Service.Log.Debug($"[NavmeshManager] [{Environment.CurrentManagedThreadId}] {message}");
 	private static void LogInfo(string message) => Service.Log.Info($"[NavmeshManager] [{Environment.CurrentManagedThreadId}] {message}");
+	private static void LogCacheSegment(string action, Navmesh.CacheSegmentTelemetry segment)
+	{
+		Log($"缓存段 {SegmentName(segment.Kind)} {action}耗时 {segment.Duration.TotalMilliseconds:f1} ms，压缩后 {FormatMiB(segment.CompressedBytes):f2} MiB，原始 {FormatMiB(segment.UncompressedBytes):f2} MiB");
+	}
+
+	private static string SegmentName(Navmesh.CacheSegmentKind kind) => kind switch
+	{
+		Navmesh.CacheSegmentKind.Mesh => "Mesh",
+		Navmesh.CacheSegmentKind.Volume => "Volume",
+		_ => kind.ToString()
+	};
+
+	private static double FormatMiB(long bytes) => bytes / 1024.0 / 1024.0;
 	private static void LogTaskError(Task task)
 	{
 		if (task.IsFaulted)

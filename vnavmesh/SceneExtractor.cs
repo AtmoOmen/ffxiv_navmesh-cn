@@ -57,6 +57,7 @@ public class SceneExtractor
         public List<MeshPart> Parts = [];
         public List<MeshInstance> Instances = [];
         public MeshType MeshType;
+        public AABB LocalBounds;
     }
 
     public Dictionary<string, Mesh> Meshes { get; private set; } = [];
@@ -83,12 +84,12 @@ public class SceneExtractor
 
     public unsafe SceneExtractor(SceneDefinition scene)
     {
-        Meshes[_keyAnalyticBox] = new() { Parts = _meshBox, MeshType = MeshType.AnalyticShape };
-        Meshes[_keyAnalyticSphere] = new() { Parts = _meshSphere, MeshType = MeshType.AnalyticShape };
-        Meshes[_keyAnalyticCylinder] = new() { Parts = _meshCylinder, MeshType = MeshType.AnalyticShape };
-        Meshes[_keyAnalyticPlaneSingle] = new() { Parts = _meshPlane, MeshType = MeshType.AnalyticPlane };
-        Meshes[_keyAnalyticPlaneDouble] = new() { Parts = _meshPlane, MeshType = MeshType.AnalyticPlane };
-        Meshes[_keyMeshCylinder] = new() { Parts = _meshCylinder, MeshType = MeshType.CylinderMesh };
+        Meshes[_keyAnalyticBox] = CreateBuiltinMesh(_meshBox, MeshType.AnalyticShape);
+        Meshes[_keyAnalyticSphere] = CreateBuiltinMesh(_meshSphere, MeshType.AnalyticShape);
+        Meshes[_keyAnalyticCylinder] = CreateBuiltinMesh(_meshCylinder, MeshType.AnalyticShape);
+        Meshes[_keyAnalyticPlaneSingle] = CreateBuiltinMesh(_meshPlane, MeshType.AnalyticPlane);
+        Meshes[_keyAnalyticPlaneDouble] = CreateBuiltinMesh(_meshPlane, MeshType.AnalyticPlane);
+        Meshes[_keyMeshCylinder] = CreateBuiltinMesh(_meshCylinder, MeshType.CylinderMesh);
         foreach (var path in scene.MeshPaths.Values)
             AddMesh(path, MeshType.FileMesh);
 
@@ -192,6 +193,13 @@ public class SceneExtractor
         return (path, transform, bounds);
     }
 
+    private static Mesh CreateBuiltinMesh(List<MeshPart> parts, MeshType type) => new()
+    {
+        Parts = parts,
+        MeshType = type,
+        LocalBounds = CalculateLocalBounds(parts)
+    };
+
     private unsafe Mesh AddMesh(string path, MeshType type)
     {
         var mesh = new Mesh();
@@ -208,6 +216,7 @@ public class SceneExtractor
             }
         }
         mesh.MeshType = type;
+        mesh.LocalBounds = CalculateLocalBounds(mesh.Parts);
         Meshes[path] = mesh;
         return mesh;
     }
@@ -216,6 +225,20 @@ public class SceneExtractor
     {
         var instance = new MeshInstance(id, worldTransform, worldBounds, matId, ExtractMaterialFlags(matId), default);
         mesh.Instances.Add(instance);
+    }
+
+    private static AABB CalculateLocalBounds(List<MeshPart> parts)
+    {
+        var res = new AABB() { Min = new(float.MaxValue), Max = new(float.MinValue) };
+        foreach (var part in parts)
+        {
+            foreach (var v in part.Vertices)
+            {
+                res.Min = Vector3.Min(res.Min, v);
+                res.Max = Vector3.Max(res.Max, v);
+            }
+        }
+        return res;
     }
 
     private static AABB CalculateBoxBounds(ref Matrix4x3 world)
@@ -240,16 +263,21 @@ public class SceneExtractor
     }
 
     private static AABB CalculateMeshBounds(Mesh mesh, ref Matrix4x3 world)
+        => CalculateTransformedBounds(mesh.LocalBounds, ref world);
+
+    private static AABB CalculateTransformedBounds(AABB bounds, ref Matrix4x3 world)
     {
         var res = new AABB() { Min = new(float.MaxValue), Max = new(float.MinValue) };
-        foreach (var part in mesh.Parts)
+        for (int i = 0; i < 8; ++i)
         {
-            foreach (var v in part.Vertices)
-            {
-                var p = world.TransformCoordinate(v);
-                res.Min = Vector3.Min(res.Min, p);
-                res.Max = Vector3.Max(res.Max, p);
-            }
+            var local = new Vector3(
+                (i & 1) != 0 ? bounds.Max.X : bounds.Min.X,
+                (i & 2) != 0 ? bounds.Max.Y : bounds.Min.Y,
+                (i & 4) != 0 ? bounds.Max.Z : bounds.Min.Z
+            );
+            var p = world.TransformCoordinate(local);
+            res.Min = Vector3.Min(res.Min, p);
+            res.Max = Vector3.Max(res.Max, p);
         }
         return res;
     }

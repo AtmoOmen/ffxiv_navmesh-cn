@@ -10,6 +10,26 @@ using System.Reflection;
 
 namespace Navmesh;
 
+public sealed class NavmeshBuildProfile
+{
+	public RcPartition? PartitioningOverride;
+	public float? DetailSampleDistOverride;
+	public bool? GenerateEdgeClimbLinksOverride;
+	public bool? GenerateEdgeJumpLinksOverride;
+
+	public void ApplyTo(NavmeshSettings settings)
+	{
+		if (PartitioningOverride is { } partitioning)
+			settings.Partitioning = partitioning;
+		if (DetailSampleDistOverride is { } detailSampleDist)
+			settings.DetailSampleDist = detailSampleDist;
+		if (GenerateEdgeClimbLinksOverride is { } generateEdgeClimbLinks)
+			settings.GenerateEdgeClimbLinks = generateEdgeClimbLinks;
+		if (GenerateEdgeJumpLinksOverride is { } generateEdgeJumpLinks)
+			settings.GenerateEdgeJumpLinks = generateEdgeJumpLinks;
+	}
+}
+
 // base class for per-territory navmesh customizations
 public class NavmeshCustomization
 {
@@ -20,10 +40,21 @@ public class NavmeshCustomization
 
 	public NavmeshSettings Settings = new();
 
+	public NavmeshSettings GetBuildSettings(SceneDefinition definition)
+	{
+		var settings = Settings.Clone();
+		var profile = new NavmeshBuildProfile();
+		CustomizeBuildProfile(definition, profile);
+		profile.ApplyTo(settings);
+		return settings;
+	}
+
 	public virtual bool IsFlyingSupported(SceneDefinition definition) => Service.LuminaRow<Lumina.Excel.Sheets.TerritoryType>(definition.TerritoryID)?.TerritoryIntendedUse.RowId is 1 or 49 or 47; // 1 is normal outdoor, 49 is island, 47 is Diadem
 
 	// this is a customization point to add or remove colliders in the scene
 	public virtual void CustomizeScene(SceneExtractor scene) { }
+
+	public virtual void CustomizeBuildProfile(SceneDefinition definition, NavmeshBuildProfile profile) { }
 
 	public virtual void CustomizeSettings(DtNavMeshCreateParams config) { }
 
