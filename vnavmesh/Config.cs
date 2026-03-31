@@ -11,20 +11,22 @@ public class Config
 {
     private const int _version = 1;
 
-    public bool AutoLoadNavmesh = true;
-    public bool EnableDTR = true;
-    public bool ShowQueryStatusInDTR = true;
-    public bool AlignCameraToMovement;
+    public bool  AutoLoadNavmesh      = true;
+    public bool  EnableDTR            = true;
+    public bool  ShowQueryStatusInDTR = true;
+    public bool  AlignCameraToMovement;
     public float AlignCameraHeight = -15;
-    public bool ShowWaypoints;
-    public bool ForceShowGameCollision;
-    public bool CancelMoveOnUserInput;
-    public bool StopOnStuck = false;
-    public float StuckTolerance = 0.05f;
-    public int StuckTimeoutMs = 500;
-    public bool RetryOnStuck = true;
+    public bool  ShowWaypoints;
+    public bool  ForceShowGameCollision;
+    public bool  CancelMoveOnUserInput;
+    public bool  StopOnStuck;
+    public float StuckTolerance       = 0.05f;
+    public int   StuckTimeoutMs       = 500;
+    public bool  RetryOnStuck         = true;
     public float RandomnessMultiplier = 1f;
-    public int BuildMaxCores = 1;
+    public float GroundPathClearance  = 2f;
+    public float GroundPathCenterBias;
+    public int   BuildMaxCores = 1;
 
     private static readonly int realMaxCores = Environment.ProcessorCount;
 
@@ -83,6 +85,20 @@ public class Config
         ImGui.SetNextItemWidth(200);
         if (ImGui.SliderFloat("随机性", ref RandomnessMultiplier, 0f, 1.0f, "%.2f"))
             NotifyModified();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("为走廊搜索注入少量随机扰动，用于分散完全等价的路线选择");
+
+        ImGui.SetNextItemWidth(200);
+        if (ImGui.SliderFloat("地面路径安全边距", ref GroundPathClearance, 0.05f, 2.0f, "%.2f"))
+            NotifyModified();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("平滑时会从通道边缘向内收缩，数值越大越偏向通道中间");
+
+        ImGui.SetNextItemWidth(200);
+        if (ImGui.SliderFloat("地面路径居中偏置", ref GroundPathCenterBias, 0.0f, 1.0f, "%.2f"))
+            NotifyModified();
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("控制平滑轨迹向通道中心回拉的强度，越大越保守");
     }
 
     public void Save(FileInfo file)

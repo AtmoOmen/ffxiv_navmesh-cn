@@ -13,6 +13,7 @@ public class AsyncMoveRequest : IDisposable
     private Task<List<Vector3>>? _pendingTask;
     private bool _pendingFly;
     private float _pendingDestRange;
+    private Vector3 _pendingDest;
 
     public bool TaskInProgress => _pendingTask != null;
 
@@ -32,31 +33,31 @@ public class AsyncMoveRequest : IDisposable
 
     public void Dispose()
     {
-        if (_pendingTask != null)
-        {
-            if (!_pendingTask.IsCompleted)
-                _pendingTask.Wait();
-            _pendingTask.Dispose();
-            _pendingTask = null;
-        }
+        if(_pendingTask == null)
+            return;
+        
+        if (!_pendingTask.IsCompleted)
+            _pendingTask.Wait();
+        _pendingTask.Dispose();
+        _pendingTask = null;
     }
 
     public void Update()
     {
-        if (_pendingTask != null && _pendingTask.IsCompleted)
+        if(_pendingTask is not { IsCompleted: true })
+            return;
+        
+        Service.Log.Information($"Pathfinding complete");
+        try
         {
-            Service.Log.Information($"Pathfinding complete");
-            try
-            {
-                _follow.Move(_pendingTask.Result, !_pendingFly, _pendingDestRange);
-            }
-            catch (Exception ex)
-            {
-                Plugin.DuoLog(ex, "算路失败");
-            }
-            _pendingTask.Dispose();
-            _pendingTask = null;
+            _follow.Move(_pendingTask.Result, !_pendingFly, _pendingDestRange, _pendingDest);
         }
+        catch (Exception ex)
+        {
+            Plugin.DuoLog(ex, "算路失败");
+        }
+        _pendingTask.Dispose();
+        _pendingTask = null;
     }
 
     public bool MoveTo(Vector3 dest, bool fly, float range = 0)
@@ -73,6 +74,7 @@ public class AsyncMoveRequest : IDisposable
         _pendingTask = _manager.QueryPath(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range: range);
         _pendingFly = fly;
         _pendingDestRange = range;
+        _pendingDest = dest;
         return true;
     }
 }

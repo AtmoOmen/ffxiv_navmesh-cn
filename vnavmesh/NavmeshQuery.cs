@@ -84,7 +84,7 @@ public class NavmeshQuery
         }
     }
 
-    public DtNavMeshQuery MeshQuery;
+    public GroundDetourQuery MeshQuery;
     public VoxelPathfind? VolumeQuery;
     private readonly IDtQueryFilter _filter = new DtQueryDefaultFilter();
     private readonly TeleportAwareFilter _teleportFilter = new();
@@ -93,6 +93,7 @@ public class NavmeshQuery
 
     public List<long> LastPath => _lastPath;
     private List<long> _lastPath = [];
+    public GroundPathDebugInfo? LastGroundPath { get; private set; }
 
     public NavmeshQuery(Navmesh navmesh)
     {
@@ -106,6 +107,7 @@ public class NavmeshQuery
     {
         var startRef = FindNearestMeshPoly(from);
         var endRef = FindNearestMeshPoly(to);
+        var requestedEnd = to.SystemToRecast();
         Service.Log.Debug($"[pathfind] poly {startRef:X} -> {endRef:X}");
         if (startRef == 0 || endRef == 0)
         {
@@ -115,7 +117,8 @@ public class NavmeshQuery
 
         var timer = Timer.Create();
         _lastPath.Clear();
-        var opt = new DtFindPathOption(range > 0 ? new GoalRadiusHeuristic(range) : DtDefaultQueryHeuristic.Default, useRaycast ? DtFindPathOptions.DT_FINDPATH_ANY_ANGLE : 0, useRaycast ? 5 : 0);
+        LastGroundPath = null;
+        var opt = new DtFindPathOption(range > 0 ? new GoalRadiusHeuristic(range) : DtDefaultQueryHeuristic.Default, 0, 0);
         var randomness = Service.Config.RandomnessMultiplier;
         IDtQueryFilter filter = randomness > 0 ? _randomnessFilter : _teleportFilter;
         if (randomness > 0)
@@ -123,38 +126,42 @@ public class NavmeshQuery
             _randomnessFilter.RandomnessMultiplier = randomness;
             _randomnessFilter.RandomSeed = (ulong)System.Random.Shared.NextInt64();
         }
-        MeshQuery.FindPath(startRef, endRef, from.SystemToRecast(), to.SystemToRecast(), filter, ref _lastPath, opt);
+        var status = MeshQuery.FindPath(startRef, endRef, from.SystemToRecast(), requestedEnd, filter, ref _lastPath, opt);
         if (_lastPath.Count == 0)
         {
             Service.Log.Error($"Failed to find a path from {from} ({startRef:X}) to {to} ({endRef:X}): failed to find path on mesh");
             return [];
         }
+        var reachedEndRef = _lastPath[^1];
+        var isPartial = status.IsPartial() || reachedEndRef != endRef;
+        var resolvedEnd = ResolvePathEndPosition(reachedEndRef, requestedEnd);
         Service.Log.Debug($"Pathfind took {timer.Value().TotalSeconds:f3}s: {string.Join(", ", _lastPath.Select(r => r.ToString("X")))}");
-
-        // In case of partial path, make sure the end point is clamped to the last polygon.
-        var endPos = to.SystemToRecast();
-        //if (polysPath.Last() != endRef)
-        //    if (MeshQuery.ClosestPointOnPoly(polysPath.Last(), endPos, out var closest, out _).Succeeded())
-        //        endPos = closest;
+        Service.Log.Debug($"[pathfind] status={status}, partial={isPartial}, reached={reachedEndRef:X}, target={endRef:X}, resolvedEnd={resolvedEnd}");
 
         cancel.ThrowIfCancellationRequested();
 
-        if (useStringPulling)
+        var settings = GroundPathSettings.FromConfig(Service.Config);
+        if (MeshQuery.TryBuildCorridor(_lastPath, from.SystemToRecast(), resolvedEnd, out var corridor) && corridor != null)
         {
-            var straightPath = new List<DtStraightPath>();
-            var success = MeshQuery.FindStraightPath(from.SystemToRecast(), endPos, _lastPath, ref straightPath, 1024, 0);
-            if (success.Failed())
-                Service.Log.Error($"Failed to find a path from {from} ({startRef:X}) to {to} ({endRef:X}): failed to find straight path ({success.Value:X})");
-            var res = straightPath.Select(p => p.pos.RecastToSystem()).ToList();
-            res.Add(endPos.RecastToSystem());
-            return res;
+            List<Vector3> result;
+            GroundPathDebugInfo debug;
+            if (useStringPulling)
+                result = GroundPathSmoother.BuildCenteredPath(MeshQuery, corridor, settings, useRaycast, out debug);
+            else
+                result = GroundPathSmoother.BuildPortalMidpointPath(MeshQuery, corridor, settings, useRaycast, out debug);
+
+            var terminal = isPartial ? resolvedEnd.RecastToSystem() : to;
+            EnsureTerminalPoint(result, terminal);
+            EnsureTerminalPoint(debug.FinalPath, terminal);
+            PopulateGroundPathDebug(debug, isPartial, to, resolvedEnd.RecastToSystem(), status, reachedEndRef);
+            LastGroundPath = debug;
+            return result;
         }
-        else
-        {
-            var res = _lastPath.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).ToList();
-            res.Add(endPos.RecastToSystem());
-            return res;
-        }
+
+        var res = _lastPath.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).ToList();
+        EnsureTerminalPoint(res, isPartial ? resolvedEnd.RecastToSystem() : to);
+        LastGroundPath = CreateFallbackGroundPathDebug(res, isPartial, to, resolvedEnd.RecastToSystem(), status, reachedEndRef);
+        return res;
     }
 
     public List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel)
@@ -243,5 +250,50 @@ public class NavmeshQuery
         }
 
         return result;
+    }
+
+    private RcVec3f ResolvePathEndPosition(long reachedEndRef, RcVec3f requestedEnd)
+    {
+        if (MeshQuery.ClosestPointOnPoly(reachedEndRef, requestedEnd, out var closest, out _).Succeeded())
+            return closest;
+        if (MeshQuery.ClosestPointOnPolyBoundary(reachedEndRef, requestedEnd, out closest).Succeeded())
+            return closest;
+
+        return MeshQuery.GetAttachedNavMesh().GetPolyCenter(reachedEndRef);
+    }
+
+    private static void EnsureTerminalPoint(List<Vector3> points, Vector3 destination)
+    {
+        if (points.Count == 0)
+        {
+            points.Add(destination);
+            return;
+        }
+
+        if (Vector3.Distance(points[^1], destination) <= 0.01f)
+            points[^1] = destination;
+        else
+            points.Add(destination);
+    }
+
+    private static void PopulateGroundPathDebug(GroundPathDebugInfo debug, bool isPartial, Vector3 requestedEnd, Vector3 resolvedEnd, DtStatus status, long reachedEndRef)
+    {
+        debug.IsPartial = isPartial;
+        debug.RequestedEnd = requestedEnd;
+        debug.ResolvedEnd = resolvedEnd;
+        debug.PathStatusText = status.ToString();
+        debug.ReachedEndRef = reachedEndRef;
+    }
+
+    private GroundPathDebugInfo CreateFallbackGroundPathDebug(List<Vector3> finalPath, bool isPartial, Vector3 requestedEnd, Vector3 resolvedEnd, DtStatus status, long reachedEndRef)
+    {
+        var debug = new GroundPathDebugInfo
+        {
+            CorridorCenters = [.. _lastPath.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem())],
+            Centerline = [.. finalPath],
+            FinalPath = [.. finalPath]
+        };
+        PopulateGroundPathDebug(debug, isPartial, requestedEnd, resolvedEnd, status, reachedEndRef);
+        return debug;
     }
 }

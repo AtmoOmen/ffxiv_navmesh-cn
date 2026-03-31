@@ -1,4 +1,6 @@
 using Dalamud.Bindings.ImGui;
+using System.Collections.Generic;
+using System.Linq;
 using Navmesh.Movement;
 using Navmesh.NavVolume;
 using System;
@@ -92,6 +94,7 @@ class DebugNavmeshManager : IDisposable
 		DrawPosition("目标", _target);
 		DrawPosition("旗帜", MapUtils.FlagToPoint(_manager.Query) ?? default);
 		DrawPosition("地面", _manager.Query.FindPointOnFloor(playerPos) ?? default);
+		DrawGroundPathDebug(_manager.Query.LastGroundPath);
 
 		_drawNavmesh ??= new(_manager.Navmesh.Mesh, _manager.Query.MeshQuery, _manager.Query.LastPath, _tree, _dd);
 		_drawNavmesh.Draw();
@@ -117,6 +120,81 @@ class DebugNavmeshManager : IDisposable
 	private void ExportBitmap(Navmesh navmesh, NavmeshQuery query, Vector3 startingPos)
 	{
 		_manager.BuildBitmap(startingPos, "D:\\navmesh.bmp", 0.5f);
+	}
+
+	private void DrawGroundPathDebug(GroundPathDebugInfo? debug)
+	{
+		if (debug == null)
+		{
+			_tree.LeafNode("地面路径调试：暂无数据");
+			return;
+		}
+
+		using (var node = _tree.Node($"地面路径调试：走廊 {debug.CorridorCenters.Count}，门户 {debug.RawPortals.Count}，输出点 {debug.FinalPath.Count}"))
+		{
+			if (!node.Opened)
+				return;
+
+			DrawDebugPoint("原始目标点", debug.RequestedEnd, 0xFFFFFF40);
+			DrawDebugPoint("实际可达终点", debug.ResolvedEnd, 0xFF40FFFF);
+			var statusLeaf = _tree.LeafNode($"状态：{debug.PathStatusText}，Partial={debug.IsPartial}，到达 Poly={debug.ReachedEndRef:X}");
+			if (debug.IsPartial && statusLeaf.SelectedOrHovered)
+			{
+				_dd.DrawWorldLine(debug.ResolvedEnd, debug.RequestedEnd, 0xFFFF4080, 3);
+				_dd.DrawWorldPointFilled(debug.RequestedEnd, 4, 0xFFFFFF40);
+				_dd.DrawWorldPointFilled(debug.ResolvedEnd, 4, 0xFF40FFFF);
+			}
+
+			DrawDebugPolyline("原始多边形走廊中心线", debug.CorridorCenters, 0xFF40A0FF);
+			DrawDebugPortals("原始门户", debug.RawPortals, false);
+			DrawDebugPortals("收缩后门户", debug.TrimmedPortals, true);
+			DrawDebugPolyline("居中中心线", debug.Centerline, 0xFF40FF40);
+			DrawDebugPolyline("最终输出路径", debug.FinalPath, 0xFFFFFF40, 3, debug.ProtectedPointIndices);
+		}
+	}
+
+	private void DrawDebugPolyline(string label, IReadOnlyList<Vector3> points, uint color, int thickness = 2, IReadOnlyCollection<int>? protectedPointIndices = null)
+	{
+		var leaf = _tree.LeafNode($"{label}：{points.Count} 个点");
+		if (!leaf.SelectedOrHovered || points.Count < 2)
+			return;
+
+		for (var i = 0; i < points.Count - 1; i++)
+			_dd.DrawWorldLine(points[i], points[i + 1], color, thickness);
+		for (var i = 0; i < points.Count; i++)
+		{
+			var pointColor = protectedPointIndices?.Contains(i) == true ? 0xFFFF4040 : color;
+			_dd.DrawWorldPointFilled(points[i], 3, pointColor);
+		}
+	}
+
+	private void DrawDebugPortals(string label, IReadOnlyList<DebugPortalSegment> segments, bool includeMetrics)
+	{
+		var leaf = _tree.LeafNode($"{label}：{segments.Count} 条");
+		if (!leaf.SelectedOrHovered)
+			return;
+
+		foreach (var segment in segments)
+		{
+			var color = segment.IsProtectedAnchor ? 0xFFFF4040u : segment.IsNarrow ? 0xFFFFA040u : 0xFF40D0FFu;
+			_dd.DrawWorldLine(segment.From, segment.To, color, 2);
+			_dd.DrawWorldPointFilled(segment.From, 3, color);
+			_dd.DrawWorldPointFilled(segment.To, 3, color);
+			if (includeMetrics)
+			{
+				var center = (segment.From + segment.To) * 0.5f;
+				_tree.LeafNode($"门户宽度 {segment.Width:f3}，有效边距 {segment.EffectiveClearance:f3}，窄口={segment.IsNarrow}，保护={segment.IsProtectedAnchor} @ {center:f3}");
+			}
+		}
+	}
+
+	private void DrawDebugPoint(string label, Vector3 point, uint color)
+	{
+		var leaf = _tree.LeafNode($"{label}：{point:f3}");
+		if (!leaf.SelectedOrHovered)
+			return;
+
+		_dd.DrawWorldPointFilled(point, 4, color);
 	}
 
 	private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query)

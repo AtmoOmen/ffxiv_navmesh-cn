@@ -37,7 +37,7 @@ class IPCProvider : IDisposable
         {
             var finalPath = new List<Vector3> { default };
             finalPath.AddRange(waypoints);
-            followPath.Move(finalPath, !fly);
+            followPath.Move(finalPath, !fly, completionTarget: finalPath.Count > 0 ? finalPath[^1] : null);
         });
         RegisterAction("Path.Stop",   followPath.Stop);
         RegisterFunc("Path.IsRunning", () => followPath.Waypoints.Count > 0);
