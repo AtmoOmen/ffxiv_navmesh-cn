@@ -29,9 +29,9 @@ public class NavmeshSettings
     public Filter Filtering = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
     public float RegionMinSize = 8;
     public float RegionMergeSize = 20;
-    public RcPartition Partitioning = RcPartition.LAYERS;
-    public float PolyMaxEdgeLen = 12f;
-    public float PolyMaxSimplificationError = 1.5f;
+    public RcPartition Partitioning = RcPartition.MONOTONE;
+    public float PolyMaxEdgeLen = 8f;
+    public float PolyMaxSimplificationError = 1.1f;
     public int PolyMaxVerts = 6;
     public float DetailSampleDist = 6f;
     public float DetailMaxSampleError = 1f;

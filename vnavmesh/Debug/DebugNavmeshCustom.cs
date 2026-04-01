@@ -32,6 +32,12 @@ class DebugNavmeshCustom : IDisposable
 				Existing?.CustomizeScene(scene);
 		}
 
+		public override void CustomizeBuildProfile(SceneDefinition definition, NavmeshBuildProfile profile)
+		{
+			if (LoadExisting)
+				Existing?.CustomizeBuildProfile(definition, profile);
+		}
+
 		public override void CustomizeSettings(DtNavMeshCreateParams config)
 		{
 			if (LoadExisting)
@@ -177,6 +183,7 @@ class DebugNavmeshCustom : IDisposable
 	private PerTile[,]? _debugTiles;
 
 	private Vector3 _dest = new();
+	private Vector3 _seamInspectPoint = new();
 
 	private string _configDirectory;
 
@@ -234,13 +241,20 @@ class DebugNavmeshCustom : IDisposable
 		if (ImGui.Button("Pathfind"))
 		{
 			var player = Service.ObjectTable.LocalPlayer;
-			var playerPos = player?.Position ?? default;
-			_navmesh.Query!.PathfindMesh(playerPos, _dest, true, true, 0, new());
+			var currentPlayerPos = player?.Position ?? default;
+			_navmesh.Query!.PathfindMesh(currentPlayerPos, _dest, true, true, 0, new());
 		}
 
 		var navmesh = _navmesh.Navmesh!;
-		navmesh.CalcTileLoc((Service.ObjectTable.LocalPlayer?.Position ?? default).SystemToRecast(), out var playerTileX, out var playerTileZ);
-		_tree.LeafNode($"Player tile: {playerTileX}x{playerTileZ}");
+		var playerPos = Service.ObjectTable.LocalPlayer?.Position ?? default;
+		navmesh.CalcTileLoc(playerPos.SystemToRecast(), out var playerTileX, out var playerTileZ);
+		_tree.LeafNode($"玩家所在区块：{playerTileX}x{playerTileZ}");
+
+		using (var ns = _tree.Node("接缝检查"))
+		{
+			if (ns.Opened)
+				DrawSeamInspection(playerPos);
+		}
 
 		_drawExtracted ??= new(_navmesh.Scene!, _navmesh.Extractor!, _tree, _dd, _coll, _configDirectory);
 		_drawExtracted.Draw();
@@ -269,36 +283,7 @@ class DebugNavmeshCustom : IDisposable
 						var inter = intermediates.Tiles[x, z];
 						if (inter == null)
 							continue;
-
-						using var nt = _tree.Node($"Tile {x}x{z}");
-						if (!nt.Opened)
-							continue;
-
-						var debug = _debugTiles[x, z] ??= new();
-						debug.DrawSolidHeightfield ??= new(inter.GetSolidHeightfield(), _tree, _dd);
-						debug.DrawSolidHeightfield.Draw();
-						debug.DrawCompactHeightfield ??= new(inter.GetCompactHeightfield(), _tree, _dd);
-						debug.DrawCompactHeightfield.Draw();
-						debug.DrawContourSet ??= new(inter.GetContourSet(), _tree, _dd);
-						debug.DrawContourSet.Draw();
-						debug.DrawPolyMesh ??= new(inter.GetMesh(), _tree, _dd);
-						debug.DrawPolyMesh.Draw();
-						if (inter.GetMeshDetail() is { } det)
-						{
-							debug.DrawPolyMeshDetail ??= new(det, _tree, _dd);
-							debug.DrawPolyMeshDetail.Draw();
-						}
-
-						using (var nhfc = _tree.Node("HF comparison"))
-						{
-							if (nhfc.Opened)
-							{
-								debug.HFC ??= CompareHeightfields(x, z, _navmesh.Extractor!);
-								_tree.LeafNode($"Old: {debug.HFC.Value.DurationOld:f3}");
-								_tree.LeafNode($"New: {debug.HFC.Value.DurationNew:f3}");
-								_tree.LeafNode($"Match: {debug.HFC.Value.Identical}");
-							}
-						}
+						DrawIntermediateTile(x, z, inter, $"区块 {x}x{z}");
 					}
 				}
 			}
@@ -307,6 +292,92 @@ class DebugNavmeshCustom : IDisposable
 		using var dt = _tree.Node("Detour navmesh");
 		if (dt.Opened)
 			_tree.LeafNode("Loaded mesh replaced with custom build, check Navmesh Manager tab");
+	}
+
+	private void DrawSeamInspection(Vector3 playerPos)
+	{
+		ImGui.InputFloat("检查点 X", ref _seamInspectPoint.X);
+		ImGui.InputFloat("检查点 Y", ref _seamInspectPoint.Y);
+		ImGui.InputFloat("检查点 Z", ref _seamInspectPoint.Z);
+		if (ImGui.Button("设为玩家位置"))
+			_seamInspectPoint = playerPos;
+		ImGui.SameLine();
+		if (ImGui.Button("设为目标点"))
+			_seamInspectPoint = _dest;
+
+		if (_navmesh.Query == null || _navmesh.Intermediates == null)
+		{
+			_tree.LeafNode("当前没有可用的导航网格查询或中间结果。");
+			return;
+		}
+
+		var query = _navmesh.Query;
+		var intermediates = _navmesh.Intermediates;
+		_debugTiles ??= new PerTile[intermediates.NumTilesX, intermediates.NumTilesZ];
+		var (tileX, tileZ) = query.FindMeshTile(_seamInspectPoint);
+		var (tileMin, tileMax) = query.GetMeshTileBounds(tileX, tileZ);
+		var distMinX = MathF.Abs(_seamInspectPoint.X - tileMin.X);
+		var distMaxX = MathF.Abs(tileMax.X - _seamInspectPoint.X);
+		var distMinZ = MathF.Abs(_seamInspectPoint.Z - tileMin.Z);
+		var distMaxZ = MathF.Abs(tileMax.Z - _seamInspectPoint.Z);
+		var nearestBoundary = MathF.Min(MathF.Min(distMinX, distMaxX), MathF.Min(distMinZ, distMaxZ));
+
+		_tree.LeafNode($"检查点：{_seamInspectPoint:f3}");
+		_tree.LeafNode($"所属区块：{tileX}x{tileZ}，边界 = {tileMin:f3} - {tileMax:f3}");
+		_tree.LeafNode($"距区块边界：X- = {distMinX:f3}，X+ = {distMaxX:f3}，Z- = {distMinZ:f3}，Z+ = {distMaxZ:f3}，最近 = {nearestBoundary:f3}");
+		_tree.LeafNode("重点查看中心区块与相邻区块边界带里的紧凑高度场、轮廓集和多边形网格。");
+
+		using var nn = _tree.Node("邻接区块中间结果");
+		if (!nn.Opened)
+			return;
+
+		for (int z = Math.Max(0, tileZ - 1); z <= Math.Min(intermediates.NumTilesZ - 1, tileZ + 1); ++z)
+		{
+			for (int x = Math.Max(0, tileX - 1); x <= Math.Min(intermediates.NumTilesX - 1, tileX + 1); ++x)
+			{
+				var inter = intermediates.Tiles[x, z];
+				var role = x == tileX && z == tileZ ? "中心" : "相邻";
+				if (inter == null)
+				{
+					_tree.LeafNode($"区块 {x}x{z}（{role}）：没有中间结果，请使用“Rebuild navmesh”重新构建。");
+					continue;
+				}
+
+				DrawIntermediateTile(x, z, inter, $"区块 {x}x{z}（{role}）");
+			}
+		}
+	}
+
+	private void DrawIntermediateTile(int x, int z, RcBuilderResult inter, string label)
+	{
+		using var nt = _tree.Node(label);
+		if (!nt.Opened)
+			return;
+
+		_debugTiles ??= new PerTile[_navmesh.Intermediates!.NumTilesX, _navmesh.Intermediates.NumTilesZ];
+		var debug = _debugTiles[x, z] ??= new();
+		debug.DrawSolidHeightfield ??= new(inter.GetSolidHeightfield(), _tree, _dd);
+		debug.DrawSolidHeightfield.Draw();
+		debug.DrawCompactHeightfield ??= new(inter.GetCompactHeightfield(), _tree, _dd);
+		debug.DrawCompactHeightfield.Draw();
+		debug.DrawContourSet ??= new(inter.GetContourSet(), _tree, _dd);
+		debug.DrawContourSet.Draw();
+		debug.DrawPolyMesh ??= new(inter.GetMesh(), _tree, _dd);
+		debug.DrawPolyMesh.Draw();
+		if (inter.GetMeshDetail() is { } det)
+		{
+			debug.DrawPolyMeshDetail ??= new(det, _tree, _dd);
+			debug.DrawPolyMeshDetail.Draw();
+		}
+
+		using var nhfc = _tree.Node("高度场对比");
+		if (!nhfc.Opened)
+			return;
+
+		debug.HFC ??= CompareHeightfields(x, z, _navmesh.Extractor!);
+		_tree.LeafNode($"旧版耗时：{debug.HFC.Value.DurationOld:f3}");
+		_tree.LeafNode($"新版耗时：{debug.HFC.Value.DurationNew:f3}");
+		_tree.LeafNode($"结果一致：{debug.HFC.Value.Identical}");
 	}
 
 	private void Clear()
