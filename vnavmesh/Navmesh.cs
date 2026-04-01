@@ -11,178 +11,6 @@ namespace Navmesh;
 // full set of data needed for navigation in the zone
 public record class Navmesh(int CustomizationVersion, string BuildSignature, bool CustomizationApplied, DtNavMesh Mesh, VoxelMap? Volume)
 {
-	public enum CacheSegmentKind : int
-	{
-		Mesh = 1,
-		Volume = 2
-	}
-
-	private enum CacheCodec : int
-	{
-		None = 0,
-		BrotliFastest = 1
-	}
-
-	private enum VolumeTileEncoding : byte
-	{
-		Empty = 0,
-		SolidLeaf = 1,
-		Mixed = 2
-	}
-
-	private enum VolumeCellState : byte
-	{
-		Empty = 0,
-		SolidLeaf = 1,
-		Subtree = 2
-	}
-
-	public readonly record struct CacheSegmentTelemetry(CacheSegmentKind Kind, long CompressedBytes, long UncompressedBytes, TimeSpan Duration);
-	public readonly record struct CacheTelemetry(CacheSegmentTelemetry Mesh, CacheSegmentTelemetry Volume)
-	{
-		public long TotalCompressedBytes => Mesh.CompressedBytes + Volume.CompressedBytes;
-		public long TotalUncompressedBytes => Mesh.UncompressedBytes + Volume.UncompressedBytes;
-	}
-
-	public readonly record struct DeserializeResult(Navmesh Navmesh, CacheTelemetry Telemetry);
-
-	private readonly record struct CacheSegmentDescriptor(CacheSegmentKind Kind, CacheCodec Codec, long Offset, long CompressedBytes, long UncompressedBytes);
-
-	private sealed class VolumeCodecWorkspace
-	{
-		private byte[] _packedStates = [];
-
-		public Span<byte> PackedStates(int size)
-		{
-			if (_packedStates.Length < size)
-				_packedStates = GC.AllocateUninitializedArray<byte>(size);
-			return _packedStates.AsSpan(0, size);
-		}
-	}
-
-	private sealed class CountingStream(Stream inner, bool leaveOpen) : Stream
-	{
-		public long BytesProcessed { get; private set; }
-
-		public override bool CanRead => inner.CanRead;
-		public override bool CanSeek => inner.CanSeek;
-		public override bool CanWrite => inner.CanWrite;
-		public override long Length => inner.Length;
-		public override long Position
-		{
-			get => inner.Position;
-			set => inner.Position = value;
-		}
-
-		public override void Flush() => inner.Flush();
-
-		public override int Read(byte[] buffer, int offset, int count)
-		{
-			var read = inner.Read(buffer, offset, count);
-			BytesProcessed += read;
-			return read;
-		}
-
-		public override int Read(Span<byte> buffer)
-		{
-			var read = inner.Read(buffer);
-			BytesProcessed += read;
-			return read;
-		}
-
-		public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
-		public override void SetLength(long value) => inner.SetLength(value);
-
-		public override void Write(byte[] buffer, int offset, int count)
-		{
-			inner.Write(buffer, offset, count);
-			BytesProcessed += count;
-		}
-
-		public override void Write(ReadOnlySpan<byte> buffer)
-		{
-			inner.Write(buffer);
-			BytesProcessed += buffer.Length;
-		}
-
-		protected override void Dispose(bool disposing)
-		{
-			if (disposing && !leaveOpen)
-				inner.Dispose();
-			base.Dispose(disposing);
-		}
-	}
-
-	private sealed class SegmentReadStream(Stream inner, long offset, long length) : Stream
-	{
-		private long _position;
-
-		public override bool CanRead => true;
-		public override bool CanSeek => true;
-		public override bool CanWrite => false;
-		public override long Length => length;
-		public override long Position
-		{
-			get => _position;
-			set => Seek(value, SeekOrigin.Begin);
-		}
-
-		public override void Flush()
-		{
-		}
-
-		public override int Read(byte[] buffer, int offsetBytes, int count)
-		{
-			if (_position >= length)
-				return 0;
-
-			var toRead = (int)Math.Min(count, length - _position);
-			lock (inner)
-			{
-				inner.Position = offset + _position;
-				var read = inner.Read(buffer, offsetBytes, toRead);
-				_position += read;
-				return read;
-			}
-		}
-
-		public override int Read(Span<byte> buffer)
-		{
-			if (_position >= length)
-				return 0;
-
-			var toRead = (int)Math.Min(buffer.Length, length - _position);
-			lock (inner)
-			{
-				inner.Position = offset + _position;
-				var read = inner.Read(buffer[..toRead]);
-				_position += read;
-				return read;
-			}
-		}
-
-		public override long Seek(long seekOffset, SeekOrigin origin)
-		{
-			var target = origin switch
-			{
-				SeekOrigin.Begin => seekOffset,
-				SeekOrigin.Current => _position + seekOffset,
-				SeekOrigin.End => length + seekOffset,
-				_ => throw new ArgumentOutOfRangeException(nameof(origin))
-			};
-
-			if (target < 0 || target > length)
-				throw new IOException($"Invalid segment seek: {target} / {length}");
-
-			_position = target;
-			return _position;
-		}
-
-		public override void SetLength(long value) => throw new NotSupportedException();
-		public override void Write(byte[] buffer, int offsetBytes, int count) => throw new NotSupportedException();
-		public override void Write(ReadOnlySpan<byte> buffer) => throw new NotSupportedException();
-	}
-
 	public static readonly uint Magic = 0x444D564E; // 'NVMD'
 	public static readonly uint Version = 28;
 	public const int FLAG_UNREACHABLE = 0x10;
@@ -723,5 +551,177 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 		writer.Write(v.X);
 		writer.Write(v.Y);
 		writer.Write(v.Z);
+	}
+	
+	public enum CacheSegmentKind : int
+	{
+		Mesh = 1,
+		Volume = 2
+	}
+
+	private enum CacheCodec : int
+	{
+		None = 0,
+		BrotliFastest = 1
+	}
+
+	private enum VolumeTileEncoding : byte
+	{
+		Empty = 0,
+		SolidLeaf = 1,
+		Mixed = 2
+	}
+
+	private enum VolumeCellState : byte
+	{
+		Empty = 0,
+		SolidLeaf = 1,
+		Subtree = 2
+	}
+
+	public readonly record struct CacheSegmentTelemetry(CacheSegmentKind Kind, long CompressedBytes, long UncompressedBytes, TimeSpan Duration);
+	public readonly record struct CacheTelemetry(CacheSegmentTelemetry Mesh, CacheSegmentTelemetry Volume)
+	{
+		public long TotalCompressedBytes => Mesh.CompressedBytes + Volume.CompressedBytes;
+		public long TotalUncompressedBytes => Mesh.UncompressedBytes + Volume.UncompressedBytes;
+	}
+
+	public readonly record struct DeserializeResult(Navmesh Navmesh, CacheTelemetry Telemetry);
+
+	private readonly record struct CacheSegmentDescriptor(CacheSegmentKind Kind, CacheCodec Codec, long Offset, long CompressedBytes, long UncompressedBytes);
+
+	private sealed class VolumeCodecWorkspace
+	{
+		private byte[] _packedStates = [];
+
+		public Span<byte> PackedStates(int size)
+		{
+			if (_packedStates.Length < size)
+				_packedStates = GC.AllocateUninitializedArray<byte>(size);
+			return _packedStates.AsSpan(0, size);
+		}
+	}
+
+	private sealed class CountingStream(Stream inner, bool leaveOpen) : Stream
+	{
+		public long BytesProcessed { get; private set; }
+
+		public override bool CanRead => inner.CanRead;
+		public override bool CanSeek => inner.CanSeek;
+		public override bool CanWrite => inner.CanWrite;
+		public override long Length => inner.Length;
+		public override long Position
+		{
+			get => inner.Position;
+			set => inner.Position = value;
+		}
+
+		public override void Flush() => inner.Flush();
+
+		public override int Read(byte[] buffer, int offset, int count)
+		{
+			var read = inner.Read(buffer, offset, count);
+			BytesProcessed += read;
+			return read;
+		}
+
+		public override int Read(Span<byte> buffer)
+		{
+			var read = inner.Read(buffer);
+			BytesProcessed += read;
+			return read;
+		}
+
+		public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+		public override void SetLength(long value) => inner.SetLength(value);
+
+		public override void Write(byte[] buffer, int offset, int count)
+		{
+			inner.Write(buffer, offset, count);
+			BytesProcessed += count;
+		}
+
+		public override void Write(ReadOnlySpan<byte> buffer)
+		{
+			inner.Write(buffer);
+			BytesProcessed += buffer.Length;
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			if (disposing && !leaveOpen)
+				inner.Dispose();
+			base.Dispose(disposing);
+		}
+	}
+
+	private sealed class SegmentReadStream(Stream inner, long offset, long length) : Stream
+	{
+		private long _position;
+
+		public override bool CanRead => true;
+		public override bool CanSeek => true;
+		public override bool CanWrite => false;
+		public override long Length => length;
+		public override long Position
+		{
+			get => _position;
+			set => Seek(value, SeekOrigin.Begin);
+		}
+
+		public override void Flush()
+		{
+		}
+
+		public override int Read(byte[] buffer, int offsetBytes, int count)
+		{
+			if (_position >= length)
+				return 0;
+
+			var toRead = (int)Math.Min(count, length - _position);
+			lock (inner)
+			{
+				inner.Position = offset + _position;
+				var read = inner.Read(buffer, offsetBytes, toRead);
+				_position += read;
+				return read;
+			}
+		}
+
+		public override int Read(Span<byte> buffer)
+		{
+			if (_position >= length)
+				return 0;
+
+			var toRead = (int)Math.Min(buffer.Length, length - _position);
+			lock (inner)
+			{
+				inner.Position = offset + _position;
+				var read = inner.Read(buffer[..toRead]);
+				_position += read;
+				return read;
+			}
+		}
+
+		public override long Seek(long seekOffset, SeekOrigin origin)
+		{
+			var target = origin switch
+			{
+				SeekOrigin.Begin => seekOffset,
+				SeekOrigin.Current => _position + seekOffset,
+				SeekOrigin.End => length + seekOffset,
+				_ => throw new ArgumentOutOfRangeException(nameof(origin))
+			};
+
+			if (target < 0 || target > length)
+				throw new IOException($"Invalid segment seek: {target} / {length}");
+
+			_position = target;
+			return _position;
+		}
+
+		public override void SetLength(long value) => throw new NotSupportedException();
+		public override void Write(byte[] buffer, int offsetBytes, int count) => throw new NotSupportedException();
+		public override void Write(ReadOnlySpan<byte> buffer) => throw new NotSupportedException();
 	}
 }
