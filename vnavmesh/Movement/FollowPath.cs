@@ -11,7 +11,7 @@ public class FollowPath : IDisposable
 {
     public bool MovementAllowed = true;
     public bool IgnoreDeltaY = false;
-    public float Tolerance = 0.25f;
+    public float Tolerance = 0.05f;
     public float DestinationTolerance = 0;
     public List<Vector3> Waypoints = new();
 
