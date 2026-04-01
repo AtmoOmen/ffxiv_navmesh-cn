@@ -4,6 +4,7 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Dalamud.Game.ClientState.Conditions;
 
 namespace Navmesh.Movement;
 
@@ -175,7 +176,7 @@ public class FollowPath : IDisposable
     private unsafe void ExecuteJump()
     {
         // Unable to jump while diving, prevents spamming error messages.
-        if (Service.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.Diving])
+        if (Service.Condition[ConditionFlag.Diving])
             return;
 
         if (DateTime.Now >= _nextJump)
@@ -187,7 +188,7 @@ public class FollowPath : IDisposable
 
     public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0, Vector3? goalPosition = null)
     {
-        Vector3? resolvedGoal = goalPosition;
+        var resolvedGoal = goalPosition;
         if (!resolvedGoal.HasValue && waypoints.Count > 0)
             resolvedGoal = waypoints[^1];
 
