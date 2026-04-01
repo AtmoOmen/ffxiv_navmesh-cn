@@ -10,7 +10,7 @@ public class AsyncMoveRequest : IDisposable
 {
     private NavmeshManager _manager;
     private FollowPath _follow;
-    private Task<List<Vector3>>? _pendingTask;
+    private Task<PathfindResult>? _pendingTask;
     private bool _pendingFly;
     private float _pendingDestRange;
 
@@ -45,10 +45,12 @@ public class AsyncMoveRequest : IDisposable
     {
         if (_pendingTask != null && _pendingTask.IsCompleted)
         {
-            Service.Log.Information($"Pathfinding complete");
+            Service.Log.Information("算路任务已完成");
             try
             {
-                _follow.Move(_pendingTask.Result, !_pendingFly, _pendingDestRange);
+                var result = _pendingTask.Result;
+                if (result.Succeeded)
+                    _follow.Move(result.Waypoints, !_pendingFly, _pendingDestRange, result.RequestedDestination);
             }
             catch (Exception ex)
             {
@@ -63,14 +65,14 @@ public class AsyncMoveRequest : IDisposable
     {
         if (_pendingTask != null)
         {
-            Service.Log.Warning($"Pathfinding task is in progress...");
+            Service.Log.Warning("已有算路任务正在进行中");
             return false;
         }
 
-        var toleranceStr = range > 0 ? $" within {range}y" : "";
+        var toleranceStr = range > 0 ? $"，容差 = {range:f3}" : "";
 
-        Service.Log.Info($"Queueing {(fly ? "fly" : "move")}-to {dest:f3}{toleranceStr}");
-        _pendingTask = _manager.QueryPath(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range: range);
+        Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
+        _pendingTask = _manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range: range);
         _pendingFly = fly;
         _pendingDestRange = range;
         return true;

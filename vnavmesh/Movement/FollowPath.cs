@@ -14,6 +14,7 @@ public class FollowPath : IDisposable
     public float Tolerance = 0.05f;
     public float DestinationTolerance = 0;
     public List<Vector3> Waypoints = new();
+    public Vector3? GoalPosition;
 
     private IDalamudPluginInterface _dalamud;
     private NavmeshManager _manager;
@@ -63,8 +64,9 @@ public class FollowPath : IDisposable
             var a = Waypoints[0];
             var b = player.Position;
             var c = posPreviousFrame ?? b;
+            var goal = GoalPosition ?? Waypoints[^1];
 
-            if (DestinationTolerance > 0 && (b - Waypoints[^1]).Length() <= DestinationTolerance)
+            if (DestinationTolerance > 0 && (b - goal).Length() <= DestinationTolerance)
             {
                 Waypoints.Clear();
                 break;
@@ -87,6 +89,7 @@ public class FollowPath : IDisposable
         if (Waypoints.Count == 0)
         {
             posPreviousFrame = player.Position;
+            GoalPosition = null;
             _movement.Enabled = _camera.Enabled = false;
             _camera.SpeedH = _camera.SpeedV = default;
             _movement.DesiredPosition = player.Position;
@@ -109,7 +112,7 @@ public class FollowPath : IDisposable
 
                 if (_millisecondsWithNoSignificantMovement >= Service.Config.StuckTimeoutMs)
                 {
-                    var destination = Waypoints[^1];
+                    var destination = GoalPosition ?? Waypoints[^1];
                     Stop();
                     OnStuck?.Invoke(destination, !IgnoreDeltaY, DestinationTolerance);
                     return;
@@ -165,6 +168,7 @@ public class FollowPath : IDisposable
     {
         UpdateSharedState(false);
         _millisecondsWithNoSignificantMovement = 0;
+        GoalPosition = null;
         Waypoints.Clear();
     }
 
@@ -181,10 +185,15 @@ public class FollowPath : IDisposable
         }
     }
 
-    public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0)
+    public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0, Vector3? goalPosition = null)
     {
-        UpdateSharedState(true);
+        Vector3? resolvedGoal = goalPosition;
+        if (!resolvedGoal.HasValue && waypoints.Count > 0)
+            resolvedGoal = waypoints[^1];
+
+        UpdateSharedState(waypoints.Count > 0);
         Waypoints = waypoints;
+        GoalPosition = resolvedGoal;
         IgnoreDeltaY = ignoreDeltaY;
         DestinationTolerance = destTolerance;
     }
@@ -192,6 +201,7 @@ public class FollowPath : IDisposable
     private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query)
     {
         UpdateSharedState(false);
+        GoalPosition = null;
         Waypoints.Clear();
     }
 }

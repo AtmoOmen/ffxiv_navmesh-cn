@@ -103,14 +103,16 @@ public class NavmeshQuery
     }
 
     public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
+        => PathfindMeshDetailed(from, to, useRaycast, useStringPulling, range, cancel).Waypoints;
+
+    internal PathfindResult PathfindMeshDetailed(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
     {
         var startRef = FindNearestMeshPoly(from);
         var endRef = FindNearestMeshPoly(to);
-        Service.Log.Debug($"[pathfind] poly {startRef:X} -> {endRef:X}");
+        Service.Log.Debug($"[算路] 地面多边形 {startRef:X} -> {endRef:X}");
         if (startRef == 0 || endRef == 0)
         {
-            Service.Log.Error($"Failed to find a path from {from} ({startRef:X}) to {to} ({endRef:X}): failed to find polygon on a mesh");
-            return [];
+            return LogMeshFailure(from, to, startRef, endRef, 0, range, "无法在导航网格上找到起点或终点多边形");
         }
 
         var timer = Timer.Create();
@@ -123,70 +125,121 @@ public class NavmeshQuery
             _randomnessFilter.RandomnessMultiplier = randomness;
             _randomnessFilter.RandomSeed = (ulong)System.Random.Shared.NextInt64();
         }
-        MeshQuery.FindPath(startRef, endRef, from.SystemToRecast(), to.SystemToRecast(), filter, ref _lastPath, opt);
-        if (_lastPath.Count == 0)
+        var startPos = from.SystemToRecast();
+        var requestedEndPos = to.SystemToRecast();
+        var pathStatus = MeshQuery.FindPath(startRef, endRef, startPos, requestedEndPos, filter, ref _lastPath, opt);
+        if (pathStatus.Failed() || _lastPath.Count == 0)
         {
-            Service.Log.Error($"Failed to find a path from {from} ({startRef:X}) to {to} ({endRef:X}): failed to find path on mesh");
-            return [];
+            return LogMeshFailure(from, to, startRef, endRef, 0, range, $"地面路径查询失败，状态 = {pathStatus}");
         }
-        Service.Log.Debug($"Pathfind took {timer.Value().TotalSeconds:f3}s: {string.Join(", ", _lastPath.Select(r => r.ToString("X")))}");
-
-        // In case of partial path, make sure the end point is clamped to the last polygon.
-        var endPos = to.SystemToRecast();
-        //if (polysPath.Last() != endRef)
-        //    if (MeshQuery.ClosestPointOnPoly(polysPath.Last(), endPos, out var closest, out _).Succeeded())
-        //        endPos = closest;
+        Service.Log.Debug($"[算路] 地面路径查询耗时 {timer.Value().TotalSeconds:f3} 秒，状态 = {pathStatus}，路径 = {string.Join(", ", _lastPath.Select(r => r.ToString("X")))}");
 
         cancel.ThrowIfCancellationRequested();
 
+        var lastPoly = _lastPath[^1];
+        var resultStatus = PathfindStatus.Complete;
+        var finalEndPos = requestedEndPos;
+        if (pathStatus.IsPartial() || lastPoly != endRef)
+        {
+            var closestStatus = MeshQuery.ClosestPointOnPoly(lastPoly, requestedEndPos, out finalEndPos, out _);
+            if (closestStatus.Failed())
+                return LogMeshFailure(from, to, startRef, endRef, lastPoly, range, $"无法将终点投影到最后可达多边形，状态 = {closestStatus}");
+
+            var projectedDestination = finalEndPos.RecastToSystem();
+            resultStatus = range > 0 && Vector3.Distance(projectedDestination, to) <= range ? PathfindStatus.ReachedWithinRange : PathfindStatus.Partial;
+        }
+
+        List<Vector3> waypoints;
         if (useStringPulling)
         {
             var straightPath = new List<DtStraightPath>();
-            var success = MeshQuery.FindStraightPath(from.SystemToRecast(), endPos, _lastPath, ref straightPath, 1024, 0);
-            if (success.Failed())
-                Service.Log.Error($"Failed to find a path from {from} ({startRef:X}) to {to} ({endRef:X}): failed to find straight path ({success.Value:X})");
-            var res = straightPath.Select(p => p.pos.RecastToSystem()).ToList();
-            res.Add(endPos.RecastToSystem());
-            return res;
+            var straightStatus = MeshQuery.FindStraightPath(startPos, finalEndPos, _lastPath, ref straightPath, 1024, 0);
+            if (straightStatus.Failed())
+                return LogMeshFailure(from, to, startRef, endRef, lastPoly, range, $"直线路径生成失败，状态 = {straightStatus}");
+
+            waypoints = DeduplicateWaypoints(straightPath.Select(p => p.pos.RecastToSystem()));
         }
         else
         {
-            var res = _lastPath.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).ToList();
-            res.Add(endPos.RecastToSystem());
-            return res;
+            var finalDestination = finalEndPos.RecastToSystem();
+            waypoints = DeduplicateWaypoints(_lastPath.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(finalDestination));
         }
+
+        if (waypoints.Count == 0)
+            return LogMeshFailure(from, to, startRef, endRef, lastPoly, range, "路径点生成结果为空");
+
+        var result = new PathfindResult(resultStatus, waypoints, to, waypoints[^1]);
+        LogMeshResult(result, from, startRef, endRef, lastPoly, range, timer.Value());
+        return result;
     }
 
     public List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel)
+        => PathfindVolumeDetailed(from, to, useRaycast, useStringPulling, cancel).Waypoints;
+
+    internal PathfindResult PathfindVolumeDetailed(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel)
     {
         if (VolumeQuery == null)
         {
-            Service.Log.Error($"Nav volume was not built");
-            return [];
+            Service.Log.Error("体素导航体未构建，无法执行飞行算路");
+            return new(PathfindStatus.Failed, [], to, to);
         }
 
         var startVoxel = FindNearestVolumeVoxel(from);
         var endVoxel = FindNearestVolumeVoxel(to);
-        Service.Log.Debug($"[pathfind] voxel {startVoxel:X} -> {endVoxel:X}");
+        Service.Log.Debug($"[算路] 飞行体素 {startVoxel:X} -> {endVoxel:X}");
         if (startVoxel == VoxelMap.InvalidVoxel || endVoxel == VoxelMap.InvalidVoxel)
         {
-            Service.Log.Error($"Failed to find a path from {from} ({startVoxel:X}) to {to} ({endVoxel:X}): failed to find empty voxel");
-            return [];
+            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 无法定位空体素");
+            return new(PathfindStatus.Failed, [], to, to);
         }
 
         var timer = Timer.Create();
         var voxelPath = VolumeQuery.FindPath(startVoxel, endVoxel, from, to, useRaycast, false, cancel); // TODO: do we need intermediate points for string-pulling algo?
         if (voxelPath.Count == 0)
         {
-            Service.Log.Error($"Failed to find a path from {from} ({startVoxel:X}) to {to} ({endVoxel:X}): failed to find path on volume");
-            return [];
+            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空");
+            return new(PathfindStatus.Failed, [], to, to);
         }
-        Service.Log.Debug($"Pathfind took {timer.Value().TotalSeconds:f3}s: {string.Join(", ", voxelPath.Select(r => $"{r.p} {r.voxel:X}"))}");
+        Service.Log.Debug($"[算路] 飞行路径查询耗时 {timer.Value().TotalSeconds:f3} 秒，路径 = {string.Join(", ", voxelPath.Select(r => $"{r.p} {r.voxel:X}"))}");
 
         // TODO: string-pulling support
-        var res = voxelPath.Select(r => r.p).ToList();
-        res.Add(to);
-        return res;
+        var waypoints = DeduplicateWaypoints(voxelPath.Select(r => r.p).Append(to));
+        return new(PathfindStatus.Complete, waypoints, to, waypoints[^1]);
+    }
+
+    private PathfindResult LogMeshFailure(Vector3 from, Vector3 to, long startRef, long endRef, long lastPoly, float range, string reason)
+    {
+        var lastPolyText = lastPoly != 0 ? lastPoly.ToString("X") : "<none>";
+        Service.Log.Error($"地面算路失败：起点 = {from:f3}，请求终点 = {to:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPolyText}，容差 = {range:f3}，原因 = {reason}");
+        return new(PathfindStatus.Failed, [], to, to);
+    }
+
+    private void LogMeshResult(PathfindResult result, Vector3 from, long startRef, long endRef, long lastPoly, float range, System.TimeSpan duration)
+    {
+        var message = $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，路径点 = {result.Waypoints.Count}";
+        switch (result.Status)
+        {
+            case PathfindStatus.Partial:
+                Service.Log.Warning(message);
+                break;
+            case PathfindStatus.Failed:
+                Service.Log.Error(message);
+                break;
+            default:
+                Service.Log.Debug(message);
+                break;
+        }
+    }
+
+    private static List<Vector3> DeduplicateWaypoints(IEnumerable<Vector3> points)
+    {
+        List<Vector3> result = [];
+        foreach (var point in points)
+        {
+            if (result.Count == 0 || Vector3.DistanceSquared(result[^1], point) > 0.000001f)
+                result.Add(point);
+        }
+        return result;
     }
 
     // returns 0 if not found, otherwise polygon ref

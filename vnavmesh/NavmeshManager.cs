@@ -136,7 +136,13 @@ public sealed class NavmeshManager : IDisposable
 
 	private static bool InCutscene => Service.Condition[ConditionFlag.WatchingCutscene] || Service.Condition[ConditionFlag.OccupiedInCutSceneEvent];
 
-	public Task<List<Vector3>> QueryPath(Vector3 from, Vector3 to, bool flying, float range = 0, CancellationToken externalCancel = default)
+	public async Task<List<Vector3>> QueryPath(Vector3 from, Vector3 to, bool flying, float range = 0, CancellationToken externalCancel = default)
+	{
+		var result = await QueryPathDetailed(from, to, flying, range, externalCancel);
+		return result.Waypoints;
+	}
+
+	internal Task<PathfindResult> QueryPathDetailed(Vector3 from, Vector3 to, bool flying, float range = 0, CancellationToken externalCancel = default)
 	{
 		if (_currentCTS == null)
 			throw new Exception($"Can't initiate query - navmesh is not loaded");
@@ -149,16 +155,16 @@ public sealed class NavmeshManager : IDisposable
 			using var autoDisposeCombined = combined;
 			using var autoDecrementCounter = new OnDispose(() => --_numActivePathfinds);
 			LogInfo($"Kicking off pathfind from {from} to {to}");
-			var path = await Task.Run(() =>
+			var result = await Task.Run(() =>
 			{
 				combined.Token.ThrowIfCancellationRequested();
 				if (Query == null)
 					throw new Exception($"Can't pathfind, navmesh did not build successfully");
-				Log($"Executing pathfind from {from} to {to}");
-				return flying ? Query.PathfindVolume(from, to, UseRaycasts, UseStringPulling, combined.Token) : Query.PathfindMesh(from, to, UseRaycasts, UseStringPulling, range, combined.Token);
+				Log($"执行算路：起点 = {from:f3}，终点 = {to:f3}");
+				return flying ? Query.PathfindVolumeDetailed(from, to, UseRaycasts, UseStringPulling, combined.Token) : Query.PathfindMeshDetailed(from, to, UseRaycasts, UseStringPulling, range, combined.Token);
 			}, combined.Token);
-			Log($"Pathfinding done: {path.Count} waypoints");
-			return path;
+			Log($"算路结束：状态 = {result.Status}，路径点 = {result.Waypoints.Count}");
+			return result;
 		}, combined.Token);
 	}
 
