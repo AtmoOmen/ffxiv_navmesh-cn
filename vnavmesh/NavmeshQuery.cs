@@ -189,7 +189,7 @@ public class NavmeshQuery
             return repairedResult;
         }
 
-        var waypoints = BuildMeshWaypoints(startPos, _lastPath, finalEndPos, useStringPulling, filter);
+        var waypoints = BuildMeshWaypoints(startPos, _lastPath, finalEndPos, useStringPulling);
         if (waypoints == null)
             return LogMeshFailure(from, to, startRef, endRef, lastPoly, range, "路径点生成失败");
 
@@ -429,11 +429,16 @@ public class NavmeshQuery
         return (min, max);
     }
 
-    private List<Vector3>? BuildMeshWaypoints(RcVec3f startPos, List<long> corridor, RcVec3f finalEndPos, bool useStringPulling, IDtQueryFilter filter)
+    private List<Vector3>? BuildMeshWaypoints(RcVec3f startPos, List<long> corridor, RcVec3f finalEndPos, bool useStringPulling)
     {
         if (useStringPulling)
         {
-            return new GroundPathPostProcessor(MeshQuery, filter).Build(startPos, corridor, finalEndPos);
+            var straightPath = new List<DtStraightPath>();
+            var straightStatus = MeshQuery.FindStraightPath(startPos, finalEndPos, corridor, ref straightPath, 1024, 0);
+            if (straightStatus.Failed())
+                return null;
+
+            return DeduplicateWaypoints(straightPath.Select(p => p.pos.RecastToSystem()));
         }
 
         return DeduplicateWaypoints(corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(finalEndPos.RecastToSystem()));
@@ -506,8 +511,8 @@ public class NavmeshQuery
         if (bestResumeCandidate == null)
             return false;
 
-        var partialWaypoints = BuildMeshWaypoints(partialCandidate.StartPoint.SystemToRecast(), partialCandidate.Corridor, partialCandidate.FinalDestination.SystemToRecast(), useStringPulling, filter);
-        var resumedWaypoints = BuildMeshWaypoints(bestResumeCandidate.Value.StartPoint.SystemToRecast(), bestResumeCandidate.Value.Corridor, bestResumeCandidate.Value.FinalDestination.SystemToRecast(), useStringPulling, filter);
+        var partialWaypoints = BuildMeshWaypoints(partialCandidate.StartPoint.SystemToRecast(), partialCandidate.Corridor, partialCandidate.FinalDestination.SystemToRecast(), useStringPulling);
+        var resumedWaypoints = BuildMeshWaypoints(bestResumeCandidate.Value.StartPoint.SystemToRecast(), bestResumeCandidate.Value.Corridor, bestResumeCandidate.Value.FinalDestination.SystemToRecast(), useStringPulling);
         if (partialWaypoints == null || resumedWaypoints == null)
             return false;
 
