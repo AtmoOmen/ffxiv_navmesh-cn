@@ -81,7 +81,7 @@ class DebugNavmeshManager : IDisposable
 
 		ImGui.Checkbox("允许移动", ref _path.MovementAllowed);
 		ImGui.Checkbox("使用射线检测", ref _manager.UseRaycasts);
-		ImGui.Checkbox("使用拉绳算法", ref _manager.UseStringPulling);
+		ImGui.Checkbox("使用地面路径后处理", ref _manager.UseStringPulling);
 		if (ImGui.Button("使用导航网格寻路至目标"))
 			_asyncMove.MoveTo(_target, false);
 		ImGui.SameLine();
