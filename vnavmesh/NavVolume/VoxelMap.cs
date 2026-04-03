@@ -162,6 +162,10 @@ public class VoxelMap
     public Level[] Levels { get; init; }
     public Tile RootTile { get; init; }
 
+    private readonly int[] _leafScaleX;
+    private readonly int[] _leafScaleY;
+    private readonly int[] _leafScaleZ;
+
     public const ushort VoxelOccupiedBit = 0x8000;
     public const ushort VoxelIdMask = 0x7fff;
 
@@ -197,6 +201,18 @@ public class VoxelMap
         }
 
         RootTile = new(this, boundsMin, boundsMax, 0);
+        _leafScaleX = GC.AllocateUninitializedArray<int>(Levels.Length);
+        _leafScaleY = GC.AllocateUninitializedArray<int>(Levels.Length);
+        _leafScaleZ = GC.AllocateUninitializedArray<int>(Levels.Length);
+        _leafScaleX[^1] = 1;
+        _leafScaleY[^1] = 1;
+        _leafScaleZ[^1] = 1;
+        for (int i = Levels.Length - 2; i >= 0; --i)
+        {
+            _leafScaleX[i] = _leafScaleX[i + 1] * Levels[i + 1].NumCellsX;
+            _leafScaleY[i] = _leafScaleY[i + 1] * Levels[i + 1].NumCellsY;
+            _leafScaleZ[i] = _leafScaleZ[i + 1] * Levels[i + 1].NumCellsZ;
+        }
     }
 
     public bool IsEmpty(ulong voxel)
@@ -255,46 +271,18 @@ public class VoxelMap
 
     public RootColumnBuildResult BuildRootColumn(Voxelizer vox, int tx, int tz)
     {
-        var scratch = new Voxelizer[Levels.Length - 1];
-        var chain = new Voxelizer[Levels.Length];
-        int nx = vox.NumX;
-        int ny = vox.NumY;
-        int nz = vox.NumZ;
-        for (int i = Levels.Length - 1; i > 0; --i)
-        {
-            ref var l = ref Levels[i];
-            nx /= l.NumCellsX;
-            ny /= l.NumCellsY;
-            nz /= l.NumCellsZ;
-            scratch[i - 1] = new Voxelizer(nx, ny, nz, true);
-        }
-        return BuildRootColumn(vox, tx, tz, scratch, chain);
-    }
-
-    public RootColumnBuildResult BuildRootColumn(Voxelizer vox, int tx, int tz, Voxelizer[] scratch, Voxelizer[] chain)
-    {
-        chain[Levels.Length - 1] = vox;
-        var current = vox;
-        for (int i = Levels.Length - 1; i > 0; --i)
-        {
-            ref var l = ref Levels[i];
-            var target = scratch[i - 1];
-            current.DownsampleInto(target, l.NumCellsX, l.NumCellsY, l.NumCellsZ);
-            chain[i - 1] = target;
-            current = target;
-        }
-
         var ny = Levels[0].NumCellsY;
         var contents = new ushort[ny];
         var subdivision = new List<Tile>();
         for (int ty = 0; ty < ny; ++ty)
-            contents[ty] = BuildTileContent(RootTile, subdivision, tx, ty, tz, 0, ty, 0, chain);
+            contents[ty] = BuildTileContent(vox, RootTile, subdivision, tx, ty, tz, 0, ty * _leafScaleY[0], 0);
         return new() { Contents = contents, Subdivision = subdivision };
     }
 
-    private ushort BuildTileContent(Tile parent, List<Tile> rootSubdivision, int rootX, int rootY, int rootZ, int x0, int y0, int z0, Span<Voxelizer> source)
+    private ushort BuildTileContent(Voxelizer vox, Tile parent, List<Tile> rootSubdivision, int rootX, int rootY, int rootZ, int leafX, int leafY, int leafZ)
     {
-        var (solid, empty) = source[0].Get(x0, y0, z0);
+        var level = parent.Level;
+        var (solid, empty) = vox.ClassifyRegion(leafX, leafY, leafZ, _leafScaleX[level], _leafScaleY[level], _leafScaleZ[level]);
         if (!solid)
         {
             return 0;
@@ -306,14 +294,16 @@ public class VoxelMap
 
         var index = parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ);
         var (min, max) = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel(index));
+        if (parent.Level + 1 >= Levels.Length)
+            throw new InvalidOperationException("体积列构建遇到超出层级的混合体素");
         var tile = new Tile(this, min, max, parent.Level + 1);
         var localId = rootSubdivision.Count;
         rootSubdivision.Add(tile);
 
         ref var l = ref Levels[tile.Level];
-        int xOff = x0 * l.NumCellsX;
-        int yOff = y0 * l.NumCellsY;
-        int zOff = z0 * l.NumCellsZ;
+        var childScaleX = _leafScaleX[tile.Level];
+        var childScaleY = _leafScaleY[tile.Level];
+        var childScaleZ = _leafScaleZ[tile.Level];
         ushort i = 0;
         for (int z = 0; z < l.NumCellsZ; ++z)
         {
@@ -321,7 +311,17 @@ public class VoxelMap
             {
                 for (int y = 0; y < l.NumCellsY; ++y, ++i)
                 {
-                    tile.Contents[i] = BuildTileContent(tile, tile.Subdivision, x, y, z, xOff + x, yOff + y, zOff + z, source.Slice(1));
+                    tile.Contents[i] = BuildTileContent(
+                        vox,
+                        tile,
+                        tile.Subdivision,
+                        x,
+                        y,
+                        z,
+                        leafX + x * childScaleX,
+                        leafY + y * childScaleY,
+                        leafZ + z * childScaleZ
+                    );
                 }
             }
         }

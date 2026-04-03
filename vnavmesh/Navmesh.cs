@@ -1,10 +1,13 @@
 using DotRecast.Detour;
 using Navmesh.NavVolume;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace Navmesh;
 
@@ -12,7 +15,7 @@ namespace Navmesh;
 public record class Navmesh(int CustomizationVersion, string BuildSignature, bool CustomizationApplied, DtNavMesh Mesh, VoxelMap? Volume)
 {
 	public static readonly uint Magic = 0x444D564E; // 'NVMD'
-	public static readonly uint Version = 29; // 更新后触发一次全量重构建
+	public static readonly uint Version = 30; // 更新后触发一次全量重构建
 	public const int FLAG_UNREACHABLE = 0x10;
 	public const int AREAID_TELEPORT = 5;
 	public readonly List<(Vector3 Start, Vector3 End)> Links = []; // not serialized! actual links are added directly to the DtNavMesh, this field exists for visualization purposes
@@ -20,6 +23,8 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 	// throws an exception on failure
 	public static DeserializeResult Deserialize(BinaryReader reader, int expectedCustomizationVersion, string expectedBuildSignature)
 	{
+		EnsureLittleEndian();
+
 		var magic = reader.ReadUInt32();
 		var version = reader.ReadUInt32();
 		if (magic != Magic || version != Version)
@@ -56,77 +61,80 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 
 		var meshSegment = meshDescriptor ?? throw new Exception("缓存缺少 Mesh 段");
 		var volumeSegment = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
+		var meshPayload = ReadSegmentPayload(reader.BaseStream, meshSegment);
+		var volumePayload = ReadSegmentPayload(reader.BaseStream, volumeSegment);
 
-		var (mesh, meshTelemetry) = ReadSegment(reader.BaseStream, meshSegment, DeserializeMesh);
-		var (volume, volumeTelemetry) = ReadSegment(reader.BaseStream, volumeSegment, DeserializeVolume);
-		return new(new(customizationVersion, buildSignature, customizationApplied, mesh, volume), new(meshTelemetry, volumeTelemetry));
+		DtNavMesh? mesh = null;
+		VoxelMap? volume = null;
+		CacheSegmentTelemetry meshTelemetry = default;
+		CacheSegmentTelemetry volumeTelemetry = default;
+		Parallel.Invoke(
+			() => (mesh, meshTelemetry) = DecodeSegment(meshSegment, meshPayload, DeserializeMesh),
+			() => (volume, volumeTelemetry) = DecodeSegment(volumeSegment, volumePayload, DeserializeVolume)
+		);
+		return new(new(customizationVersion, buildSignature, customizationApplied, mesh!, volume), new(meshTelemetry, volumeTelemetry));
 	}
 
 	public CacheTelemetry Serialize(BinaryWriter writer)
 	{
+		EnsureLittleEndian();
+
+		EncodedSegment meshSegment = default;
+		EncodedSegment volumeSegment = default;
+		Parallel.Invoke(
+			() => meshSegment = EncodeSegment(CacheSegmentKind.Mesh, CacheCodec.BrotliFastest, meshWriter => SerializeMesh(meshWriter, Mesh)),
+			() => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.BrotliFastest, volumeWriter => SerializeVolume(volumeWriter, Volume, new()))
+		);
+
 		writer.Write(Magic);
 		writer.Write(Version);
 		writer.Write(CustomizationVersion);
 		writer.Write(BuildSignature);
 		writer.Write(CustomizationApplied);
 
-		var descriptors = new[]
-		{
-			new CacheSegmentDescriptor(CacheSegmentKind.Mesh, CacheCodec.BrotliFastest, 0, 0, 0),
-			new CacheSegmentDescriptor(CacheSegmentKind.Volume, CacheCodec.BrotliFastest, 0, 0, 0)
-		};
-
-		writer.Write(descriptors.Length);
-		var descriptorOffsets = new long[descriptors.Length];
-		for (var i = 0; i < descriptors.Length; ++i)
-		{
-			descriptorOffsets[i] = writer.BaseStream.Position;
-			WriteSegmentDescriptor(writer, descriptors[i]);
-		}
-
-		var meshTelemetry = WriteSegment(writer, descriptorOffsets[0], descriptors[0], meshWriter => SerializeMesh(meshWriter, Mesh));
-		var volumeWorkspace = new VolumeCodecWorkspace();
-		var volumeTelemetry = WriteSegment(writer, descriptorOffsets[1], descriptors[1], volumeWriter => SerializeVolume(volumeWriter, Volume, volumeWorkspace));
-		return new(meshTelemetry, volumeTelemetry);
+		writer.Write(2);
+		var payloadOffset = writer.BaseStream.Position + 2L * CacheSegmentDescriptorSize;
+		var meshDescriptor = new CacheSegmentDescriptor(CacheSegmentKind.Mesh, CacheCodec.BrotliFastest, payloadOffset, meshSegment.Payload.LongLength, meshSegment.UncompressedBytes);
+		var volumeDescriptor = new CacheSegmentDescriptor(CacheSegmentKind.Volume, CacheCodec.BrotliFastest, payloadOffset + meshSegment.Payload.LongLength, volumeSegment.Payload.LongLength, volumeSegment.UncompressedBytes);
+		WriteSegmentDescriptor(writer, meshDescriptor);
+		WriteSegmentDescriptor(writer, volumeDescriptor);
+		writer.BaseStream.Write(meshSegment.Payload);
+		writer.BaseStream.Write(volumeSegment.Payload);
+		return new(meshSegment.Telemetry, volumeSegment.Telemetry);
 	}
 
-	private static CacheSegmentTelemetry WriteSegment(BinaryWriter writer, long descriptorOffset, CacheSegmentDescriptor descriptor, Action<BinaryWriter> serialize)
+	private static EncodedSegment EncodeSegment(CacheSegmentKind kind, CacheCodec codec, Action<BinaryWriter> serialize)
 	{
 		var timer = Timer.Create();
-		var offset = writer.BaseStream.Position;
-		var countingStream = CreateSegmentWriteStream(writer.BaseStream, descriptor.Codec, out var disposableStream);
-		long uncompressedBytes;
-		try
+		using var payloadStream = new MemoryStream();
+		var countingStream = CreateSegmentWriteStream(payloadStream, codec, out var disposableStream);
+		using (disposableStream)
 		{
-			using var _ = disposableStream;
 			using var segmentWriter = new BinaryWriter(countingStream);
 			serialize(segmentWriter);
 			segmentWriter.Flush();
 			countingStream.Flush();
-			uncompressedBytes = countingStream.BytesProcessed;
-		}
-		finally
-		{
-			writer.Flush();
 		}
 
-		var endOffset = writer.BaseStream.Position;
-		var compressedBytes = endOffset - offset;
-		var updatedDescriptor = descriptor with { Offset = offset, CompressedBytes = compressedBytes, UncompressedBytes = uncompressedBytes };
-		var resumeOffset = endOffset;
-		writer.BaseStream.Position = descriptorOffset;
-		WriteSegmentDescriptor(writer, updatedDescriptor);
-		writer.BaseStream.Position = resumeOffset;
-		return new(descriptor.Kind, compressedBytes, uncompressedBytes, timer.Value());
+		var payload = payloadStream.ToArray();
+		return new(payload, countingStream.BytesProcessed, new(kind, payload.LongLength, countingStream.BytesProcessed, timer.Value()));
 	}
 
-	private static (T Value, CacheSegmentTelemetry Telemetry) ReadSegment<T>(Stream source, CacheSegmentDescriptor descriptor, Func<BinaryReader, T> deserialize)
+	private static byte[] ReadSegmentPayload(Stream source, CacheSegmentDescriptor descriptor)
 	{
 		if (descriptor.Offset < 0 || descriptor.CompressedBytes < 0 || descriptor.Offset + descriptor.CompressedBytes > source.Length)
 			throw new Exception($"缓存段越界: {descriptor.Kind} @ {descriptor.Offset} + {descriptor.CompressedBytes}");
 
+		var payload = GC.AllocateUninitializedArray<byte>(checked((int)descriptor.CompressedBytes));
+		source.Position = descriptor.Offset;
+		source.ReadExactly(payload);
+		return payload;
+	}
+
+	private static (T Value, CacheSegmentTelemetry Telemetry) DecodeSegment<T>(CacheSegmentDescriptor descriptor, byte[] payload, Func<BinaryReader, T> deserialize)
+	{
 		var timer = Timer.Create();
-		using var segmentStream = new SegmentReadStream(source, descriptor.Offset, descriptor.CompressedBytes);
+		using var segmentStream = new MemoryStream(payload, writable: false);
 		var countingStream = CreateSegmentReadStream(segmentStream, descriptor.Codec, out var disposableStream);
 		using var _ = disposableStream;
 		using var segmentReader = new BinaryReader(countingStream);
@@ -254,9 +262,7 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 		tile.header.bmax = bounds.max.SystemToRecast();
 
 		tile.header.vertCount = reader.ReadInt32();
-		tile.verts = new float[tile.header.vertCount * 3];
-		for (int i = 0; i < tile.verts.Length; ++i)
-			tile.verts[i] = reader.ReadSingle();
+		tile.verts = ReadSingleArray(reader, tile.header.vertCount * 3);
 
 		tile.header.polyCount = reader.ReadInt32();
 		tile.polys = new DtPoly[tile.header.polyCount];
@@ -279,14 +285,10 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 			tile.detailMeshes[i] = new(reader.ReadInt32(), reader.ReadInt32(), reader.ReadByte(), reader.ReadByte());
 
 		tile.header.detailVertCount = reader.ReadInt32();
-		tile.detailVerts = new float[tile.header.detailVertCount * 3];
-		for (int i = 0; i < tile.detailVerts.Length; ++i)
-			tile.detailVerts[i] = reader.ReadSingle();
+		tile.detailVerts = ReadSingleArray(reader, tile.header.detailVertCount * 3);
 
 		tile.header.detailTriCount = reader.ReadInt32();
-		tile.detailTris = new int[tile.header.detailTriCount * 4];
-		for (int i = 0; i < tile.detailTris.Length; ++i)
-			tile.detailTris[i] = reader.ReadByte();
+		tile.detailTris = ReadByteBackedIntArray(reader, tile.header.detailTriCount * 4);
 
 		tile.header.bvQuantFactor = reader.ReadSingle();
 		tile.header.bvNodeCount = reader.ReadInt32();
@@ -333,8 +335,7 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 		SerializeBounds(writer, tile.header.bmin.RecastToSystem(), tile.header.bmax.RecastToSystem());
 
 		writer.Write(tile.header.vertCount);
-		for (int i = 0; i < tile.header.vertCount * 3; ++i)
-			writer.Write(tile.verts[i]);
+		WriteSingleArray(writer, tile.verts);
 
 		writer.Write(tile.header.polyCount);
 		for (int i = 0; i < tile.header.polyCount; ++i)
@@ -360,12 +361,10 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 		}
 
 		writer.Write(tile.header.detailVertCount);
-		for (int i = 0; i < tile.header.detailVertCount * 3; ++i)
-			writer.Write(tile.detailVerts[i]);
+		WriteSingleArray(writer, tile.detailVerts);
 
 		writer.Write(tile.header.detailTriCount);
-		for (int i = 0; i < tile.header.detailTriCount * 4; ++i)
-			writer.Write((byte)tile.detailTris[i]);
+		WriteByteBackedIntArray(writer, tile.detailTris);
 
 		writer.Write(tile.header.bvQuantFactor);
 		writer.Write(tile.header.bvNodeCount);
@@ -485,46 +484,37 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 
 	private static void SerializeVolumeTile(BinaryWriter writer, VoxelMap.Tile tile, VolumeCodecWorkspace workspace)
 	{
-		var encoding = ClassifyTile(tile);
+		var packedBytes = PackedStateBytes(tile.Contents.Length);
+		var packedStates = workspace.PackedStates(packedBytes);
+		var subtreeIds = workspace.SubtreeIds(tile.Contents.Length);
+		packedStates.Clear();
+		var subtreeCount = 0;
+		var allEmpty = true;
+		var allSolidLeaf = tile.Subdivision.Count == 0;
+		for (var i = 0; i < tile.Contents.Length; ++i)
+		{
+			var cell = tile.Contents[i];
+			var state = ClassifyCell(cell);
+			packedStates[i >> 2] |= (byte)((byte)state << ((i & 3) * 2));
+			allEmpty &= state == VolumeCellState.Empty;
+			allSolidLeaf &= state == VolumeCellState.SolidLeaf;
+			if (state == VolumeCellState.Subtree)
+				subtreeIds[subtreeCount++] = (ushort)(cell & VoxelMap.VoxelIdMask);
+		}
+
+		var encoding = allEmpty ? VolumeTileEncoding.Empty : allSolidLeaf ? VolumeTileEncoding.SolidLeaf : VolumeTileEncoding.Mixed;
 		writer.Write((byte)encoding);
 		if (encoding != VolumeTileEncoding.Mixed)
 			return;
 
-		var packedBytes = PackedStateBytes(tile.Contents.Length);
-		var packedStates = workspace.PackedStates(packedBytes);
-		packedStates.Clear();
-		for (var i = 0; i < tile.Contents.Length; ++i)
-		{
-			var state = ClassifyCell(tile.Contents[i]);
-			packedStates[i >> 2] |= (byte)((byte)state << ((i & 3) * 2));
-		}
-
 		writer.Write(packedStates);
-		for (var i = 0; i < tile.Contents.Length; ++i)
+		for (var i = 0; i < subtreeCount; ++i)
 		{
-			if (ClassifyCell(tile.Contents[i]) != VolumeCellState.Subtree)
-				continue;
-
-			var localId = tile.Contents[i] & VoxelMap.VoxelIdMask;
+			var localId = subtreeIds[i];
 			if (localId >= tile.Subdivision.Count)
 				throw new Exception($"体积子树索引越界: {localId} / {tile.Subdivision.Count}");
 			SerializeVolumeTile(writer, tile.Subdivision[localId], workspace);
 		}
-	}
-
-	private static VolumeTileEncoding ClassifyTile(VoxelMap.Tile tile)
-	{
-		var allEmpty = true;
-		var allSolidLeaf = tile.Subdivision.Count == 0;
-		foreach (var cell in tile.Contents)
-		{
-			allEmpty &= cell == 0;
-			allSolidLeaf &= cell == ushort.MaxValue;
-			if (!allEmpty && !allSolidLeaf)
-				return VolumeTileEncoding.Mixed;
-		}
-
-		return allEmpty ? VolumeTileEncoding.Empty : VolumeTileEncoding.SolidLeaf;
 	}
 
 	private static VolumeCellState ClassifyCell(ushort value) => value switch
@@ -535,6 +525,56 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 	};
 
 	private static int PackedStateBytes(int numCells) => (numCells + 3) >> 2;
+
+	private static float[] ReadSingleArray(BinaryReader reader, int count)
+	{
+		if (count == 0)
+			return [];
+
+		var result = GC.AllocateUninitializedArray<float>(count);
+		reader.BaseStream.ReadExactly(MemoryMarshal.AsBytes(result.AsSpan()));
+		return result;
+	}
+
+	private static void WriteSingleArray(BinaryWriter writer, ReadOnlySpan<float> values)
+	{
+		if (values.IsEmpty)
+			return;
+
+		writer.BaseStream.Write(MemoryMarshal.AsBytes(values));
+	}
+
+	private static int[] ReadByteBackedIntArray(BinaryReader reader, int count)
+	{
+		if (count == 0)
+			return [];
+
+		var bytes = GC.AllocateUninitializedArray<byte>(count);
+		reader.BaseStream.ReadExactly(bytes);
+		var result = GC.AllocateUninitializedArray<int>(count);
+		for (var i = 0; i < count; ++i)
+			result[i] = bytes[i];
+		return result;
+	}
+
+	private static void WriteByteBackedIntArray(BinaryWriter writer, ReadOnlySpan<int> values)
+	{
+		if (values.IsEmpty)
+			return;
+
+		var rented = ArrayPool<byte>.Shared.Rent(values.Length);
+		try
+		{
+			var bytes = rented.AsSpan(0, values.Length);
+			for (var i = 0; i < values.Length; ++i)
+				bytes[i] = (byte)values[i];
+			writer.BaseStream.Write(bytes);
+		}
+		finally
+		{
+			ArrayPool<byte>.Shared.Return(rented);
+		}
+	}
 
 	private static (Vector3 min, Vector3 max) DeserializeBounds(BinaryReader reader) => (DeserializeVector3(reader), DeserializeVector3(reader));
 
@@ -588,17 +628,33 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 
 	public readonly record struct DeserializeResult(Navmesh Navmesh, CacheTelemetry Telemetry);
 
+	private const int CacheSegmentDescriptorSize = sizeof(int) * 2 + sizeof(long) * 3;
+	private readonly record struct EncodedSegment(byte[] Payload, long UncompressedBytes, CacheSegmentTelemetry Telemetry);
 	private readonly record struct CacheSegmentDescriptor(CacheSegmentKind Kind, CacheCodec Codec, long Offset, long CompressedBytes, long UncompressedBytes);
+
+	private static void EnsureLittleEndian()
+	{
+		if (!BitConverter.IsLittleEndian)
+			throw new PlatformNotSupportedException("缓存格式仅支持小端架构");
+	}
 
 	private sealed class VolumeCodecWorkspace
 	{
 		private byte[] _packedStates = [];
+		private ushort[] _subtreeIds = [];
 
 		public Span<byte> PackedStates(int size)
 		{
 			if (_packedStates.Length < size)
 				_packedStates = GC.AllocateUninitializedArray<byte>(size);
 			return _packedStates.AsSpan(0, size);
+		}
+
+		public Span<ushort> SubtreeIds(int size)
+		{
+			if (_subtreeIds.Length < size)
+				_subtreeIds = GC.AllocateUninitializedArray<ushort>(size);
+			return _subtreeIds.AsSpan(0, size);
 		}
 	}
 

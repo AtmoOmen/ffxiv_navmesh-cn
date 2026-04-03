@@ -71,19 +71,22 @@ public class NavmeshBuilder
     private sealed class BuildThreadScratch
     {
         public long[] PhaseTicks { get; } = new long[(int)BuildPhase.Count];
-        public Voxelizer[]? VolumeScratch;
-        public Voxelizer[]? VolumeChain;
+        public Voxelizer? VolumeRoot;
+        public NavmeshRasterizer.ScratchBuffers Rasterizer { get; } = new();
 
         public void Reset()
         {
             Array.Clear(PhaseTicks, 0, PhaseTicks.Length);
+            VolumeRoot?.Clear();
         }
     }
 
     private sealed class TileBuildInput
     {
-        public required (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] GeometryInstances { get; init; }
-        public required (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] TerrainInstances { get; init; }
+        public required int GeometryStart { get; init; }
+        public required int GeometryCount { get; init; }
+        public required int TerrainStart { get; init; }
+        public required int TerrainCount { get; init; }
     }
 
     private sealed class TileBuildResult
@@ -132,6 +135,9 @@ public class NavmeshBuilder
 
     private readonly NavmeshCustomization _customization;
     private readonly TileBuildInput[] _tileInputs;
+    private readonly int[] _tileBuildOrder;
+    private readonly (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] _geometryInstances;
+    private readonly (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] _terrainInstances;
     private readonly ThreadLocal<BuildThreadScratch> _threadScratch = new(() => new(), true);
     private readonly float _tileWidthWorld;
     private readonly float _tileHeightWorld;
@@ -208,7 +214,11 @@ public class NavmeshBuilder
         }
 
         var bucketTimer = Timer.Create();
-        _tileInputs = BucketTileInputs();
+        var bucketedInputs = BucketTileInputs();
+        _tileInputs = bucketedInputs.Inputs;
+        _tileBuildOrder = bucketedInputs.TileBuildOrder;
+        _geometryInstances = bucketedInputs.GeometryInstances;
+        _terrainInstances = bucketedInputs.TerrainInstances;
         Service.Log.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
     }
 
@@ -224,42 +234,94 @@ public class NavmeshBuilder
         return MergeBuiltTiles(builtTiles, true);
     }
 
-    private TileBuildInput[] BucketTileInputs()
+    private (TileBuildInput[] Inputs, int[] TileBuildOrder, (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] GeometryInstances, (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] TerrainInstances) BucketTileInputs()
     {
         int tileCount = NumTilesX * NumTilesZ;
-        var geometryBuckets = new List<(SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)>?[tileCount];
-        var terrainBuckets = new List<(SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)>?[tileCount];
+        var geometryCounts = new int[tileCount];
+        var terrainCounts = new int[tileCount];
 
         foreach (var mesh in Scene.Meshes.Values)
         {
             foreach (var instance in mesh.Instances)
             {
                 GetTileRange(instance.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
+                var isGeometry = (mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0;
+                var isTerrain = (mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
                 for (int z = minZ; z <= maxZ; ++z)
                 {
                     var rowBase = z * NumTilesX;
                     for (int x = minX; x <= maxX; ++x)
                     {
                         var index = rowBase + x;
-                        if ((mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0)
-                            (geometryBuckets[index] ??= []).Add((mesh, instance));
-                        else if ((mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0)
-                            (terrainBuckets[index] ??= []).Add((mesh, instance));
+                        if (isGeometry)
+                            ++geometryCounts[index];
+                        else if (isTerrain)
+                            ++terrainCounts[index];
                     }
                 }
             }
         }
 
         var result = new TileBuildInput[tileCount];
+        var geometryTotal = 0;
+        var terrainTotal = 0;
         for (int i = 0; i < tileCount; ++i)
         {
             result[i] = new()
             {
-                GeometryInstances = geometryBuckets[i]?.ToArray() ?? [],
-                TerrainInstances = terrainBuckets[i]?.ToArray() ?? []
+                GeometryStart = geometryTotal,
+                GeometryCount = geometryCounts[i],
+                TerrainStart = terrainTotal,
+                TerrainCount = terrainCounts[i]
             };
+            geometryTotal += geometryCounts[i];
+            terrainTotal += terrainCounts[i];
         }
-        return result;
+
+        var tileBuildOrder = new int[tileCount];
+        for (int i = 0; i < tileCount; ++i)
+            tileBuildOrder[i] = i;
+        Array.Sort(tileBuildOrder, (lhs, rhs) =>
+        {
+            var leftWeight = terrainCounts[lhs] * 32 + geometryCounts[lhs] * 4;
+            var rightWeight = terrainCounts[rhs] * 32 + geometryCounts[rhs] * 4;
+            var compare = rightWeight.CompareTo(leftWeight);
+            return compare != 0 ? compare : lhs.CompareTo(rhs);
+        });
+
+        var geometryInstances = new (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[geometryTotal];
+        var terrainInstances = new (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[terrainTotal];
+        var geometryOffsets = new int[tileCount];
+        var terrainOffsets = new int[tileCount];
+        for (int i = 0; i < tileCount; ++i)
+        {
+            geometryOffsets[i] = result[i].GeometryStart;
+            terrainOffsets[i] = result[i].TerrainStart;
+        }
+
+        foreach (var mesh in Scene.Meshes.Values)
+        {
+            foreach (var instance in mesh.Instances)
+            {
+                GetTileRange(instance.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
+                var isGeometry = (mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0;
+                var isTerrain = (mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
+                for (int z = minZ; z <= maxZ; ++z)
+                {
+                    var rowBase = z * NumTilesX;
+                    for (int x = minX; x <= maxX; ++x)
+                    {
+                        var index = rowBase + x;
+                        if (isGeometry)
+                            geometryInstances[geometryOffsets[index]++] = (mesh, instance);
+                        else if (isTerrain)
+                            terrainInstances[terrainOffsets[index]++] = (mesh, instance);
+                    }
+                }
+            }
+        }
+
+        return (result, tileBuildOrder, geometryInstances, terrainInstances);
     }
 
     private TileBuildResult[] BuildTileResults(bool captureIntermediates, Action? onTileFinished)
@@ -269,7 +331,7 @@ public class NavmeshBuilder
         var builtTiles = new TileBuildResult[tileCount];
         var buildTimer = Timer.Create();
 
-        Parallel.For(0, tileCount, new ParallelOptions { MaxDegreeOfParallelism = threadCount }, tileIndex =>
+        Parallel.ForEach(_tileBuildOrder, new ParallelOptions { MaxDegreeOfParallelism = threadCount }, tileIndex =>
         {
             int x = tileIndex % NumTilesX;
             int z = tileIndex / NumTilesX;
@@ -329,8 +391,11 @@ public class NavmeshBuilder
     {
         var scratch = _threadScratch.Value!;
         scratch.Reset();
+        EnsureVolumeScratch(scratch);
         var totalStart = Stopwatch.GetTimestamp();
         var telemetry = new RcContext();
+        var geometryInstances = _geometryInstances.AsSpan(input.GeometryStart, input.GeometryCount);
+        var terrainInstances = _terrainInstances.AsSpan(input.TerrainStart, input.TerrainCount);
 
         var tileBoundsMin = new Vector3(BoundsMin.X + x * _tileWidthWorld, BoundsMin.Y, BoundsMin.Z + z * _tileHeightWorld);
         var tileBoundsMax = new Vector3(tileBoundsMin.X + _tileWidthWorld, BoundsMax.Y, tileBoundsMin.Z + _tileHeightWorld);
@@ -340,17 +405,17 @@ public class NavmeshBuilder
         tileBoundsMax.Z += _borderSizeWorld;
 
         var shf = new RcHeightfield(_tileSizeXVoxels, _tileSizeZVoxels, tileBoundsMin.SystemToRecast(), tileBoundsMax.SystemToRecast(), Settings.CellSize, Settings.CellHeight, _borderSizeVoxels);
-        var vox = Navmesh.Volume != null ? new Voxelizer(_voxelizerNumX, _voxelizerNumY, _voxelizerNumZ) : null;
-        var rasterizer = new NavmeshRasterizer(shf, _walkableNormalThreshold, _walkableClimbVoxels, _walkableHeightVoxels, Settings.Filtering.HasFlag(NavmeshSettings.Filter.Interiors), vox, telemetry);
+        var vox = scratch.VolumeRoot;
+        var rasterizer = new NavmeshRasterizer(shf, _walkableNormalThreshold, _walkableClimbVoxels, _walkableHeightVoxels, Settings.Filtering.HasFlag(NavmeshSettings.Filter.Interiors), vox, telemetry, scratch.Rasterizer);
 
         var phaseStart = Stopwatch.GetTimestamp();
-        rasterizer.Rasterize(input.GeometryInstances, SceneExtractor.MeshType.All, true, true);
+        rasterizer.Rasterize(geometryInstances, SceneExtractor.MeshType.All, true, true);
         scratch.PhaseTicks[(int)BuildPhase.RasterizeGeometry] += ElapsedTimeSpanTicks(phaseStart);
 
-        if (input.TerrainInstances.Length > 0)
+        if (!terrainInstances.IsEmpty)
         {
             phaseStart = Stopwatch.GetTimestamp();
-            rasterizer.Rasterize(input.TerrainInstances, SceneExtractor.MeshType.All, false, true);
+            rasterizer.Rasterize(terrainInstances, SceneExtractor.MeshType.All, false, true);
             scratch.PhaseTicks[(int)BuildPhase.RasterizeTerrain] += ElapsedTimeSpanTicks(phaseStart);
         }
 
@@ -496,9 +561,8 @@ public class NavmeshBuilder
         VoxelMap.RootColumnBuildResult? volumeColumn = null;
         if (Navmesh.Volume != null && vox != null)
         {
-            EnsureVolumeScratch(scratch);
             phaseStart = Stopwatch.GetTimestamp();
-            volumeColumn = Navmesh.Volume.BuildRootColumn(vox, x, z, scratch.VolumeScratch!, scratch.VolumeChain!);
+            volumeColumn = Navmesh.Volume.BuildRootColumn(vox, x, z);
             scratch.PhaseTicks[(int)BuildPhase.BuildVolumeColumn] += ElapsedTimeSpanTicks(phaseStart);
         }
 
@@ -519,8 +583,8 @@ public class NavmeshBuilder
             TileZ = z,
             TotalTicks = totalTicks,
             PhaseTicks = phaseTicks,
-            GeometryInstanceCount = input.GeometryInstances.Length,
-            TerrainInstanceCount = input.TerrainInstances.Length,
+            GeometryInstanceCount = input.GeometryCount,
+            TerrainInstanceCount = input.TerrainCount,
             PolyCount = pmesh.npolys,
             VertCount = pmesh.nverts,
             DetailTriCount = dmesh?.ntris ?? 0,
@@ -650,23 +714,10 @@ public class NavmeshBuilder
 
     private void EnsureVolumeScratch(BuildThreadScratch scratch)
     {
-        if (Navmesh.Volume == null || scratch.VolumeScratch != null)
+        if (Navmesh.Volume == null)
             return;
 
-        var levels = Navmesh.Volume.Levels;
-        scratch.VolumeScratch = new Voxelizer[levels.Length - 1];
-        scratch.VolumeChain = new Voxelizer[levels.Length];
-
-        int nx = _voxelizerNumX;
-        int ny = _voxelizerNumY;
-        int nz = _voxelizerNumZ;
-        for (int i = levels.Length - 1; i > 0; --i)
-        {
-            nx /= levels[i].NumCellsX;
-            ny /= levels[i].NumCellsY;
-            nz /= levels[i].NumCellsZ;
-            scratch.VolumeScratch[i - 1] = new Voxelizer(nx, ny, nz, true);
-        }
+        scratch.VolumeRoot ??= new Voxelizer(_voxelizerNumX, _voxelizerNumY, _voxelizerNumZ);
     }
 
     private int ResolveThreadCount()

@@ -4,6 +4,7 @@ using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace Navmesh;
 
@@ -40,6 +41,10 @@ public class SceneExtractor
     {
         public List<Vector3> Vertices = [];
         public List<Primitive> Primitives = [];
+        public AABB LocalBounds;
+
+        internal Span<Vector3> VertexSpan => CollectionsMarshal.AsSpan(Vertices);
+        internal Span<Primitive> PrimitiveSpan => CollectionsMarshal.AsSpan(Primitives);
     }
 
     public class MeshInstance(ulong id, Matrix4x3 worldTransform, AABB worldBounds, ulong material, PrimitiveFlags forceSetPrimFlags, PrimitiveFlags forceClearPrimFlags)
@@ -58,6 +63,8 @@ public class SceneExtractor
         public List<MeshInstance> Instances = [];
         public MeshType MeshType;
         public AABB LocalBounds;
+
+        internal Span<MeshPart> PartSpan => CollectionsMarshal.AsSpan(Parts);
     }
 
     public Dictionary<string, Mesh> Meshes { get; private set; } = [];
@@ -232,11 +239,19 @@ public class SceneExtractor
         var res = new AABB() { Min = new(float.MaxValue), Max = new(float.MinValue) };
         foreach (var part in parts)
         {
-            foreach (var v in part.Vertices)
-            {
-                res.Min = Vector3.Min(res.Min, v);
-                res.Max = Vector3.Max(res.Max, v);
-            }
+            res.Min = Vector3.Min(res.Min, part.LocalBounds.Min);
+            res.Max = Vector3.Max(res.Max, part.LocalBounds.Max);
+        }
+        return res;
+    }
+
+    private static AABB CalculateLocalBounds(List<Vector3> vertices)
+    {
+        var res = new AABB() { Min = new(float.MaxValue), Max = new(float.MinValue) };
+        foreach (var v in vertices)
+        {
+            res.Min = Vector3.Min(res.Min, v);
+            res.Max = Vector3.Max(res.Max, v);
         }
         return res;
     }
@@ -310,6 +325,7 @@ public class SceneExtractor
             part.Vertices.Add(node->Vertex(i));
         foreach (ref var p in node->Primitives)
             part.Primitives.Add(new(p.V1, p.V2, p.V3, ExtractMaterialFlags(p.Material), p.Material));
+        part.LocalBounds = CalculateLocalBounds(part.Vertices);
         return part;
     }
 
@@ -344,6 +360,12 @@ public class SceneExtractor
         return res;
     }
 
+    private static MeshPart FinalizePart(MeshPart part)
+    {
+        part.LocalBounds = CalculateLocalBounds(part.Vertices);
+        return part;
+    }
+
     public static List<MeshPart> BuildBoxMesh()
     {
         var mesh = new MeshPart();
@@ -373,7 +395,7 @@ public class SceneExtractor
         // back (z=1)
         mesh.Primitives.Add(new(1, 3, 5, PrimitiveFlags.None));
         mesh.Primitives.Add(new(5, 3, 7, PrimitiveFlags.None));
-        return [mesh];
+        return [FinalizePart(mesh)];
     }
 
     private static List<MeshPart> BuildSphereMesh(int numSegments)
@@ -415,7 +437,7 @@ public class SceneExtractor
         for (int i = 0; i < numSegments - 1; ++i)
             mesh.Primitives.Add(new(itop + i, itop + i + 1, icap + 1, PrimitiveFlags.None));
         mesh.Primitives.Add(new(itop + numSegments - 1, itop, icap + 1, PrimitiveFlags.None));
-        return [mesh];
+        return [FinalizePart(mesh)];
     }
 
     private static List<MeshPart> BuildCylinderMesh(int numSegments)
@@ -457,7 +479,7 @@ public class SceneExtractor
             mesh.Primitives.Add(new(iv, iv + 2, tcenter, PrimitiveFlags.None));
         }
         mesh.Primitives.Add(new(ivn + 1, 1, tcenter, PrimitiveFlags.None));
-        return [mesh];
+        return [FinalizePart(mesh)];
     }
 
     private static List<MeshPart> BuildPlaneMesh()
@@ -469,6 +491,6 @@ public class SceneExtractor
         mesh.Vertices.Add(new(+1, +1, 0));
         mesh.Primitives.Add(new(0, 1, 2, PrimitiveFlags.None));
         mesh.Primitives.Add(new(0, 2, 3, PrimitiveFlags.None));
-        return [mesh];
+        return [FinalizePart(mesh)];
     }
 }
