@@ -12,10 +12,10 @@ public class FollowPath : IDisposable
 {
     public bool MovementAllowed = true;
     public bool IgnoreDeltaY = false;
-    public float Tolerance = 0.05f;
     public float DestinationTolerance = 0;
     public List<Vector3> Waypoints = new();
     public Vector3? GoalPosition;
+    public float Tolerance => _nextToleranceOverride ?? (Waypoints.Count > 0 ? _activeTolerance : Service.Config.PathTolerance);
 
     private IDalamudPluginInterface _dalamud;
     private NavmeshManager _manager;
@@ -24,6 +24,8 @@ public class FollowPath : IDisposable
     private DateTime _nextJump;
 
     private Vector3? posPreviousFrame;
+    private float _activeTolerance = 0.05f;
+    private float? _nextToleranceOverride;
 
     private int _millisecondsWithNoSignificantMovement = 0;
 
@@ -39,6 +41,7 @@ public class FollowPath : IDisposable
         _dalamud = dalamud;
         _sharedPathIsRunning = _dalamud.GetOrCreateData<bool[]>(_sharedPathTag, () => [false]);
         _manager = manager;
+        _activeTolerance = Service.Config.PathTolerance;
         _manager.OnNavmeshChanged += OnNavmeshChanged;
         OnNavmeshChanged(_manager.Navmesh, _manager.Query);
     }
@@ -80,7 +83,7 @@ public class FollowPath : IDisposable
                 c.Y = 0;
             }
 
-            if (DistanceToLineSegment(a, b, c) > Tolerance)
+            if (DistanceToLineSegment(a, b, c) > _activeTolerance)
                 break;
 
             Waypoints.RemoveAt(0);
@@ -171,6 +174,7 @@ public class FollowPath : IDisposable
         _millisecondsWithNoSignificantMovement = 0;
         GoalPosition = null;
         Waypoints.Clear();
+        _activeTolerance = Service.Config.PathTolerance;
     }
 
     private unsafe void ExecuteJump()
@@ -186,7 +190,14 @@ public class FollowPath : IDisposable
         }
     }
 
-    public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0, Vector3? goalPosition = null)
+    public float ConsumeNextTolerance()
+    {
+        var tolerance = _nextToleranceOverride ?? Service.Config.PathTolerance;
+        _nextToleranceOverride = null;
+        return tolerance;
+    }
+
+    public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0, Vector3? goalPosition = null, float? tolerance = null)
     {
         var resolvedGoal = goalPosition;
         if (!resolvedGoal.HasValue && waypoints.Count > 0)
@@ -197,6 +208,7 @@ public class FollowPath : IDisposable
         GoalPosition = resolvedGoal;
         IgnoreDeltaY = ignoreDeltaY;
         DestinationTolerance = destTolerance;
+        _activeTolerance = tolerance ?? ConsumeNextTolerance();
     }
 
     private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query)
@@ -204,5 +216,11 @@ public class FollowPath : IDisposable
         UpdateSharedState(false);
         GoalPosition = null;
         Waypoints.Clear();
+        _activeTolerance = Service.Config.PathTolerance;
+    }
+
+    public void SetNextTolerance(float tolerance)
+    {
+        _nextToleranceOverride = MathF.Max(0, tolerance);
     }
 }

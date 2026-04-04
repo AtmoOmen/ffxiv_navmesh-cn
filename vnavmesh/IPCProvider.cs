@@ -9,7 +9,7 @@ namespace Navmesh;
 
 class IPCProvider : IDisposable
 {
-    private List<Action> _disposeActions = new();
+    private List<Action> _disposeActions = [];
 
     public IPCProvider(NavmeshManager navmeshManager, FollowPath followPath, AsyncMoveRequest move, MainWindow mainWindow, DTRProvider dtr)
     {
@@ -43,7 +43,7 @@ class IPCProvider : IDisposable
         RegisterFunc("Path.GetAlignCamera", () => Service.Config.AlignCameraToMovement);
         RegisterAction("Path.SetAlignCamera", (bool v) => { Service.Config.AlignCameraToMovement = v; Service.Config.NotifyModified(); });
         RegisterFunc("Path.GetTolerance", () => followPath.Tolerance);
-        RegisterAction("Path.SetTolerance", (float v) => followPath.Tolerance = v);
+        RegisterAction("Path.SetTolerance", (float v) => followPath.SetNextTolerance(v));
 
         RegisterFunc("SimpleMove.PathfindAndMoveTo", (Vector3 dest, bool fly) => move.MoveTo(dest, fly));
         RegisterFunc("SimpleMove.PathfindAndMoveCloseTo", (Vector3 dest, bool fly, float range) => move.MoveTo(dest, fly, range));

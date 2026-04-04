@@ -13,6 +13,7 @@ public class AsyncMoveRequest : IDisposable
     private Task<PathfindResult>? _pendingTask;
     private bool _pendingFly;
     private float _pendingDestRange;
+    private float _pendingPathTolerance;
 
     public bool TaskInProgress => _pendingTask != null;
 
@@ -50,7 +51,7 @@ public class AsyncMoveRequest : IDisposable
             {
                 var result = _pendingTask.Result;
                 if (result.Succeeded)
-                    _follow.Move(result.Waypoints, !_pendingFly, _pendingDestRange, result.RequestedDestination);
+                    _follow.Move(result.Waypoints, !_pendingFly, _pendingDestRange, result.RequestedDestination, _pendingPathTolerance);
             }
             catch (Exception ex)
             {
@@ -72,6 +73,7 @@ public class AsyncMoveRequest : IDisposable
         var toleranceStr = range > 0 ? $"，容差 = {range:f3}" : "";
 
         Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
+        _pendingPathTolerance = _follow.ConsumeNextTolerance();
         _pendingTask = _manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range: range);
         _pendingFly = fly;
         _pendingDestRange = range;

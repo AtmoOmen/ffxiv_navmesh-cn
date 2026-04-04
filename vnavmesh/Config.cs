@@ -23,10 +23,11 @@ public class Config
     public float StuckTolerance = 0.05f;
     public int StuckTimeoutMs = 500;
     public bool RetryOnStuck = true;
+    public float PathTolerance = 0.05f;
     public float RandomnessMultiplier = 1f;
     public int BuildMaxCores = 1;
 
-    private static readonly int realMaxCores = Environment.ProcessorCount;
+    private static readonly int RealMaxCores = Environment.ProcessorCount;
 
     public event Action? Modified;
 
@@ -56,9 +57,11 @@ public class Config
             NotifyModified();
         if (ImGui.Checkbox("卡住时停止寻路", ref StopOnStuck))
             NotifyModified();
+        if (ImGui.SliderFloat("路径跟随容差", ref PathTolerance, 0.01f, 1f, "%.2f"))
+            NotifyModified();
 
         ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderInt("路网构建最大使用核心数", ref BuildMaxCores, -8, realMaxCores))
+        if (ImGui.SliderInt("路网构建最大使用核心数", ref BuildMaxCores, -8, RealMaxCores))
             NotifyModified();
         ImGuiComponents.HelpMarker("0 为使用全部核心\n正数为使用指定数量核心\n负数为保留指定数量核心");
 
