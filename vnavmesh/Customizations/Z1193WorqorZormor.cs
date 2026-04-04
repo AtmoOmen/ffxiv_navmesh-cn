@@ -3,7 +3,7 @@
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1193)]
-class Z1193WorqorZormor : NavmeshCustomization
+internal class Z1193WorqorZormor : NavmeshCustomization
 {
     public override int Version => 1;
 

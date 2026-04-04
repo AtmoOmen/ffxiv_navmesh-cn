@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
@@ -10,33 +6,32 @@ using vnavmesh.Interface.Debug.Components;
 using vnavmesh.Interface.Render;
 using vnavmesh.Navmesh;
 using vnavmesh.Utils;
+using ColliderType = FFXIVClientStructs.FFXIV.Client.LayoutEngine.Layer.ColliderType;
 
 namespace vnavmesh.Interface.Debug;
 
 public class DebugExtractedCollision : IDisposable
 {
-    private SceneDefinition _scene;
-    private SceneExtractor _extractor;
-    private UITree _tree;
-    private DebugDrawer _dd;
+    private SceneDefinition    _scene;
+    private SceneExtractor     _extractor;
+    private UITree             _tree;
+    private DebugDrawer        _dd;
     private DebugGameCollision _coll;
-    private EffectMesh.Data? _visu;
-    private string _configDirectory;
+    private EffectMesh.Data?   _visu;
+    private string             _configDirectory;
 
     public DebugExtractedCollision(SceneDefinition scene, SceneExtractor extractor, UITree tree, DebugDrawer dd, DebugGameCollision coll, string configDir)
     {
-        _scene = scene;
-        _extractor = extractor;
-        _tree = tree;
-        _dd = dd;
-        _coll = coll;
+        _scene           = scene;
+        _extractor       = extractor;
+        _tree            = tree;
+        _dd              = dd;
+        _coll            = coll;
         _configDirectory = configDir;
     }
 
-    public void Dispose()
-    {
+    public void Dispose() =>
         _visu?.Dispose();
-    }
 
     public void Draw()
     {
@@ -55,9 +50,7 @@ public class DebugExtractedCollision : IDisposable
             if (nt.Opened)
             {
                 foreach (var t in _scene.Terrains)
-                {
                     _tree.LeafNode(t);
-                }
             }
         }
 
@@ -67,12 +60,21 @@ public class DebugExtractedCollision : IDisposable
             {
                 foreach (var p in _scene.BgParts)
                 {
-                    var coll = FindCollider(InstanceType.BgPart, p.key);
-                    (Transform transform, Vector3 bbMin, Vector3 bbMax) shape = default;
-                    var haveShape = p.analytic && _scene.AnalyticShapes.TryGetValue(p.crc, out shape);
-                    var color = haveShape && (Math.Abs(shape.transform.Translation.X) > 0.1 || Math.Abs(shape.transform.Translation.Y) > 0.1 || Math.Abs(shape.transform.Translation.Z) > 0.1 || shape.transform.Rotation.W < 0.99) ? 0xff00ffff : 0xffffffff;
-                    var type = p.analytic ? $"{(haveShape ? ((FileLayerGroupAnalyticCollider.Type)shape.transform.Type).ToString() : "<missing>")}" : $"Mesh {_scene.MeshPaths[p.crc]}";
+                    var                                                 coll      = FindCollider(InstanceType.BgPart, p.key);
+                    (Transform transform, Vector3 bbMin, Vector3 bbMax) shape     = default;
+                    var                                                 haveShape = p.analytic && _scene.AnalyticShapes.TryGetValue(p.crc, out shape);
+                    var color = haveShape &&
+                                (Math.Abs(shape.transform.Translation.X) > 0.1 ||
+                                 Math.Abs(shape.transform.Translation.Y) > 0.1 ||
+                                 Math.Abs(shape.transform.Translation.Z) > 0.1 ||
+                                 shape.transform.Rotation.W              < 0.99)
+                                    ? 0xff00ffff
+                                    : 0xffffffff;
+                    var type = p.analytic
+                                   ? $"{(haveShape ? ((FileLayerGroupAnalyticCollider.Type)shape.transform.Type).ToString() : "<missing>")}"
+                                   : $"Mesh {_scene.MeshPaths[p.crc]}";
                     using var n = _tree.Node($"[{p.key:X}] {type} at {p.transform.Translation} ({p.crc:X}) (coll={(nint)coll:X})###{p.key:X}", false, color);
+
                     if (n.SelectedOrHovered)
                     {
                         var info = _extractor.ExtractBgPartInfo(_scene, p.key, p.transform, p.crc, p.analytic);
@@ -80,9 +82,11 @@ public class DebugExtractedCollision : IDisposable
                         if (coll != null)
                             _coll.VisualizeCollider(coll, default, default);
                     }
+
                     if (n.Opened)
                     {
                         DrawTransform("组件 (Part)", p.transform);
+
                         if (haveShape)
                         {
                             DrawTransform("形状 (Shape)", shape.transform);
@@ -101,7 +105,11 @@ public class DebugExtractedCollision : IDisposable
                 foreach (var c in _scene.Colliders)
                 {
                     var coll = FindCollider(InstanceType.CollisionBox, c.key);
-                    var n = _tree.Node($"[{c.key:X}] {c.type}{(c.type == FFXIVClientStructs.FFXIV.Client.LayoutEngine.Layer.ColliderType.Mesh ? $" '{_scene.MeshPaths[c.crc]}'" : "")} at {c.transform.Translation} ({c.crc:X}) (coll={(nint)coll:X})###{c.key:X}");
+                    var n = _tree.Node
+                    (
+                        $"[{c.key:X}] {c.type}{(c.type == ColliderType.Mesh ? $" '{_scene.MeshPaths[c.crc]}'" : "")} at {c.transform.Translation} ({c.crc:X}) (coll={(nint)coll:X})###{c.key:X}"
+                    );
+
                     if (n.SelectedOrHovered)
                     {
                         var info = _extractor.ExtractColliderInfo(_scene, c.key, c.transform, c.crc, c.type);
@@ -109,10 +117,8 @@ public class DebugExtractedCollision : IDisposable
                         if (coll != null)
                             _coll.VisualizeCollider(coll, default, default);
                     }
-                    if (n.Opened)
-                    {
-                        DrawTransform("组件 (Part)", c.transform);
-                    }
+
+                    if (n.Opened) DrawTransform("组件 (Part)", c.transform);
                 }
             }
         }
@@ -140,7 +146,8 @@ public class DebugExtractedCollision : IDisposable
         if (ImGui.Button("导出为 DotRecast OBJ 文件"))
             ExportMesh();
 
-        int meshIndex = 0;
+        var meshIndex = 0;
+
         foreach (var (name, mesh) in _extractor.Meshes)
         {
             if (_meshFilter.Length > 0 && !name.Contains(_meshFilter, StringComparison.InvariantCultureIgnoreCase))
@@ -159,7 +166,8 @@ public class DebugExtractedCollision : IDisposable
                 {
                     if (np.Opened)
                     {
-                        int partIndex = 0;
+                        var partIndex = 0;
+
                         foreach (var p in mesh.Parts)
                         {
                             using var npi = _tree.Node(partIndex.ToString());
@@ -172,10 +180,13 @@ public class DebugExtractedCollision : IDisposable
                                 {
                                     if (nv.Opened)
                                     {
-                                        int j = 0;
+                                        var j = 0;
+
                                         foreach (var v in p.Vertices)
+                                        {
                                             if (_tree.LeafNode($"{j++}: {v:f3}").SelectedOrHovered)
                                                 VisualizeVertex(mesh, v);
+                                        }
                                     }
                                 }
 
@@ -183,7 +194,8 @@ public class DebugExtractedCollision : IDisposable
                                 {
                                     if (nt.Opened)
                                     {
-                                        int j = 0;
+                                        var j = 0;
+
                                         foreach (var t in p.Primitives)
                                         {
                                             var v1 = p.Vertices[t.V1];
@@ -205,10 +217,14 @@ public class DebugExtractedCollision : IDisposable
                 {
                     if (ni.Opened)
                     {
-                        int instIndex = 0;
+                        var instIndex = 0;
+
                         foreach (var i in mesh.Instances)
                         {
-                            if (_tree.LeafNode($"{instIndex}: {i.WorldBounds.Min:f3}-{i.WorldBounds.Max:f3}, R0 = {i.WorldTransform.Row0:f3}, R1 = {i.WorldTransform.Row1:f3}, R2 = {i.WorldTransform.Row2:f3}, R3 = {i.WorldTransform.Row3:f3}, {i.WorldBounds.Min:f3} - {i.WorldBounds.Max:f3} (+: {i.ForceSetPrimFlags}, -: {i.ForceClearPrimFlags})").SelectedOrHovered)
+                            if (_tree.LeafNode
+                                (
+                                    $"{instIndex}: {i.WorldBounds.Min:f3}-{i.WorldBounds.Max:f3}, R0 = {i.WorldTransform.Row0:f3}, R1 = {i.WorldTransform.Row1:f3}, R2 = {i.WorldTransform.Row2:f3}, R3 = {i.WorldTransform.Row3:f3}, {i.WorldBounds.Min:f3} - {i.WorldBounds.Max:f3} (+: {i.ForceSetPrimFlags}, -: {i.ForceClearPrimFlags})"
+                                ).SelectedOrHovered)
                                 VisualizeMeshInstance(meshIndex, instIndex);
                             ++instIndex;
                         }
@@ -225,6 +241,7 @@ public class DebugExtractedCollision : IDisposable
         if (_visu == null)
         {
             int nv = 0, np = 0, ni = 0;
+
             foreach (var mesh in _extractor.Meshes.Values)
             {
                 foreach (var part in mesh.Parts)
@@ -232,6 +249,7 @@ public class DebugExtractedCollision : IDisposable
                     nv += part.Vertices.Count;
                     np += part.Primitives.Count;
                 }
+
                 ni += mesh.Instances.Count;
             }
 
@@ -239,11 +257,13 @@ public class DebugExtractedCollision : IDisposable
             using var builder = _visu.Map(_dd.RenderContext);
 
             var timer = StopWatchTimer.Create();
-            nv = np = ni = 0;
+            nv = np   = ni = 0;
+
             foreach (var mesh in _extractor.Meshes.Values)
             {
                 var color = MeshColor(mesh);
-                int nvm = 0, npm = 0;
+                int nvm   = 0, npm = 0;
+
                 foreach (var part in mesh.Parts)
                 {
                     foreach (var v in part.Vertices)
@@ -253,38 +273,34 @@ public class DebugExtractedCollision : IDisposable
                     nvm += part.Vertices.Count;
                     npm += part.Primitives.Count;
                 }
-                foreach (var inst in mesh.Instances)
-                {
-                    builder.AddInstance(new(inst.WorldTransform, color));
-                }
+
+                foreach (var inst in mesh.Instances) builder.AddInstance(new(inst.WorldTransform, color));
                 builder.AddMesh(nv, np, npm, ni, mesh.Instances.Count);
                 nv += nvm;
                 np += npm;
                 ni += mesh.Instances.Count;
             }
+
             Service.Log.Debug($"网格可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
+
         return _visu;
     }
 
-    private void Visualize()
-    {
+    private void Visualize() =>
         _dd.EffectMesh?.Draw(_dd.RenderContext, GetOrInitVisualizer());
-    }
 
-    private void VisualizeMeshInstances(int meshIndex)
-    {
+    private void VisualizeMeshInstances(int meshIndex) =>
         _dd.EffectMesh?.DrawSingle(_dd.RenderContext, GetOrInitVisualizer(), meshIndex);
-    }
 
     private void VisualizeMeshPart(SceneExtractor.Mesh mesh, int meshIndex, int partIndex)
     {
         if (_dd.EffectMesh == null)
             return;
-        var visu = GetOrInitVisualizer();
+        var visu     = GetOrInitVisualizer();
         var visuMesh = visu.Meshes[meshIndex];
         visuMesh.FirstPrimitive += mesh.Parts.Take(partIndex).Sum(part => part.Primitives.Count);
-        visuMesh.NumPrimitives = mesh.Parts[partIndex].Primitives.Count;
+        visuMesh.NumPrimitives  =  mesh.Parts[partIndex].Primitives.Count;
         _dd.EffectMesh.Bind(_dd.RenderContext, false, false);
         visu.Bind(_dd.RenderContext);
         visu.DrawManual(_dd.RenderContext, visuMesh);
@@ -294,10 +310,10 @@ public class DebugExtractedCollision : IDisposable
     {
         if (_dd.EffectMesh == null)
             return;
-        var visu = GetOrInitVisualizer();
+        var visu     = GetOrInitVisualizer();
         var visuMesh = visu.Meshes[meshIndex];
         visuMesh.FirstInstance += instIndex;
-        visuMesh.NumInstances = 1;
+        visuMesh.NumInstances  =  1;
         _dd.EffectMesh.Bind(_dd.RenderContext, false, false);
         visu.Bind(_dd.RenderContext);
         visu.DrawManual(_dd.RenderContext, visuMesh);
@@ -312,26 +328,29 @@ public class DebugExtractedCollision : IDisposable
     private void VisualizeTriangle(SceneExtractor.Mesh mesh, Vector3 v1, Vector3 v2, Vector3 v3)
     {
         foreach (var i in mesh.Instances)
-            _dd.DrawWorldTriangle(i.WorldTransform.TransformCoordinate(v1), i.WorldTransform.TransformCoordinate(v2), i.WorldTransform.TransformCoordinate(v3), 0xff0000ff);
+        {
+            _dd.DrawWorldTriangle
+                (i.WorldTransform.TransformCoordinate(v1), i.WorldTransform.TransformCoordinate(v2), i.WorldTransform.TransformCoordinate(v3), 0xff0000ff);
+        }
     }
 
     private unsafe Collider* FindCollider(InstanceType type, ulong key)
     {
         var layout = LayoutWorld.Instance()->ActiveLayout;
-        var insts = layout != null ? LayoutUtil.FindPtr(ref layout->InstancesByType, type) : null;
-        var inst = insts != null ? LayoutUtil.FindPtr(ref *insts, key) : null;
-        var coll = inst != null ? inst->GetCollider() : null;
+        var insts  = layout != null ? layout->InstancesByType.FindPtr(type) : null;
+        var inst   = insts  != null ? (*insts).FindPtr(key) : null;
+        var coll   = inst   != null ? inst->GetCollider() : null;
         return coll;
     }
 
     private Vector4 MeshColor(SceneExtractor.Mesh mesh) =>
-        mesh.MeshType.HasFlag(SceneExtractor.MeshType.Terrain) ? new(0, 1, 0, 0.55f) :
+        mesh.MeshType.HasFlag(SceneExtractor.MeshType.Terrain)  ? new(0, 1, 0, 0.55f) :
         mesh.MeshType.HasFlag(SceneExtractor.MeshType.FileMesh) ? new(1, 1, 0, 0.55f) :
-        new(1, 0, 0, 0.55f);
+                                                                  new(1, 0, 0, 0.55f);
 
     private void ExportMesh()
     {
-        var key = NavmeshManager.GetCacheKey(_scene);
+        var key     = NavmeshManager.GetCacheKey(_scene);
         var outFile = new FileInfo($"{_configDirectory}/export/{key}.obj");
 
         var verts = new List<Vector3>();

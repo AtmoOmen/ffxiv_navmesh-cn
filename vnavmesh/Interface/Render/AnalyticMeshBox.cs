@@ -5,17 +5,17 @@ namespace vnavmesh.Interface.Render;
 
 public class AnalyticMeshBox
 {
-    public int FirstVertex { get; init; }
+    public int FirstVertex    { get; init; }
     public int FirstPrimitive { get; init; }
-    public int NumVertices { get; init; }
-    public int NumPrimitives { get; init; }
+    public int NumVertices    { get; init; }
+    public int NumPrimitives  { get; init; }
 
     private EffectMesh.Data.Builder _builder;
 
     public AnalyticMeshBox(EffectMesh.Data.Builder builder)
     {
-        _builder = builder;
-        FirstVertex = builder.NumVertices;
+        _builder       = builder;
+        FirstVertex    = builder.NumVertices;
         FirstPrimitive = builder.NumPrimitives;
 
         builder.AddVertex(new(-1, -1, -1));
@@ -40,7 +40,7 @@ public class AnalyticMeshBox
         builder.AddTriangle(1, 5, 3);
         builder.AddTriangle(3, 5, 7);
 
-        NumVertices = builder.NumVertices - FirstVertex;
+        NumVertices   = builder.NumVertices   - FirstVertex;
         NumPrimitives = builder.NumPrimitives - FirstPrimitive;
     }
 

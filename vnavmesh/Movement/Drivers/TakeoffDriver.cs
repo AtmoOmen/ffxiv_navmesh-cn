@@ -14,10 +14,11 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
 
     public SegmentDriverUpdate Update(MovementExecutionContext context)
     {
-        if(IsAirborne)
+        if (IsAirborne)
             return new(CreateIdleCommand(context.Player.Position));
 
-        if(!Service.Condition[ConditionFlag.Mounted])
+        if (!Service.Condition[ConditionFlag.Mounted])
+        {
             return new
             (
                 CreateIdleCommand(context.Player.Position),
@@ -31,6 +32,7 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
                     ResolveFallbackWaypoint(context)
                 )
             );
+        }
 
         var desired = ResolveFallbackWaypoint(context);
         var delta = new Vector3
@@ -46,9 +48,9 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
                 desired,
                 context.MovementAllowed,
                 false,
-                Service.Config.AlignCameraToMovement,
+                context.Config.AlignCameraToMovement,
                 Angle.FromDirectionXZ(delta) + 180.Degrees(),
-                Service.Config.AlignCameraHeight.Degrees(),
+                context.Config.AlignCameraHeight.Degrees(),
                 true
             )
         );
@@ -65,7 +67,7 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
     private static Vector3 ResolveFallbackWaypoint(MovementExecutionContext context)
     {
         for (var i = context.SegmentIndex + 1; i < context.Plan.Segments.Count; i++)
-            if(context.Plan.Segments[i].Waypoints.Count > 0)
+            if (context.Plan.Segments[i].Waypoints.Count > 0)
                 return context.Plan.Segments[i].Waypoints[0];
 
         return context.Plan.FinalDestination;

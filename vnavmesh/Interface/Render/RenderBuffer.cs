@@ -1,5 +1,4 @@
-﻿using System;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using SharpDX;
 using SharpDX.Direct3D11;
 using Buffer = SharpDX.Direct3D11.Buffer;
@@ -16,40 +15,39 @@ public class RenderBuffer<T> : IDisposable where T : unmanaged
 {
     public class Builder : IDisposable
     {
-        private RenderContext _ctx;
+        private RenderContext   _ctx;
         private RenderBuffer<T> _buffer;
-        private DataStream _stream;
-        private Buffer? _staging; // only for non-dynamic
+        private DataStream      _stream;
+        private Buffer?         _staging; // only for non-dynamic
 
         public int CurElements => _buffer.CurElements;
 
         internal Builder(RenderContext ctx, RenderBuffer<T> buffer)
         {
-            _ctx = ctx;
-            _buffer = buffer;
+            _ctx               = ctx;
+            _buffer            = buffer;
             buffer.CurElements = 0;
-            if (buffer.Dynamic)
-            {
-                ctx.Context.MapSubresource(buffer.Buffer, MapMode.WriteDiscard, MapFlags.None, out _stream);
-            }
+
+            if (buffer.Dynamic) ctx.Context.MapSubresource(buffer.Buffer, MapMode.WriteDiscard, MapFlags.None, out _stream);
             else
             {
-                _staging = new(ctx.Device, new()
-                {
-                    SizeInBytes = buffer.ElementSize * buffer.MaxElements,
-                    Usage = ResourceUsage.Staging,
-                    CpuAccessFlags = CpuAccessFlags.Write,
-                });
+                _staging = new
+                (
+                    ctx.Device,
+                    new()
+                    {
+                        SizeInBytes    = buffer.ElementSize * buffer.MaxElements,
+                        Usage          = ResourceUsage.Staging,
+                        CpuAccessFlags = CpuAccessFlags.Write
+                    }
+                );
                 ctx.Context.MapSubresource(_staging, MapMode.Write, MapFlags.None, out _stream);
             }
         }
 
         public void Dispose()
         {
-            if (_buffer.Dynamic)
-            {
-                _ctx.Context.UnmapSubresource(_buffer.Buffer, 0);
-            }
+            if (_buffer.Dynamic) _ctx.Context.UnmapSubresource(_buffer.Buffer, 0);
             else
             {
                 _ctx.Context.UnmapSubresource(_staging!, 0);
@@ -66,34 +64,37 @@ public class RenderBuffer<T> : IDisposable where T : unmanaged
             ++_buffer.CurElements;
             _stream.Write((nint)Unsafe.AsPointer(ref item), 0, sizeof(T));
         }
+
         public void Add(T item) => Add(ref item);
     }
 
-    public bool Dynamic { get; init; }
-    public int ElementSize { get; init; }
-    public int MaxElements { get; init; }
-    public int CurElements { get; private set; }
-    public Buffer Buffer { get; init; }
+    public bool   Dynamic     { get; init; }
+    public int    ElementSize { get; init; }
+    public int    MaxElements { get; init; }
+    public int    CurElements { get; private set; }
+    public Buffer Buffer      { get; init; }
 
     public unsafe RenderBuffer(RenderContext ctx, int maxElements, BindFlags bindFlags, bool dynamic)
     {
-        dynamic = true; // TODO: figure why it doesn't work as expected..
-        Dynamic = dynamic;
+        dynamic     = true; // TODO: figure why it doesn't work as expected..
+        Dynamic     = dynamic;
         ElementSize = sizeof(T);
         MaxElements = Math.Max(1, maxElements);
-        Buffer = new(ctx.Device, new()
-        {
-            SizeInBytes = ElementSize * MaxElements,
-            Usage = dynamic ? ResourceUsage.Dynamic : ResourceUsage.Default,
-            BindFlags = bindFlags,
-            CpuAccessFlags = dynamic ? CpuAccessFlags.Write : CpuAccessFlags.None,
-        });
+        Buffer = new
+        (
+            ctx.Device,
+            new()
+            {
+                SizeInBytes    = ElementSize * MaxElements,
+                Usage          = dynamic ? ResourceUsage.Dynamic : ResourceUsage.Default,
+                BindFlags      = bindFlags,
+                CpuAccessFlags = dynamic ? CpuAccessFlags.Write : CpuAccessFlags.None
+            }
+        );
     }
 
-    public void Dispose()
-    {
+    public void Dispose() =>
         Buffer.Dispose();
-    }
 
-    public Builder Map(RenderContext ctx) => new Builder(ctx, this);
+    public Builder Map(RenderContext ctx) => new(ctx, this);
 }

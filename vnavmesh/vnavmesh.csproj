@@ -1,22 +1,23 @@
-<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.CN.NET.Sdk/14.0.2">
-  <PropertyGroup>
-    <Version>0.4.3.0</Version>
-    <PackageProjectUrl>https://github.com/AtmoOmen/ffxiv_navmesh</PackageProjectUrl>
-  </PropertyGroup>
-  
-  <ItemGroup>
-    <ProjectReference Include="..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj" />
-    <ProjectReference Include="..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj" />
-    <ProjectReference Include="..\DotRecast\src\DotRecast.Detour.Extras\DotRecast.Detour.Extras.csproj" />
-    <ProjectReference Include="..\DotRecast\src\DotRecast.Recast\DotRecast.Recast.csproj" />
-  </ItemGroup>
+    <PropertyGroup>
+        <Version>0.4.3.0</Version>
+        <PackageProjectUrl>https://github.com/AtmoOmen/ffxiv_navmesh</PackageProjectUrl>
+        <ImplicitUsings>enable</ImplicitUsings>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
-    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
-    <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
-    <Reference Include="Dalamud.Common" Private="false" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj" />
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj" />
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Detour.Extras\DotRecast.Detour.Extras.csproj" />
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Recast\DotRecast.Recast.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+        <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
+        <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+        <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
+        <Reference Include="Dalamud.Common" Private="false" />
+    </ItemGroup>
 
 </Project>

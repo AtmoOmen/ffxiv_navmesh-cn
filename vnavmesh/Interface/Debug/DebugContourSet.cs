@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Numerics;
 using DotRecast.Recast;
 using vnavmesh.Interface.Debug.Components;
@@ -9,14 +8,14 @@ namespace vnavmesh.Interface.Debug;
 public class DebugContourSet : DebugRecast
 {
     private RcContourSet _cset;
-    private UITree _tree;
-    private DebugDrawer _dd;
+    private UITree       _tree;
+    private DebugDrawer  _dd;
 
     public DebugContourSet(RcContourSet cset, UITree tree, DebugDrawer dd)
     {
         _cset = cset;
         _tree = tree;
-        _dd = dd;
+        _dd   = dd;
     }
 
     public override void Dispose()
@@ -36,15 +35,18 @@ public class DebugContourSet : DebugRecast
         {
             if (nc.SelectedOrHovered)
                 VisualizeContours();
+
             if (nc.Opened)
             {
-                int i = 0;
+                var i = 0;
+
                 foreach (var c in _cset.conts)
                 {
-                    var hOffset = (i & 1) + 1; // i assume this is just for better visualization?..
-                    using var ncont = _tree.Node($"轮廓 {i++}：面积类型={c.area}，区域={c.reg}");
+                    var       hOffset = (i & 1) + 1; // i assume this is just for better visualization?..
+                    using var ncont   = _tree.Node($"轮廓 {i++}：面积类型={c.area}，区域={c.reg}");
 
-                    bool contourDrawn = false;
+                    var contourDrawn = false;
+
                     if (ncont.Opened)
                     {
                         using (var ns = _tree.Node($"简化顶点 ({c.nverts})###simp"))
@@ -54,12 +56,16 @@ public class DebugContourSet : DebugRecast
                                 VisualizeContour(c.verts, c.nverts, hOffset, c.reg, 1, true);
                                 contourDrawn = true;
                             }
+
                             if (ns.Opened)
                             {
-                                for (int iv = 0; iv < c.nverts; ++iv)
+                                for (var iv = 0; iv < c.nverts; ++iv)
                                 {
                                     var reg = c.verts[iv * 4 + 3];
-                                    if (_tree.LeafNode($"{iv}: {c.verts[iv * 4]}x{c.verts[iv * 4 + 1]}x{c.verts[iv * 4 + 2]}, reg={reg & RcConstants.RC_CONTOUR_REG_MASK}, border={(reg & RcConstants.RC_BORDER_VERTEX) != 0}, areaborder={(reg & RcConstants.RC_AREA_BORDER) != 0}").SelectedOrHovered)
+                                    if (_tree.LeafNode
+                                        (
+                                            $"{iv}: {c.verts[iv * 4]}x{c.verts[iv * 4 + 1]}x{c.verts[iv * 4 + 2]}, reg={reg & RcConstants.RC_CONTOUR_REG_MASK}, border={(reg & RcConstants.RC_BORDER_VERTEX) != 0}, areaborder={(reg & RcConstants.RC_AREA_BORDER) != 0}"
+                                        ).SelectedOrHovered)
                                         VisualizeVertex(c.verts, iv, hOffset, RegionColor(reg, true, 1), 10);
                                 }
                             }
@@ -72,12 +78,16 @@ public class DebugContourSet : DebugRecast
                                 VisualizeContour(c.rverts, c.nrverts, hOffset, c.reg, 1, true);
                                 contourDrawn = true;
                             }
+
                             if (nraw.Opened)
                             {
-                                for (int iv = 0; iv < c.nrverts; ++iv)
+                                for (var iv = 0; iv < c.nrverts; ++iv)
                                 {
                                     var reg = c.rverts[iv * 4 + 3];
-                                    if (_tree.LeafNode($"{iv}: {c.rverts[iv * 4]}x{c.rverts[iv * 4 + 1]}x{c.rverts[iv * 4 + 2]}, reg={reg & RcConstants.RC_CONTOUR_REG_MASK}, border={(reg & RcConstants.RC_BORDER_VERTEX) != 0}, areaborder={(reg & RcConstants.RC_AREA_BORDER) != 0}").SelectedOrHovered)
+                                    if (_tree.LeafNode
+                                        (
+                                            $"{iv}: {c.rverts[iv * 4]}x{c.rverts[iv * 4 + 1]}x{c.rverts[iv * 4 + 2]}, reg={reg & RcConstants.RC_CONTOUR_REG_MASK}, border={(reg & RcConstants.RC_BORDER_VERTEX) != 0}, areaborder={(reg & RcConstants.RC_AREA_BORDER) != 0}"
+                                        ).SelectedOrHovered)
                                         VisualizeVertex(c.rverts, iv, hOffset, RegionColor(reg, true, 1), 10);
                                 }
                             }
@@ -87,7 +97,7 @@ public class DebugContourSet : DebugRecast
                     if (!contourDrawn && ncont.SelectedOrHovered)
                     {
                         VisualizeContour(c.rverts, c.nrverts, hOffset, c.reg, 0.5f, true);
-                        VisualizeContour(c.verts, c.nverts, hOffset, c.reg, 1.0f, true);
+                        VisualizeContour(c.verts,  c.nverts,  hOffset, c.reg, 1.0f, true);
                     }
                 }
             }
@@ -99,7 +109,8 @@ public class DebugContourSet : DebugRecast
 
     private void VisualizeContours()
     {
-        int i = 0;
+        var i = 0;
+
         foreach (var c in _cset.conts)
         {
             var hOffset = (i & 1) + 1; // i assume this is just for better visualization?..
@@ -116,13 +127,13 @@ public class DebugContourSet : DebugRecast
         if (!withVertices)
             return;
         var vcolor = RegionColor(reg, true, 1);
-        for (int i = 0; i < numVerts; i++)
+        for (var i = 0; i < numVerts; i++)
             VisualizeVertex(verts, i, hOffset, vcolor, 5);
     }
 
     private void VisualizeVertex(int[] verts, int index, int hOffset, uint color, float radius)
     {
-        bool isBorder = (verts[4 * index + 3] & RcConstants.RC_BORDER_VERTEX) != 0;
+        var isBorder = (verts[4 * index + 3] & RcConstants.RC_BORDER_VERTEX) != 0;
         _dd.DrawWorldPoint(GetContourVertex(verts, index, hOffset + (isBorder ? 2 : 0)), radius, isBorder ? 0xffffffff : color, 2);
     }
 
@@ -133,7 +144,7 @@ public class DebugContourSet : DebugRecast
             var from = GetContourCenter(c.verts, c.nverts);
             _dd.DrawWorldPoint(from, 8, RegionColor(c.reg, true, 1));
 
-            for (int iv = 0; iv < c.nverts; ++iv)
+            for (var iv = 0; iv < c.nverts; ++iv)
             {
                 var reg = c.verts[4 * iv + 3] & RcConstants.RC_CONTOUR_REG_MASK;
                 if (reg == 0 || reg < c.reg)
@@ -147,17 +158,22 @@ public class DebugContourSet : DebugRecast
         }
     }
 
-    private Vector3 GetContourVertex(int[] verts, int index, int hOffset) => _cset.bmin.RecastToSystem() + new Vector3(_cset.cs, _cset.ch, _cset.cs) * new Vector3(verts[4 * index], verts[4 * index + 1] + hOffset, verts[4 * index + 2]);
+    private Vector3 GetContourVertex
+        (int[] verts, int index, int hOffset) => _cset.bmin.RecastToSystem() +
+                                                 new Vector3(_cset.cs,         _cset.ch,                       _cset.cs) *
+                                                 new Vector3(verts[4 * index], verts[4 * index + 1] + hOffset, verts[4 * index + 2]);
 
     private Vector3 GetContourCenter(int[] verts, int numVerts)
     {
         Vector3 res = new();
+
         if (numVerts > 0)
         {
-            for (int i = 0; i < numVerts; ++i)
+            for (var i = 0; i < numVerts; ++i)
                 res += new Vector3(verts[4 * i], verts[4 * i + 1] + 4, verts[4 * i + 2]);
             res = _cset.bmin.RecastToSystem() + new Vector3(_cset.cs, _cset.ch, _cset.cs) * res / numVerts;
         }
+
         return res;
     }
 
@@ -166,8 +182,8 @@ public class DebugContourSet : DebugRecast
         var fcolor = IntColor(reg, 0);
         if (darken)
             fcolor *= 0.5f;
-        fcolor.W = alpha;
-        fcolor *= 255;
-        return (((uint)fcolor.W) & 0xFF) << 24 | (((uint)fcolor.Z) & 0xFF) << 16 | (((uint)fcolor.Y) & 0xFF) << 8 | (((uint)fcolor.X) & 0xFF);
+        fcolor.W =  alpha;
+        fcolor   *= 255;
+        return ((uint)fcolor.W & 0xFF) << 24 | ((uint)fcolor.Z & 0xFF) << 16 | ((uint)fcolor.Y & 0xFF) << 8 | (uint)fcolor.X & 0xFF;
     }
 }

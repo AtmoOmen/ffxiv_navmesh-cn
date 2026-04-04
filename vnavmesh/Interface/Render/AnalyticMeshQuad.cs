@@ -5,17 +5,17 @@ namespace vnavmesh.Interface.Render;
 
 public class AnalyticMeshQuad
 {
-    public int FirstVertex { get; init; }
+    public int FirstVertex    { get; init; }
     public int FirstPrimitive { get; init; }
-    public int NumVertices { get; init; }
-    public int NumPrimitives { get; init; }
+    public int NumVertices    { get; init; }
+    public int NumPrimitives  { get; init; }
 
     private EffectMesh.Data.Builder _builder;
 
     public AnalyticMeshQuad(EffectMesh.Data.Builder builder)
     {
-        _builder = builder;
-        FirstVertex = builder.NumVertices;
+        _builder       = builder;
+        FirstVertex    = builder.NumVertices;
         FirstPrimitive = builder.NumPrimitives;
 
         builder.AddVertex(new(+1, +1, 0));
@@ -26,7 +26,7 @@ public class AnalyticMeshQuad
         builder.AddTriangle(0, 1, 2);
         builder.AddTriangle(2, 1, 3);
 
-        NumVertices = builder.NumVertices - FirstVertex;
+        NumVertices   = builder.NumVertices   - FirstVertex;
         NumPrimitives = builder.NumPrimitives - FirstPrimitive;
     }
 

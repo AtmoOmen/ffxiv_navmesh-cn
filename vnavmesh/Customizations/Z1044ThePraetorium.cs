@@ -3,7 +3,7 @@
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1044)]
-class Z1044ThePraetorium : NavmeshCustomization
+internal class Z1044ThePraetorium : NavmeshCustomization
 {
     public override int Version => 3;
 
@@ -13,4 +13,3 @@ class Z1044ThePraetorium : NavmeshCustomization
         Settings.Filtering -= NavmeshSettings.Filter.LedgeSpans;
     }
 }
-

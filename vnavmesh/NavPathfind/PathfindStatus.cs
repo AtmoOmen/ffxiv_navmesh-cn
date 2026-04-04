@@ -5,5 +5,5 @@ internal enum PathfindStatus
     Failed,
     Complete,
     ReachedWithinRange,
-    Partial,
+    Partial
 }

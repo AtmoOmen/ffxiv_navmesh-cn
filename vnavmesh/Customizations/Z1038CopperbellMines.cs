@@ -3,7 +3,7 @@
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1038)]
-class Z1038CopperbellMines : NavmeshCustomization
+internal class Z1038CopperbellMines : NavmeshCustomization
 {
     public override int Version => 1;
 

@@ -14,7 +14,9 @@ internal class Z0146SouthernThanalan : NavmeshCustomization
 
         // the ground directly in front of the bridge next to the amalj'aa camp has two triangles that cannot be landed on
         if (scene.Meshes.TryGetValue("bg/ffxiv/wil_w1/fld/w1f4/collision/tr1610.pcb", out var mesh2))
+        {
             foreach (var inst in mesh2.Instances)
                 inst.ForceClearPrimFlags |= SceneExtractor.PrimitiveFlags.Unlandable;
+        }
     }
 }

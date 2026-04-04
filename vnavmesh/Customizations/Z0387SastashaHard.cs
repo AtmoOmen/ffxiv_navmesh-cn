@@ -3,7 +3,7 @@
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(387)]
-class Z0387SastashaHard : NavmeshCustomization
+internal class Z0387SastashaHard : NavmeshCustomization
 {
     public override int Version => 1;
 

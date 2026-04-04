@@ -15,7 +15,7 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
     {
         var segment = (GroundTraverseSegment)context.Segment;
         ConsumeReachedWaypoints(segment, context);
-        if(segment.Waypoints.Count == 0)
+        if (segment.Waypoints.Count == 0)
             return new(CreateIdleCommand(context.Player.Position));
 
         var desired = segment.Waypoints[0];
@@ -36,13 +36,13 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
             var current  = Flatten(context.Player.Position);
             var previous = Flatten(context.PreviousPosition ?? context.Player.Position);
 
-            if(context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, Flatten(context.Plan.RequestedDestination)) <= context.Plan.DestinationTolerance)
+            if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, Flatten(context.Plan.RequestedDestination)) <= context.Plan.DestinationTolerance)
             {
                 segment.Waypoints.Clear();
                 break;
             }
 
-            if(DriverMath.DistanceToLineSegment(target, current, previous) > context.PathTolerance)
+            if (DriverMath.DistanceToLineSegment(target, current, previous) > context.PathTolerance)
                 break;
 
             segment.Waypoints.RemoveAt(0);
@@ -64,9 +64,9 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
             desired,
             context.MovementAllowed,
             allowVerticalControl,
-            Service.Config.AlignCameraToMovement,
+            context.Config.AlignCameraToMovement,
             Angle.FromDirectionXZ(delta) + 180.Degrees(),
-            Service.Config.AlignCameraHeight.Degrees(),
+            context.Config.AlignCameraHeight.Degrees(),
             requestJump
         );
     }

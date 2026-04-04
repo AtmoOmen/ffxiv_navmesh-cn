@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using vnavmesh.Interface.Debug.Components;
 using vnavmesh.Interface.Render;
@@ -11,31 +8,29 @@ namespace vnavmesh.Interface.Debug;
 
 public class DebugVoxelMap : IDisposable
 {
-    private VoxelMap _vm;
-    private VoxelPathfind? _query;
-    private UITree _tree;
-    private DebugDrawer _dd;
-    private EffectMesh.Data? _visu;
+    private VoxelMap                                                _vm;
+    private VoxelPathfind?                                          _query;
+    private UITree                                                  _tree;
+    private DebugDrawer                                             _dd;
+    private EffectMesh.Data?                                        _visu;
     private Dictionary<VoxelMap.Tile, (int firstBox, int numBoxes)> _visuBoxes = new();
-    private int[] _numSubdivPerLevel;
-    private int[] _numLeavesPerLevel;
+    private int[]                                                   _numSubdivPerLevel;
+    private int[]                                                   _numLeavesPerLevel;
 
     public DebugVoxelMap(VoxelMap vm, VoxelPathfind? query, UITree tree, DebugDrawer dd)
     {
-        _vm = vm;
+        _vm    = vm;
         _query = query;
-        _tree = tree;
-        _dd = dd;
+        _tree  = tree;
+        _dd    = dd;
 
         _numSubdivPerLevel = new int[vm.Levels.Length];
         _numLeavesPerLevel = new int[vm.Levels.Length];
         InitTile(vm.RootTile);
     }
 
-    public void Dispose()
-    {
+    public void Dispose() =>
         _visu?.Dispose();
-    }
 
     public void Draw()
     {
@@ -46,10 +41,11 @@ public class DebugVoxelMap : IDisposable
         var playerVoxel = _vm.FindLeafVoxel(Service.ObjectTable.LocalPlayer?.Position ?? default);
         _tree.LeafNode($"玩家所在体素：{playerVoxel.voxel:X} (是否为空={playerVoxel.empty})");
 
-        for (int level = 0; level < _vm.Levels.Length; ++level)
+        for (var level = 0; level < _vm.Levels.Length; ++level)
         {
             var l = _vm.Levels[level];
-            _tree.LeafNode($"层级 {level}：{_numSubdivPerLevel[level]} 个细分节点，{_numLeavesPerLevel[level]} 个叶节点，大小={l.CellSize:f3}，数量={l.NumCellsX}x{l.NumCellsY}x{l.NumCellsZ}");
+            _tree.LeafNode
+                ($"层级 {level}：{_numSubdivPerLevel[level]} 个细分节点，{_numLeavesPerLevel[level]} 个叶节点，大小={l.CellSize:f3}，数量={l.NumCellsX}x{l.NumCellsY}x{l.NumCellsZ}");
         }
 
         DrawTile(_vm.RootTile, "根瓦片 (Root tile)");
@@ -58,20 +54,24 @@ public class DebugVoxelMap : IDisposable
         {
             if (nv.SelectedOrHovered)
                 VisualizeQuery();
+
             if (nv.Opened && _query != null)
             {
                 var ns = _query.NodeSpan;
-                for (int i = 0; i < ns.Length; ++i)
+
+                for (var i = 0; i < ns.Length; ++i)
                 {
-                    ref var n = ref ns[i];
-                    var bounds = _vm.VoxelBounds(n.Voxel, 0);
-                    if (_tree.LeafNode($"[{i}] {n.Voxel:X} ({bounds.min:f3}-{bounds.max:f3}), 父节点={n.ParentIndex}, 消耗={n.GScore:f4}, 总计={n.HScore:f4}").SelectedOrHovered)
+                    ref var n      = ref ns[i];
+                    var     bounds = _vm.VoxelBounds(n.Voxel, 0);
+
+                    if (_tree.LeafNode
+                            ($"[{i}] {n.Voxel:X} ({bounds.min:f3}-{bounds.max:f3}), 父节点={n.ParentIndex}, 消耗={n.GScore:f4}, 总计={n.HScore:f4}").SelectedOrHovered)
                     {
                         VisualizeVoxel(n.Voxel);
                         ref var parent = ref ns[n.ParentIndex];
                         _dd.DrawWorldLine(parent.Position, n.Position, 0xff00ffff);
                         _dd.DrawWorldPointFilled(parent.Position, 2, 0xff00ffff);
-                        _dd.DrawWorldPointFilled(n.Position, 2, 0xff0000ff);
+                        _dd.DrawWorldPointFilled(n.Position,      2, 0xff0000ff);
                     }
                 }
             }
@@ -83,8 +83,11 @@ public class DebugVoxelMap : IDisposable
     private void InitTile(VoxelMap.Tile tile)
     {
         foreach (var t in tile.Contents)
+        {
             if ((t & VoxelMap.VoxelIdMask) == VoxelMap.VoxelIdMask)
                 ++_numLeavesPerLevel[tile.Level];
+        }
+
         _numSubdivPerLevel[tile.Level] += tile.Subdivision.Count;
         foreach (var sub in tile.Subdivision)
             InitTile(sub);
@@ -99,12 +102,12 @@ public class DebugVoxelMap : IDisposable
             return;
 
         for (ushort i = 0; i < tile.Contents.Length; i++)
-        {
             if ((tile.Contents[i] & VoxelMap.VoxelOccupiedBit) != 0)
             {
-                var v = tile.LevelDesc.IndexToVoxel(i);
+                var v  = tile.LevelDesc.IndexToVoxel(i);
                 var cn = $"{v.x}x{v.y}x{v.z}";
                 var id = tile.Contents[i] & VoxelMap.VoxelIdMask;
+
                 if (id == VoxelMap.VoxelIdMask)
                 {
                     // fully solid
@@ -117,28 +120,25 @@ public class DebugVoxelMap : IDisposable
                     DrawTile(tile.Subdivision[id], $"{cn} -> #{id}");
                 }
             }
-        }
     }
 
     private void InitTileVisualizer(VoxelMap.Tile tile, EffectMesh.Data.Builder builder, AnalyticMeshBox box)
     {
         var start = builder.NumInstances;
+
         for (ushort i = 0; i < tile.Contents.Length; i++)
-        {
             if ((tile.Contents[i] & VoxelMap.VoxelOccupiedBit) != 0)
             {
                 var id = tile.Contents[i] & VoxelMap.VoxelIdMask;
+
                 if (id == VoxelMap.VoxelIdMask)
                 {
                     var bounds = tile.CalculateSubdivisionBounds(tile.LevelDesc.IndexToVoxel(i));
                     box.Add(bounds.min, bounds.max, new(0.7f));
                 }
-                else
-                {
-                    InitTileVisualizer(tile.Subdivision[id], builder, box);
-                }
+                else InitTileVisualizer(tile.Subdivision[id], builder, box);
             }
-        }
+
         if (builder.NumInstances > start)
             _visuBoxes[tile] = (start, builder.NumInstances - start);
     }
@@ -149,12 +149,13 @@ public class DebugVoxelMap : IDisposable
         {
             _visu = new(_dd.RenderContext, 8, 12, _numLeavesPerLevel.Sum(), false);
             using var builder = _visu.Map(_dd.RenderContext);
-            var box = new AnalyticMeshBox(builder);
+            var       box     = new AnalyticMeshBox(builder);
 
             var timer = StopWatchTimer.Create();
             InitTileVisualizer(_vm.RootTile, builder, box);
             Service.Log.Debug($"体素图可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
+
         return _visu;
     }
 
@@ -172,12 +173,10 @@ public class DebugVoxelMap : IDisposable
         if (_query != null)
         {
             var ns = _query.NodeSpan;
-            for (int i = 0; i < ns.Length; ++i)
-            {
-                VisualizeVoxel(ns[i].Voxel);
-            }
+            for (var i = 0; i < ns.Length; ++i) VisualizeVoxel(ns[i].Voxel);
         }
     }
 
-    private void VisualizeCell((Vector3 min, Vector3 max) bounds) => _dd.DrawWorldAABB((bounds.min + bounds.max) * 0.5f, (bounds.max - bounds.min) * 0.5f, 0xff0080ff, 1);
+    private void VisualizeCell((Vector3 min, Vector3 max) bounds) => _dd.DrawWorldAABB
+        ((bounds.min + bounds.max) * 0.5f, (bounds.max - bounds.min) * 0.5f, 0xff0080ff);
 }

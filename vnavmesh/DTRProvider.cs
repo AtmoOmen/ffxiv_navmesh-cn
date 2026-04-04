@@ -1,49 +1,43 @@
-﻿using System;
-using Dalamud.Game.Gui.Dtr;
+﻿using Dalamud.Game.Gui.Dtr;
+using Dalamud.Plugin.Services;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Navmesh;
 
 namespace vnavmesh;
 
-public class DTRProvider : IDisposable
+public class DTRProvider
+(
+    Config               config,
+    NavmeshManager       manager,
+    AsyncMoveRequest     asyncMove,
+    MovementPlanExecutor movementExecutor
+)
+    : IDisposable
 {
-    private NavmeshManager _manager;
-    private AsyncMoveRequest _asyncMove;
-    private MovementPlanExecutor _movementExecutor;
-    private IDtrBarEntry _dtrBarEntry;
+    private readonly IDtrBarEntry dtrBarEntry = Service.DtrBar.Get("vnavmesh");
 
-    public DTRProvider(NavmeshManager manager, AsyncMoveRequest asyncMove, MovementPlanExecutor movementExecutor)
-    {
-        _manager = manager;
-        _asyncMove = asyncMove;
-        _movementExecutor = movementExecutor;
-        _dtrBarEntry = Service.DtrBar.Get("vnavmesh");
-    }
-
-    public void Dispose()
-    {
-        _dtrBarEntry.Remove();
-    }
+    public void Dispose() =>
+        dtrBarEntry.Remove();
 
     public void Update()
     {
-        _dtrBarEntry.Shown = Service.Config.EnableDTR;
-        if (_dtrBarEntry.Shown)
+        dtrBarEntry.Shown = config.EnableDTR;
+
+        if (dtrBarEntry.Shown)
         {
-            var loadProgress = _manager.LoadTaskProgress;
-            var meshStatus = loadProgress >= 0 ? $"{loadProgress * 100:f0}%" : _manager.Navmesh != null ? "就绪" : "未就绪";
-            
+            var loadProgress = manager.LoadTaskProgress;
+            var meshStatus   = loadProgress >= 0 ? $"{loadProgress * 100:f0}%" : manager.Navmesh != null ? "就绪" : "未就绪";
+
             var statusText = "导航: " + meshStatus;
-            
-            if (Service.Config.ShowQueryStatusInDTR)
+
+            if (config.ShowQueryStatusInDTR)
             {
-                var pathfindInProgress = _manager.PathfindInProgress;
-                var numQueued = _manager.NumQueuedPathfindRequests;
-                var asyncMoveActive = _asyncMove.TaskInProgress;
-                var isMoving = _movementExecutor.Waypoints.Count > 0;
-                
-                // Show query status when there's activity
+                var pathfindInProgress = manager.PathfindInProgress;
+                var numQueued          = manager.NumQueuedPathfindRequests;
+                var asyncMoveActive    = asyncMove.TaskInProgress;
+                var isMoving           = movementExecutor.Waypoints.Count > 0;
+
                 if (pathfindInProgress || numQueued > 0)
                 {
                     var activeCount = pathfindInProgress ? 1 : 0;
@@ -51,8 +45,7 @@ public class DTRProvider : IDisposable
                     if (numQueued > 0)
                         statusText += $" (等待中: {numQueued})";
                 }
-                
-                // Show current operations
+
                 if (asyncMoveActive)
                     statusText += " | 算路中";
                 if (isMoving)
@@ -60,12 +53,11 @@ public class DTRProvider : IDisposable
             }
             else
             {
-                // Fallback to original simple status for backward compatibility
-                if (_asyncMove.TaskInProgress || _movementExecutor.Waypoints.Count > 0)
+                if (asyncMove.TaskInProgress || movementExecutor.Waypoints.Count > 0)
                     statusText = "导航: 算路中";
             }
-            
-            _dtrBarEntry.Text = statusText;
+
+            dtrBarEntry.Text = statusText;
         }
     }
 }

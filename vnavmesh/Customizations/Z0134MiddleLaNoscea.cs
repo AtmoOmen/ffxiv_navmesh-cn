@@ -18,9 +18,9 @@ public class Z0134MiddleLaNoscea : NavmeshCustomization
                     for (var i = 0; i < part.Primitives.Count; i++)
                     {
                         var prim = part.Primitives[i];
-                        var v1 = part.Vertices[prim.V1];
-                        var v2 = part.Vertices[prim.V2];
-                        var v3 = part.Vertices[prim.V3];
+                        var v1   = part.Vertices[prim.V1];
+                        var v2   = part.Vertices[prim.V2];
+                        var v3   = part.Vertices[prim.V3];
                         if (v1.Y < 2 && v2.Y < 2 && v3.Y < 2)
                             part.Primitives[i] = prim with { Flags = prim.Flags | SceneExtractor.PrimitiveFlags.ForceUnwalkable };
                     }

@@ -1,6 +1,4 @@
-using System;
 using System.Numerics;
-using System.Threading.Tasks;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navmesh;
@@ -10,24 +8,26 @@ namespace vnavmesh.Movement;
 
 public class AsyncMoveRequest : IDisposable
 {
-    private readonly NavmeshManager _manager;
-    private readonly MovementPlanExecutor _executor;
+    private readonly Config                    _config;
+    private readonly NavmeshManager            _manager;
+    private readonly MovementPlanExecutor      _executor;
     private readonly GroundMovementPlanBuilder _groundPlanBuilder = new();
     private readonly FlightMovementPlanBuilder _flightPlanBuilder = new();
-    private Task<PathfindResult>? _pendingTask;
-    private bool _pendingFly;
-    private float _pendingDestRange;
-    private float _pendingPathTolerance;
+    private          Task<PathfindResult>?     _pendingTask;
+    private          bool                      _pendingFly;
+    private          float                     _pendingDestRange;
+    private          float                     _pendingPathTolerance;
 
     public bool TaskInProgress => _pendingTask != null;
 
-    public AsyncMoveRequest(NavmeshManager manager, MovementPlanExecutor executor)
+    public AsyncMoveRequest(Config config, NavmeshManager manager, MovementPlanExecutor executor)
     {
-        _manager = manager;
+        _config   = config;
+        _manager  = manager;
         _executor = executor;
         _executor.OnMovementFailure += failure =>
         {
-            if (!Service.Config.RetryOnStuck || failure.Reason != MovementFailureReason.Stuck)
+            if (!_config.RetryOnStuck || failure.Reason != MovementFailureReason.Stuck)
                 return;
 
             MoveTo(failure.RequestedDestination, failure.RequestedMode == MovementMode.Flight, failure.DestinationTolerance);
@@ -50,6 +50,7 @@ public class AsyncMoveRequest : IDisposable
         if (_pendingTask != null && _pendingTask.IsCompleted)
         {
             Service.Log.Information("算路任务已完成");
+
             try
             {
                 var result = _pendingTask.Result;
@@ -60,6 +61,7 @@ public class AsyncMoveRequest : IDisposable
             {
                 Plugin.DuoLog(ex, "算路失败");
             }
+
             _pendingTask.Dispose();
             _pendingTask = null;
         }
@@ -76,16 +78,16 @@ public class AsyncMoveRequest : IDisposable
         var toleranceStr = range > 0 ? $"，容差 = {range:f3}" : "";
         Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
         _pendingPathTolerance = _executor.ConsumeNextTolerance();
-        _pendingTask = _manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range: range);
-        _pendingFly = fly;
-        _pendingDestRange = range;
+        _pendingTask          = _manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range);
+        _pendingFly           = fly;
+        _pendingDestRange     = range;
         return true;
     }
 
     private MovementPlan BuildPlan(PathfindResult result)
     {
         return _pendingFly
-            ? _flightPlanBuilder.Build(result, _pendingDestRange, _pendingPathTolerance)
-            : _groundPlanBuilder.Build(result, _pendingDestRange, _pendingPathTolerance);
+                   ? _flightPlanBuilder.Build(result, _pendingDestRange, _pendingPathTolerance)
+                   : _groundPlanBuilder.Build(result, _pendingDestRange, _pendingPathTolerance);
     }
 }

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Dalamud.Game.ClientState.Conditions;
 using vnavmesh.NavPathfind;
 
@@ -9,7 +8,9 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
     public MovementPlan Build(PathfindResult result, float destinationTolerance, float pathTolerance)
     {
         var segments = new List<MovementSegment>();
-        if(!IsAirborne)
+
+        if (!IsAirborne)
+        {
             segments.Add
             (
                 new TakeoffSegment
@@ -17,6 +18,7 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
                     CompletionTolerance = 0
                 }
             );
+        }
 
         segments.Add
         (

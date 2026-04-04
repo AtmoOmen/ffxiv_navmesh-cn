@@ -1,4 +1,5 @@
 using System.Numerics;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using vnavmesh.Navmesh;
 
 namespace vnavmesh.Utils;
@@ -15,7 +16,7 @@ public static class MapUtil
 
     private static unsafe Vector2? GetFlagPosition()
     {
-        var map = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentMap.Instance();
+        var map = AgentMap.Instance();
         if (map == null || map->FlagMarkerCount == 0)
             return null;
         var marker = map->FlagMapMarkers[0];

@@ -1,8 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
+using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 
@@ -12,15 +11,15 @@ public class DebugExportObj
 {
     private class MegaMesh
     {
-        public List<Vector3> Vertices = new();
+        public List<Vector3>                  Vertices  = new();
         public List<(int v1, int v2, int v3)> Triangles = new();
 
         public unsafe void AddPCB(MeshPCB.FileNode* node, ref Matrix4x3 world)
         {
             if (node == null)
                 return;
-            int firstVertex = Vertices.Count;
-            for (int i = 0; i < node->NumVertsRaw + node->NumVertsCompressed; ++i)
+            var firstVertex = Vertices.Count;
+            for (var i = 0; i < node->NumVertsRaw + node->NumVertsCompressed; ++i)
                 Vertices.Add(world.TransformCoordinate(node->Vertex(i)));
             foreach (ref var p in node->Primitives)
                 Triangles.Add((p.V1 + firstVertex, p.V2 + firstVertex, p.V3 + firstVertex));
@@ -35,7 +34,8 @@ public class DebugExportObj
 
         // first pass - mark streamed meshes (so that we can ignore them on standalone mesh pass) and manually load & add full streamable meshes
         HashSet<nint> streamedMeshes = new();
-        foreach (var s in FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance()->BGCollisionModule->SceneManager->Scenes)
+
+        foreach (var s in Framework.Instance()->BGCollisionModule->SceneManager->Scenes)
         {
             foreach (var coll in s->Scene->Colliders)
             {
@@ -46,22 +46,19 @@ public class DebugExportObj
                     continue;
                 var basePath = cast->PathBaseString;
                 var elements = new Span<ColliderStreamed.Element>(cast->Elements, cast->Header->NumMeshes);
+
                 foreach (ref var e in elements)
                 {
-                    if (includeStandaloneMeshes && e.Mesh != null)
-                    {
-                        streamedMeshes.Add((nint)e.Mesh);
-                    }
+                    if (includeStandaloneMeshes && e.Mesh != null) streamedMeshes.Add((nint)e.Mesh);
+
                     if (includeStreamedMeshes)
                     {
                         var f = Service.DataManager.GetFile($"{basePath}/tr{e.MeshId:d4}.pcb");
+
                         if (f != null)
                         {
                             var data = (MeshPCB.FileHeader*)Unsafe.AsPointer(ref f.Data[0]);
-                            if (data->Version is 1 or 4)
-                            {
-                                res.AddPCB((MeshPCB.FileNode*)(data + 1), ref Matrix4x3.Identity);
-                            }
+                            if (data->Version is 1 or 4) res.AddPCB((MeshPCB.FileNode*)(data + 1), ref Matrix4x3.Identity);
                         }
                     }
                 }
@@ -71,7 +68,7 @@ public class DebugExportObj
         // second pass - add standalone meshes
         if (includeStandaloneMeshes)
         {
-            foreach (var s in FFXIVClientStructs.FFXIV.Client.System.Framework.Framework.Instance()->BGCollisionModule->SceneManager->Scenes)
+            foreach (var s in Framework.Instance()->BGCollisionModule->SceneManager->Scenes)
             {
                 foreach (var coll in s->Scene->Colliders)
                 {

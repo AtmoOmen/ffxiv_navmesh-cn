@@ -1,9 +1,10 @@
-﻿using vnavmesh.Navmesh;
+﻿using System.Numerics;
+using vnavmesh.Navmesh;
 
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1110)]
-class Z1110AetherochemicalResearchFacility : NavmeshCustomization
+internal class Z1110AetherochemicalResearchFacility : NavmeshCustomization
 {
     public override int Version => 3;
 
@@ -13,7 +14,7 @@ class Z1110AetherochemicalResearchFacility : NavmeshCustomization
         scene.Meshes.Remove("<box>");
 
         // the lifts in the final room move when being used, so if the client triggers a rebuild at the end of the dungeon for whatever reason, it will break mesh connectivity (for subsequent runs)
-        scene.InsertCylinderCollider(new System.Numerics.Vector3(10, 1, 10), new(221.229f, -60, 95f));
-        scene.InsertCylinderCollider(new System.Numerics.Vector3(10, 1, 10), new(195f, -29f, 196f));
+        scene.InsertCylinderCollider(new Vector3(10, 1, 10), new(221.229f, -60, 95f));
+        scene.InsertCylinderCollider(new Vector3(10, 1, 10), new(195f, -29f, 196f));
     }
 }

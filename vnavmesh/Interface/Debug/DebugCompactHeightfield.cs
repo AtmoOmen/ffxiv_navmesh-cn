@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using System.Numerics;
 using DotRecast.Recast;
 using vnavmesh.Interface.Debug.Components;
@@ -11,32 +9,34 @@ namespace vnavmesh.Interface.Debug;
 public class DebugCompactHeightfield : DebugRecast
 {
     private RcCompactHeightfield _chf;
-    private UITree _tree;
-    private DebugDrawer _dd;
-    private EffectMesh.Data? _visuSolid;
-    private EffectMesh.Data? _visuDistance;
-    private EffectMesh.Data? _visuRegion;
-    private int[] _regionsNumSpans;
-    private int[] _regionsStartOffset;
+    private UITree               _tree;
+    private DebugDrawer          _dd;
+    private EffectMesh.Data?     _visuSolid;
+    private EffectMesh.Data?     _visuDistance;
+    private EffectMesh.Data?     _visuRegion;
+    private int[]                _regionsNumSpans;
+    private int[]                _regionsStartOffset;
 
     private static int _heightOffset = 0;
 
-    private static Vector4 _colAreaNull = new(0, 0, 0, 0.5f);
+    private static Vector4 _colAreaNull     = new(0, 0, 0, 0.5f);
     private static Vector4 _colAreaWalkable = new(0, 0.75f, 1.0f, 0.5f);
+
     private static Vector4 AreaColor(int area) => area == 0 ? _colAreaNull : _colAreaWalkable; // TODO: other colors for other areas
+
     private static Vector4 RegionColor(int region) => region != 0 ? IntColor(region, 0.75f) : _colAreaNull;
 
     public DebugCompactHeightfield(RcCompactHeightfield chf, UITree tree, DebugDrawer dd)
     {
-        _chf = chf;
+        _chf  = chf;
         _tree = tree;
-        _dd = dd;
+        _dd   = dd;
 
         _regionsNumSpans = new int[_chf.maxRegions + 1];
         foreach (ref var span in chf.spans.AsSpan())
             ++_regionsNumSpans[span.reg & ~RcConstants.RC_BORDER_REG];
         _regionsStartOffset = new int[_regionsNumSpans.Length];
-        for (int i = 1; i < _regionsNumSpans.Length; i++)
+        for (var i = 1; i < _regionsNumSpans.Length; i++)
             _regionsStartOffset[i] = _regionsStartOffset[i - 1] + _regionsNumSpans[i - 1];
     }
 
@@ -60,12 +60,14 @@ public class DebugCompactHeightfield : DebugRecast
         {
             if (nc.SelectedOrHovered)
                 VisualizeSolid();
+
             if (nc.Opened)
             {
-                for (int z = 0; z < _chf.height; ++z)
+                for (var z = 0; z < _chf.height; ++z)
                 {
                     UITree.NodeRaii? nz = null;
-                    for (int x = 0; x < _chf.width; ++x)
+
+                    for (var x = 0; x < _chf.width; ++x)
                     {
                         ref var cell = ref _chf.cells[z * _chf.width + x];
                         if (cell.count == 0)
@@ -78,16 +80,21 @@ public class DebugCompactHeightfield : DebugRecast
                         using var nx = _tree.Node($"[{x}x{z}]: {cell.count} 个跨度，起始索引 {cell.index}");
                         if (nx.SelectedOrHovered)
                             VisualizeSolidCell(x, z, true);
+
                         if (nx.Opened)
                         {
-                            for (int i = 0; i < cell.count; ++i)
+                            for (var i = 0; i < cell.count; ++i)
                             {
                                 ref var span = ref _chf.spans[cell.index + i];
-                                if (_tree.LeafNode($"y={span.y}+{span.h}，连接={RcCommons.GetCon(ref span, 0)} {RcCommons.GetCon(ref span, 1)} {RcCommons.GetCon(ref span, 2)} {RcCommons.GetCon(ref span, 3)}，区域 (Reg)={span.reg & ~RcConstants.RC_BORDER_REG} ({((span.reg & RcConstants.RC_BORDER_REG) == 0 ? "常规" : "边界")})，距离 (Dist)={_chf.dist[i]}，面积类型 (Area)={_chf.areas[i]}").SelectedOrHovered)
+                                if (_tree.LeafNode
+                                    (
+                                        $"y={span.y}+{span.h}，连接={RcCommons.GetCon(ref span, 0)} {RcCommons.GetCon(ref span, 1)} {RcCommons.GetCon(ref span, 2)} {RcCommons.GetCon(ref span, 3)}，区域 (Reg)={span.reg & ~RcConstants.RC_BORDER_REG} ({((span.reg & RcConstants.RC_BORDER_REG) == 0 ? "常规" : "边界")})，距离 (Dist)={_chf.dist[i]}，面积类型 (Area)={_chf.areas[i]}"
+                                    ).SelectedOrHovered)
                                     VisualizeSolidSpan(x, z, cell.index + i, true);
                             }
                         }
                     }
+
                     nz?.Dispose();
                 }
             }
@@ -100,9 +107,10 @@ public class DebugCompactHeightfield : DebugRecast
         {
             if (nregs.SelectedOrHovered)
                 VisualizeRegions();
+
             if (nregs.Opened)
             {
-                for (int i = 0; i < _chf.maxRegions; ++i)
+                for (var i = 0; i < _chf.maxRegions; ++i)
                 {
                     using var nreg = _tree.Node($"区域 {i}：{_regionsNumSpans[i]} 个跨度，偏移量 {_regionsStartOffset[i]}###reg_{i}");
                     if (nreg.SelectedOrHovered)
@@ -110,25 +118,26 @@ public class DebugCompactHeightfield : DebugRecast
                     if (!nreg.Opened)
                         continue;
 
-                    int ispan = 0;
-                    for (int z = 0; z < _chf.height; ++z)
-                    {
-                        for (int x = 0; x < _chf.width; ++x)
-                        {
-                            ref var cell = ref _chf.cells[z * _chf.width + x];
-                            for (int idx = 0; idx < cell.count; ++idx)
-                            {
-                                ref var span = ref _chf.spans[cell.index + idx];
-                                if ((span.reg & ~RcConstants.RC_BORDER_REG) != i)
-                                    continue;
+                    var ispan = 0;
 
-                                if (_tree.LeafNode($"{ispan}: [{x}x{z}]: y={span.y}+{span.h}").SelectedOrHovered)
-                                {
-                                    VisualizeRegionSpan(ispan);
-                                    VisualizeConnections(x, z, cell.index + idx);
-                                }
-                                ++ispan;
+                    for (var z = 0; z < _chf.height; ++z)
+                    for (var x = 0; x < _chf.width; ++x)
+                    {
+                        ref var cell = ref _chf.cells[z * _chf.width + x];
+
+                        for (var idx = 0; idx < cell.count; ++idx)
+                        {
+                            ref var span = ref _chf.spans[cell.index + idx];
+                            if ((span.reg & ~RcConstants.RC_BORDER_REG) != i)
+                                continue;
+
+                            if (_tree.LeafNode($"{ispan}: [{x}x{z}]: y={span.y}+{span.h}").SelectedOrHovered)
+                            {
+                                VisualizeRegionSpan(ispan);
+                                VisualizeConnections(x, z, cell.index + idx);
                             }
+
+                            ++ispan;
                         }
                     }
                 }
@@ -138,28 +147,34 @@ public class DebugCompactHeightfield : DebugRecast
 
     private IEnumerable<(Vector3 center, int index)> EnumerateSpanPositions()
     {
-        int icell = 0;
-        int ispan = 0;
-        var x0 = _chf.bmin.X + _chf.cs * 0.5f;
-        var cz = _chf.bmin.Z + _chf.cs * 0.5f;
-        for (int z = 0; z < _chf.height; ++z)
+        var icell = 0;
+        var ispan = 0;
+        var x0    = _chf.bmin.X + _chf.cs * 0.5f;
+        var cz    = _chf.bmin.Z + _chf.cs * 0.5f;
+
+        for (var z = 0; z < _chf.height; ++z)
         {
             var cx = x0;
-            for (int x = 0; x < _chf.width; ++x)
+
+            for (var x = 0; x < _chf.width; ++x)
             {
                 var cell = _chf.cells[icell++];
+
                 if (cell.count != 0)
                 {
                     if (cell.index != ispan)
                         throw new Exception($"紧凑高度场跨度中存在异常间隙：单元格 {x}x{z} 的起始索引为 {cell.index}，预期为 {ispan}");
-                    for (int i = 0; i < cell.count; ++i)
+
+                    for (var i = 0; i < cell.count; ++i)
                     {
                         yield return (new(cx, _chf.bmin.Y + (_chf.spans[ispan].y + _heightOffset) * _chf.ch, cz), ispan);
                         ++ispan;
                     }
                 }
+
                 cx += _chf.cs;
             }
+
             cz += _chf.cs;
         }
     }
@@ -170,15 +185,16 @@ public class DebugCompactHeightfield : DebugRecast
         {
             _visuSolid = new EffectMesh.Data(_dd.RenderContext, 4, 2, _chf.spanCount, false);
             using var builder = _visuSolid.Map(_dd.RenderContext);
-            var quad = new AnalyticMeshQuad(builder);
+            var       quad    = new AnalyticMeshQuad(builder);
 
             var timer = StopWatchTimer.Create();
-            var wx = new Vector3(_chf.cs * 0.5f, 0, 0);
-            var wz = new Vector3(0, 0, -_chf.cs * 0.5f);
+            var wx    = new Vector3(_chf.cs * 0.5f, 0, 0);
+            var wz    = new Vector3(0,              0, -_chf.cs * 0.5f);
             foreach (var (center, index) in EnumerateSpanPositions())
                 quad.Add(center, wx, wz, AreaColor(_chf.areas[index]));
             Service.Log.Debug($"CHF 实体可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
+
         return _visuSolid;
     }
 
@@ -188,19 +204,22 @@ public class DebugCompactHeightfield : DebugRecast
         {
             _visuDistance = new EffectMesh.Data(_dd.RenderContext, 4, 2, _chf.spanCount, false);
             using var builder = _visuDistance.Map(_dd.RenderContext);
-            var quad = new AnalyticMeshQuad(builder);
+            var       quad    = new AnalyticMeshQuad(builder);
 
-            var timer = StopWatchTimer.Create();
-            var wx = new Vector3(_chf.cs * 0.5f, 0, 0);
-            var wz = new Vector3(0, 0, -_chf.cs * 0.5f);
-            float dscale = 1.0f / Math.Max(1, _chf.maxDistance);
+            var timer  = StopWatchTimer.Create();
+            var wx     = new Vector3(_chf.cs * 0.5f, 0, 0);
+            var wz     = new Vector3(0,              0, -_chf.cs * 0.5f);
+            var dscale = 1.0f / Math.Max(1, _chf.maxDistance);
+
             foreach (var (center, index) in EnumerateSpanPositions())
             {
                 var c = _chf.dist[index] * dscale;
                 quad.Add(center, wx, wz, new(c, c, c, 0.7f));
             }
+
             Service.Log.Debug($"CHF 距离可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
+
         return _visuDistance;
     }
 
@@ -210,20 +229,23 @@ public class DebugCompactHeightfield : DebugRecast
         {
             _visuRegion = new EffectMesh.Data(_dd.RenderContext, 4, 2, _chf.spanCount, false);
             using var builder = _visuRegion.Map(_dd.RenderContext);
-            var quad = new AnalyticMeshQuad(builder);
+            var       quad    = new AnalyticMeshQuad(builder);
 
-            var timer = StopWatchTimer.Create();
-            var wx = new Vector3(_chf.cs * 0.5f, 0, 0);
-            var wz = new Vector3(0, 0, -_chf.cs * 0.5f);
+            var timer   = StopWatchTimer.Create();
+            var wx      = new Vector3(_chf.cs * 0.5f, 0, 0);
+            var wz      = new Vector3(0,              0, -_chf.cs * 0.5f);
             var storage = new EffectMesh.Instance[_chf.spanCount];
             var offsets = new int[_regionsNumSpans.Length];
+
             foreach (var (center, index) in EnumerateSpanPositions())
             {
                 var reg = _chf.spans[index].reg & ~RcConstants.RC_BORDER_REG;
                 var off = offsets[reg]++;
                 storage[_regionsStartOffset[reg] + off] = quad.BuildInstance(center, wx, wz, RegionColor(reg));
             }
-            int i = 0;
+
+            var i = 0;
+
             foreach (ref var inst in storage.AsSpan())
             {
                 builder.AddInstance(inst);
@@ -232,6 +254,7 @@ public class DebugCompactHeightfield : DebugRecast
 
             Service.Log.Debug($"CHF 区域可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
+
         return _visuRegion;
     }
 
@@ -250,9 +273,12 @@ public class DebugCompactHeightfield : DebugRecast
         ref var cell = ref _chf.cells[z * _chf.width + x];
         _dd.EffectMesh.Bind(_dd.RenderContext, true, false);
         GetOrInitVisualizerSolid().DrawSubset(_dd.RenderContext, cell.index, cell.count);
+
         if (showConnections)
-            for (int i = 0; i < cell.count; ++i)
+        {
+            for (var i = 0; i < cell.count; ++i)
                 VisualizeConnections(x, z, cell.index + i);
+        }
     }
 
     private void VisualizeSolidSpan(int x, int z, int spanIndex, bool showConnections)
@@ -300,17 +326,18 @@ public class DebugCompactHeightfield : DebugRecast
     private void VisualizeConnections(int x, int z, int spanIndex)
     {
         ref var span = ref _chf.spans[spanIndex];
-        for (int dir = 0; dir < 4; ++dir)
+
+        for (var dir = 0; dir < 4; ++dir)
         {
             var conn = RcCommons.GetCon(ref span, dir);
             if (conn == RcConstants.RC_NOT_CONNECTED)
                 continue;
-            int nx = x + RcCommons.GetDirOffsetX(dir);
-            int nz = z + RcCommons.GetDirOffsetY(dir);
-            ref var nc = ref _chf.cells[nz * _chf.width + nx];
-            ref var ns = ref _chf.spans[nc.index + conn];
-            var from = _chf.bmin.RecastToSystem() + new Vector3(_chf.cs * (x + 0.5f), _chf.ch * (span.y + _heightOffset), _chf.cs * (z + 0.5f));
-            var to = _chf.bmin.RecastToSystem() + new Vector3(_chf.cs * (nx + 0.5f), _chf.ch * (ns.y + _heightOffset), _chf.cs * (nz + 0.5f));
+            var     nx   = x + RcCommons.GetDirOffsetX(dir);
+            var     nz   = z + RcCommons.GetDirOffsetY(dir);
+            ref var nc   = ref _chf.cells[nz * _chf.width + nx];
+            ref var ns   = ref _chf.spans[nc.index        + conn];
+            var     from = _chf.bmin.RecastToSystem() + new Vector3(_chf.cs * (x  + 0.5f), _chf.ch * (span.y + _heightOffset), _chf.cs * (z  + 0.5f));
+            var     to   = _chf.bmin.RecastToSystem() + new Vector3(_chf.cs * (nx + 0.5f), _chf.ch * (ns.y   + _heightOffset), _chf.cs * (nz + 0.5f));
             _dd.DrawWorldLine(from, to, 0xff00ffff);
         }
     }

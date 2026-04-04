@@ -1,15 +1,20 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Numerics;
+﻿using System.Numerics;
 using vnavmesh.Utils;
 
 namespace vnavmesh.NavVolume;
 
-public class PathfindLoopException(ulong from, ulong to, Vector3 fromP, Vector3 toP) : Exception {
-    public readonly ulong FromVoxel = from;
-    public readonly ulong ToVoxel = to;
-    public readonly Vector3 FromPos = fromP;
-    public readonly Vector3 ToPos = toP;
+public class PathfindLoopException
+(
+    ulong   from,
+    ulong   to,
+    Vector3 fromP,
+    Vector3 toP
+) : Exception
+{
+    public readonly ulong   FromVoxel = from;
+    public readonly ulong   ToVoxel   = to;
+    public readonly Vector3 FromPos   = fromP;
+    public readonly Vector3 ToPos     = toP;
 
     public override string Message => $"An infinite loop occurred during the pathfind operation. (from={FromVoxel:X} / {FromPos}, to={ToVoxel:X} / {ToPos})";
 }
@@ -29,15 +34,16 @@ public static class VoxelSearch
         if (cv.empty)
             return cv.voxel; // fast path: the cell is empty already
 
-        float minDist = float.MaxValue;
-        ulong res = VoxelMap.InvalidVoxel;
+        var minDist = float.MaxValue;
+        var res     = VoxelMap.InvalidVoxel;
+
         foreach (var v in volume.RootTile.EnumerateLeafVoxels(center - halfExtent, center + halfExtent))
         {
             if (!v.empty)
                 continue;
 
-            var p = FindClosestVoxelPoint(volume, v.index, center, 0);
-            var d = p - center;
+            var p    = FindClosestVoxelPoint(volume, v.index, center, 0);
+            var d    = p - center;
             var dist = d.LengthSquared();
             if (d.X != 0 || d.Z != 0)
                 dist += 100; // penalty for moving sideways vs up - TODO reconsider...
@@ -48,18 +54,21 @@ public static class VoxelSearch
             if (dist < minDist)
             {
                 minDist = dist;
-                res = v.index;
+                res     = v.index;
             }
         }
+
         return res;
     }
 
     // enumerate entered voxels along line; starting voxel is not returned, ending voxel is
-    public static IEnumerable<(ulong voxel, float t, bool empty)> EnumerateVoxelsInLine(VoxelMap volume, ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
+    public static IEnumerable<(ulong voxel, float t, bool empty)> EnumerateVoxelsInLine
+        (VoxelMap volume, ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
     {
         var origFrom = fromVoxel;
-        var ab = toPos - fromPos;
-        var eps = 0.1f / ab.Length();
+        var ab       = toPos - fromPos;
+        var eps      = 0.1f / ab.Length();
+
         while (fromVoxel != toVoxel)
         {
             StepLine(volume, origFrom, toVoxel, fromPos, ab, eps, fromVoxel, out var nextVoxel, out var t, out var nextEmpty);
@@ -71,8 +80,9 @@ public static class VoxelSearch
     public static bool LineOfSight(VoxelMap volume, ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
     {
         var origFrom = fromVoxel;
-        var ab = toPos - fromPos;
-        var eps = 0.1f / ab.Length();
+        var ab       = toPos - fromPos;
+        var eps      = 0.1f / ab.Length();
+
         while (fromVoxel != toVoxel)
         {
             StepLine(volume, origFrom, toVoxel, fromPos, ab, eps, fromVoxel, out var nextVoxel, out _, out var nextEmpty);
@@ -85,7 +95,19 @@ public static class VoxelSearch
         return true;
     }
 
-    private static void StepLine(VoxelMap volume, ulong origFrom, ulong toVoxel, Vector3 fromPos, Vector3 ab, float eps, ulong fromVoxel, out ulong nextVoxel, out float t, out bool nextEmpty)
+    private static void StepLine
+    (
+        VoxelMap  volume,
+        ulong     origFrom,
+        ulong     toVoxel,
+        Vector3   fromPos,
+        Vector3   ab,
+        float     eps,
+        ulong     fromVoxel,
+        out ulong nextVoxel,
+        out float t,
+        out bool  nextEmpty
+    )
     {
         var (vmin, vmax) = volume.VoxelBounds(fromVoxel, 0);
         var tx = ab.X == 0 ? float.MaxValue : ((ab.X > 0 ? vmax.X : vmin.X) - fromPos.X) / ab.X;

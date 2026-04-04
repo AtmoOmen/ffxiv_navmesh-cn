@@ -1,18 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Seeds = System.Collections.Generic.Dictionary<uint, System.Collections.Generic.List<vnavmesh.Navmesh.JsonVec>>;
 
 namespace vnavmesh.Navmesh;
 
-public record struct JsonVec(float X, float Y, float Z)
+public record struct JsonVec
+(
+    float X,
+    float Y,
+    float Z
+)
 {
     public static implicit operator Vector3(JsonVec v) => new(v.X, v.Y, v.Z);
+
     public static implicit operator JsonVec(Vector3 v) => new(v.X, v.Y, v.Z);
 }
 
@@ -31,7 +31,7 @@ public class FloodFill
     private FloodFill(Seeds remote, Seeds local)
     {
         SeedsRemote = remote;
-        SeedsLocal = local;
+        SeedsLocal  = local;
     }
 
     static FloodFill()
@@ -62,20 +62,20 @@ public class FloodFill
 
     public async Task Serialize()
     {
-        var finfo = new FileInfo(LocalSource);
-        using var st = finfo.Create();
+        var       finfo = new FileInfo(LocalSource);
+        using var st    = finfo.Create();
         await JsonSerializer.SerializeAsync(st, new SortedDictionary<uint, List<JsonVec>>(SeedsLocal), serOpts);
     }
 
     private static async Task<FloodFill> Init()
     {
         Seeds remote = [];
-        Seeds local = [];
+        Seeds local  = [];
 
         try
         {
-            var client = new HttpClient();
-            using HttpResponseMessage resp = await client.GetAsync(RemoteSource);
+            var       client = new HttpClient();
+            using var resp   = await client.GetAsync(RemoteSource);
             resp.EnsureSuccessStatusCode();
             var body = await resp.Content.ReadAsStreamAsync();
             remote = await FromStream(body);
@@ -87,8 +87,8 @@ public class FloodFill
 
         try
         {
-            var finfo = new FileInfo(LocalSource);
-            using var st = finfo.OpenRead();
+            var       finfo = new FileInfo(LocalSource);
+            using var st    = finfo.OpenRead();
             local = await FromStream(st);
         }
         catch (FileNotFoundException ex)
@@ -109,10 +109,11 @@ public class FloodFill
     }
 
     private static readonly JsonSerializerOptions deOpts = new() { ReadCommentHandling = JsonCommentHandling.Skip };
+
     private static readonly JsonSerializerOptions serOpts = new()
     {
         WriteIndented = true,
-        IndentSize = 2
+        IndentSize    = 2
     };
 
     private static async Task<Seeds> FromStream(Stream s)

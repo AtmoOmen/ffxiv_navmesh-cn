@@ -1,32 +1,36 @@
-using System;
-using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using SharpDX;
 using vnavmesh.Interface.Render;
 using vnavmesh.Models;
 using vnavmesh.Utils;
+using Vector2 = System.Numerics.Vector2;
+using Vector3 = System.Numerics.Vector3;
+using Vector4 = System.Numerics.Vector4;
 
 namespace vnavmesh.Interface.Debug;
 
 public unsafe class DebugDrawer : IDisposable
 {
     public RenderContext RenderContext { get; init; } = new();
-    public RenderTarget? RenderTarget { get; private set; }
-    public EffectMesh? EffectMesh { get; init; }
+    public RenderTarget? RenderTarget  { get; private set; }
+    public EffectMesh?   EffectMesh    { get; init; }
 
-    public Vector3 Origin;
+    public Vector3   Origin;
     public Matrix4x4 View;
     public Matrix4x4 Proj;
     public Matrix4x4 ViewProj;
-    public Vector4 NearPlane;
-    public float CameraAzimuth; // facing north = 0, facing west = pi/4, facing south = +-pi/2, facing east = -pi/4
-    public float CameraAltitude; // facing horizontally = 0, facing down = pi/4, facing up = -pi/4
-    public Vector2 ViewportSize;
+    public Vector4   NearPlane;
+    public float     CameraAzimuth;  // facing north = 0, facing west = pi/4, facing south = +-pi/2, facing east = -pi/4
+    public float     CameraAltitude; // facing horizontally = 0, facing down = pi/4, facing up = -pi/4
+    public Vector2   ViewportSize;
 
-    private List<(Vector2 from, Vector2 to, uint col, int thickness)> _viewportLines = new();
-    private List<(Vector2 center, float radius, uint color)> _viewportCircles = new();
+    private List<(Vector2 from, Vector2 to, uint col, int thickness)> _viewportLines   = new();
+    private List<(Vector2 center, float radius, uint color)>          _viewportCircles = new();
 
     public DebugDrawer()
     {
@@ -49,14 +53,15 @@ public unsafe class DebugDrawer : IDisposable
 
     public void StartFrame()
     {
-        var controlCamera = FFXIVClientStructs.FFXIV.Client.Game.Control.CameraManager.Instance()->GetActiveCamera();
-        var renderCamera = controlCamera != null ? controlCamera->SceneCamera.RenderCamera : null;
+        var controlCamera = CameraManager.Instance()->GetActiveCamera();
+        var renderCamera  = controlCamera != null ? controlCamera->SceneCamera.RenderCamera : null;
+
         if (renderCamera != null)
         {
-            Origin = renderCamera->Origin;
-            View = renderCamera->ViewMatrix;
+            Origin   = renderCamera->Origin;
+            View     = renderCamera->ViewMatrix;
             View.M44 = 1; // for whatever reason, game doesn't initialize it...
-            Proj = renderCamera->ProjectionMatrix;
+            Proj     = renderCamera->ProjectionMatrix;
             ViewProj = View * Proj;
 
             // note that game uses reverse-z by default, so we can't just get full plane equation by reading column 3 of vp matrix
@@ -66,9 +71,9 @@ public unsafe class DebugDrawer : IDisposable
             // plane equation for near plane has Q.dot(n) = O.dot(n) - near => pw = V43 + near
             NearPlane = new(View.M13, View.M23, View.M33, View.M43 + renderCamera->NearPlane);
 
-            CameraAzimuth = MathF.Atan2(View.M13, View.M33);
+            CameraAzimuth  = MathF.Atan2(View.M13, View.M33);
             CameraAltitude = MathF.Asin(View.M23);
-            var device = FFXIVClientStructs.FFXIV.Client.Graphics.Kernel.Device.Instance();
+            var device = Device.Instance();
             ViewportSize = new(device->Width, device->Height);
         }
 
@@ -79,6 +84,7 @@ public unsafe class DebugDrawer : IDisposable
             RenderTarget?.Dispose();
             RenderTarget = new(RenderContext, (int)ViewportSize.X, (int)ViewportSize.Y);
         }
+
         RenderTarget.Bind(RenderContext);
     }
 
@@ -89,13 +95,14 @@ public unsafe class DebugDrawer : IDisposable
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(0, 0));
         ImGuiHelpers.ForceNextWindowMainViewport();
         ImGuiHelpers.SetNextWindowPosRelativeMainViewport(new Vector2(0, 0));
-        ImGui.Begin("world_overlay", ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoBackground);
+        ImGui.Begin
+        (
+            "world_overlay",
+            ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoBackground
+        );
         ImGui.SetWindowSize(ImGui.GetIO().DisplaySize);
 
-        if (RenderTarget != null)
-        {
-            ImGui.GetWindowDrawList().AddImage(RenderTarget.ImguiHandle, new(), new(RenderTarget.Size.X, RenderTarget.Size.Y));
-        }
+        if (RenderTarget != null) ImGui.GetWindowDrawList().AddImage(RenderTarget.ImguiHandle, new(), new(RenderTarget.Size.X, RenderTarget.Size.Y));
 
         var dl = ImGui.GetWindowDrawList();
         foreach (var l in _viewportLines)
@@ -146,19 +153,22 @@ public unsafe class DebugDrawer : IDisposable
         DrawWorldLine(baa, bba, color, thickness);
         DrawWorldLine(bab, bbb, color, thickness);
     }
-    public void DrawWorldAABB(AABB aabb, uint color, int thickness = 1) => DrawWorldAABB((aabb.Min + aabb.Max) * 0.5f, (aabb.Max - aabb.Min) * 0.5f, color, thickness);
+
+    public void DrawWorldAABB(AABB aabb, uint color, int thickness = 1) => DrawWorldAABB
+        ((aabb.Min + aabb.Max) * 0.5f, (aabb.Max - aabb.Min) * 0.5f, color, thickness);
 
     public void DrawWorldSphere(Vector3 center, float radius, uint color, int thickness = 1)
     {
-        int numSegments = CurveApproxUtil.CalculateCircleSegments(radius, 360.Degrees(), 0.1f);
-        var prev1 = center + new Vector3(0, 0, radius);
-        var prev2 = center + new Vector3(0, radius, 0);
-        var prev3 = center + new Vector3(radius, 0, 0);
-        for (int i = 1; i <= numSegments; ++i)
+        var numSegments = CurveApproxUtil.CalculateCircleSegments(radius, 360.Degrees(), 0.1f);
+        var prev1       = center + new Vector3(0,      0,      radius);
+        var prev2       = center + new Vector3(0,      radius, 0);
+        var prev3       = center + new Vector3(radius, 0,      0);
+
+        for (var i = 1; i <= numSegments; ++i)
         {
-            var dir = (i * 360.0f / numSegments).Degrees().ToDirection();
-            var curr1 = center + radius * new Vector3(dir.X, 0, dir.Y);
-            var curr2 = center + radius * new Vector3(0, dir.Y, dir.X);
+            var dir   = (i * 360.0f / numSegments).Degrees().ToDirection();
+            var curr1 = center + radius * new Vector3(dir.X, 0,     dir.Y);
+            var curr2 = center + radius * new Vector3(0,     dir.Y, dir.X);
             var curr3 = center + radius * new Vector3(dir.Y, dir.X, 0);
             DrawWorldLine(curr1, prev1, color, thickness);
             DrawWorldLine(curr2, prev2, color, thickness);
@@ -202,35 +212,37 @@ public unsafe class DebugDrawer : IDisposable
         ClipLineToNearPlane(ref p, ref q);
         var ps = WorldToScreen(p);
         var qs = WorldToScreen(q);
-        var d = Vector2.Normalize(qs - ps) * l;
-        var n = new Vector2(-d.Y, d.X) * 0.5f;
-        _viewportLines.Add((ps, ps + d + n, color, thickness));
+        var d  = Vector2.Normalize(qs - ps) * l;
+        var n  = new Vector2(-d.Y, d.X)     * 0.5f;
+        _viewportLines.Add((ps, ps     + d + n, color, thickness));
         _viewportLines.Add((ps, ps + d - n, color, thickness));
     }
 
     public void DrawWorldArc(Vector3 a, Vector3 b, float h, float arrowA, float arrowB, uint color, int thickness = 1)
     {
         var delta = b - a;
-        var len = delta.Length();
+        var len   = delta.Length();
         h *= len;
+
         Vector3 Eval(Vector3 from, Vector3 delta, float u)
         {
-            var res = from + u * delta;
-            var coeff = u * 2 - 1;
-            res.Y += h * (1 - coeff * coeff);
+            var res   = from + u * delta;
+            var coeff = u        * 2 - 1;
+            res.Y += h * (1          - coeff * coeff);
             return res;
         }
+
         ;
 
-        const int NumPoints = 8;
-        const float u0 = 0.05f;
-        const float du = (1.0f - u0 * 2) / NumPoints;
-        var from = Eval(a, delta, u0);
+        const int   NumPoints = 8;
+        const float u0        = 0.05f;
+        const float du        = (1.0f - u0 * 2) / NumPoints;
+        var         from      = Eval(a, delta, u0);
 
         if (arrowA > 1)
             DrawWorldArrowPoint(from, Eval(a, delta, 2 * u0), arrowA, color, thickness);
 
-        for (int i = 1; i <= NumPoints; ++i)
+        for (var i = 1; i <= NumPoints; ++i)
         {
             var to = Eval(a, delta, u0 + i * du);
             DrawWorldLine(from, to, color, thickness);
@@ -241,16 +253,16 @@ public unsafe class DebugDrawer : IDisposable
             DrawWorldArrowPoint(from, Eval(a, delta, 1 - 2 * u0), arrowB, color, thickness);
     }
 
-    private unsafe SharpDX.Matrix ReadMatrix(nint address)
+    private Matrix ReadMatrix(nint address)
     {
-        var p = (float*)address;
-        SharpDX.Matrix mtx = new();
+        var    p   = (float*)address;
+        Matrix mtx = new();
         for (var i = 0; i < 16; i++)
             mtx[i] = *p++;
         return mtx;
     }
 
-    private unsafe SharpDX.Vector2 ReadVec2(nint address)
+    private SharpDX.Vector2 ReadVec2(nint address)
     {
         var p = (float*)address;
         return new(p[0], p[1]);
@@ -265,15 +277,16 @@ public unsafe class DebugDrawer : IDisposable
 
         if (an > 0 || bn > 0)
         {
-            var ab = b - a;
+            var ab  = b - a;
             var abn = Vector3.Dot(ab, new(NearPlane.X, NearPlane.Y, NearPlane.Z));
-            var t = -an / abn;
-            var p = a + t * ab;
+            var t   = -an / abn;
+            var p   = a + t * ab;
             if (an > 0)
                 a = p;
             else
                 b = p;
         }
+
         return true;
     }
 
@@ -290,12 +303,14 @@ public unsafe class DebugDrawer : IDisposable
         if (!en.MoveNext())
             yield break;
         var first = en.Current;
-        var from = en.Current;
+        var from  = en.Current;
+
         while (en.MoveNext())
         {
             yield return (from, en.Current);
             from = en.Current;
         }
+
         yield return (from, first);
     }
 }

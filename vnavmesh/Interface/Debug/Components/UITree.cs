@@ -1,5 +1,4 @@
-﻿using System;
-using Dalamud.Bindings.ImGui;
+﻿using Dalamud.Bindings.ImGui;
 
 namespace vnavmesh.Interface.Debug.Components;
 
@@ -9,9 +8,9 @@ public class UITree
 
     public struct NodeRaii : IDisposable
     {
-        public bool Selected { get; init; }
-        public bool Opened { get; init; }
-        public bool Hovered { get; init; }
+        public  bool Selected { get; init; }
+        public  bool Opened   { get; init; }
+        public  bool Hovered  { get; init; }
         private bool _disposed;
         private bool _realOpened;
 
@@ -19,9 +18,9 @@ public class UITree
 
         public NodeRaii(bool selected, bool opened, bool hovered, bool realOpened)
         {
-            Selected = selected;
-            Opened = opened;
-            Hovered = hovered;
+            Selected    = selected;
+            Opened      = opened;
+            Hovered     = hovered;
             _realOpened = realOpened;
         }
 
@@ -38,7 +37,7 @@ public class UITree
 
     public NodeRaii Node(string text, bool leaf = false, uint color = 0xffffffff)
     {
-        var id = ImGui.GetID(text);
+        var id    = ImGui.GetID(text);
         var flags = ImGuiTreeNodeFlags.None;
         if (id == _selectedId)
             flags |= ImGuiTreeNodeFlags.Selected;
@@ -47,7 +46,7 @@ public class UITree
 
         ImGui.PushID((int)id);
         ImGui.PushStyleColor(ImGuiCol.Text, color);
-        bool open = ImGui.TreeNodeEx(text, flags);
+        var open = ImGui.TreeNodeEx(text, flags);
         ImGui.PopStyleColor();
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
             _selectedId = id;

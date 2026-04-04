@@ -3,7 +3,7 @@
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(823)]
-class Z0823TheQitanaRavel : NavmeshCustomization
+internal class Z0823TheQitanaRavel : NavmeshCustomization
 {
     public override int Version => 1;
 

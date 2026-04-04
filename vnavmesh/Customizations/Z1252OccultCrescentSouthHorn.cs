@@ -16,7 +16,7 @@ internal class Z1252OccultCrescentSouthHorn : NavmeshCustomization
         {
             // bottom stair of second-tier staircase around SW tower is too steep even though it's <55 degrees, probably because of rasterization bs, extend it outward by 1y to make slope more gradual
             var verts = CollectionsMarshal.AsSpan(mesh.Parts[221].Vertices);
-            verts[8].X += 1;
+            verts[8].X  += 1;
             verts[16].X += 1;
         }
     }

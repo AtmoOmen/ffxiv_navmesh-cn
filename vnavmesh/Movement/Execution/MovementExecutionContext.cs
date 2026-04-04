@@ -7,7 +7,7 @@ namespace vnavmesh.Movement.Execution;
 
 internal sealed class MovementExecutionContext
 {
-    public required IFramework       Framework        { get; init; }
+    public required Config           Config           { get; init; }
     public required IPlayerCharacter Player           { get; init; }
     public required MovementPlan     Plan             { get; init; }
     public required int              SegmentIndex     { get; init; }

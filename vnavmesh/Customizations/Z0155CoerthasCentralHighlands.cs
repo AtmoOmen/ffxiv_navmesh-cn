@@ -4,7 +4,7 @@ using vnavmesh.Navmesh;
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(155)]
-class Z0155CoerthasCentralHighlands : NavmeshCustomization
+internal class Z0155CoerthasCentralHighlands : NavmeshCustomization
 {
     public override int Version => 7;
 
@@ -15,7 +15,9 @@ class Z0155CoerthasCentralHighlands : NavmeshCustomization
 
         // set the doorstep of Monument Tower as walkable, though you can't land on it
         if (scene.Meshes.TryGetValue("bg/ffxiv/roc_r1/fld/r1f1/collision/r1f1_b7_astr1.pcb", out var tower))
+        {
             foreach (var inst in tower.Instances)
                 inst.ForceSetPrimFlags |= SceneExtractor.PrimitiveFlags.ForceWalkable;
+        }
     }
 }

@@ -3,7 +3,7 @@
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(822)]
-class Z0822MtGulg : NavmeshCustomization
+internal class Z0822MtGulg : NavmeshCustomization
 {
     public override int Version => 1;
 

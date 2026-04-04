@@ -1,9 +1,10 @@
-﻿using vnavmesh.Navmesh;
+﻿using DotRecast.Recast;
+using vnavmesh.Navmesh;
 
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(363)]
-class Z0363TheLostCityofAmdapor : NavmeshCustomization
+internal class Z0363TheLostCityofAmdapor : NavmeshCustomization
 {
     public override int Version => 1;
 
@@ -13,8 +14,6 @@ class Z0363TheLostCityofAmdapor : NavmeshCustomization
         scene.Meshes.Remove("bg/ffxiv/fst_f1/dun/f1d5/collision/f1d5_a2_door2.pcb");
     }
 
-    public Z0363TheLostCityofAmdapor()
-    {
-        Settings.Partitioning = DotRecast.Recast.RcPartition.MONOTONE;
-    }
+    public Z0363TheLostCityofAmdapor() =>
+        Settings.Partitioning = RcPartition.MONOTONE;
 }

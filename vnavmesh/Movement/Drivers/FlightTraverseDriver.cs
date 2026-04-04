@@ -15,7 +15,7 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
     {
         var segment = (FlightTraverseSegment)context.Segment;
         ConsumeReachedWaypoints(segment, context);
-        if(segment.Waypoints.Count == 0)
+        if (segment.Waypoints.Count == 0)
             return new(CreateIdleCommand(context.Player.Position));
 
         var desired = segment.Waypoints[0];
@@ -32,9 +32,9 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
                 desired,
                 context.MovementAllowed,
                 true,
-                Service.Config.AlignCameraToMovement,
+                context.Config.AlignCameraToMovement,
                 Angle.FromDirectionXZ(delta) + 180.Degrees(),
-                Service.Config.AlignCameraHeight.Degrees(),
+                context.Config.AlignCameraHeight.Degrees(),
                 false
             )
         );
@@ -53,13 +53,13 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
             var current  = context.Player.Position;
             var previous = context.PreviousPosition ?? current;
 
-            if(context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, context.Plan.RequestedDestination) <= context.Plan.DestinationTolerance)
+            if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, context.Plan.RequestedDestination) <= context.Plan.DestinationTolerance)
             {
                 segment.Waypoints.Clear();
                 break;
             }
 
-            if(DriverMath.DistanceToLineSegment(segment.Waypoints[0], current, previous) > context.PathTolerance)
+            if (DriverMath.DistanceToLineSegment(segment.Waypoints[0], current, previous) > context.PathTolerance)
                 break;
 
             segment.Waypoints.RemoveAt(0);

@@ -1,6 +1,4 @@
-using System;
 using Dalamud.Interface.Windowing;
-using Dalamud.Plugin;
 using vnavmesh.Interface;
 
 namespace vnavmesh;
@@ -8,17 +6,15 @@ namespace vnavmesh;
 internal sealed class WindowProvider : IDisposable
 {
     private readonly WindowSystem _windowSystem = new("vnavmesh");
-    private readonly IDalamudPluginInterface _pluginInterface;
-    private readonly MainWindow _mainWindow;
+    private readonly MainWindow   _mainWindow;
 
-    public WindowProvider(IDalamudPluginInterface pluginInterface, MainWindow mainWindow)
+    public WindowProvider(MainWindow mainWindow)
     {
-        _pluginInterface = pluginInterface;
         _mainWindow = mainWindow;
 
         _windowSystem.AddWindow(_mainWindow);
-        _pluginInterface.UiBuilder.Draw += Draw;
-        _pluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
+        Service.PluginInterface.UiBuilder.Draw         += Draw;
+        Service.PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
     }
 
     public bool IsOpen
@@ -29,15 +25,13 @@ internal sealed class WindowProvider : IDisposable
 
     public void Dispose()
     {
-        _pluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
-        _pluginInterface.UiBuilder.Draw -= Draw;
+        Service.PluginInterface.UiBuilder.OpenConfigUi -= OpenConfigUi;
+        Service.PluginInterface.UiBuilder.Draw         -= Draw;
         _windowSystem.RemoveAllWindows();
     }
 
-    private void OpenConfigUi()
-    {
+    private void OpenConfigUi() =>
         IsOpen = true;
-    }
 
     private void Draw()
     {

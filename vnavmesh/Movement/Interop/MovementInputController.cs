@@ -1,4 +1,3 @@
-using System;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud.Game.Config;
@@ -12,13 +11,26 @@ namespace vnavmesh.Movement.Interop;
 [StructLayout(LayoutKind.Explicit, Size = 0x18)]
 public struct PlayerMoveControllerFlyInput
 {
-    [FieldOffset(0x0)]  public float Forward;
-    [FieldOffset(0x4)]  public float Left;
-    [FieldOffset(0x8)]  public float Up;
-    [FieldOffset(0xC)]  public float Turn;
-    [FieldOffset(0x10)] public float u10;
-    [FieldOffset(0x14)] public byte  DirMode;
-    [FieldOffset(0x15)] public byte  HaveBackwardOrStrafe;
+    [FieldOffset(0x0)]
+    public float Forward;
+
+    [FieldOffset(0x4)]
+    public float Left;
+
+    [FieldOffset(0x8)]
+    public float Up;
+
+    [FieldOffset(0xC)]
+    public float Turn;
+
+    [FieldOffset(0x10)]
+    public float u10;
+
+    [FieldOffset(0x14)]
+    public byte DirMode;
+
+    [FieldOffset(0x15)]
+    public byte HaveBackwardOrStrafe;
 }
 
 public unsafe class MovementInputController : IDisposable
@@ -28,7 +40,7 @@ public unsafe class MovementInputController : IDisposable
         get => rmiWalkHook.IsEnabled;
         set
         {
-            if(value)
+            if (value)
             {
                 rmiWalkHook.Enable();
                 rmiFlyHook.Enable();
@@ -89,7 +101,7 @@ public unsafe class MovementInputController : IDisposable
         var movementAllowed = bAdditiveUnk == 0 && rmiWalkIsInputEnabled1(self) && rmiWalkIsInputEnabled2(self);
         UserInput = *sumLeft != 0 || *sumForward != 0;
 
-        if(movementAllowed && (IgnoreUserInput || *sumLeft == 0 && *sumForward == 0) && DirectionToDestination(false) is { } relDir)
+        if (movementAllowed && (IgnoreUserInput || *sumLeft == 0 && *sumForward == 0) && DirectionToDestination(false) is { } relDir)
         {
             var dir = relDir.h.ToDirection();
             *sumLeft    = dir.X;
@@ -102,7 +114,7 @@ public unsafe class MovementInputController : IDisposable
         rmiFlyHook.Original(self, result);
         UserInput = result->Forward != 0 || result->Left != 0 || result->Up != 0;
 
-        if((IgnoreUserInput || result->Forward == 0 && result->Left == 0 && result->Up == 0) && DirectionToDestination(AllowVerticalControl) is { } relDir)
+        if ((IgnoreUserInput || result->Forward == 0 && result->Left == 0 && result->Up == 0) && DirectionToDestination(AllowVerticalControl) is { } relDir)
         {
             var dir = relDir.h.ToDirection();
             result->Forward = dir.Y;
@@ -114,21 +126,22 @@ public unsafe class MovementInputController : IDisposable
     private (Angle h, Angle v)? DirectionToDestination(bool allowVertical)
     {
         var player = Service.ObjectTable.LocalPlayer;
-        if(player == null)
+        if (player == null)
             return null;
 
         var dist = DesiredPosition - player.Position;
-        if(dist.LengthSquared() <= Precision * Precision)
+        if (dist.LengthSquared() <= Precision * Precision)
             return null;
 
         var dirH = Angle.FromDirectionXZ(dist);
         var dirV = allowVertical ? Angle.FromDirection(new(dist.Y, new Vector2(dist.X, dist.Z).Length())) : default;
         var refDir = legacyMode
-            ? ((CameraEx*)CameraManager.Instance()->GetActiveCamera())->DirH.Radians() + 180.Degrees()
-            : player.Rotation.Radians();
+                         ? ((CameraEx*)CameraManager.Instance()->GetActiveCamera())->DirH.Radians() + 180.Degrees()
+                         : player.Rotation.Radians();
         return (dirH - refDir, dirV);
     }
 
     private void OnConfigChanged(object? sender, ConfigChangeEvent evt) => UpdateLegacyMode();
+
     private void UpdateLegacyMode() => legacyMode = Service.GameConfig.UiControl.TryGetUInt("MoveMode", out var mode) && mode == 1;
 }

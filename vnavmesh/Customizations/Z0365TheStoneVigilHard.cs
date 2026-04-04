@@ -3,7 +3,7 @@
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(365)]
-class Z0365TheStoneVigilHard : NavmeshCustomization
+internal class Z0365TheStoneVigilHard : NavmeshCustomization
 {
     public override int Version => 1;
 

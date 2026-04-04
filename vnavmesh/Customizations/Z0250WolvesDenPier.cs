@@ -3,7 +3,7 @@
 namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(250)]
-class Z0250WolvesDenPier : NavmeshCustomization
+internal class Z0250WolvesDenPier : NavmeshCustomization
 {
     public override int Version => 1;
 

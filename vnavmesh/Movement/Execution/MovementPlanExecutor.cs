@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
@@ -18,12 +15,12 @@ namespace vnavmesh.Movement.Execution;
 public sealed class MovementPlanExecutor : IDisposable
 {
     public bool                                    MovementAllowed = true;
-    public float                                   Tolerance => _nextToleranceOverride ?? (IsRunning ? _activePathTolerance : Service.Config.PathTolerance);
+    public float                                   Tolerance => _nextToleranceOverride ?? (IsRunning ? _activePathTolerance : _config.PathTolerance);
     public bool                                    IsRunning => _activePlan != null;
     public List<Vector3>                           Waypoints => CollectWaypoints();
     internal event Action<MovementFailureContext>? OnMovementFailure;
 
-    private readonly IDalamudPluginInterface   _dalamud;
+    private readonly Config                    _config;
     private readonly NavmeshManager            _manager;
     private readonly CameraAlignmentController _camera        = new();
     private readonly MovementInputController   _movement      = new();
@@ -43,12 +40,12 @@ public sealed class MovementPlanExecutor : IDisposable
     private float?                  _nextToleranceOverride;
     private int                     _millisecondsWithNoSignificantMovement;
 
-    public MovementPlanExecutor(IDalamudPluginInterface dalamud, NavmeshManager manager)
+    public MovementPlanExecutor(Config config, NavmeshManager manager)
     {
-        _dalamud                  =  dalamud;
+        _config                   =  config;
         _manager                  =  manager;
-        _sharedPathIsRunning      =  _dalamud.GetOrCreateData<bool[]>(SharedPathTag, () => [false]);
-        _activePathTolerance      =  Service.Config.PathTolerance;
+        _sharedPathIsRunning      =  Service.PluginInterface.GetOrCreateData<bool[]>(SharedPathTag, () => [false]);
+        _activePathTolerance      =  _config.PathTolerance;
         _manager.OnNavmeshChanged += OnNavmeshChanged;
         OnNavmeshChanged(_manager.Navmesh, _manager.Query);
     }
@@ -57,7 +54,7 @@ public sealed class MovementPlanExecutor : IDisposable
     {
         ResetControllers();
         UpdateSharedState(false);
-        _dalamud.RelinquishData(SharedPathTag);
+        Service.PluginInterface.RelinquishData(SharedPathTag);
         _manager.OnNavmeshChanged -= OnNavmeshChanged;
         _camera.Dispose();
         _movement.Dispose();
@@ -66,35 +63,35 @@ public sealed class MovementPlanExecutor : IDisposable
     public void Update(IFramework framework)
     {
         var player = Service.ObjectTable.LocalPlayer;
-        if(player == null)
+        if (player == null)
             return;
 
-        if(_activePlan == null)
+        if (_activePlan == null)
         {
             _previousPosition = player.Position;
             ResetControllers();
             return;
         }
 
-        AdvanceCompletedSegments(framework, player);
+        AdvanceCompletedSegments(player);
 
-        if(_activePlan == null)
+        if (_activePlan == null)
         {
             _previousPosition = player.Position;
             ResetControllers();
             return;
         }
 
-        if(Service.Config.StopOnStuck && _previousPosition.HasValue)
+        if (_config.StopOnStuck && _previousPosition.HasValue)
         {
             var delta    = framework.UpdateDelta.Milliseconds / 1000f;
             var distance = delta > 0 ? Vector3.Distance(player.Position, _previousPosition.Value) / delta : 0;
-            if(distance <= Service.Config.StuckTolerance)
+            if (distance <= _config.StuckTolerance)
                 _millisecondsWithNoSignificantMovement += framework.UpdateDelta.Milliseconds;
             else
                 _millisecondsWithNoSignificantMovement = 0;
 
-            if(_millisecondsWithNoSignificantMovement >= Service.Config.StuckTimeoutMs)
+            if (_millisecondsWithNoSignificantMovement >= _config.StuckTimeoutMs)
             {
                 Fail(MovementFailureReason.Stuck);
                 _previousPosition = player.Position;
@@ -104,17 +101,17 @@ public sealed class MovementPlanExecutor : IDisposable
 
         _previousPosition = player.Position;
 
-        if(Service.Config.CancelMoveOnUserInput && _movement.UserInput)
+        if (_config.CancelMoveOnUserInput && _movement.UserInput)
         {
             Stop();
             return;
         }
 
-        var context = BuildContext(framework, player);
+        var context = BuildContext(player);
         GameplayActivityBridge.ResetAFKTime();
         var update = _activeDriver!.Update(context);
 
-        if(update.Failure is { } failure)
+        if (update.Failure is { } failure)
         {
             Stop();
             OnMovementFailure?.Invoke(failure);
@@ -127,7 +124,7 @@ public sealed class MovementPlanExecutor : IDisposable
     internal void Execute(MovementPlan plan)
     {
         Stop();
-        if(plan.Segments.Count == 0)
+        if (plan.Segments.Count == 0)
             return;
 
         _activePlan                            = plan;
@@ -140,7 +137,7 @@ public sealed class MovementPlanExecutor : IDisposable
 
     public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0, Vector3? goalPosition = null, float? tolerance = null)
     {
-        if(waypoints.Count == 0)
+        if (waypoints.Count == 0)
         {
             Stop();
             return;
@@ -150,7 +147,9 @@ public sealed class MovementPlanExecutor : IDisposable
         var resolvedGoal      = goalPosition ?? waypoints[^1];
         var resolvedTolerance = tolerance    ?? ConsumeNextTolerance();
         var segments          = new List<MovementSegment>();
-        if(requestedMode == MovementMode.Flight && !IsAirborne)
+
+        if (requestedMode == MovementMode.Flight && !IsAirborne)
+        {
             segments.Add
             (
                 new TakeoffSegment
@@ -158,6 +157,7 @@ public sealed class MovementPlanExecutor : IDisposable
                     CompletionTolerance = 0
                 }
             );
+        }
 
         segments.Add
         (
@@ -192,7 +192,7 @@ public sealed class MovementPlanExecutor : IDisposable
         ExitCurrentSegment();
         _activePlan                            = null;
         _activeSegmentIndex                    = 0;
-        _activePathTolerance                   = Service.Config.PathTolerance;
+        _activePathTolerance                   = _config.PathTolerance;
         _millisecondsWithNoSignificantMovement = 0;
         UpdateSharedState(false);
         ResetControllers();
@@ -200,28 +200,26 @@ public sealed class MovementPlanExecutor : IDisposable
 
     public float ConsumeNextTolerance()
     {
-        var tolerance = _nextToleranceOverride ?? Service.Config.PathTolerance;
+        var tolerance = _nextToleranceOverride ?? _config.PathTolerance;
         _nextToleranceOverride = null;
         return tolerance;
     }
 
-    public void SetNextTolerance(float tolerance)
-    {
+    public void SetNextTolerance(float tolerance) =>
         _nextToleranceOverride = MathF.Max(0, tolerance);
-    }
 
-    private void AdvanceCompletedSegments(IFramework framework, IPlayerCharacter player)
+    private void AdvanceCompletedSegments(IPlayerCharacter player)
     {
         while (_activePlan != null)
         {
-            var context = BuildContext(framework, player);
-            if(!_activeDriver!.ShouldAdvance(context))
+            var context = BuildContext(player);
+            if (!_activeDriver!.ShouldAdvance(context))
                 return;
 
             ExitCurrentSegment();
             _activeSegmentIndex++;
 
-            if(_activeSegmentIndex >= _activePlan.Segments.Count)
+            if (_activeSegmentIndex >= _activePlan.Segments.Count)
             {
                 Stop();
                 return;
@@ -233,7 +231,7 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private void EnterCurrentSegment()
     {
-        if(_activePlan == null)
+        if (_activePlan == null)
             return;
 
         _activeDriver        = ResolveDriver(_activePlan.Segments[_activeSegmentIndex].Kind);
@@ -243,17 +241,17 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private void ExitCurrentSegment()
     {
-        if(_activePlan == null || _activeDriver == null || _activeSegmentIndex >= _activePlan.Segments.Count)
+        if (_activePlan == null || _activeDriver == null || _activeSegmentIndex >= _activePlan.Segments.Count)
             return;
 
         _activeDriver.Exit(BuildContextForCurrentSegment());
         _activeDriver = null;
     }
 
-    private MovementExecutionContext BuildContext(IFramework framework, IPlayerCharacter player) =>
+    private MovementExecutionContext BuildContext(IPlayerCharacter player) =>
         new()
         {
-            Framework        = framework,
+            Config           = _config,
             Player           = player,
             Plan             = _activePlan!,
             SegmentIndex     = _activeSegmentIndex,
@@ -268,7 +266,7 @@ public sealed class MovementPlanExecutor : IDisposable
         var player = Service.ObjectTable.LocalPlayer ?? throw new InvalidOperationException("本地玩家不存在，无法构建移动上下文");
         return new()
         {
-            Framework        = Service.Framework,
+            Config           = _config,
             Player           = player,
             Plan             = _activePlan!,
             SegmentIndex     = _activeSegmentIndex,
@@ -298,10 +296,10 @@ public sealed class MovementPlanExecutor : IDisposable
         _camera.DesiredAzimuth  = command.DesiredAzimuth;
         _camera.DesiredAltitude = command.DesiredAltitude;
 
-        if(command.RequestJump)
+        if (command.RequestJump)
             ExecuteJump();
 
-        if(!command.MovementEnabled)
+        if (!command.MovementEnabled)
             _movement.DesiredPosition = currentPosition;
     }
 
@@ -310,13 +308,13 @@ public sealed class MovementPlanExecutor : IDisposable
         _movement.Enabled = false;
         _camera.Enabled   = false;
         _camera.SpeedH    = _camera.SpeedV = default;
-        if(Service.ObjectTable.LocalPlayer is { } player)
+        if (Service.ObjectTable.LocalPlayer is { } player)
             _movement.DesiredPosition = player.Position;
     }
 
     private void Fail(MovementFailureReason reason)
     {
-        if(_activePlan == null)
+        if (_activePlan == null)
             return;
 
         var activeWaypoint = ResolveActiveWaypoint();
@@ -335,11 +333,11 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private Vector3 ResolveActiveWaypoint()
     {
-        if(_activePlan == null)
+        if (_activePlan == null)
             return default;
 
         for (var i = _activeSegmentIndex; i < _activePlan.Segments.Count; i++)
-            if(_activePlan.Segments[i].Waypoints.Count > 0)
+            if (_activePlan.Segments[i].Waypoints.Count > 0)
                 return _activePlan.Segments[i].Waypoints[0];
 
         return _activePlan.FinalDestination;
@@ -347,7 +345,7 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private List<Vector3> CollectWaypoints()
     {
-        if(_activePlan == null)
+        if (_activePlan == null)
             return [];
 
         return [.. _activePlan.Segments.Skip(_activeSegmentIndex).SelectMany(segment => segment.Waypoints)];
@@ -355,21 +353,20 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private unsafe void ExecuteJump()
     {
-        if(Service.Condition[ConditionFlag.Diving])
+        if (Service.Condition[ConditionFlag.Diving])
             return;
 
-        if(DateTime.Now >= _nextJump)
+        if (DateTime.Now >= _nextJump)
         {
             ActionManager.Instance()->UseAction(ActionType.GeneralAction, 2);
             _nextJump = DateTime.Now.AddMilliseconds(100);
         }
     }
 
-    private void OnNavmeshChanged(Navmesh.Navmesh? navmesh, NavmeshQuery? query)
-    {
+    private void OnNavmeshChanged(Navmesh.Navmesh? navmesh, NavmeshQuery? query) =>
         Stop();
-    }
 
-    private        void UpdateSharedState(bool isRunning) => _sharedPathIsRunning[0] = isRunning;
-    private static bool IsAirborne                        => Service.Condition[ConditionFlag.InFlight] || Service.Condition[ConditionFlag.Diving];
+    private void UpdateSharedState(bool isRunning) => _sharedPathIsRunning[0] = isRunning;
+
+    private static bool IsAirborne => Service.Condition[ConditionFlag.InFlight] || Service.Condition[ConditionFlag.Diving];
 }

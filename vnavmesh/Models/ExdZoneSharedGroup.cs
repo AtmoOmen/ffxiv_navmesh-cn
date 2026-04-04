@@ -1,41 +1,42 @@
 ﻿using System.Runtime.InteropServices;
+using Lumina.Excel.Sheets;
 
 namespace vnavmesh.Models;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct ExdZoneSharedGroup
 {
-    uint LGBSharedGroup;
-    uint RequirementRow0;
-    uint RequirementRow1;
-    uint RequirementRow2;
-    uint RequirementRow3;
-    uint RequirementRow4;
-    uint RequirementRow5;
-    uint Unknown0;
-    uint RequirementQuestSequence0;
-    uint RequirementQuestSequence1;
-    uint RequirementQuestSequence2;
-    uint RequirementQuestSequence3;
-    uint RequirementQuestSequence4;
-    uint RequirementQuestSequence5;
-    uint Unknown1;
-    byte RequirementType0;
-    byte RequirementType1;
-    byte RequirementType2;
-    byte RequirementType3;
-    byte RequirementType4;
-    byte RequirementType5;
-    byte Unknown8;
-    byte Unknown9;
-    byte Unknown10;
-    byte Unknown11;
-    byte Unknown12;
-    byte Unknown13;
-    byte Unknown14;
-    byte Unknown15;
+    private uint LGBSharedGroup;
+    private uint RequirementRow0;
+    private uint RequirementRow1;
+    private uint RequirementRow2;
+    private uint RequirementRow3;
+    private uint RequirementRow4;
+    private uint RequirementRow5;
+    private uint Unknown0;
+    private uint RequirementQuestSequence0;
+    private uint RequirementQuestSequence1;
+    private uint RequirementQuestSequence2;
+    private uint RequirementQuestSequence3;
+    private uint RequirementQuestSequence4;
+    private uint RequirementQuestSequence5;
+    private uint Unknown1;
+    private byte RequirementType0;
+    private byte RequirementType1;
+    private byte RequirementType2;
+    private byte RequirementType3;
+    private byte RequirementType4;
+    private byte RequirementType5;
+    private byte Unknown8;
+    private byte Unknown9;
+    private byte Unknown10;
+    private byte Unknown11;
+    private byte Unknown12;
+    private byte Unknown13;
+    private byte Unknown14;
+    private byte Unknown15;
 
-    public static implicit operator ExdZoneSharedGroup(Lumina.Excel.Sheets.ZoneSharedGroup sg) => new()
+    public static implicit operator ExdZoneSharedGroup(ZoneSharedGroup sg) => new()
     {
         LGBSharedGroup            = sg.LGBSharedGroup,
         RequirementRow0           = sg.RequirementRow[0].RowId,
@@ -65,6 +66,6 @@ public struct ExdZoneSharedGroup
         Unknown12                 = sg.Unknown12 ? (byte)1 : (byte)0,
         Unknown13                 = sg.Unknown13 ? (byte)1 : (byte)0,
         Unknown14                 = sg.Unknown14 ? (byte)1 : (byte)0,
-        Unknown15                 = sg.Unknown15 ? (byte)1 : (byte)0,
+        Unknown15                 = sg.Unknown15 ? (byte)1 : (byte)0
     };
 }

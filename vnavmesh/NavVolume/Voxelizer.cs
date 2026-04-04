@@ -1,4 +1,3 @@
-using System;
 using System.Numerics;
 
 namespace vnavmesh.NavVolume;
@@ -12,7 +11,7 @@ public class Voxelizer
     public int NumZ;
     public int NumW => _emptyWords == null ? 1 : 2;
 
-    private readonly ulong[] _solidWords;
+    private readonly ulong[]  _solidWords;
     private readonly ulong[]? _emptyWords;
 
     public Voxelizer(int nx, int ny, int nz, bool partial = false)
@@ -24,14 +23,14 @@ public class Voxelizer
         NumY = ny;
         NumZ = nz;
 
-        var numCells = nx * ny * nz;
-        var wordCount = (numCells + 63) >> 6;
+        var numCells  = nx * ny * nz;
+        var wordCount = numCells + 63 >> 6;
         _solidWords = GC.AllocateUninitializedArray<ulong>(wordCount);
         if (partial)
             _emptyWords = GC.AllocateUninitializedArray<ulong>(wordCount);
     }
 
-    public int VoxelToIndex(int x, int y, int z) => ((z * NumX) + x) * NumY + y;
+    public int VoxelToIndex(int x, int y, int z) => (z * NumX + x) * NumY + y;
 
     public (bool solid, bool empty) Get(int idx)
     {
@@ -45,37 +44,36 @@ public class Voxelizer
     public (bool solid, bool empty) ClassifyRegion(int x0, int y0, int z0, int sizeX, int sizeY, int sizeZ)
     {
         var anySolid = false;
+
         if (_emptyWords == null)
         {
             var allSolid = true;
-            for (int z = 0; z < sizeZ; ++z)
+
+            for (var z = 0; z < sizeZ; ++z)
+            for (var x = 0; x < sizeX; ++x)
             {
-                for (int x = 0; x < sizeX; ++x)
-                {
-                    var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-                    var segmentAnySolid = RangeAnySet(_solidWords, startIndex, sizeY);
-                    anySolid |= segmentAnySolid;
-                    var segmentAllSolid = RangeAllSet(_solidWords, startIndex, sizeY);
-                    allSolid &= segmentAllSolid;
-                    if (anySolid && !allSolid)
-                        return (true, true);
-                }
+                var startIndex      = VoxelToIndex(x0 + x, y0, z0 + z);
+                var segmentAnySolid = RangeAnySet(_solidWords, startIndex, sizeY);
+                anySolid |= segmentAnySolid;
+                var segmentAllSolid = RangeAllSet(_solidWords, startIndex, sizeY);
+                allSolid &= segmentAllSolid;
+                if (anySolid && !allSolid)
+                    return (true, true);
             }
 
             return anySolid ? (true, !allSolid) : (false, true);
         }
 
         var anyEmpty = false;
-        for (int z = 0; z < sizeZ; ++z)
+
+        for (var z = 0; z < sizeZ; ++z)
+        for (var x = 0; x < sizeX; ++x)
         {
-            for (int x = 0; x < sizeX; ++x)
-            {
-                var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-                anySolid |= RangeAnySet(_solidWords, startIndex, sizeY);
-                anyEmpty |= RangeAnySet(_emptyWords, startIndex, sizeY);
-                if (anySolid && anyEmpty)
-                    return (true, true);
-            }
+            var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
+            anySolid |= RangeAnySet(_solidWords, startIndex, sizeY);
+            anyEmpty |= RangeAnySet(_emptyWords, startIndex, sizeY);
+            if (anySolid && anyEmpty)
+                return (true, true);
         }
 
         return (anySolid, anyEmpty);
@@ -101,22 +99,19 @@ public class Voxelizer
         var shiftX = BitOperations.Log2((uint)dx);
         var shiftY = BitOperations.Log2((uint)dy);
         var shiftZ = BitOperations.Log2((uint)dz);
-        var idx = 0;
-        for (int z = 0; z < NumZ; ++z)
+        var idx    = 0;
+
+        for (var z = 0; z < NumZ; ++z)
+        for (var x = 0; x < NumX; ++x)
+        for (var y = 0; y < NumY; ++y, ++idx)
         {
-            for (int x = 0; x < NumX; ++x)
-            {
-                for (int y = 0; y < NumY; ++y, ++idx)
-                {
-                    var solid = GetBit(_solidWords, idx);
-                    var empty = _emptyWords != null ? GetBit(_emptyWords, idx) : !solid;
-                    var resIndex = result.VoxelToIndex(x >> shiftX, y >> shiftY, z >> shiftZ);
-                    if (solid)
-                        SetBit(result._solidWords, resIndex);
-                    if (empty && result._emptyWords != null)
-                        SetBit(result._emptyWords, resIndex);
-                }
-            }
+            var solid    = GetBit(_solidWords, idx);
+            var empty    = _emptyWords != null ? GetBit(_emptyWords, idx) : !solid;
+            var resIndex = result.VoxelToIndex(x >> shiftX, y >> shiftY, z >> shiftZ);
+            if (solid)
+                SetBit(result._solidWords, resIndex);
+            if (empty && result._emptyWords != null)
+                SetBit(result._emptyWords, resIndex);
         }
     }
 
@@ -130,50 +125,52 @@ public class Voxelizer
     private static bool GetBit(ulong[] words, int index)
     {
         var wordIndex = index >> 6;
-        var bitMask = 1UL << (index & 63);
+        var bitMask   = 1UL   << (index & 63);
         return (words[wordIndex] & bitMask) != 0;
     }
 
     private static void SetBit(ulong[] words, int index)
     {
         var wordIndex = index >> 6;
-        var bitMask = 1UL << (index & 63);
+        var bitMask   = 1UL   << (index & 63);
         words[wordIndex] |= bitMask;
     }
 
     private static void SetRange(ulong[] words, int startIndex, int length)
     {
-        var index = startIndex;
+        var index     = startIndex;
         var remaining = length;
+
         while (remaining > 0)
         {
             var wordIndex = index >> 6;
             var bitOffset = index & 63;
-            var bitCount = Math.Min(64 - bitOffset, remaining);
+            var bitCount  = Math.Min(64 - bitOffset, remaining);
             var mask = bitCount == 64
-                ? ulong.MaxValue
-                : ((1UL << bitCount) - 1) << bitOffset;
+                           ? ulong.MaxValue
+                           : (1UL << bitCount) - 1 << bitOffset;
             words[wordIndex] |= mask;
-            index += bitCount;
-            remaining -= bitCount;
+            index            += bitCount;
+            remaining        -= bitCount;
         }
     }
 
     private static bool RangeAnySet(ulong[] words, int startIndex, int length)
     {
-        var index = startIndex;
+        var index     = startIndex;
         var remaining = length;
+
         while (remaining > 0)
         {
             var wordIndex = index >> 6;
             var bitOffset = index & 63;
-            var bitCount = Math.Min(64 - bitOffset, remaining);
+            var bitCount  = Math.Min(64 - bitOffset, remaining);
             var mask = bitCount == 64
-                ? ulong.MaxValue
-                : ((1UL << bitCount) - 1) << bitOffset;
+                           ? ulong.MaxValue
+                           : (1UL << bitCount) - 1 << bitOffset;
             if ((words[wordIndex] & mask) != 0)
                 return true;
-            index += bitCount;
+            index     += bitCount;
             remaining -= bitCount;
         }
 
@@ -182,19 +179,20 @@ public class Voxelizer
 
     private static bool RangeAllSet(ulong[] words, int startIndex, int length)
     {
-        var index = startIndex;
+        var index     = startIndex;
         var remaining = length;
+
         while (remaining > 0)
         {
             var wordIndex = index >> 6;
             var bitOffset = index & 63;
-            var bitCount = Math.Min(64 - bitOffset, remaining);
+            var bitCount  = Math.Min(64 - bitOffset, remaining);
             var mask = bitCount == 64
-                ? ulong.MaxValue
-                : ((1UL << bitCount) - 1) << bitOffset;
+                           ? ulong.MaxValue
+                           : (1UL << bitCount) - 1 << bitOffset;
             if ((words[wordIndex] & mask) != mask)
                 return false;
-            index += bitCount;
+            index     += bitCount;
             remaining -= bitCount;
         }
 

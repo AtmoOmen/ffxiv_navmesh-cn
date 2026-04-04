@@ -1,9 +1,10 @@
-﻿using System;
-
-namespace vnavmesh.Utils;
+﻿namespace vnavmesh.Utils;
 
 // usage: using var x = new OnDispose(action);
-public readonly record struct OnDispose(Action A) : IDisposable
+public readonly record struct OnDispose
+(
+    Action A
+) : IDisposable
 {
     public void Dispose() => A();
 }

@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.InteropServices;
 using Dalamud.Hooking;
 using Dalamud.Utility.Signatures;
@@ -10,14 +9,29 @@ namespace vnavmesh.Movement.Interop;
 [StructLayout(LayoutKind.Explicit, Size = 0x2B0)]
 public struct CameraEx
 {
-    [FieldOffset(0x140)] public float DirH;
-    [FieldOffset(0x144)] public float DirV;
-    [FieldOffset(0x148)] public float InputDeltaHAdjusted;
-    [FieldOffset(0x14C)] public float InputDeltaVAdjusted;
-    [FieldOffset(0x150)] public float InputDeltaH;
-    [FieldOffset(0x154)] public float InputDeltaV;
-    [FieldOffset(0x158)] public float DirVMin;
-    [FieldOffset(0x15C)] public float DirVMax;
+    [FieldOffset(0x140)]
+    public float DirH;
+
+    [FieldOffset(0x144)]
+    public float DirV;
+
+    [FieldOffset(0x148)]
+    public float InputDeltaHAdjusted;
+
+    [FieldOffset(0x14C)]
+    public float InputDeltaVAdjusted;
+
+    [FieldOffset(0x150)]
+    public float InputDeltaH;
+
+    [FieldOffset(0x154)]
+    public float InputDeltaV;
+
+    [FieldOffset(0x158)]
+    public float DirVMin;
+
+    [FieldOffset(0x15C)]
+    public float DirVMax;
 }
 
 public unsafe class CameraAlignmentController : IDisposable
@@ -27,11 +41,11 @@ public unsafe class CameraAlignmentController : IDisposable
         get => rmiCameraHook.IsEnabled;
         set
         {
-            if(value == rmiCameraHook.IsEnabled)
+            if (value == rmiCameraHook.IsEnabled)
                 return;
 
             ResetSmoothing();
-            if(value)
+            if (value)
                 rmiCameraHook.Enable();
             else
                 rmiCameraHook.Disable();
@@ -61,10 +75,8 @@ public unsafe class CameraAlignmentController : IDisposable
         Service.Log.Information($"RMICamera address: 0x{rmiCameraHook.Address:X}");
     }
 
-    public void Dispose()
-    {
+    public void Dispose() =>
         rmiCameraHook.Dispose();
-    }
 
     private void ResetSmoothing()
     {
@@ -76,10 +88,10 @@ public unsafe class CameraAlignmentController : IDisposable
     {
         rmiCameraHook.Original(self, inputMode, speedH, speedV);
 
-        if(IgnoreUserInput || inputMode == 0)
+        if (IgnoreUserInput || inputMode == 0)
         {
             var dt = Framework.Instance()->FrameDeltaTime;
-            if(dt <= 0)
+            if (dt <= 0)
                 return;
 
             var deltaH = (DesiredAzimuth  - self->DirH.Radians()).Normalized();
@@ -87,7 +99,7 @@ public unsafe class CameraAlignmentController : IDisposable
             var maxH   = SpeedH.Rad * dt;
             var maxV   = SpeedV.Rad * dt;
 
-            if(!EnableSmoothing || SmoothTimeH <= 0 && SmoothTimeV <= 0)
+            if (!EnableSmoothing || SmoothTimeH <= 0 && SmoothTimeV <= 0)
             {
                 self->InputDeltaH = Math.Clamp(deltaH.Rad, -maxH, maxH);
                 self->InputDeltaV = Math.Clamp(deltaV.Rad, -maxV, maxV);
@@ -106,7 +118,7 @@ public unsafe class CameraAlignmentController : IDisposable
 
     private static float SmoothDamp(float current, float target, ref float currentVelocity, float smoothTime, float maxSpeed, float deltaTime)
     {
-        if(smoothTime <= 0)
+        if (smoothTime <= 0)
             return target;
 
         smoothTime = Math.Max(0.0001f, smoothTime);
@@ -126,7 +138,7 @@ public unsafe class CameraAlignmentController : IDisposable
         var origMinusCurrent = originalTo - current;
         var outMinusOrig     = output     - originalTo;
 
-        if(origMinusCurrent > 0 == outMinusOrig > 0)
+        if (origMinusCurrent > 0 == outMinusOrig > 0)
         {
             output          = originalTo;
             currentVelocity = (output - originalTo) / deltaTime;

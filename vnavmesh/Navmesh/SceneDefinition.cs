@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Numerics;
+﻿using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine.Layer;
 using vnavmesh.Utils;
@@ -34,28 +33,21 @@ public class SceneDefinition
 
         var filter = LayoutUtil.FindFilter(layout);
         TerritoryID = filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId;
-        CFCID = filter != null ? filter->CfcId : layout->CfcId;
+        CFCID       = filter != null ? filter->CfcId : layout->CfcId;
         ZoneSGs.AddRange(LayoutUtil.GetZoneSharedGroupsEnabled(TerritoryID));
 
         foreach (var (k, v) in layout->Layers)
         {
             if (v.Value->FestivalId != 0)
-            {
-                FestivalLayers.Add(((uint)v.Value->FestivalSubId << 16) | v.Value->FestivalId);
-            }
+                FestivalLayers.Add((uint)v.Value->FestivalSubId << 16 | v.Value->FestivalId);
         }
 
-        foreach (var (k, v) in layout->CrcToAnalyticShapeData)
-        {
-            AnalyticShapes[k.Key] = (v.Transform, v.BoundsMin, v.BoundsMax);
-        }
+        foreach (var (k, v) in layout->CrcToAnalyticShapeData) AnalyticShapes[k.Key] = (v.Transform, v.BoundsMin, v.BoundsMax);
 
-        foreach (var (k, v) in layout->Terrains)
-        {
-            Terrains.Add($"{v.Value->PathString}/collision");
-        }
+        foreach (var (k, v) in layout->Terrains) Terrains.Add($"{v.Value->PathString}/collision");
 
-        var bgParts = LayoutUtil.FindPtr(ref layout->InstancesByType, InstanceType.BgPart);
+        var bgParts = layout->InstancesByType.FindPtr(InstanceType.BgPart);
+
         if (bgParts != null)
         {
             foreach (var (k, v) in *bgParts)
@@ -66,18 +58,27 @@ public class SceneDefinition
 
                 if (cast->AnalyticShapeDataCrc != 0)
                 {
-                    BgParts.Add((k, *v.Value->GetTransformImpl(), cast->AnalyticShapeDataCrc, ((ulong)cast->CollisionMaterialIdHigh << 32) | cast->CollisionMaterialIdLow, ((ulong)cast->CollisionMaterialMaskHigh << 32) | cast->CollisionMaterialMaskLow, true));
+                    BgParts.Add
+                    (
+                        (k, *v.Value->GetTransformImpl(), cast->AnalyticShapeDataCrc, (ulong)cast->CollisionMaterialIdHigh << 32 | cast->CollisionMaterialIdLow,
+                            (ulong)cast->CollisionMaterialMaskHigh << 32 | cast->CollisionMaterialMaskLow, true)
+                    );
                 }
                 else if (cast->CollisionMeshPathCrc != 0)
                 {
                     if (!MeshPaths.ContainsKey(cast->CollisionMeshPathCrc))
-                        MeshPaths[cast->CollisionMeshPathCrc] = LayoutUtil.ReadString(LayoutUtil.FindPtr(ref layout->CrcToPath, cast->CollisionMeshPathCrc));
-                    BgParts.Add((k, *v.Value->GetTransformImpl(), cast->CollisionMeshPathCrc, ((ulong)cast->CollisionMaterialIdHigh << 32) | cast->CollisionMaterialIdLow, ((ulong)cast->CollisionMaterialMaskHigh << 32) | cast->CollisionMaterialMaskLow, false));
+                        MeshPaths[cast->CollisionMeshPathCrc] = LayoutUtil.ReadString(layout->CrcToPath.FindPtr(cast->CollisionMeshPathCrc));
+                    BgParts.Add
+                    (
+                        (k, *v.Value->GetTransformImpl(), cast->CollisionMeshPathCrc, (ulong)cast->CollisionMaterialIdHigh << 32 | cast->CollisionMaterialIdLow,
+                            (ulong)cast->CollisionMaterialMaskHigh << 32 | cast->CollisionMaterialMaskLow, false)
+                    );
                 }
             }
         }
 
-        var colliders = LayoutUtil.FindPtr(ref layout->InstancesByType, InstanceType.CollisionBox);
+        var colliders = layout->InstancesByType.FindPtr(InstanceType.CollisionBox);
+
         if (colliders != null)
         {
             foreach (var (k, v) in *colliders)
@@ -87,18 +88,21 @@ public class SceneDefinition
                     continue;
 
                 if (cast->PcbPathCrc != 0 && !MeshPaths.ContainsKey(cast->PcbPathCrc))
-                    MeshPaths[cast->PcbPathCrc] = LayoutUtil.ReadString(LayoutUtil.FindPtr(ref layout->CrcToPath, cast->PcbPathCrc));
-                Colliders.Add((k, cast->Transform, cast->PcbPathCrc, ((ulong)cast->MaterialIdHigh << 32) | cast->MaterialIdLow, ((ulong)cast->MaterialMaskHigh << 32) | cast->MaterialMaskLow, cast->TriggerBoxLayoutInstance.Type));
+                    MeshPaths[cast->PcbPathCrc] = LayoutUtil.ReadString(layout->CrcToPath.FindPtr(cast->PcbPathCrc));
+                Colliders.Add
+                (
+                    (k, cast->Transform, cast->PcbPathCrc, (ulong)cast->MaterialIdHigh << 32 | cast->MaterialIdLow,
+                        (ulong)cast->MaterialMaskHigh                                  << 32 | cast->MaterialMaskLow, cast->TriggerBoxLayoutInstance.Type)
+                );
             }
         }
 
-        var exitRanges = LayoutUtil.FindPtr(ref layout->InstancesByType, InstanceType.ExitRange);
+        var exitRanges = layout->InstancesByType.FindPtr(InstanceType.ExitRange);
+
         if (exitRanges != null)
         {
             foreach (var (k, v) in *exitRanges)
-            {
                 ExitRanges.Add((k, *v.Value->GetTransformImpl()));
-            }
         }
     }
 }

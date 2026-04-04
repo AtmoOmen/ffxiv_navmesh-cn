@@ -1,10 +1,5 @@
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Numerics;
-using System.Threading;
-using System.Threading.Tasks;
 using DotRecast.Core;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
@@ -21,35 +16,44 @@ namespace vnavmesh.Navmesh;
 // individual tiles can be built concurrently
 public class NavmeshBuilder
 {
-    public record struct Intermediates(RcHeightfield SolidHeightfield, RcCompactHeightfield CompactHeightfield, RcContourSet ContourSet, RcPolyMesh PolyMesh, RcPolyMeshDetail? DetailMesh);
+    private readonly Config _config;
+
+    public record struct Intermediates
+    (
+        RcHeightfield        SolidHeightfield,
+        RcCompactHeightfield CompactHeightfield,
+        RcContourSet         ContourSet,
+        RcPolyMesh           PolyMesh,
+        RcPolyMeshDetail?    DetailMesh
+    );
 
     public sealed class BuildPhaseSummary
     {
-        public required string Name { get; init; }
-        public required long TotalTicks { get; init; }
-        public required long AverageTicks { get; init; }
-        public required long MaxTicks { get; init; }
-        public required int SlowestTileX { get; init; }
-        public required int SlowestTileZ { get; init; }
+        public required string Name         { get; init; }
+        public required long   TotalTicks   { get; init; }
+        public required long   AverageTicks { get; init; }
+        public required long   MaxTicks     { get; init; }
+        public required int    SlowestTileX { get; init; }
+        public required int    SlowestTileZ { get; init; }
     }
 
     public sealed class SlowTileSummary
     {
-        public required int TileX { get; init; }
-        public required int TileZ { get; init; }
-        public required long TotalTicks { get; init; }
-        public required int GeometryInstanceCount { get; init; }
-        public required int TerrainInstanceCount { get; init; }
-        public required int PolyCount { get; init; }
-        public required int VertCount { get; init; }
-        public required int DetailTriCount { get; init; }
+        public required int  TileX                 { get; init; }
+        public required int  TileZ                 { get; init; }
+        public required long TotalTicks            { get; init; }
+        public required int  GeometryInstanceCount { get; init; }
+        public required int  TerrainInstanceCount  { get; init; }
+        public required int  PolyCount             { get; init; }
+        public required int  VertCount             { get; init; }
+        public required int  DetailTriCount        { get; init; }
     }
 
     public sealed class BuildTelemetrySummary
     {
-        public required long ParallelTicks { get; init; }
-        public required IReadOnlyList<BuildPhaseSummary> Phases { get; init; }
-        public required IReadOnlyList<SlowTileSummary> SlowTiles { get; init; }
+        public required long                             ParallelTicks { get; init; }
+        public required IReadOnlyList<BuildPhaseSummary> Phases        { get; init; }
+        public required IReadOnlyList<SlowTileSummary>   SlowTiles     { get; init; }
     }
 
     private enum BuildPhase
@@ -72,8 +76,8 @@ public class NavmeshBuilder
 
     private sealed class BuildThreadScratch
     {
-        public long[] PhaseTicks { get; } = new long[(int)BuildPhase.Count];
-        public Voxelizer? VolumeRoot;
+        public long[]                           PhaseTicks { get; } = new long[(int)BuildPhase.Count];
+        public Voxelizer?                       VolumeRoot;
         public NavmeshRasterizer.ScratchBuffers Rasterizer { get; } = new();
 
         public void Reset()
@@ -87,24 +91,24 @@ public class NavmeshBuilder
     {
         public required int GeometryStart { get; init; }
         public required int GeometryCount { get; init; }
-        public required int TerrainStart { get; init; }
-        public required int TerrainCount { get; init; }
+        public required int TerrainStart  { get; init; }
+        public required int TerrainCount  { get; init; }
     }
 
     private sealed class TileBuildResult
     {
-        public required int TileX { get; init; }
-        public required int TileZ { get; init; }
-        public required long TotalTicks { get; init; }
-        public required long[] PhaseTicks { get; init; }
-        public required int GeometryInstanceCount { get; init; }
-        public required int TerrainInstanceCount { get; init; }
-        public required int PolyCount { get; init; }
-        public required int VertCount { get; init; }
-        public required int DetailTriCount { get; init; }
-        public DtMeshData? MeshData;
-        public VoxelMap.RootColumnBuildResult? VolumeColumn;
-        public RcBuilderResult? DebugResult;
+        public required int                             TileX                 { get; init; }
+        public required int                             TileZ                 { get; init; }
+        public required long                            TotalTicks            { get; init; }
+        public required long[]                          PhaseTicks            { get; init; }
+        public required int                             GeometryInstanceCount { get; init; }
+        public required int                             TerrainInstanceCount  { get; init; }
+        public required int                             PolyCount             { get; init; }
+        public required int                             VertCount             { get; init; }
+        public required int                             DetailTriCount        { get; init; }
+        public          DtMeshData?                     MeshData;
+        public          VoxelMap.RootColumnBuildResult? VolumeColumn;
+        public          RcBuilderResult?                DebugResult;
     }
 
     private static readonly string[] _phaseNames =
@@ -124,45 +128,46 @@ public class NavmeshBuilder
         "Recast: 细节网格"
     ];
 
-    public NavmeshSettings Settings;
-    public SceneExtractor Scene;
-    public Vector3 BoundsMin;
-    public Vector3 BoundsMax;
-    public int NumTilesX;
-    public int NumTilesZ;
-    public bool Flyable;
-    public string BuildSignature;
-    public Navmesh Navmesh; // should not be accessed while building tiles
+    public NavmeshSettings        Settings;
+    public SceneExtractor         Scene;
+    public Vector3                BoundsMin;
+    public Vector3                BoundsMax;
+    public int                    NumTilesX;
+    public int                    NumTilesZ;
+    public bool                   Flyable;
+    public string                 BuildSignature;
+    public Navmesh                Navmesh; // should not be accessed while building tiles
     public BuildTelemetrySummary? LastBuildTelemetry { get; private set; }
 
-    private readonly NavmeshCustomization _customization;
-    private readonly TileBuildInput[] _tileInputs;
-    private readonly int[] _tileBuildOrder;
+    private readonly NavmeshCustomization                                               _customization;
+    private readonly TileBuildInput[]                                                   _tileInputs;
+    private readonly int[]                                                              _tileBuildOrder;
     private readonly (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] _geometryInstances;
     private readonly (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] _terrainInstances;
-    private readonly ThreadLocal<BuildThreadScratch> _threadScratch = new(() => new(), true);
-    private readonly float _tileWidthWorld;
-    private readonly float _tileHeightWorld;
-    private readonly float _invTileWidthWorld;
-    private readonly float _invTileHeightWorld;
+    private readonly ThreadLocal<BuildThreadScratch>                                    _threadScratch = new(() => new(), true);
+    private readonly float                                                              _tileWidthWorld;
+    private readonly float                                                              _tileHeightWorld;
+    private readonly float                                                              _invTileWidthWorld;
+    private readonly float                                                              _invTileHeightWorld;
 
-    private int _walkableClimbVoxels;
-    private int _walkableHeightVoxels;
-    private int _walkableRadiusVoxels;
+    private int   _walkableClimbVoxels;
+    private int   _walkableHeightVoxels;
+    private int   _walkableRadiusVoxels;
     private float _walkableNormalThreshold;
-    private int _borderSizeVoxels;
+    private int   _borderSizeVoxels;
     private float _borderSizeWorld;
-    private int _tileSizeXVoxels;
-    private int _tileSizeZVoxels;
-    private int _voxelizerNumX = 1;
-    private int _voxelizerNumY = 1;
-    private int _voxelizerNumZ = 1;
+    private int   _tileSizeXVoxels;
+    private int   _tileSizeZVoxels;
+    private int   _voxelizerNumX = 1;
+    private int   _voxelizerNumY = 1;
+    private int   _voxelizerNumZ = 1;
 
-    public NavmeshBuilder(SceneDefinition scene, NavmeshCustomization customization)
+    public NavmeshBuilder(SceneDefinition scene, NavmeshCustomization customization, Config config)
     {
+        _config  = config;
         Settings = customization.GetBuildSettings(scene);
 
-        Flyable = customization.IsFlyingSupported(scene);
+        Flyable        = customization.IsFlyingSupported(scene);
         BuildSignature = Settings.BuildSignature(Flyable);
         _customization = customization;
 
@@ -179,34 +184,36 @@ public class NavmeshBuilder
 
         var navmeshParams = new DtNavMeshParams
         {
-            orig = BoundsMin.SystemToRecast(),
-            tileWidth = (BoundsMax.X - BoundsMin.X) / NumTilesX,
+            orig       = BoundsMin.SystemToRecast(),
+            tileWidth  = (BoundsMax.X - BoundsMin.X) / NumTilesX,
             tileHeight = (BoundsMax.Z - BoundsMin.Z) / NumTilesZ,
-            maxTiles = NumTilesX * NumTilesZ,
-            maxPolys = 1 << DtNavMesh.DT_POLY_BITS
+            maxTiles   = NumTilesX                   * NumTilesZ,
+            maxPolys   = 1 << DtNavMesh.DT_POLY_BITS
         };
 
-        _tileWidthWorld = navmeshParams.tileWidth;
-        _tileHeightWorld = navmeshParams.tileHeight;
-        _invTileWidthWorld = 1.0f / _tileWidthWorld;
+        _tileWidthWorld     = navmeshParams.tileWidth;
+        _tileHeightWorld    = navmeshParams.tileHeight;
+        _invTileWidthWorld  = 1.0f / _tileWidthWorld;
         _invTileHeightWorld = 1.0f / _tileHeightWorld;
 
         var navmesh = new DtNavMesh(navmeshParams, Settings.PolyMaxVerts);
-        var volume = Flyable ? new VoxelMap(BoundsMin, BoundsMax, Settings.NumTiles) : null;
+        var volume  = Flyable ? new VoxelMap(BoundsMin, BoundsMax, Settings.NumTiles) : null;
         Navmesh = new(customization.Version, BuildSignature, false, navmesh, volume);
 
-        _walkableClimbVoxels = (int)MathF.Floor(Settings.AgentMaxClimb / Settings.CellHeight);
-        _walkableHeightVoxels = (int)MathF.Ceiling(Settings.AgentHeight / Settings.CellHeight);
-        _walkableRadiusVoxels = (int)MathF.Ceiling(Settings.AgentRadius / Settings.CellSize);
+        _walkableClimbVoxels     = (int)MathF.Floor(Settings.AgentMaxClimb / Settings.CellHeight);
+        _walkableHeightVoxels    = (int)MathF.Ceiling(Settings.AgentHeight / Settings.CellHeight);
+        _walkableRadiusVoxels    = (int)MathF.Ceiling(Settings.AgentRadius / Settings.CellSize);
         _walkableNormalThreshold = Settings.AgentMaxSlopeDeg.Degrees().Cos();
-        _borderSizeVoxels = 3 + _walkableRadiusVoxels;
-        _borderSizeWorld = _borderSizeVoxels * Settings.CellSize;
-        _tileSizeXVoxels = (int)MathF.Ceiling(navmeshParams.tileWidth / Settings.CellSize) + 2 * _borderSizeVoxels;
-        _tileSizeZVoxels = (int)MathF.Ceiling(navmeshParams.tileHeight / Settings.CellSize) + 2 * _borderSizeVoxels;
+        _borderSizeVoxels        = 3 + _walkableRadiusVoxels;
+        _borderSizeWorld         = _borderSizeVoxels * Settings.CellSize;
+        _tileSizeXVoxels         = (int)MathF.Ceiling(navmeshParams.tileWidth  / Settings.CellSize) + 2 * _borderSizeVoxels;
+        _tileSizeZVoxels         = (int)MathF.Ceiling(navmeshParams.tileHeight / Settings.CellSize) + 2 * _borderSizeVoxels;
+
         if (volume != null)
         {
             _voxelizerNumY = Settings.NumTiles[0];
-            for (int i = 1; i < Settings.NumTiles.Length; ++i)
+
+            for (var i = 1; i < Settings.NumTiles.Length; ++i)
             {
                 var n = Settings.NumTiles[i];
                 _voxelizerNumX *= n;
@@ -215,12 +222,12 @@ public class NavmeshBuilder
             }
         }
 
-        var bucketTimer = StopWatchTimer.Create();
+        var bucketTimer    = StopWatchTimer.Create();
         var bucketedInputs = BucketTileInputs();
-        _tileInputs = bucketedInputs.Inputs;
-        _tileBuildOrder = bucketedInputs.TileBuildOrder;
+        _tileInputs        = bucketedInputs.Inputs;
+        _tileBuildOrder    = bucketedInputs.TileBuildOrder;
         _geometryInstances = bucketedInputs.GeometryInstances;
-        _terrainInstances = bucketedInputs.TerrainInstances;
+        _terrainInstances  = bucketedInputs.TerrainInstances;
         Service.Log.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
     }
 
@@ -236,23 +243,27 @@ public class NavmeshBuilder
         return MergeBuiltTiles(builtTiles, true);
     }
 
-    private (TileBuildInput[] Inputs, int[] TileBuildOrder, (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] GeometryInstances, (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] TerrainInstances) BucketTileInputs()
+    private (TileBuildInput[] Inputs, int[] TileBuildOrder, (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] GeometryInstances, (
+        SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] TerrainInstances) BucketTileInputs()
     {
-        int tileCount = NumTilesX * NumTilesZ;
+        var tileCount      = NumTilesX * NumTilesZ;
         var geometryCounts = new int[tileCount];
-        var terrainCounts = new int[tileCount];
+        var terrainCounts  = new int[tileCount];
 
         foreach (var mesh in Scene.Meshes.Values)
         {
             foreach (var instance in mesh.Instances)
             {
                 GetTileRange(instance.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
-                var isGeometry = (mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0;
+                var isGeometry =
+                    (mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0;
                 var isTerrain = (mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
-                for (int z = minZ; z <= maxZ; ++z)
+
+                for (var z = minZ; z <= maxZ; ++z)
                 {
                     var rowBase = z * NumTilesX;
-                    for (int x = minX; x <= maxX; ++x)
+
+                    for (var x = minX; x <= maxX; ++x)
                     {
                         var index = rowBase + x;
                         if (isGeometry)
@@ -264,41 +275,47 @@ public class NavmeshBuilder
             }
         }
 
-        var result = new TileBuildInput[tileCount];
+        var result        = new TileBuildInput[tileCount];
         var geometryTotal = 0;
-        var terrainTotal = 0;
-        for (int i = 0; i < tileCount; ++i)
+        var terrainTotal  = 0;
+
+        for (var i = 0; i < tileCount; ++i)
         {
             result[i] = new()
             {
                 GeometryStart = geometryTotal,
                 GeometryCount = geometryCounts[i],
-                TerrainStart = terrainTotal,
-                TerrainCount = terrainCounts[i]
+                TerrainStart  = terrainTotal,
+                TerrainCount  = terrainCounts[i]
             };
             geometryTotal += geometryCounts[i];
-            terrainTotal += terrainCounts[i];
+            terrainTotal  += terrainCounts[i];
         }
 
         var tileBuildOrder = new int[tileCount];
-        for (int i = 0; i < tileCount; ++i)
+        for (var i = 0; i < tileCount; ++i)
             tileBuildOrder[i] = i;
-        Array.Sort(tileBuildOrder, (lhs, rhs) =>
-        {
-            var leftWeight = terrainCounts[lhs] * 32 + geometryCounts[lhs] * 4;
-            var rightWeight = terrainCounts[rhs] * 32 + geometryCounts[rhs] * 4;
-            var compare = rightWeight.CompareTo(leftWeight);
-            return compare != 0 ? compare : lhs.CompareTo(rhs);
-        });
+        Array.Sort
+        (
+            tileBuildOrder,
+            (lhs, rhs) =>
+            {
+                var leftWeight  = terrainCounts[lhs] * 32 + geometryCounts[lhs] * 4;
+                var rightWeight = terrainCounts[rhs] * 32 + geometryCounts[rhs] * 4;
+                var compare     = rightWeight.CompareTo(leftWeight);
+                return compare != 0 ? compare : lhs.CompareTo(rhs);
+            }
+        );
 
         var geometryInstances = new (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[geometryTotal];
-        var terrainInstances = new (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[terrainTotal];
-        var geometryOffsets = new int[tileCount];
-        var terrainOffsets = new int[tileCount];
-        for (int i = 0; i < tileCount; ++i)
+        var terrainInstances  = new (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[terrainTotal];
+        var geometryOffsets   = new int[tileCount];
+        var terrainOffsets    = new int[tileCount];
+
+        for (var i = 0; i < tileCount; ++i)
         {
             geometryOffsets[i] = result[i].GeometryStart;
-            terrainOffsets[i] = result[i].TerrainStart;
+            terrainOffsets[i]  = result[i].TerrainStart;
         }
 
         foreach (var mesh in Scene.Meshes.Values)
@@ -306,12 +323,15 @@ public class NavmeshBuilder
             foreach (var instance in mesh.Instances)
             {
                 GetTileRange(instance.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
-                var isGeometry = (mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0;
+                var isGeometry =
+                    (mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0;
                 var isTerrain = (mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
-                for (int z = minZ; z <= maxZ; ++z)
+
+                for (var z = minZ; z <= maxZ; ++z)
                 {
                     var rowBase = z * NumTilesX;
-                    for (int x = minX; x <= maxX; ++x)
+
+                    for (var x = minX; x <= maxX; ++x)
                     {
                         var index = rowBase + x;
                         if (isGeometry)
@@ -328,18 +348,23 @@ public class NavmeshBuilder
 
     private TileBuildResult[] BuildTileResults(bool captureIntermediates, Action? onTileFinished)
     {
-        int tileCount = NumTilesX * NumTilesZ;
-        int threadCount = ResolveThreadCount();
-        var builtTiles = new TileBuildResult[tileCount];
-        var buildTimer = StopWatchTimer.Create();
+        var tileCount   = NumTilesX * NumTilesZ;
+        var threadCount = ResolveThreadCount();
+        var builtTiles  = new TileBuildResult[tileCount];
+        var buildTimer  = StopWatchTimer.Create();
 
-        Parallel.ForEach(_tileBuildOrder, new ParallelOptions { MaxDegreeOfParallelism = threadCount }, tileIndex =>
-        {
-            int x = tileIndex % NumTilesX;
-            int z = tileIndex / NumTilesX;
-            builtTiles[tileIndex] = BuildTileCore(x, z, _tileInputs[tileIndex], captureIntermediates);
-            onTileFinished?.Invoke();
-        });
+        Parallel.ForEach
+        (
+            _tileBuildOrder,
+            new ParallelOptions { MaxDegreeOfParallelism = threadCount },
+            tileIndex =>
+            {
+                var x = tileIndex % NumTilesX;
+                var z = tileIndex / NumTilesX;
+                builtTiles[tileIndex] = BuildTileCore(x, z, _tileInputs[tileIndex], captureIntermediates);
+                onTileFinished?.Invoke();
+            }
+        );
 
         var parallelDuration = buildTimer.Value();
         LastBuildTelemetry = SummarizeBuildTelemetry(builtTiles, parallelDuration);
@@ -350,10 +375,10 @@ public class NavmeshBuilder
 
     private List<RcBuilderResult> MergeBuiltTiles(IReadOnlyList<TileBuildResult> builtTiles, bool collectIntermediates)
     {
-        var mergeTimer = StopWatchTimer.Create();
+        var                   mergeTimer   = StopWatchTimer.Create();
         List<RcBuilderResult> debugResults = collectIntermediates ? new(builtTiles.Count) : [];
 
-        for (int tileIndex = 0; tileIndex < builtTiles.Count; ++tileIndex)
+        for (var tileIndex = 0; tileIndex < builtTiles.Count; ++tileIndex)
         {
             var built = builtTiles[tileIndex];
             if (built.MeshData != null)
@@ -372,10 +397,11 @@ public class NavmeshBuilder
 
     private static void MergeTileColumn(VoxelMap parent, int x, int z, VoxelMap.RootColumnBuildResult column)
     {
-        var shift = parent.RootTile.Subdivision.Count;
-        int ny = parent.Levels[0].NumCellsY;
+        var shift       = parent.RootTile.Subdivision.Count;
+        var ny          = parent.Levels[0].NumCellsY;
         int parentIndex = parent.Levels[0].VoxelToIndex(x, 0, z);
-        for (int y = 0; y < ny; ++y)
+
+        for (var y = 0; y < ny; ++y)
         {
             var contents = column.Contents[y];
             if ((contents & VoxelMap.VoxelOccupiedBit) == 0)
@@ -386,6 +412,7 @@ public class NavmeshBuilder
 
             parent.RootTile.Contents[parentIndex + y] = contents;
         }
+
         parent.RootTile.Subdivision.AddRange(column.Subdivision);
     }
 
@@ -394,21 +421,40 @@ public class NavmeshBuilder
         var scratch = _threadScratch.Value!;
         scratch.Reset();
         EnsureVolumeScratch(scratch);
-        var totalStart = Stopwatch.GetTimestamp();
-        var telemetry = new RcContext();
+        var totalStart        = Stopwatch.GetTimestamp();
+        var telemetry         = new RcContext();
         var geometryInstances = _geometryInstances.AsSpan(input.GeometryStart, input.GeometryCount);
-        var terrainInstances = _terrainInstances.AsSpan(input.TerrainStart, input.TerrainCount);
+        var terrainInstances  = _terrainInstances.AsSpan(input.TerrainStart, input.TerrainCount);
 
-        var tileBoundsMin = new Vector3(BoundsMin.X + x * _tileWidthWorld, BoundsMin.Y, BoundsMin.Z + z * _tileHeightWorld);
-        var tileBoundsMax = new Vector3(tileBoundsMin.X + _tileWidthWorld, BoundsMax.Y, tileBoundsMin.Z + _tileHeightWorld);
+        var tileBoundsMin = new Vector3(BoundsMin.X     + x * _tileWidthWorld, BoundsMin.Y, BoundsMin.Z     + z * _tileHeightWorld);
+        var tileBoundsMax = new Vector3(tileBoundsMin.X + _tileWidthWorld,     BoundsMax.Y, tileBoundsMin.Z + _tileHeightWorld);
         tileBoundsMin.X -= _borderSizeWorld;
         tileBoundsMin.Z -= _borderSizeWorld;
         tileBoundsMax.X += _borderSizeWorld;
         tileBoundsMax.Z += _borderSizeWorld;
 
-        var shf = new RcHeightfield(_tileSizeXVoxels, _tileSizeZVoxels, tileBoundsMin.SystemToRecast(), tileBoundsMax.SystemToRecast(), Settings.CellSize, Settings.CellHeight, _borderSizeVoxels);
+        var shf = new RcHeightfield
+        (
+            _tileSizeXVoxels,
+            _tileSizeZVoxels,
+            tileBoundsMin.SystemToRecast(),
+            tileBoundsMax.SystemToRecast(),
+            Settings.CellSize,
+            Settings.CellHeight,
+            _borderSizeVoxels
+        );
         var vox = scratch.VolumeRoot;
-        var rasterizer = new NavmeshRasterizer(shf, _walkableNormalThreshold, _walkableClimbVoxels, _walkableHeightVoxels, Settings.Filtering.HasFlag(NavmeshSettings.Filter.Interiors), vox, telemetry, scratch.Rasterizer);
+        var rasterizer = new NavmeshRasterizer
+        (
+            shf,
+            _walkableNormalThreshold,
+            _walkableClimbVoxels,
+            _walkableHeightVoxels,
+            Settings.Filtering.HasFlag(NavmeshSettings.Filter.Interiors),
+            vox,
+            telemetry,
+            scratch.Rasterizer
+        );
 
         var phaseStart = Stopwatch.GetTimestamp();
         rasterizer.Rasterize(geometryInstances, SceneExtractor.MeshType.All, true, true);
@@ -433,67 +479,64 @@ public class NavmeshBuilder
         var chf = RcCompacts.BuildCompactHeightfield(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
         RcAreas.ErodeWalkableArea(telemetry, _walkableRadiusVoxels, chf);
 
-        var regionMinArea = (int)(Settings.RegionMinSize * Settings.RegionMinSize);
+        var regionMinArea   = (int)(Settings.RegionMinSize   * Settings.RegionMinSize);
         var regionMergeArea = (int)(Settings.RegionMergeSize * Settings.RegionMergeSize);
+
         if (Settings.Partitioning == RcPartition.WATERSHED)
         {
             RcRegions.BuildDistanceField(telemetry, chf);
             RcRegions.BuildRegions(telemetry, chf, regionMinArea, regionMergeArea);
         }
-        else if (Settings.Partitioning == RcPartition.MONOTONE)
-        {
-            RcRegions.BuildRegionsMonotone(telemetry, chf, regionMinArea, regionMergeArea);
-        }
-        else
-        {
-            RcRegions.BuildLayerRegions(telemetry, chf, regionMinArea);
-        }
+        else if (Settings.Partitioning == RcPartition.MONOTONE) RcRegions.BuildRegionsMonotone(telemetry, chf, regionMinArea, regionMergeArea);
+        else RcRegions.BuildLayerRegions(telemetry, chf, regionMinArea);
 
         var polyMaxEdgeLenVoxels = (int)(Settings.PolyMaxEdgeLen / Settings.CellSize);
-        var cset = RcContours.BuildContours(telemetry, chf, Settings.PolyMaxSimplificationError, polyMaxEdgeLenVoxels, RcBuildContoursFlags.RC_CONTOUR_TESS_WALL_EDGES);
+        var cset = RcContours.BuildContours
+            (telemetry, chf, Settings.PolyMaxSimplificationError, polyMaxEdgeLenVoxels, RcBuildContoursFlags.RC_CONTOUR_TESS_WALL_EDGES);
 
         var pmesh = RcMeshs.BuildPolyMesh(telemetry, cset, Settings.PolyMaxVerts);
-        for (int i = 0; i < pmesh.npolys; ++i)
+        for (var i = 0; i < pmesh.npolys; ++i)
             pmesh.flags[i] = 1;
 
-        var detailSampleDist = Settings.DetailSampleDist < 0.9f ? 0 : Settings.CellSize * Settings.DetailSampleDist;
+        var detailSampleDist     = Settings.DetailSampleDist < 0.9f ? 0 : Settings.CellSize * Settings.DetailSampleDist;
         var detailSampleMaxError = Settings.CellHeight * Settings.DetailMaxSampleError;
-        RcPolyMeshDetail? dmesh = RcMeshDetails.BuildPolyMeshDetail(telemetry, pmesh, chf, detailSampleDist, detailSampleMaxError);
+        var dmesh                = RcMeshDetails.BuildPolyMeshDetail(telemetry, pmesh, chf, detailSampleDist, detailSampleMaxError);
 
         var navmeshConfig = new DtNavMeshCreateParams
         {
-            verts = pmesh.verts,
+            verts     = pmesh.verts,
             vertCount = pmesh.nverts,
-            polys = pmesh.polys,
+            polys     = pmesh.polys,
             polyFlags = pmesh.flags,
             polyAreas = pmesh.areas,
             polyCount = pmesh.npolys,
-            nvp = pmesh.nvp,
+            nvp       = pmesh.nvp,
 
-            detailMeshes = dmesh?.meshes,
-            detailVerts = dmesh?.verts,
+            detailMeshes     = dmesh?.meshes,
+            detailVerts      = dmesh?.verts,
             detailVertsCount = dmesh?.nverts ?? 0,
-            detailTris = dmesh?.tris,
-            detailTriCount = dmesh?.ntris ?? 0,
+            detailTris       = dmesh?.tris,
+            detailTriCount   = dmesh?.ntris ?? 0,
 
-            tileX = x,
-            tileZ = z,
+            tileX     = x,
+            tileZ     = z,
             tileLayer = 0,
-            bmin = pmesh.bmin,
-            bmax = pmesh.bmax,
+            bmin      = pmesh.bmin,
+            bmax      = pmesh.bmax,
 
             walkableHeight = Settings.AgentHeight,
             walkableRadius = Settings.AgentRadius,
-            walkableClimb = Settings.AgentMaxClimb,
-            cs = Settings.CellSize,
-            ch = Settings.CellHeight,
+            walkableClimb  = Settings.AgentMaxClimb,
+            cs             = Settings.CellSize,
+            ch             = Settings.CellHeight,
 
-            buildBvTree = true,
+            buildBvTree = true
         };
         _customization.CustomizeSettings(navmeshConfig);
 
-        RcBuilderResult? builderResult = null;
+        RcBuilderResult? builderResult   = null;
         JumpLinkBuilder? jumpLinkBuilder = null;
+
         if (captureIntermediates || Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks)
         {
             builderResult = new RcBuilderResult(x, z, shf, chf, cset, pmesh, dmesh, telemetry);
@@ -506,13 +549,15 @@ public class NavmeshBuilder
             foreach (var link in links)
             {
                 RcVec3f prev = default;
+
                 for (var i = 0; i < link.startSamples.Length; i++)
                 {
                     var p = link.startSamples[i].p;
                     var q = link.endSamples[i].p;
+
                     if (i == 0 || RcVecUtils.Dist2D(prev, p) > Settings.AgentRadius)
                     {
-                        navmeshConfig.AddOffMeshConnection(p.RecastToSystem(), q.RecastToSystem(), Settings.AgentRadius, false);
+                        navmeshConfig.AddOffMeshConnection(p.RecastToSystem(), q.RecastToSystem(), Settings.AgentRadius);
                         prev = p;
                     }
                 }
@@ -522,9 +567,11 @@ public class NavmeshBuilder
         if ((Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks) && jumpLinkBuilder != null)
         {
             phaseStart = Stopwatch.GetTimestamp();
+
             if (Settings.GenerateEdgeClimbLinks)
             {
-                var cfg = new JumpLinkBuilderConfig(
+                var cfg = new JumpLinkBuilderConfig
+                (
                     Settings.CellSize,
                     Settings.CellHeight,
                     Settings.AgentRadius,
@@ -542,7 +589,8 @@ public class NavmeshBuilder
 
             if (Settings.GenerateEdgeJumpLinks)
             {
-                var cfg = new JumpLinkBuilderConfig(
+                var cfg = new JumpLinkBuilderConfig
+                (
                     Settings.CellSize,
                     Settings.CellHeight,
                     Settings.AgentRadius,
@@ -557,14 +605,16 @@ public class NavmeshBuilder
                 );
                 addConnections(jumpLinkBuilder.Build(cfg, JumpLinkType.EDGE_JUMP));
             }
+
             scratch.PhaseTicks[(int)BuildPhase.BuildJumpLinks] += ElapsedTimeSpanTicks(phaseStart);
         }
 
         VoxelMap.RootColumnBuildResult? volumeColumn = null;
+
         if (Navmesh.Volume != null && vox != null)
         {
-            phaseStart = Stopwatch.GetTimestamp();
-            volumeColumn = Navmesh.Volume.BuildRootColumn(vox, x, z);
+            phaseStart                                            =  Stopwatch.GetTimestamp();
+            volumeColumn                                          =  Navmesh.Volume.BuildRootColumn(vox, x, z);
             scratch.PhaseTicks[(int)BuildPhase.BuildVolumeColumn] += ElapsedTimeSpanTicks(phaseStart);
         }
 
@@ -581,18 +631,18 @@ public class NavmeshBuilder
         Service.Log.Debug($"[NavmeshBuilder] 瓦片 {x}x{z} 构建耗时 {TicksToMilliseconds(totalTicks):f1} ms");
         return new()
         {
-            TileX = x,
-            TileZ = z,
-            TotalTicks = totalTicks,
-            PhaseTicks = phaseTicks,
+            TileX                 = x,
+            TileZ                 = z,
+            TotalTicks            = totalTicks,
+            PhaseTicks            = phaseTicks,
             GeometryInstanceCount = input.GeometryCount,
-            TerrainInstanceCount = input.TerrainCount,
-            PolyCount = pmesh.npolys,
-            VertCount = pmesh.nverts,
-            DetailTriCount = dmesh?.ntris ?? 0,
-            MeshData = navmeshData,
-            VolumeColumn = volumeColumn,
-            DebugResult = captureIntermediates ? builderResult : null
+            TerrainInstanceCount  = input.TerrainCount,
+            PolyCount             = pmesh.npolys,
+            VertCount             = pmesh.nverts,
+            DetailTriCount        = dmesh?.ntris ?? 0,
+            MeshData              = navmeshData,
+            VolumeColumn          = volumeColumn,
+            DebugResult           = captureIntermediates ? builderResult : null
         };
     }
 
@@ -600,58 +650,37 @@ public class NavmeshBuilder
     {
         foreach (var tick in telemetry)
         {
-            if (tick.Key.StartsWith("RC_TIMER_RASTERIZE_", StringComparison.Ordinal))
-            {
-                phaseTicks[(int)BuildPhase.RecastRasterize] += tick.Ticks;
-            }
-            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_COMPACTHEIGHTFIELD))
-            {
-                phaseTicks[(int)BuildPhase.RecastBuildCompactHeightfield] += tick.Ticks;
-            }
-            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_ERODE_AREA))
-            {
-                phaseTicks[(int)BuildPhase.RecastErodeArea] += tick.Ticks;
-            }
-            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_DISTANCEFIELD))
-            {
-                phaseTicks[(int)BuildPhase.RecastBuildDistanceField] += tick.Ticks;
-            }
-            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_REGIONS))
-            {
-                phaseTicks[(int)BuildPhase.RecastBuildRegions] += tick.Ticks;
-            }
-            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_CONTOURS))
-            {
-                phaseTicks[(int)BuildPhase.RecastBuildContours] += tick.Ticks;
-            }
-            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_POLYMESH))
-            {
-                phaseTicks[(int)BuildPhase.RecastBuildPolyMesh] += tick.Ticks;
-            }
-            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_POLYMESHDETAIL))
-            {
-                phaseTicks[(int)BuildPhase.RecastBuildPolyMeshDetail] += tick.Ticks;
-            }
+            if (tick.Key.StartsWith("RC_TIMER_RASTERIZE_", StringComparison.Ordinal)) phaseTicks[(int)BuildPhase.RecastRasterize]                  += tick.Ticks;
+            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_COMPACTHEIGHTFIELD)) phaseTicks[(int)BuildPhase.RecastBuildCompactHeightfield] += tick.Ticks;
+            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_ERODE_AREA)) phaseTicks[(int)BuildPhase.RecastErodeArea]                             += tick.Ticks;
+            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_DISTANCEFIELD)) phaseTicks[(int)BuildPhase.RecastBuildDistanceField]           += tick.Ticks;
+            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_REGIONS)) phaseTicks[(int)BuildPhase.RecastBuildRegions]                       += tick.Ticks;
+            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_CONTOURS)) phaseTicks[(int)BuildPhase.RecastBuildContours]                     += tick.Ticks;
+            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_POLYMESH)) phaseTicks[(int)BuildPhase.RecastBuildPolyMesh]                     += tick.Ticks;
+            else if (tick.Key == nameof(RcTimerLabel.RC_TIMER_BUILD_POLYMESHDETAIL)) phaseTicks[(int)BuildPhase.RecastBuildPolyMeshDetail]         += tick.Ticks;
         }
     }
 
     private static BuildTelemetrySummary SummarizeBuildTelemetry(IReadOnlyList<TileBuildResult> builtTiles, TimeSpan parallelDuration)
     {
-        List<BuildPhaseSummary> phases = [];
-        int tileCount = builtTiles.Count;
-        for (int phaseIndex = 0; phaseIndex < (int)BuildPhase.Count; ++phaseIndex)
+        List<BuildPhaseSummary> phases    = [];
+        var                     tileCount = builtTiles.Count;
+
+        for (var phaseIndex = 0; phaseIndex < (int)BuildPhase.Count; ++phaseIndex)
         {
-            long totalTicks = 0;
-            long maxTicks = 0;
-            int slowestTileX = -1;
-            int slowestTileZ = -1;
+            long totalTicks   = 0;
+            long maxTicks     = 0;
+            var  slowestTileX = -1;
+            var  slowestTileZ = -1;
+
             foreach (var tile in builtTiles)
             {
                 var ticks = tile.PhaseTicks[phaseIndex];
                 totalTicks += ticks;
+
                 if (ticks > maxTicks)
                 {
-                    maxTicks = ticks;
+                    maxTicks     = ticks;
                     slowestTileX = tile.TileX;
                     slowestTileZ = tile.TileZ;
                 }
@@ -660,47 +689,58 @@ public class NavmeshBuilder
             if (totalTicks == 0)
                 continue;
 
-            phases.Add(new()
-            {
-                Name = _phaseNames[phaseIndex],
-                TotalTicks = totalTicks,
-                AverageTicks = totalTicks / Math.Max(tileCount, 1),
-                MaxTicks = maxTicks,
-                SlowestTileX = slowestTileX,
-                SlowestTileZ = slowestTileZ
-            });
+            phases.Add
+            (
+                new()
+                {
+                    Name         = _phaseNames[phaseIndex],
+                    TotalTicks   = totalTicks,
+                    AverageTicks = totalTicks / Math.Max(tileCount, 1),
+                    MaxTicks     = maxTicks,
+                    SlowestTileX = slowestTileX,
+                    SlowestTileZ = slowestTileZ
+                }
+            );
         }
 
         List<SlowTileSummary> slowTiles = [];
+
         foreach (var tile in builtTiles.OrderByDescending(t => t.TotalTicks).Take(5))
         {
-            slowTiles.Add(new()
-            {
-                TileX = tile.TileX,
-                TileZ = tile.TileZ,
-                TotalTicks = tile.TotalTicks,
-                GeometryInstanceCount = tile.GeometryInstanceCount,
-                TerrainInstanceCount = tile.TerrainInstanceCount,
-                PolyCount = tile.PolyCount,
-                VertCount = tile.VertCount,
-                DetailTriCount = tile.DetailTriCount
-            });
+            slowTiles.Add
+            (
+                new()
+                {
+                    TileX                 = tile.TileX,
+                    TileZ                 = tile.TileZ,
+                    TotalTicks            = tile.TotalTicks,
+                    GeometryInstanceCount = tile.GeometryInstanceCount,
+                    TerrainInstanceCount  = tile.TerrainInstanceCount,
+                    PolyCount             = tile.PolyCount,
+                    VertCount             = tile.VertCount,
+                    DetailTriCount        = tile.DetailTriCount
+                }
+            );
         }
 
         return new()
         {
             ParallelTicks = parallelDuration.Ticks,
-            Phases = phases,
-            SlowTiles = slowTiles
+            Phases        = phases,
+            SlowTiles     = slowTiles
         };
     }
 
     private static void LogBuildTelemetry(BuildTelemetrySummary telemetry)
     {
         Service.Log.Debug("[NavmeshBuilder] 阶段统计（总计 / 单瓦片均值 / 最慢瓦片）");
+
         foreach (var phase in telemetry.Phases)
         {
-            Service.Log.Debug($"[NavmeshBuilder] {phase.Name}: 总计 {TicksToMilliseconds(phase.TotalTicks):f1} ms，均值 {TicksToMilliseconds(phase.AverageTicks):f2} ms，最慢瓦片 {phase.SlowestTileX}x{phase.SlowestTileZ} = {TicksToMilliseconds(phase.MaxTicks):f1} ms");
+            Service.Log.Debug
+            (
+                $"[NavmeshBuilder] {phase.Name}: 总计 {TicksToMilliseconds(phase.TotalTicks):f1} ms，均值 {TicksToMilliseconds(phase.AverageTicks):f2} ms，最慢瓦片 {phase.SlowestTileX}x{phase.SlowestTileZ} = {TicksToMilliseconds(phase.MaxTicks):f1} ms"
+            );
         }
 
         if (telemetry.SlowTiles.Count > 0)
@@ -708,9 +748,13 @@ public class NavmeshBuilder
             var slowestTiles = string.Join("，", telemetry.SlowTiles.Select(tile => $"{tile.TileX}x{tile.TileZ} = {TicksToMilliseconds(tile.TotalTicks):f1} ms"));
             Service.Log.Debug($"[NavmeshBuilder] 最慢瓦片 Top {telemetry.SlowTiles.Count}: {slowestTiles}");
         }
+
         foreach (var tile in telemetry.SlowTiles)
         {
-            Service.Log.Debug($"[NavmeshBuilder] 慢瓦片 {tile.TileX}x{tile.TileZ}: 几何实例 {tile.GeometryInstanceCount}，地形实例 {tile.TerrainInstanceCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}");
+            Service.Log.Debug
+            (
+                $"[NavmeshBuilder] 慢瓦片 {tile.TileX}x{tile.TileZ}: 几何实例 {tile.GeometryInstanceCount}，地形实例 {tile.TerrainInstanceCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}"
+            );
         }
     }
 
@@ -724,18 +768,18 @@ public class NavmeshBuilder
 
     private int ResolveThreadCount()
     {
-        var maxThreads = Environment.ProcessorCount;
-        var wantedThreads = Service.Config.BuildMaxCores;
-        int threadCount = wantedThreads <= 0 ? maxThreads + wantedThreads : wantedThreads;
+        var maxThreads    = Environment.ProcessorCount;
+        var wantedThreads = _config.BuildMaxCores;
+        var threadCount   = wantedThreads <= 0 ? maxThreads + wantedThreads : wantedThreads;
         return Math.Clamp(threadCount, 1, maxThreads);
     }
 
     private void GetTileRange(AABB bounds, out int minX, out int maxX, out int minZ, out int maxZ)
     {
-        minX = (int)MathF.Floor((bounds.Min.X - _borderSizeWorld - BoundsMin.X) * _invTileWidthWorld);
-        maxX = (int)MathF.Floor((bounds.Max.X + _borderSizeWorld - BoundsMin.X) * _invTileWidthWorld);
-        minZ = (int)MathF.Floor((bounds.Min.Z - _borderSizeWorld - BoundsMin.Z) * _invTileHeightWorld);
-        maxZ = (int)MathF.Floor((bounds.Max.Z + _borderSizeWorld - BoundsMin.Z) * _invTileHeightWorld);
+        minX = (int)MathF.Floor((bounds.Min.X                    - _borderSizeWorld - BoundsMin.X) * _invTileWidthWorld);
+        maxX = (int)MathF.Floor((bounds.Max.X + _borderSizeWorld - BoundsMin.X)                    * _invTileWidthWorld);
+        minZ = (int)MathF.Floor((bounds.Min.Z                    - _borderSizeWorld - BoundsMin.Z) * _invTileHeightWorld);
+        maxZ = (int)MathF.Floor((bounds.Max.Z + _borderSizeWorld - BoundsMin.Z)                    * _invTileHeightWorld);
 
         minX = Math.Clamp(minX, 0, NumTilesX - 1);
         maxX = Math.Clamp(maxX, 0, NumTilesX - 1);

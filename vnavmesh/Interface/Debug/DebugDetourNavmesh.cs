@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
@@ -18,25 +15,33 @@ public class DebugDetourNavmesh : DebugRecast
         public EffectMesh.Data? VisuDetail;
     }
 
-    private DtNavMesh _navmesh;
+    private DtNavMesh       _navmesh;
     private DtNavMeshQuery? _query;
-    private UITree _tree;
-    private DebugDrawer _dd;
-    private PerTile[] _perTile;
-    private List<long> _path;
+    private UITree          _tree;
+    private DebugDrawer     _dd;
+    private PerTile[]       _perTile;
+    private List<long>      _path;
 
-    private static Vector4 _colAreaNull = new(0, 0, 0, 0.25f);
+    private static Vector4 _colAreaNull     = new(0, 0, 0, 0.25f);
     private static Vector4 _colAreaWalkable = new(0, 0.75f, 1.0f, 0.5f);
-    private static Vector4 _colClosedList = new(1.0f, 0.75f, 1.0f, 0.5f);
-    private enum InstanceID { Tile, AreaNull, AreaWalkable, ClosedList, Count };
+    private static Vector4 _colClosedList   = new(1.0f, 0.75f, 1.0f, 0.5f);
+
+    private enum InstanceID
+    {
+        Tile,
+        AreaNull,
+        AreaWalkable,
+        ClosedList,
+        Count
+    }
 
     public DebugDetourNavmesh(DtNavMesh navmesh, DtNavMeshQuery? query, List<long> queryPath, UITree tree, DebugDrawer dd)
     {
         _navmesh = navmesh;
-        _query = query;
-        _path = queryPath;
-        _tree = tree;
-        _dd = dd;
+        _query   = query;
+        _path    = queryPath;
+        _tree    = tree;
+        _dd      = dd;
         _perTile = new PerTile[navmesh.GetParams().maxTiles];
     }
 
@@ -68,14 +73,18 @@ public class DebugDetourNavmesh : DebugRecast
         using var nt = _tree.Node($"区块 (最多 {param.maxTiles} 个)###tiles");
         if (nt.SelectedOrHovered)
             VisualizeWithClosedList();
+
         if (nt.Opened)
         {
-            for (int i = 0; i < param.maxTiles; ++i)
+            for (var i = 0; i < param.maxTiles; ++i)
             {
                 var tile = _navmesh.GetTile(i);
                 if (tile.data == null)
                     continue;
-                using var ntile = _tree.Node($"区块 {i} (位于 {tile.data.header.x}x{tile.data.header.y}x{tile.data.header.layer})：标志={tile.flags:X}，Salt={tile.salt}，基础多边形引用={_navmesh.GetPolyRefBase(tile):X}###{i}");
+                using var ntile = _tree.Node
+                (
+                    $"区块 {i} (位于 {tile.data.header.x}x{tile.data.header.y}x{tile.data.header.layer})：标志={tile.flags:X}，Salt={tile.salt}，基础多边形引用={_navmesh.GetPolyRefBase(tile):X}###{i}"
+                );
                 if (!ntile.Opened)
                     continue;
 
@@ -86,21 +95,23 @@ public class DebugDetourNavmesh : DebugRecast
                 {
                     if (np.SelectedOrHovered)
                         VisualizeRoughPolygons(tile, true);
+
                     if (np.Opened)
                     {
-                        for (int j = 0; j < tile.data.header.polyCount; ++j)
+                        for (var j = 0; j < tile.data.header.polyCount; ++j)
                         {
-                            var p = tile.data.polys[j];
+                            var       p    = tile.data.polys[j];
                             using var ntri = _tree.Node($"{p.index} (0x{p.index:X})：{p.vertCount} 个顶点，标志={p.flags:X}，面积类型={p.GetArea()}，多边形类型={p.GetPolyType()}");
                             if (ntri.SelectedOrHovered)
                                 VisualizeRoughPolygon(tile, p, true);
+
                             if (ntri.Opened)
                             {
-                                for (int k = 0; k < p.vertCount; ++k)
+                                for (var k = 0; k < p.vertCount; ++k)
                                     if (_tree.LeafNode($"{p.verts[k]} ({GetVertex(tile, p.verts[k])})，邻接={p.neis[k]:X}").SelectedOrHovered)
                                         VisualizeVertex(GetVertex(tile, p.verts[k]));
 
-                                for (int k = tile.polyLinks[p.index]; k != DtNavMesh.DT_NULL_LINK; k = tile.links[k].next)
+                                for (var k = tile.polyLinks[p.index]; k != DtNavMesh.DT_NULL_LINK; k = tile.links[k].next)
                                 {
                                     var link = tile.links[k];
                                     if (_tree.LeafNode($"链接 {k}：引用={link.refs:X}，边缘={link.edge}，侧面={link.side}，bmin={link.bmin}，bmax={link.bmax}").SelectedOrHovered)
@@ -115,22 +126,24 @@ public class DebugDetourNavmesh : DebugRecast
                 {
                     if (nv.Opened)
                     {
-                        for (int j = 0; j < tile.data.header.vertCount; ++j)
+                        for (var j = 0; j < tile.data.header.vertCount; ++j)
                             if (_tree.LeafNode($"{j}: {GetVertex(tile, j):f3}").SelectedOrHovered)
                                 VisualizeVertex(GetVertex(tile, j));
                     }
                 }
 
-                using (var nd = _tree.Node($"细节网格 ({tile.data.header.detailMeshCount} 个子网格，共 {tile.data.header.detailVertCount} 个顶点，共 {tile.data.header.detailTriCount} 个图元)"))
+                using (var nd = _tree.Node
+                           ($"细节网格 ({tile.data.header.detailMeshCount} 个子网格，共 {tile.data.header.detailVertCount} 个顶点，共 {tile.data.header.detailTriCount} 个图元)"))
                 {
                     if (nd.SelectedOrHovered)
                         VisualizeDetailPolygons(tile, true);
+
                     if (nd.Opened)
                     {
-                        for (int j = 0; j < tile.data.header.detailMeshCount; ++j)
+                        for (var j = 0; j < tile.data.header.detailMeshCount; ++j)
                         {
-                            var poly = tile.data.polys[j];
-                            ref var sub = ref tile.data.detailMeshes[j];
+                            var       poly = tile.data.polys[j];
+                            ref var   sub  = ref tile.data.detailMeshes[j];
                             using var nsub = _tree.Node($"{j}：基础顶点={poly.vertCount}");
                             if (nsub.SelectedOrHovered)
                                 VisualizeDetailSubmesh(tile, j, true);
@@ -141,16 +154,16 @@ public class DebugDetourNavmesh : DebugRecast
                             {
                                 if (np.Opened)
                                 {
-                                    for (int k = 0; k < sub.triCount; ++k)
+                                    for (var k = 0; k < sub.triCount; ++k)
                                     {
                                         var offset = (sub.triBase + k) * 4;
-                                        var v1i = tile.data.detailTris[offset];
-                                        var v2i = tile.data.detailTris[offset + 1];
-                                        var v3i = tile.data.detailTris[offset + 2];
-                                        var flags = tile.data.detailTris[offset + 3];
-                                        var v1 = GetDetailVertex(tile, poly, v1i);
-                                        var v2 = GetDetailVertex(tile, poly, v2i);
-                                        var v3 = GetDetailVertex(tile, poly, v3i);
+                                        var v1i    = tile.data.detailTris[offset];
+                                        var v2i    = tile.data.detailTris[offset + 1];
+                                        var v3i    = tile.data.detailTris[offset + 2];
+                                        var flags  = tile.data.detailTris[offset + 3];
+                                        var v1     = GetDetailVertex(tile, poly, v1i);
+                                        var v2     = GetDetailVertex(tile, poly, v2i);
+                                        var v3     = GetDetailVertex(tile, poly, v3i);
                                         if (_tree.LeafNode($"{k}: {v1i}x{v2i}x{v3i} ({v1:f3}x{v2:f3}x{v3:f3})，标志={flags:X}").SelectedOrHovered)
                                             VisualizeTriangle(v1, v2, v3, 0xff000000, 2);
                                     }
@@ -161,7 +174,7 @@ public class DebugDetourNavmesh : DebugRecast
                             {
                                 if (nv.Opened)
                                 {
-                                    for (int k = 0; k < sub.vertCount; ++k)
+                                    for (var k = 0; k < sub.vertCount; ++k)
                                     {
                                         var v = GetDetailVertex(tile, sub.vertBase + k);
                                         if (_tree.LeafNode($"{k}: {v:f3}").SelectedOrHovered)
@@ -186,11 +199,14 @@ public class DebugDetourNavmesh : DebugRecast
         if (!nr.Opened)
             return;
 
-        int i = 1;
+        var i = 1;
+
         foreach (var n in _query!.GetNodePool().AsEnumerable())
         {
             var queried = _path.Any(p => p == n.id);
-            var node = _tree.LeafNode($"{i++}: {n.id:X}, 父节点={n.pidx}, 进入={n.pos}, 消耗={n.cost}, 总计={n.total}, 状态={n.state}, 标志={n.flags}", queried ? 0xff808000 : 0xffffffff);
+            var node = _tree.LeafNode
+                ($"{i++}: {n.id:X}, 父节点={n.pidx}, 进入={n.pos}, 消耗={n.cost}, 总计={n.total}, 状态={n.state}, 标志={n.flags}", queried ? 0xff808000 : 0xffffffff);
+
             if (node.SelectedOrHovered || queried)
             {
                 VisualizeRoughPolygon(n.id, true, node.SelectedOrHovered);
@@ -202,10 +218,11 @@ public class DebugDetourNavmesh : DebugRecast
     private EffectMesh.Data GetOrInitVisualizerRough(int tileIndex)
     {
         ref var perTile = ref _perTile[tileIndex];
+
         if (perTile.VisuRough == null)
         {
             var primsPerPoly = _navmesh.GetMaxVertsPerPoly() - 2;
-            var tile = _navmesh.GetTile(tileIndex);
+            var tile         = _navmesh.GetTile(tileIndex);
             perTile.VisuRough = new(_dd.RenderContext, tile.data.header.vertCount, tile.data.header.polyCount * primsPerPoly, (int)InstanceID.Count, false);
             using var builder = perTile.VisuRough.Map(_dd.RenderContext);
 
@@ -217,17 +234,19 @@ public class DebugDetourNavmesh : DebugRecast
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaWalkable));
             builder.AddInstance(new(Matrix4x3.Identity, _colClosedList));
 
-            for (int i = 0; i < tile.data.header.vertCount; ++i)
+            for (var i = 0; i < tile.data.header.vertCount; ++i)
                 builder.AddVertex(GetVertex(tile, i));
 
             // one 'mesh' per polygon; by default, assign color based on tile index
-            int startingPrimitive = 0;
-            for (int i = 0; i < tile.data.header.polyCount; ++i)
+            var startingPrimitive = 0;
+
+            for (var i = 0; i < tile.data.header.polyCount; ++i)
             {
                 var p = tile.data.polys[i];
+
                 if (p.GetPolyType() != DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION && p.vertCount >= 3)
                 {
-                    for (int j = 2; j < p.vertCount; ++j)
+                    for (var j = 2; j < p.vertCount; ++j)
                         builder.AddTriangle(p.verts[0], p.verts[j], p.verts[j - 1]); // flipped for dx order
                     builder.AddMesh(0, startingPrimitive, p.vertCount - 2, 0, 1);
                     startingPrimitive += p.vertCount - 2;
@@ -238,18 +257,22 @@ public class DebugDetourNavmesh : DebugRecast
                     builder.AddMesh(0, startingPrimitive, 0, 0, 0);
                 }
             }
+
             Service.Log.Debug($"导航网格粗略可视化区块 #{tileIndex} 构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
+
         return perTile.VisuRough;
     }
 
     private EffectMesh.Data GetOrInitVisualizerDetail(int tileIndex)
     {
         ref var perTile = ref _perTile[tileIndex];
+
         if (perTile.VisuDetail == null)
         {
             var tile = _navmesh.GetTile(tileIndex);
-            perTile.VisuDetail = new(_dd.RenderContext, tile.data.header.vertCount + tile.data.header.detailVertCount, tile.data.header.detailTriCount, (int)InstanceID.Count, false);
+            perTile.VisuDetail = new
+                (_dd.RenderContext, tile.data.header.vertCount + tile.data.header.detailVertCount, tile.data.header.detailTriCount, (int)InstanceID.Count, false);
             using var builder = perTile.VisuDetail.Map(_dd.RenderContext);
 
             var timer = StopWatchTimer.Create();
@@ -260,39 +283,50 @@ public class DebugDetourNavmesh : DebugRecast
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaWalkable));
             builder.AddInstance(new(Matrix4x3.Identity, _colClosedList));
 
-            for (int i = 0; i < tile.data.header.vertCount; ++i)
+            for (var i = 0; i < tile.data.header.vertCount; ++i)
                 builder.AddVertex(GetVertex(tile, i));
-            for (int i = 0; i < tile.data.header.detailVertCount; ++i)
+            for (var i = 0; i < tile.data.header.detailVertCount; ++i)
                 builder.AddVertex(GetDetailVertex(tile, i));
 
             // one 'mesh' per polygon; by default, assign color based on tile index
-            int startingPrimitive = 0;
-            for (int i = 0; i < tile.data.header.detailMeshCount; ++i)
+            var startingPrimitive = 0;
+
+            for (var i = 0; i < tile.data.header.detailMeshCount; ++i)
             {
-                var poly = tile.data.polys[i];
-                ref var sub = ref tile.data.detailMeshes[i];
-                for (int j = 0; j < sub.triCount; ++j)
+                var     poly = tile.data.polys[i];
+                ref var sub  = ref tile.data.detailMeshes[i];
+
+                for (var j = 0; j < sub.triCount; ++j)
                 {
                     var offset = (sub.triBase + j) * 4;
-                    var v1i = tile.data.detailTris[offset];
-                    var v2i = tile.data.detailTris[offset + 1];
-                    var v3i = tile.data.detailTris[offset + 2];
-                    var v1 = v1i < poly.vertCount ? poly.verts[v1i] : tile.data.header.vertCount + tile.data.detailMeshes[poly.index].vertBase + v1i - poly.vertCount;
-                    var v2 = v2i < poly.vertCount ? poly.verts[v2i] : tile.data.header.vertCount + tile.data.detailMeshes[poly.index].vertBase + v2i - poly.vertCount;
-                    var v3 = v3i < poly.vertCount ? poly.verts[v3i] : tile.data.header.vertCount + tile.data.detailMeshes[poly.index].vertBase + v3i - poly.vertCount;
+                    var v1i    = tile.data.detailTris[offset];
+                    var v2i    = tile.data.detailTris[offset + 1];
+                    var v3i    = tile.data.detailTris[offset + 2];
+                    var v1 = v1i < poly.vertCount
+                                 ? poly.verts[v1i]
+                                 : tile.data.header.vertCount + tile.data.detailMeshes[poly.index].vertBase + v1i - poly.vertCount;
+                    var v2 = v2i < poly.vertCount
+                                 ? poly.verts[v2i]
+                                 : tile.data.header.vertCount + tile.data.detailMeshes[poly.index].vertBase + v2i - poly.vertCount;
+                    var v3 = v3i < poly.vertCount
+                                 ? poly.verts[v3i]
+                                 : tile.data.header.vertCount + tile.data.detailMeshes[poly.index].vertBase + v3i - poly.vertCount;
                     builder.AddTriangle(v1, v3, v2); // flipped for dx order
                 }
+
                 builder.AddMesh(0, startingPrimitive, sub.triCount, 0, 1);
                 startingPrimitive += sub.triCount;
             }
+
             Service.Log.Debug($"导航网格细节可视化区块 #{tileIndex} 构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
         }
+
         return perTile.VisuDetail;
     }
 
     private void VisualizeWithClosedList()
     {
-        for (int i = 0; i < _perTile.Length; ++i)
+        for (var i = 0; i < _perTile.Length; ++i)
         {
             var tile = _navmesh.GetTile(i);
             if (tile.data != null)
@@ -307,7 +341,7 @@ public class DebugDetourNavmesh : DebugRecast
         var visu = GetOrInitVisualizerRough(tile.index);
         _dd.EffectMesh.Bind(_dd.RenderContext, false, false);
         visu.Bind(_dd.RenderContext);
-        for (int i = 0; i < tile.data.header.polyCount; ++i)
+        for (var i = 0; i < tile.data.header.polyCount; ++i)
             VisualizeRoughPolygon(tile, visu, tile.data.polys[i], colorByArea, false);
     }
 
@@ -335,34 +369,40 @@ public class DebugDetourNavmesh : DebugRecast
             if (poly.vertCount < 3)
                 return;
             // triangles
-            var instance = _query != null && _query.IsInClosedList(DtNavMesh.EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList : !colorByArea ? InstanceID.Tile : poly.GetArea() == 0 ? InstanceID.AreaNull : InstanceID.AreaWalkable;
+            var instance = _query != null && _query.IsInClosedList(DtNavMesh.EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
+                           !colorByArea ? InstanceID.Tile :
+                           poly.GetArea() == 0 ? InstanceID.AreaNull : InstanceID.AreaWalkable;
             var mesh = visu.Meshes[poly.index] with { FirstInstance = (int)instance };
             visu.DrawManual(_dd.RenderContext, mesh);
 
             // edges
             var from = GetVertex(tile, poly.verts[0]);
-            for (int i = 0; i < poly.vertCount; ++i)
+
+            for (var i = 0; i < poly.vertCount; ++i)
             {
-                var to = GetVertex(tile, poly.verts[i == poly.vertCount - 1 ? 0 : i + 1]);
+                var to    = GetVertex(tile, poly.verts[i == poly.vertCount - 1 ? 0 : i + 1]);
                 var inner = poly.neis[i] != 0;
-                uint color = 0xd8403000;
+                var color = 0xd8403000;
+
                 if (inner)
                 {
                     color = 0x20403000;
+
                     if ((poly.neis[i] & DtNavMesh.DT_EXT_LINK) != 0)
                     {
-                        bool con = false;
-                        for (int k = tile.polyLinks[poly.index]; k != DtNavMesh.DT_NULL_LINK; k = tile.links[k].next)
-                        {
+                        var con = false;
+
+                        for (var k = tile.polyLinks[poly.index]; k != DtNavMesh.DT_NULL_LINK; k = tile.links[k].next)
                             if (tile.links[k].edge == i)
                             {
                                 con = true;
                                 break;
                             }
-                        }
+
                         color = con ? 0x30ffffffu : 0x30000000u;
                     }
                 }
+
                 if (highlight)
                     color |= 0xff000000;
                 _dd.DrawWorldLine(from, to, color, highlight ? 3 : inner ? 1 : 2);
@@ -370,13 +410,10 @@ public class DebugDetourNavmesh : DebugRecast
             }
 
             // vertices
-            for (int i = 0; i < poly.vertCount; ++i)
+            for (var i = 0; i < poly.vertCount; ++i)
                 _dd.DrawWorldPoint(GetVertex(tile, poly.verts[i]), 3, 0xff000000);
         }
-        else
-        {
-            // TODO: ...
-        }
+        // TODO: ...
     }
 
     private void VisualizeDetailPolygons(DtMeshTile tile, bool colorByArea)
@@ -386,13 +423,13 @@ public class DebugDetourNavmesh : DebugRecast
         var visu = GetOrInitVisualizerDetail(tile.index);
         _dd.EffectMesh.Bind(_dd.RenderContext, false, false);
         visu.Bind(_dd.RenderContext);
-        for (int i = 0; i < tile.data.header.detailMeshCount; ++i)
+        for (var i = 0; i < tile.data.header.detailMeshCount; ++i)
             VisualizeDetailSubmeshWithEdges(tile, visu, tile.data.polys[i], colorByArea, false);
 
         // all vertices
-        for (int i = 0; i < tile.data.header.vertCount; ++i)
+        for (var i = 0; i < tile.data.header.vertCount; ++i)
             _dd.DrawWorldPointFilled(GetVertex(tile, i), 3, 0xff00ff00);
-        for (int i = 0; i < tile.data.header.detailVertCount; ++i)
+        for (var i = 0; i < tile.data.header.detailVertCount; ++i)
             _dd.DrawWorldPointFilled(GetDetailVertex(tile, i), 2, 0xff0000ff);
     }
 
@@ -400,8 +437,8 @@ public class DebugDetourNavmesh : DebugRecast
     {
         if (_dd.EffectMesh == null)
             return;
-        var poly = tile.data.polys[index];
-        ref var sub = ref tile.data.detailMeshes[poly.index];
+        var     poly = tile.data.polys[index];
+        ref var sub  = ref tile.data.detailMeshes[poly.index];
 
         var visu = GetOrInitVisualizerDetail(tile.index);
         _dd.EffectMesh.Bind(_dd.RenderContext, false, false);
@@ -409,32 +446,35 @@ public class DebugDetourNavmesh : DebugRecast
         VisualizeDetailSubmeshWithEdges(tile, visu, poly, colorByArea, true);
 
         // vertices
-        for (int i = 0; i < poly.vertCount; ++i)
+        for (var i = 0; i < poly.vertCount; ++i)
             _dd.DrawWorldPointFilled(GetVertex(tile, poly.verts[i]), 3, 0xff00ff00);
-        for (int i = 0; i < sub.vertCount; ++i)
+        for (var i = 0; i < sub.vertCount; ++i)
             _dd.DrawWorldPointFilled(GetDetailVertex(tile, sub.vertBase + i), 2, 0xff0000ff);
     }
 
     private void VisualizeDetailSubmeshWithEdges(DtMeshTile tile, EffectMesh.Data visu, DtPoly poly, bool colorByArea, bool highlight)
     {
         // triangles
-        var instance = _query != null && _query.IsInClosedList(DtNavMesh.EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList : !colorByArea ? InstanceID.Tile : poly.GetArea() == 0 ? InstanceID.AreaNull : InstanceID.AreaWalkable;
+        var instance = _query != null && _query.IsInClosedList(DtNavMesh.EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
+                       !colorByArea ? InstanceID.Tile :
+                       poly.GetArea() == 0 ? InstanceID.AreaNull : InstanceID.AreaWalkable;
         var mesh = visu.Meshes[poly.index] with { FirstInstance = (int)instance };
         visu.DrawManual(_dd.RenderContext, mesh);
 
         // edges
-        ref var sub = ref tile.data.detailMeshes[poly.index];
-        var color = highlight ? 0xff000000 : 0x80000000;
-        for (int i = 0; i < sub.triCount; ++i)
+        ref var sub   = ref tile.data.detailMeshes[poly.index];
+        var     color = highlight ? 0xff000000 : 0x80000000;
+
+        for (var i = 0; i < sub.triCount; ++i)
         {
             var offset = (sub.triBase + i) * 4;
-            var v1i = tile.data.detailTris[offset];
-            var v2i = tile.data.detailTris[offset + 1];
-            var v3i = tile.data.detailTris[offset + 2];
-            var flags = tile.data.detailTris[offset + 3];
-            var v1 = GetDetailVertex(tile, poly, v1i);
-            var v2 = GetDetailVertex(tile, poly, v2i);
-            var v3 = GetDetailVertex(tile, poly, v3i);
+            var v1i    = tile.data.detailTris[offset];
+            var v2i    = tile.data.detailTris[offset + 1];
+            var v3i    = tile.data.detailTris[offset + 2];
+            var flags  = tile.data.detailTris[offset + 3];
+            var v1     = GetDetailVertex(tile, poly, v1i);
+            var v2     = GetDetailVertex(tile, poly, v2i);
+            var v3     = GetDetailVertex(tile, poly, v3i);
             _dd.DrawWorldLine(v1, v2, color, (DtNavMesh.GetDetailTriEdgeFlags(flags, 0) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
             _dd.DrawWorldLine(v2, v3, color, (DtNavMesh.GetDetailTriEdgeFlags(flags, 1) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
             _dd.DrawWorldLine(v3, v1, color, (DtNavMesh.GetDetailTriEdgeFlags(flags, 2) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
@@ -462,8 +502,16 @@ public class DebugDetourNavmesh : DebugRecast
             throw;
         }
     }
+
     private Vector3 GetDetailVertex(DtMeshTile tile, int i) => new(tile.data.detailVerts[i * 3], tile.data.detailVerts[i * 3 + 1], tile.data.detailVerts[i * 3 + 2]);
+
     private Vector3 GetDetailVertex(DtMeshTile tile, DtPoly poly, int localIndex) => localIndex < poly.vertCount
-        ? GetVertex(tile, poly.verts[localIndex])
-        : GetDetailVertex(tile, tile.data.detailMeshes[poly.index].vertBase + localIndex - poly.vertCount);
+                                                                                         ? GetVertex(tile, poly.verts[localIndex])
+                                                                                         : GetDetailVertex
+                                                                                         (
+                                                                                             tile,
+                                                                                             tile.data.detailMeshes[poly.index].vertBase +
+                                                                                             localIndex -
+                                                                                             poly.vertCount
+                                                                                         );
 }
