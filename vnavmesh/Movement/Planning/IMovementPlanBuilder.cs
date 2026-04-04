@@ -1,8 +1,8 @@
-using vnavmesh.NavPathfind;
+using vnavmesh.PathPostprocess;
 
 namespace vnavmesh.Movement.Planning;
 
 internal interface IMovementPlanBuilder
 {
-    MovementPlan Build(PathfindResult result, float destinationTolerance, float pathTolerance);
+    MovementPlan Build(PostprocessedPath path);
 }

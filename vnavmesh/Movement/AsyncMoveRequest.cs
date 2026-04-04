@@ -2,7 +2,7 @@ using System.Numerics;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navmesh;
-using vnavmesh.NavPathfind;
+using vnavmesh.PathPostprocess;
 
 namespace vnavmesh.Movement;
 
@@ -13,10 +13,7 @@ public class AsyncMoveRequest : IDisposable
     private readonly MovementPlanExecutor      _executor;
     private readonly GroundMovementPlanBuilder _groundPlanBuilder = new();
     private readonly FlightMovementPlanBuilder _flightPlanBuilder = new();
-    private          Task<PathfindResult>?     _pendingTask;
-    private          bool                      _pendingFly;
-    private          float                     _pendingDestRange;
-    private          float                     _pendingPathTolerance;
+    private          Task<PostprocessedPath>?  _pendingTask;
 
     public bool TaskInProgress => _pendingTask != null;
 
@@ -77,17 +74,15 @@ public class AsyncMoveRequest : IDisposable
 
         var toleranceStr = range > 0 ? $"，容差 = {range:f3}" : "";
         Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
-        _pendingPathTolerance = _executor.ConsumeNextTolerance();
-        _pendingTask          = _manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range);
-        _pendingFly           = fly;
-        _pendingDestRange     = range;
+        var pendingPathTolerance = _executor.ConsumeNextTolerance();
+        _pendingTask             = _manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range, pendingPathTolerance);
         return true;
     }
 
-    private MovementPlan BuildPlan(PathfindResult result)
+    private MovementPlan BuildPlan(PostprocessedPath result)
     {
-        return _pendingFly
-                   ? _flightPlanBuilder.Build(result, _pendingDestRange, _pendingPathTolerance)
-                   : _groundPlanBuilder.Build(result, _pendingDestRange, _pendingPathTolerance);
+        return result.RequestedMode == MovementMode.Flight
+                   ? _flightPlanBuilder.Build(result)
+                   : _groundPlanBuilder.Build(result);
     }
 }

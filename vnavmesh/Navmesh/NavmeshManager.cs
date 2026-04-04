@@ -5,6 +5,7 @@ using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Lumina.Excel.Sheets;
+using vnavmesh.PathPostprocess;
 using vnavmesh.NavPathfind;
 using vnavmesh.Utils;
 using Action = System.Action;
@@ -158,11 +159,19 @@ public sealed class NavmeshManager : IDisposable
 
     public async Task<List<Vector3>> QueryPath(Vector3 from, Vector3 to, bool flying, float range = 0, CancellationToken externalCancel = default)
     {
-        var result = await QueryPathDetailed(from, to, flying, range, externalCancel);
+        var result = await QueryPathDetailed(from, to, flying, range, externalCancel: externalCancel);
         return result.Waypoints;
     }
 
-    internal Task<PathfindResult> QueryPathDetailed(Vector3 from, Vector3 to, bool flying, float range = 0, CancellationToken externalCancel = default)
+    internal Task<PostprocessedPath> QueryPathDetailed
+    (
+        Vector3           from,
+        Vector3           to,
+        bool              flying,
+        float             range = 0,
+        float?            completionTolerance = null,
+        CancellationToken externalCancel = default
+    )
     {
         if (_currentCTS == null)
             throw new Exception("Can't initiate query - navmesh is not loaded");
@@ -185,9 +194,10 @@ public sealed class NavmeshManager : IDisposable
                                      if (Query == null)
                                          throw new Exception("Can't pathfind, navmesh did not build successfully");
                                      Log($"执行算路：起点 = {from:f3}，终点 = {to:f3}");
-                                     return flying
-                                                ? Query.PathfindVolumeDetailed(from, to, UseRaycasts, UseStringPulling, combined.Token)
-                                                : Query.PathfindMeshDetailed(from, to, UseRaycasts, UseStringPulling, range, combined.Token);
+                                     var plannerResult = flying
+                                                             ? Query.PlanVolumePathDetailed(from, to, UseRaycasts, combined.Token)
+                                                             : Query.PlanMeshPathDetailed(from, to, UseRaycasts, range, combined.Token);
+                                     return Query.Postprocess(plannerResult, UseStringPulling, completionTolerance ?? _config.PathTolerance, combined.Token);
                                  },
                                  combined.Token
                              );

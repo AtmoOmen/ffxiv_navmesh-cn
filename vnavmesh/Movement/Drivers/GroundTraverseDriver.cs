@@ -13,40 +13,39 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
 
     public SegmentDriverUpdate Update(MovementExecutionContext context)
     {
-        var segment = (GroundTraverseSegment)context.Segment;
-        ConsumeReachedWaypoints(segment, context);
-        if (segment.Waypoints.Count == 0)
-            return new(CreateIdleCommand(context.Player.Position));
+        var nextWaypointIndex = ConsumeReachedWaypoints(context);
+        if (nextWaypointIndex >= context.WaypointCount)
+            return new(CreateIdleCommand(context.Player.Position), nextWaypointIndex);
 
-        var desired = segment.Waypoints[0];
-        return new(BuildCommand(context, desired, false, false));
+        var desired = context.Segment.Waypoints[nextWaypointIndex];
+        return new(BuildCommand(context, desired, false, false), nextWaypointIndex);
     }
 
-    public bool ShouldAdvance(MovementExecutionContext context) => context.Segment.Waypoints.Count == 0;
+    public bool ShouldAdvance(MovementExecutionContext context) => context.ActiveWaypointIndex >= context.WaypointCount;
 
     public void Exit(MovementExecutionContext context)
     {
     }
 
-    private static void ConsumeReachedWaypoints(GroundTraverseSegment segment, MovementExecutionContext context)
+    private static int ConsumeReachedWaypoints(MovementExecutionContext context)
     {
-        while (segment.Waypoints.Count > 0)
+        var nextWaypointIndex = context.ActiveWaypointIndex;
+        while (nextWaypointIndex < context.WaypointCount)
         {
-            var target   = Flatten(segment.Waypoints[0]);
+            var target   = Flatten(context.Segment.Waypoints[nextWaypointIndex]);
             var current  = Flatten(context.Player.Position);
             var previous = Flatten(context.PreviousPosition ?? context.Player.Position);
 
             if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, Flatten(context.Plan.RequestedDestination)) <= context.Plan.DestinationTolerance)
-            {
-                segment.Waypoints.Clear();
-                break;
-            }
+                return context.WaypointCount;
 
             if (DriverMath.DistanceToLineSegment(target, current, previous) > context.PathTolerance)
-                break;
+                return nextWaypointIndex;
 
-            segment.Waypoints.RemoveAt(0);
+            nextWaypointIndex++;
         }
+
+        return nextWaypointIndex;
     }
 
     private static Vector3 Flatten(Vector3 value) => new(value.X, 0, value.Z);

@@ -9,6 +9,7 @@ using vnavmesh.Movement.Drivers;
 using vnavmesh.Movement.Interop;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navmesh;
+using vnavmesh.PathPostprocess;
 
 namespace vnavmesh.Movement.Execution;
 
@@ -33,6 +34,7 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private MovementPlan?           _activePlan;
     private int                     _activeSegmentIndex;
+    private int[]                   _segmentWaypointIndices = [];
     private IMovementSegmentDriver? _activeDriver;
     private DateTime                _nextJump;
     private Vector3?                _previousPosition;
@@ -111,6 +113,9 @@ public sealed class MovementPlanExecutor : IDisposable
         GameplayActivityBridge.ResetAFKTime();
         var update = _activeDriver!.Update(context);
 
+        if (update.ActiveWaypointIndex is { } nextWaypointIndex)
+            _segmentWaypointIndices[_activeSegmentIndex] = Math.Clamp(nextWaypointIndex, 0, _activePlan!.Segments[_activeSegmentIndex].Waypoints.Count);
+
         if (update.Failure is { } failure)
         {
             Stop();
@@ -129,7 +134,8 @@ public sealed class MovementPlanExecutor : IDisposable
 
         _activePlan                            = plan;
         _activeSegmentIndex                    = 0;
-        _activePathTolerance                   = ConsumeNextTolerance();
+        _segmentWaypointIndices                = new int[plan.Segments.Count];
+        _activePathTolerance                   = plan.Segments[0].CompletionTolerance;
         _millisecondsWithNoSignificantMovement = 0;
         UpdateSharedState(true);
         EnterCurrentSegment();
@@ -148,6 +154,8 @@ public sealed class MovementPlanExecutor : IDisposable
         var resolvedTolerance = tolerance    ?? ConsumeNextTolerance();
         var segments          = new List<MovementSegment>();
 
+        Service.Log.Debug("收到执行器原始路径输入：该入口会绕过算路层与后处理层");
+
         if (requestedMode == MovementMode.Flight && !IsAirborne)
         {
             segments.Add
@@ -165,11 +173,15 @@ public sealed class MovementPlanExecutor : IDisposable
                 ? new FlightTraverseSegment
                 {
                     CompletionTolerance = resolvedTolerance,
+                    GeometryOwnership   = PathGeometryOwnership.ExternalInput,
+                    ReachabilitySource  = PathReachabilitySource.ExternalInput,
                     Waypoints           = [.. waypoints]
                 }
                 : new GroundTraverseSegment
                 {
                     CompletionTolerance = resolvedTolerance,
+                    GeometryOwnership   = PathGeometryOwnership.ExternalInput,
+                    ReachabilitySource  = PathReachabilitySource.ExternalInput,
                     Waypoints           = [.. waypoints]
                 }
         );
@@ -192,6 +204,7 @@ public sealed class MovementPlanExecutor : IDisposable
         ExitCurrentSegment();
         _activePlan                            = null;
         _activeSegmentIndex                    = 0;
+        _segmentWaypointIndices                = [];
         _activePathTolerance                   = _config.PathTolerance;
         _millisecondsWithNoSignificantMovement = 0;
         UpdateSharedState(false);
@@ -251,14 +264,16 @@ public sealed class MovementPlanExecutor : IDisposable
     private MovementExecutionContext BuildContext(IPlayerCharacter player) =>
         new()
         {
-            Config           = _config,
-            Player           = player,
-            Plan             = _activePlan!,
-            SegmentIndex     = _activeSegmentIndex,
-            Segment          = _activePlan!.Segments[_activeSegmentIndex],
-            MovementAllowed  = MovementAllowed,
-            PathTolerance    = _activePathTolerance,
-            PreviousPosition = _previousPosition
+            Config                 = _config,
+            Player                 = player,
+            Plan                   = _activePlan!,
+            SegmentIndex           = _activeSegmentIndex,
+            Segment                = _activePlan!.Segments[_activeSegmentIndex],
+            ActiveWaypointIndex    = _segmentWaypointIndices[_activeSegmentIndex],
+            SegmentWaypointIndices = _segmentWaypointIndices,
+            MovementAllowed        = MovementAllowed,
+            PathTolerance          = _activePathTolerance,
+            PreviousPosition       = _previousPosition
         };
 
     private MovementExecutionContext BuildContextForCurrentSegment()
@@ -266,14 +281,16 @@ public sealed class MovementPlanExecutor : IDisposable
         var player = Service.ObjectTable.LocalPlayer ?? throw new InvalidOperationException("本地玩家不存在，无法构建移动上下文");
         return new()
         {
-            Config           = _config,
-            Player           = player,
-            Plan             = _activePlan!,
-            SegmentIndex     = _activeSegmentIndex,
-            Segment          = _activePlan!.Segments[_activeSegmentIndex],
-            MovementAllowed  = MovementAllowed,
-            PathTolerance    = _activePathTolerance,
-            PreviousPosition = _previousPosition
+            Config                 = _config,
+            Player                 = player,
+            Plan                   = _activePlan!,
+            SegmentIndex           = _activeSegmentIndex,
+            Segment                = _activePlan!.Segments[_activeSegmentIndex],
+            ActiveWaypointIndex    = _segmentWaypointIndices[_activeSegmentIndex],
+            SegmentWaypointIndices = _segmentWaypointIndices,
+            MovementAllowed        = MovementAllowed,
+            PathTolerance          = _activePathTolerance,
+            PreviousPosition       = _previousPosition
         };
     }
 
@@ -337,8 +354,12 @@ public sealed class MovementPlanExecutor : IDisposable
             return default;
 
         for (var i = _activeSegmentIndex; i < _activePlan.Segments.Count; i++)
-            if (_activePlan.Segments[i].Waypoints.Count > 0)
-                return _activePlan.Segments[i].Waypoints[0];
+        {
+            var segment       = _activePlan.Segments[i];
+            var waypointIndex = _segmentWaypointIndices[i];
+            if (waypointIndex < segment.Waypoints.Count)
+                return segment.Waypoints[waypointIndex];
+        }
 
         return _activePlan.FinalDestination;
     }
@@ -348,7 +369,16 @@ public sealed class MovementPlanExecutor : IDisposable
         if (_activePlan == null)
             return [];
 
-        return [.. _activePlan.Segments.Skip(_activeSegmentIndex).SelectMany(segment => segment.Waypoints)];
+        List<Vector3> result = [];
+        for (var i = _activeSegmentIndex; i < _activePlan.Segments.Count; i++)
+        {
+            var segment = _activePlan.Segments[i];
+            var start   = _segmentWaypointIndices[i];
+            for (var waypointIndex = start; waypointIndex < segment.Waypoints.Count; waypointIndex++)
+                result.Add(segment.Waypoints[waypointIndex]);
+        }
+
+        return result;
     }
 
     private unsafe void ExecuteJump()

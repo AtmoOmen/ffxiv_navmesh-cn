@@ -1,11 +1,11 @@
 using Dalamud.Game.ClientState.Conditions;
-using vnavmesh.NavPathfind;
+using vnavmesh.PathPostprocess;
 
 namespace vnavmesh.Movement.Planning;
 
 internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
 {
-    public MovementPlan Build(PathfindResult result, float destinationTolerance, float pathTolerance)
+    public MovementPlan Build(PostprocessedPath path)
     {
         var segments = new List<MovementSegment>();
 
@@ -20,24 +20,25 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
             );
         }
 
-        segments.Add
-        (
-            new FlightTraverseSegment
-            {
-                CompletionTolerance = pathTolerance,
-                Waypoints           = [.. result.Waypoints]
-            }
-        );
+        segments.AddRange(path.Segments.Select(BuildSegment));
 
         return new()
         {
-            RequestedMode        = MovementMode.Flight,
-            RequestedDestination = result.RequestedDestination,
-            FinalDestination     = result.FinalDestination,
-            DestinationTolerance = destinationTolerance,
+            RequestedMode        = path.RequestedMode,
+            RequestedDestination = path.RequestedDestination,
+            FinalDestination     = path.FinalDestination,
+            DestinationTolerance = path.DestinationTolerance,
             Segments             = segments
         };
     }
 
     private static bool IsAirborne => Service.Condition[ConditionFlag.InFlight] || Service.Condition[ConditionFlag.Diving];
+
+    private static MovementSegment BuildSegment(PostprocessedPathSegment segment) => new FlightTraverseSegment
+    {
+        CompletionTolerance = segment.CompletionTolerance,
+        GeometryOwnership   = segment.GeometryOwnership,
+        ReachabilitySource  = segment.ReachabilitySource,
+        Waypoints           = [.. segment.Waypoints]
+    };
 }

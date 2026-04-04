@@ -3,7 +3,9 @@ using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.NavPathfind;
 using vnavmesh.NavVolume;
+using vnavmesh.PathPostprocess;
 using vnavmesh.Utils;
+using vnavmesh.Movement.Planning;
 
 namespace vnavmesh.Navmesh;
 
@@ -181,6 +183,7 @@ public class NavmeshQuery
 
     public           DtNavMeshQuery      MeshQuery;
     public           VoxelPathfind?      VolumeQuery;
+    private readonly PathPostprocessor   _postprocessor;
     private readonly IDtQueryFilter      _filter         = new DtQueryDefaultFilter();
     private readonly TeleportAwareFilter _teleportFilter = new();
     private readonly RandomnessFilter    _randomnessFilter;
@@ -194,13 +197,20 @@ public class NavmeshQuery
         MeshQuery = new(navmesh.Mesh /*, s => Service.Log.Debug(s)*/);
         if (navmesh.Volume != null)
             VolumeQuery = new(navmesh.Volume, _config);
+        _postprocessor = new(MeshQuery);
         _randomnessFilter = new(_teleportFilter);
     }
 
     public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
-        => PathfindMeshDetailed(from, to, useRaycast, useStringPulling, range, cancel).Waypoints;
+        => Postprocess(PlanMeshPathDetailed(from, to, useRaycast, range, cancel), useStringPulling, _config.PathTolerance, cancel).Waypoints;
 
-    internal PathfindResult PathfindMeshDetailed(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
+    public List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel)
+        => Postprocess(PlanVolumePathDetailed(from, to, useRaycast, cancel), useStringPulling, _config.PathTolerance, cancel).Waypoints;
+
+    internal PostprocessedPath Postprocess(PlannerResult result, bool useStringPulling, float completionTolerance, CancellationToken cancel) =>
+        _postprocessor.Process(result, useStringPulling, completionTolerance, cancel);
+
+    internal PlannerResult PlanMeshPathDetailed(Vector3 from, Vector3 to, bool useRaycast, float range, CancellationToken cancel)
     {
         var requestedStartRef = FindNearestMeshPoly(from);
         var endRef            = FindNearestMeshPoly(to);
@@ -229,7 +239,6 @@ public class NavmeshQuery
 
         var pathCandidate = bestStartCandidate.Value;
         var startRef      = pathCandidate.StartRef;
-        var startPos      = pathCandidate.StartPoint.SystemToRecast();
         LastPath.AddRange(pathCandidate.Corridor);
         var pathStatus = pathCandidate.QueryStatus;
         Service.Log.Debug($"[算路] 地面多边形 {startRef:X} -> {endRef:X}（原始起点候选 = {requestedStartRef:X}）");
@@ -239,36 +248,53 @@ public class NavmeshQuery
 
         var lastPoly     = pathCandidate.LastPoly;
         var resultStatus = pathCandidate.ResultStatus;
-        var finalEndPos  = pathCandidate.FinalDestination.SystemToRecast();
 
         if (resultStatus == PathfindStatus.Partial &&
-            TryRepairShortGroundGap(pathCandidate, to, endRef, requestedEndPos, filter, opt, range, useStringPulling, cancel, out var repairedResult))
+            TryRepairShortGroundGap(pathCandidate, to, endRef, requestedEndPos, filter, opt, range, cancel, out var repairedResult))
         {
             LogMeshResult(repairedResult, from, startRef, endRef, lastPoly, range, timer.Value());
             return repairedResult;
         }
 
-        var waypoints = BuildMeshWaypoints(startPos, LastPath, finalEndPos, useStringPulling);
-        if (waypoints == null)
-            return LogMeshFailure(from, to, startRef, endRef, lastPoly, range, "路径点生成失败");
-
-        if (waypoints.Count == 0)
-            return LogMeshFailure(from, to, startRef, endRef, lastPoly, range, "路径点生成结果为空");
-
-        var result = new PathfindResult(resultStatus, waypoints, to, waypoints[^1]);
+        var result = new PlannerResult
+        {
+            Status               = resultStatus,
+            RequestedMode        = MovementMode.Ground,
+            RequestedDestination = to,
+            FinalDestination     = pathCandidate.FinalDestination,
+            DestinationTolerance = range,
+            Segments =
+            [
+                new()
+                {
+                    MovementMode         = MovementMode.Ground,
+                    SegmentKind          = MovementSegmentKind.GroundTraverse,
+                    AllowVerticalControl = false,
+                    ReachabilitySource   = PathReachabilitySource.Mesh,
+                    GeometryKind         = PlannerSegmentGeometryKind.MeshCorridor,
+                    StartPosition        = pathCandidate.StartPoint,
+                    EndPosition          = pathCandidate.FinalDestination,
+                    Corridor             = [.. LastPath]
+                }
+            ]
+        };
         LogMeshResult(result, from, startRef, endRef, lastPoly, range, timer.Value());
         return result;
     }
 
-    public List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel)
-        => PathfindVolumeDetailed(from, to, useRaycast, useStringPulling, cancel).Waypoints;
-
-    internal PathfindResult PathfindVolumeDetailed(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel)
+    internal PlannerResult PlanVolumePathDetailed(Vector3 from, Vector3 to, bool useRaycast, CancellationToken cancel)
     {
         if (VolumeQuery == null)
         {
             Service.Log.Error("体素导航体未构建，无法执行飞行算路");
-            return new(PathfindStatus.Failed, [], to, to);
+            return new()
+            {
+                Status               = PathfindStatus.Failed,
+                RequestedMode        = MovementMode.Flight,
+                RequestedDestination = to,
+                FinalDestination     = to,
+                DestinationTolerance = 0
+            };
         }
 
         var locateTimer    = StopWatchTimer.Create();
@@ -280,7 +306,14 @@ public class NavmeshQuery
         if (startVoxel == VoxelMap.InvalidVoxel || endVoxel == VoxelMap.InvalidVoxel)
         {
             Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 无法定位空体素");
-            return new(PathfindStatus.Failed, [], to, to);
+            return new()
+            {
+                Status               = PathfindStatus.Failed,
+                RequestedMode        = MovementMode.Flight,
+                RequestedDestination = to,
+                FinalDestination     = to,
+                DestinationTolerance = 0
+            };
         }
 
         var searchTimer = StopWatchTimer.Create();
@@ -292,7 +325,14 @@ public class NavmeshQuery
         if (voxelPath.Count == 0)
         {
             Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空");
-            return new(PathfindStatus.Failed, [], to, to);
+            return new()
+            {
+                Status               = PathfindStatus.Failed,
+                RequestedMode        = MovementMode.Flight,
+                RequestedDestination = to,
+                FinalDestination     = to,
+                DestinationTolerance = 0
+            };
         }
 
         Service.Log.Debug
@@ -300,27 +340,53 @@ public class NavmeshQuery
             $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchDuration.TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，路径点 = {voxelPath.Count}"
         );
 
-        // TODO: string-pulling support
         List<Vector3> rawWaypoints = new(voxelPath.Count + 1);
         foreach (var step in voxelPath)
             rawWaypoints.Add(step.p);
         rawWaypoints.Add(to);
-        var waypoints = DeduplicateWaypoints(rawWaypoints);
-        return new(PathfindStatus.Complete, waypoints, to, waypoints[^1]);
+        return new()
+        {
+            Status               = PathfindStatus.Complete,
+            RequestedMode        = MovementMode.Flight,
+            RequestedDestination = to,
+            FinalDestination     = rawWaypoints[^1],
+            DestinationTolerance = 0,
+            Segments =
+            [
+                new()
+                {
+                    MovementMode         = MovementMode.Flight,
+                    SegmentKind          = MovementSegmentKind.FlightTraverse,
+                    AllowVerticalControl = true,
+                    ReachabilitySource   = PathReachabilitySource.Volume,
+                    GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                    StartPosition        = from,
+                    EndPosition          = to,
+                    Points               = [.. rawWaypoints]
+                }
+            ]
+        };
     }
 
-    private PathfindResult LogMeshFailure(Vector3 from, Vector3 to, long startRef, long endRef, long lastPoly, float range, string reason)
+    private PlannerResult LogMeshFailure(Vector3 from, Vector3 to, long startRef, long endRef, long lastPoly, float range, string reason)
     {
         var lastPolyText = lastPoly != 0 ? lastPoly.ToString("X") : "<none>";
         Service.Log.Error($"地面算路失败：起点 = {from:f3}，请求终点 = {to:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPolyText}，容差 = {range:f3}，原因 = {reason}");
-        return new(PathfindStatus.Failed, [], to, to);
+        return new()
+        {
+            Status               = PathfindStatus.Failed,
+            RequestedMode        = MovementMode.Ground,
+            RequestedDestination = to,
+            FinalDestination     = to,
+            DestinationTolerance = range
+        };
     }
 
-    private void LogMeshResult(PathfindResult result, Vector3 from, long startRef, long endRef, long lastPoly, float range, TimeSpan duration)
+    private void LogMeshResult(PlannerResult result, Vector3 from, long startRef, long endRef, long lastPoly, float range, TimeSpan duration)
     {
         var diagnostic = BuildSeamDiagnostic(from, result.RequestedDestination, result.FinalDestination);
         var message =
-            $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，路径点 = {result.Waypoints.Count}";
+            $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，粗路径段 = {result.Segments.Count}";
 
         if (result.Status == PathfindStatus.Partial)
         {
@@ -534,34 +600,6 @@ public class NavmeshQuery
         return (min, max);
     }
 
-    private List<Vector3>? BuildMeshWaypoints(RcVec3f startPos, List<long> corridor, RcVec3f finalEndPos, bool useStringPulling)
-    {
-        if (useStringPulling)
-        {
-            var straightPath   = new List<DtStraightPath>();
-            var straightStatus = MeshQuery.FindStraightPath(startPos, finalEndPos, corridor, ref straightPath, 1024, 0);
-            if (straightStatus.Failed())
-                return null;
-
-            return DeduplicateWaypoints(straightPath.Select(p => p.pos.RecastToSystem()));
-        }
-
-        return DeduplicateWaypoints(corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(finalEndPos.RecastToSystem()));
-    }
-
-    private static List<Vector3> DeduplicateWaypoints(IEnumerable<Vector3> points)
-    {
-        List<Vector3> result = [];
-
-        foreach (var point in points)
-        {
-            if (result.Count == 0 || Vector3.DistanceSquared(result[^1], point) > 0.000001f)
-                result.Add(point);
-        }
-
-        return result;
-    }
-
     private bool TryRepairShortGroundGap
     (
         MeshPathCandidate  partialCandidate,
@@ -571,12 +609,11 @@ public class NavmeshQuery
         IDtQueryFilter     filter,
         DtFindPathOption   opt,
         float              range,
-        bool               useStringPulling,
         CancellationToken  cancel,
-        out PathfindResult repairedResult
+        out PlannerResult repairedResult
     )
     {
-        repairedResult = default;
+        repairedResult = default!;
 
         var partialEnd = partialCandidate.FinalDestination;
         var repairCandidates = FindIntersectingMeshPolys
@@ -642,26 +679,41 @@ public class NavmeshQuery
         if (bestResumeCandidate == null)
             return false;
 
-        var partialWaypoints = BuildMeshWaypoints
-            (partialCandidate.StartPoint.SystemToRecast(), partialCandidate.Corridor, partialCandidate.FinalDestination.SystemToRecast(), useStringPulling);
-        var resumedWaypoints = BuildMeshWaypoints
-        (
-            bestResumeCandidate.Value.StartPoint.SystemToRecast(),
-            bestResumeCandidate.Value.Corridor,
-            bestResumeCandidate.Value.FinalDestination.SystemToRecast(),
-            useStringPulling
-        );
-        if (partialWaypoints == null || resumedWaypoints == null)
-            return false;
-
         var bridgePointToAdd = bestResumeCandidate.Value.StartPoint;
-        var mergedWaypoints  = DeduplicateWaypoints(partialWaypoints.Concat([bridgePointToAdd]).Concat(resumedWaypoints));
-        if (mergedWaypoints.Count == 0)
-            return false;
+        var mergedWaypoints = new List<Vector3>
+        {
+            partialCandidate.StartPoint
+        };
+        mergedWaypoints.AddRange(partialCandidate.Corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()));
+        mergedWaypoints.Add(partialCandidate.FinalDestination);
+        mergedWaypoints.Add(bridgePointToAdd);
+        mergedWaypoints.AddRange(bestResumeCandidate.Value.Corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()));
+        mergedWaypoints.Add(bestResumeCandidate.Value.FinalDestination);
 
         Service.Log.Warning
             ($"[算路] 已触发短距补桥：partial 终点 = {partialCandidate.FinalDestination:f3}，桥接点 = {bridgePointToAdd:f3}，桥接后结果 = {bestResumeCandidate.Value.ResultStatus}");
-        repairedResult = new(bestResumeCandidate.Value.ResultStatus, mergedWaypoints, requestedTarget, mergedWaypoints[^1]);
+        repairedResult = new()
+        {
+            Status               = bestResumeCandidate.Value.ResultStatus,
+            RequestedMode        = MovementMode.Ground,
+            RequestedDestination = requestedTarget,
+            FinalDestination     = bestResumeCandidate.Value.FinalDestination,
+            DestinationTolerance = range,
+            Segments =
+            [
+                new()
+                {
+                    MovementMode         = MovementMode.Ground,
+                    SegmentKind          = MovementSegmentKind.GroundTraverse,
+                    AllowVerticalControl = false,
+                    ReachabilitySource   = PathReachabilitySource.Mesh,
+                    GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                    StartPosition        = partialCandidate.StartPoint,
+                    EndPosition          = bestResumeCandidate.Value.FinalDestination,
+                    Points               = [.. mergedWaypoints]
+                }
+            ]
+        };
         return true;
     }
 

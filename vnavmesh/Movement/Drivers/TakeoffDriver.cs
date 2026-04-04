@@ -22,7 +22,7 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
             return new
             (
                 CreateIdleCommand(context.Player.Position),
-                new
+                Failure: new
                 (
                     MovementFailureReason.TakeoffUnavailable,
                     context.Plan.RequestedMode,
@@ -66,9 +66,8 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
 
     private static Vector3 ResolveFallbackWaypoint(MovementExecutionContext context)
     {
-        for (var i = context.SegmentIndex + 1; i < context.Plan.Segments.Count; i++)
-            if (context.Plan.Segments[i].Waypoints.Count > 0)
-                return context.Plan.Segments[i].Waypoints[0];
+        if (context.TryGetFirstRemainingWaypoint(context.SegmentIndex + 1, out var waypoint))
+            return waypoint;
 
         return context.Plan.FinalDestination;
     }

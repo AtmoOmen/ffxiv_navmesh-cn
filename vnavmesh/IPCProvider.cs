@@ -79,6 +79,7 @@ internal class IPCProvider : IDisposable
         );
         RegisterFunc("Query.Mesh.FlagToPoint", () => navmeshManager.Query is { } q ? MapUtil.FlagToPoint(q) : null);
 
+        // 原始执行器入口：该接口直接消费外部点列，不经过算路层与后处理层。
         RegisterAction("Path.MoveTo", (List<Vector3> waypoints, bool fly) => movementExecutor.Move(waypoints, !fly));
         RegisterAction("Path.Stop",   movementExecutor.Stop);
         RegisterFunc("Path.IsRunning",          () => movementExecutor.Waypoints.Count > 0);

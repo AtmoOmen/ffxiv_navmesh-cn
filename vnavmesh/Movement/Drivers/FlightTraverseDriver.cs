@@ -13,12 +13,11 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
 
     public SegmentDriverUpdate Update(MovementExecutionContext context)
     {
-        var segment = (FlightTraverseSegment)context.Segment;
-        ConsumeReachedWaypoints(segment, context);
-        if (segment.Waypoints.Count == 0)
-            return new(CreateIdleCommand(context.Player.Position));
+        var nextWaypointIndex = ConsumeReachedWaypoints(context);
+        if (nextWaypointIndex >= context.WaypointCount)
+            return new(CreateIdleCommand(context.Player.Position), nextWaypointIndex);
 
-        var desired = segment.Waypoints[0];
+        var desired = context.Segment.Waypoints[nextWaypointIndex];
         var delta = new Vector3
         (
             desired.X - context.Player.Position.X,
@@ -37,33 +36,33 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
                 context.Config.AlignCameraHeight.Degrees(),
                 false
             )
-        );
+        , nextWaypointIndex);
     }
 
-    public bool ShouldAdvance(MovementExecutionContext context) => context.Segment.Waypoints.Count == 0;
+    public bool ShouldAdvance(MovementExecutionContext context) => context.ActiveWaypointIndex >= context.WaypointCount;
 
     public void Exit(MovementExecutionContext context)
     {
     }
 
-    private static void ConsumeReachedWaypoints(FlightTraverseSegment segment, MovementExecutionContext context)
+    private static int ConsumeReachedWaypoints(MovementExecutionContext context)
     {
-        while (segment.Waypoints.Count > 0)
+        var nextWaypointIndex = context.ActiveWaypointIndex;
+        while (nextWaypointIndex < context.WaypointCount)
         {
             var current  = context.Player.Position;
             var previous = context.PreviousPosition ?? current;
 
             if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, context.Plan.RequestedDestination) <= context.Plan.DestinationTolerance)
-            {
-                segment.Waypoints.Clear();
-                break;
-            }
+                return context.WaypointCount;
 
-            if (DriverMath.DistanceToLineSegment(segment.Waypoints[0], current, previous) > context.PathTolerance)
-                break;
+            if (DriverMath.DistanceToLineSegment(context.Segment.Waypoints[nextWaypointIndex], current, previous) > context.PathTolerance)
+                return nextWaypointIndex;
 
-            segment.Waypoints.RemoveAt(0);
+            nextWaypointIndex++;
         }
+
+        return nextWaypointIndex;
     }
 
     private static MovementFrameCommand CreateIdleCommand(Vector3 current) => new(current, false, false, false, default, default, false);
