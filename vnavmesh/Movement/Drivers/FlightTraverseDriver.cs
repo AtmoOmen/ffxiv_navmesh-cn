@@ -33,7 +33,9 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
                 context.Config.AlignCameraToMovement,
                 Angle.FromDirectionXZ(delta) + 180.Degrees(),
                 context.Config.AlignCameraHeight.Degrees(),
-                false
+                false,
+                false,
+                default
             ),
             nextWaypointIndex
         );
@@ -45,5 +47,5 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
     {
     }
 
-    private static MovementFrameCommand CreateIdleCommand(Vector3 current) => new(current, false, false, false, default, default, false);
+    private static MovementFrameCommand CreateIdleCommand(Vector3 current) => new(current, false, false, false, default, default, false, false, default);
 }

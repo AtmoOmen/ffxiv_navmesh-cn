@@ -11,5 +11,7 @@ internal readonly record struct MovementFrameCommand
     bool    EnableCameraAlign,
     Angle   DesiredAzimuth,
     Angle   DesiredAltitude,
-    bool    RequestJump
+    bool    RequestJump,
+    bool    EnableFacingAlign,
+    Angle   DesiredFacing
 );

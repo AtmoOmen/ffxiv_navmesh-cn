@@ -32,7 +32,8 @@ public sealed class MovementPlanExecutor : IDisposable
     private readonly TakeoffDriver             _takeoffDriver = new();
     private readonly bool[]                    _sharedPathIsRunning;
 
-    private const string SharedPathTag = "vnav.PathIsRunning";
+    private const string SharedPathTag             = "vnav.PathIsRunning";
+    private const float  TakeoffResumeDeltaY       = 0.1f;
 
     private MovementPlan?           _activePlan;
     private int                     _activeSegmentIndex;
@@ -80,6 +81,7 @@ public sealed class MovementPlanExecutor : IDisposable
             return;
         }
 
+        SyncActiveDriver(player, framePreviousPosition);
         AdvanceCompletedSegments(player, framePreviousPosition);
 
         if (_activePlan == null)
@@ -88,6 +90,8 @@ public sealed class MovementPlanExecutor : IDisposable
             ResetControllers();
             return;
         }
+
+        SyncActiveDriver(player, framePreviousPosition);
 
         if (_config.StopOnStuck && _previousPosition.HasValue)
         {
@@ -258,8 +262,9 @@ public sealed class MovementPlanExecutor : IDisposable
         if (_activePlan == null)
             return;
 
-        _activeDriver        = ResolveDriver(_activePlan.Segments[_activeSegmentIndex].Kind);
-        _activeDriver.Enter(BuildContextForCurrentSegment(previousPosition));
+        var context  = BuildContextForCurrentSegment(previousPosition);
+        _activeDriver = ResolveDriver(context);
+        _activeDriver.Enter(context);
         ConsumeInitialWaypoints(previousPosition);
     }
 
@@ -270,6 +275,30 @@ public sealed class MovementPlanExecutor : IDisposable
 
         _activeDriver.Exit(BuildContextForCurrentSegment(previousPosition));
         _activeDriver = null;
+    }
+
+    private void SyncActiveDriver(IPlayerCharacter player, Vector3? previousPosition)
+    {
+        if (_activePlan == null || _activeSegmentIndex >= _activePlan.Segments.Count)
+            return;
+
+        var desiredDriver = ResolveDriver(BuildContext(player, previousPosition));
+        if (ReferenceEquals(_activeDriver, desiredDriver))
+            return;
+
+        SwitchDriver(desiredDriver, previousPosition);
+    }
+
+    private void SwitchDriver(IMovementSegmentDriver driver, Vector3? previousPosition)
+    {
+        if (_activePlan == null)
+            return;
+
+        if (_activeDriver != null)
+            _activeDriver.Exit(BuildContextForCurrentSegment(previousPosition));
+
+        _activeDriver = driver;
+        _activeDriver.Enter(BuildContextForCurrentSegment(previousPosition));
     }
 
     private MovementExecutionContext BuildContext(IPlayerCharacter player, Vector3? previousPosition) =>
@@ -320,6 +349,16 @@ public sealed class MovementPlanExecutor : IDisposable
             _segmentWaypointIndices[_activeSegmentIndex] = Math.Clamp(nextWaypointIndex, 0, context.WaypointCount);
     }
 
+    private IMovementSegmentDriver ResolveDriver(MovementExecutionContext context)
+    {
+        if (context.Segment.Kind == MovementSegmentKind.FlightTraverse
+            && !IsAirborne
+            && context.TryGetFirstElevatedRemainingWaypoint(TakeoffResumeDeltaY, out _))
+            return _takeoffDriver;
+
+        return ResolveDriver(context.Segment.Kind);
+    }
+
     private IMovementSegmentDriver ResolveDriver(MovementSegmentKind kind) => kind switch
     {
         MovementSegmentKind.GroundTraverse => _groundDriver,
@@ -330,9 +369,11 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private void ApplyFrameCommand(MovementFrameCommand command, Vector3 currentPosition)
     {
-        _movement.Enabled              = command.MovementEnabled;
+        _movement.Enabled              = command.MovementEnabled || command.EnableFacingAlign;
         _movement.AllowVerticalControl = command.AllowVerticalControl;
         _movement.DesiredPosition      = command.DesiredPosition;
+        _movement.EnableFacingAlign    = command.EnableFacingAlign;
+        _movement.DesiredFacing        = command.DesiredFacing;
 
         _camera.Enabled         = command.EnableCameraAlign;
         _camera.SpeedH          = _camera.SpeedV = 360.Degrees();
@@ -348,9 +389,11 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private void ResetControllers()
     {
-        _movement.Enabled = false;
-        _camera.Enabled   = false;
-        _camera.SpeedH    = _camera.SpeedV = default;
+        _movement.Enabled           = false;
+        _movement.EnableFacingAlign = false;
+        _movement.DesiredFacing     = default;
+        _camera.Enabled             = false;
+        _camera.SpeedH              = _camera.SpeedV = default;
         if (Service.ObjectTable.LocalPlayer is { } player)
             _movement.DesiredPosition = player.Position;
     }

@@ -23,6 +23,12 @@ internal sealed class MovementExecutionContext
     public bool     HasRemainingWaypoints       => ActiveWaypointIndex < WaypointCount;
     public Vector3? ActiveWaypoint              => HasRemainingWaypoints ? Segment.Waypoints[ActiveWaypointIndex] : null;
 
+    public bool TryGetFirstRemainingWaypoint(out Vector3 waypoint) =>
+        TryFindRemainingWaypoint(static (_, _) => true, out waypoint);
+
+    public bool TryGetFirstElevatedRemainingWaypoint(float minHeightDelta, out Vector3 waypoint) =>
+        TryFindRemainingWaypoint(static (candidate, minimumY) => candidate.Y > minimumY, out waypoint, Player.Position.Y + minHeightDelta);
+
     public bool TryGetFirstRemainingWaypoint(int startSegmentIndex, out Vector3 waypoint)
     {
         for (var i = startSegmentIndex; i < Plan.Segments.Count; i++)
@@ -34,6 +40,28 @@ internal sealed class MovementExecutionContext
             {
                 waypoint = segment.Waypoints[waypointIndex];
                 return true;
+            }
+        }
+
+        waypoint = default;
+        return false;
+    }
+
+    private bool TryFindRemainingWaypoint(Func<Vector3, float, bool> predicate, out Vector3 waypoint, float threshold = 0)
+    {
+        for (var segmentIndex = SegmentIndex; segmentIndex < Plan.Segments.Count; segmentIndex++)
+        {
+            var segment            = Plan.Segments[segmentIndex];
+            var firstWaypointIndex = segmentIndex == SegmentIndex ? ActiveWaypointIndex : SegmentWaypointIndices[segmentIndex];
+
+            for (var waypointIndex = firstWaypointIndex; waypointIndex < segment.Waypoints.Count; waypointIndex++)
+            {
+                var candidate = segment.Waypoints[waypointIndex];
+                if (predicate(candidate, threshold))
+                {
+                    waypoint = candidate;
+                    return true;
+                }
             }
         }
 

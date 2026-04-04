@@ -57,11 +57,16 @@ public unsafe class MovementInputController : IDisposable
 
     public bool    IgnoreUserInput      { get; set; }
     public bool    AllowVerticalControl { get; set; } = true;
+    public bool    EnableFacingAlign    { get; set; }
     public Vector3 DesiredPosition      { get; set; }
+    public Angle   DesiredFacing        { get; set; }
     public float   Precision            { get; set; } = 0.01f;
+    public float   FacingPrecisionRad   { get; set; } = 1.Degrees().Rad;
     public bool    UserInput            { get; private set; }
 
     private bool legacyMode;
+
+    private const float FULL_TURN_INPUT_ANGLE = MathF.PI / 4;
 
     private delegate bool RMIWalkIsInputEnabled(void* self);
 
@@ -108,6 +113,9 @@ public unsafe class MovementInputController : IDisposable
             *sumLeft    = dir.X;
             *sumForward = dir.Y;
         }
+
+        if (movementAllowed && (IgnoreUserInput || *sumTurnLeft == 0) && ResolveFacingTurnInput() is { } turnInput)
+            *sumTurnLeft = turnInput;
     }
 
     private void RMIFlyDetour(void* self, PlayerMoveControllerFlyInput* result)
@@ -122,6 +130,9 @@ public unsafe class MovementInputController : IDisposable
             result->Left    = dir.X;
             result->Up      = AllowVerticalControl ? relDir.v.Rad : 0;
         }
+
+        if ((IgnoreUserInput || result->Turn == 0) && ResolveFacingTurnInput() is { } turnInput)
+            result->Turn = turnInput;
     }
 
     private (Angle h, Angle v)? DirectionToDestination(bool allowVertical)
@@ -140,6 +151,22 @@ public unsafe class MovementInputController : IDisposable
                          ? ((CameraEx*)CameraManager.Instance()->GetActiveCamera())->DirH.Radians() + 180.Degrees()
                          : player.Rotation.Radians();
         return (dirH - refDir, dirV);
+    }
+
+    private float? ResolveFacingTurnInput()
+    {
+        if (!EnableFacingAlign)
+            return null;
+
+        var player = Service.ObjectTable.LocalPlayer;
+        if (player == null)
+            return null;
+
+        var delta = (DesiredFacing - player.Rotation.Radians()).Normalized().Rad;
+        if (MathF.Abs(delta) <= FacingPrecisionRad)
+            return 0;
+
+        return Math.Clamp(delta / FULL_TURN_INPUT_ANGLE, -1f, 1f);
     }
 
     private void OnConfigChanged(object? sender, ConfigChangeEvent evt) => UpdateLegacyMode();
