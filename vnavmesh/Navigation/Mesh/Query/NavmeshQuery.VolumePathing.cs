@@ -17,6 +17,7 @@ public partial class NavmeshQuery
             return CreateFlightFailure(to);
         }
 
+        var volume        = VolumeQuery.Volume;
         var locateTimer    = StopWatchTimer.Create();
         var startVoxel     = FindNearestVolumeVoxel(from);
         var endVoxel       = FindNearestVolumeVoxel(to);
@@ -29,9 +30,14 @@ public partial class NavmeshQuery
             return CreateFlightFailure(to);
         }
 
+        var requestedStartLeaf  = volume.FindLeafVoxel(from);
+        var requestedTargetLeaf = volume.FindLeafVoxel(to);
+        var safeStart           = requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ? from : VoxelSearch.FindClosestVoxelPoint(volume, startVoxel, from);
+        var safeDestination     = requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ? to : VoxelSearch.FindClosestVoxelPoint(volume, endVoxel, to);
+        var destinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
         var searchTimer = StopWatchTimer.Create();
         var voxelPath = VolumeQuery.FindPath
-            (startVoxel, endVoxel, from, to, useRaycast, false, cancel);
+            (startVoxel, endVoxel, safeStart, safeDestination, useRaycast, true, cancel);
         var telemetry = VolumeQuery.LastTelemetry;
 
         if (voxelPath.Count == 0)
@@ -42,19 +48,16 @@ public partial class NavmeshQuery
 
         Service.Log.Debug
         (
-            $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，路径点 = {voxelPath.Count}"
+            $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，路径点 = {voxelPath.Count}，起点修正 = {(Vector3.DistanceSquared(safeStart, from) > 0.000001f ? "是" : "否")}，安全终点修正 = {(destinationAdjusted ? "是" : "否")}"
         );
 
-        List<Vector3> rawWaypoints = new(voxelPath.Count + 1);
-        foreach (var step in voxelPath)
-            rawWaypoints.Add(step.p);
-        rawWaypoints.Add(to);
+        List<Vector3> rawWaypoints = BuildFlightCorridorAnchors(volume, voxelPath, safeStart, safeDestination);
         return new()
         {
-            Status               = PathfindStatus.Complete,
+            Status               = destinationAdjusted ? PathfindStatus.Partial : PathfindStatus.Complete,
             RequestedMode        = MovementMode.Flight,
             RequestedDestination = to,
-            FinalDestination     = rawWaypoints[^1],
+            FinalDestination     = safeDestination,
             DestinationTolerance = 0,
             Segments =
             [
@@ -66,7 +69,7 @@ public partial class NavmeshQuery
                     ReachabilitySource   = PathReachabilitySource.Volume,
                     GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
                     StartPosition        = from,
-                    EndPosition          = to,
+                    EndPosition          = safeDestination,
                     Points               = [.. rawWaypoints]
                 }
             ]
@@ -82,4 +85,22 @@ public partial class NavmeshQuery
             FinalDestination     = destination,
             DestinationTolerance = 0
         };
+
+    private static List<Vector3> BuildFlightCorridorAnchors
+        (VoxelMap volume, IReadOnlyList<(ulong voxel, Vector3 p)> voxelPath, Vector3 safeStart, Vector3 safeDestination)
+    {
+        List<Vector3> anchors = [safeStart];
+
+        for (var i = 1; i < voxelPath.Count - 1; i++)
+            anchors.Add(GetVoxelCenter(volume, voxelPath[i].voxel));
+
+        anchors.Add(safeDestination);
+        return anchors;
+    }
+
+    private static Vector3 GetVoxelCenter(VoxelMap volume, ulong voxel)
+    {
+        var (min, max) = volume.VoxelBounds(voxel, 0);
+        return 0.5f * (min + max);
+    }
 }

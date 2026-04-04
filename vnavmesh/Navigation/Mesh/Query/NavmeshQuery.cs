@@ -197,7 +197,7 @@ public partial class NavmeshQuery
         MeshQuery = new(navmesh.Mesh /*, s => Service.Log.Debug(s)*/);
         if (navmesh.Volume != null)
             VolumeQuery = new(navmesh.Volume, _config);
-        _postprocessor    = new(MeshQuery);
+        _postprocessor    = new(MeshQuery, navmesh.Volume);
         _randomnessFilter = new(_teleportFilter);
     }
 
