@@ -168,7 +168,12 @@ public class VoxelPathfind
                 {
                     var delta = nextNode.Position - prevNode.Position;
                     foreach (var v in VoxelSearch.EnumerateVoxelsInLine(Volume, prevNode.Voxel, nextNode.Voxel, prevNode.Position, nextNode.Position))
+                    {
+                        if (!v.empty)
+                            continue;
+
                         res.Add((v.voxel, prevNode.Position + v.t * delta));
+                    }
                 }
                 else res.Add((nextNode.Voxel, nextNode.Position));
 
