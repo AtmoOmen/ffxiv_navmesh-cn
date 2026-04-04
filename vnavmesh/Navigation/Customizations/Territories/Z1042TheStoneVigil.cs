@@ -1,0 +1,19 @@
+using vnavmesh.Navigation.Scene;
+
+namespace vnavmesh.Navigation.Customizations.Territories;
+
+[CustomizationTerritory(1042)]
+internal class Z1042TheStoneVigil : NavmeshCustomization
+{
+    public override int Version => 1;
+
+    public override void CustomizeScene(SceneExtractor scene)
+    {
+        //Force all instances of Mesh as unwalkable
+        if (scene.Meshes.TryGetValue("bg/ffxiv/roc_r1/dun/r1d1/collision/r1d1_b1_sas03.pcb", out var mesh))
+        {
+            foreach (var instance in mesh.Instances)
+                instance.ForceSetPrimFlags |= SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+        }
+    }
+}

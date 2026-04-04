@@ -1,8 +1,9 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
-using vnavmesh.Models;
+using vnavmesh.Bootstrap;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Planning;
+using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Drivers;
 

@@ -1,4 +1,4 @@
-using vnavmesh.PathPostprocess;
+using vnavmesh.Navigation.Planning;
 
 namespace vnavmesh.Movement.Planning;
 
@@ -6,8 +6,8 @@ internal sealed class TakeoffSegment : MovementSegment
 {
     public TakeoffSegment()
     {
-        MovementMode      = MovementMode.Flight;
-        GeometryOwnership = PathGeometryOwnership.None;
+        MovementMode       = MovementMode.Flight;
+        GeometryOwnership  = PathGeometryOwnership.None;
         ReachabilitySource = PathReachabilitySource.Volume;
     }
 

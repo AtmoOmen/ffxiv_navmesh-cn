@@ -1,7 +1,6 @@
 using System.Numerics;
-using vnavmesh.Models;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Movement.Planning;
+using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Drivers;
 
@@ -35,8 +34,9 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
                 Angle.FromDirectionXZ(delta) + 180.Degrees(),
                 context.Config.AlignCameraHeight.Degrees(),
                 false
-            )
-        , nextWaypointIndex);
+            ),
+            nextWaypointIndex
+        );
     }
 
     public bool ShouldAdvance(MovementExecutionContext context) => context.ActiveWaypointIndex >= context.WaypointCount;
@@ -48,6 +48,7 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
     private static int ConsumeReachedWaypoints(MovementExecutionContext context)
     {
         var nextWaypointIndex = context.ActiveWaypointIndex;
+
         while (nextWaypointIndex < context.WaypointCount)
         {
             var current  = context.Player.Position;

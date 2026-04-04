@@ -1,15 +1,17 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using vnavmesh.Models;
+using vnavmesh.Bootstrap;
+using vnavmesh.Configuration;
 using vnavmesh.Movement.Drivers;
 using vnavmesh.Movement.Interop;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navmesh;
-using vnavmesh.PathPostprocess;
+using vnavmesh.Navigation.Mesh.Query;
+using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation.Planning;
+using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Execution;
 
@@ -370,6 +372,7 @@ public sealed class MovementPlanExecutor : IDisposable
             return [];
 
         List<Vector3> result = [];
+
         for (var i = _activeSegmentIndex; i < _activePlan.Segments.Count; i++)
         {
             var segment = _activePlan.Segments[i];
@@ -393,7 +396,7 @@ public sealed class MovementPlanExecutor : IDisposable
         }
     }
 
-    private void OnNavmeshChanged(Navmesh.Navmesh? navmesh, NavmeshQuery? query) =>
+    private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query) =>
         Stop();
 
     private void UpdateSharedState(bool isRunning) => _sharedPathIsRunning[0] = isRunning;

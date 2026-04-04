@@ -6,18 +6,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj" />
-        <ProjectReference Include="..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj" />
-        <ProjectReference Include="..\DotRecast\src\DotRecast.Detour.Extras\DotRecast.Detour.Extras.csproj" />
-        <ProjectReference Include="..\DotRecast\src\DotRecast.Recast\DotRecast.Recast.csproj" />
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj"/>
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj"/>
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Detour.Extras\DotRecast.Detour.Extras.csproj"/>
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Recast\DotRecast.Recast.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-        <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
-        <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
-        <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
-        <Reference Include="Dalamud.Common" Private="false" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0"/>
+        <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0"/>
+        <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0"/>
+        <PackageReference Include="SharpDX.Mathematics" Version="4.2.0"/>
+        <Reference Include="Dalamud.Common" Private="false"/>
     </ItemGroup>
 
 </Project>

@@ -6,5 +6,5 @@ internal readonly record struct SegmentDriverUpdate
 (
     MovementFrameCommand    Command,
     int?                    ActiveWaypointIndex = null,
-    MovementFailureContext? Failure = null
+    MovementFailureContext? Failure             = null
 );

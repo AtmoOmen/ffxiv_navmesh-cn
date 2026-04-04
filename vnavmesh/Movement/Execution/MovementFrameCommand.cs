@@ -1,5 +1,5 @@
 using System.Numerics;
-using vnavmesh.Models;
+using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Execution;
 

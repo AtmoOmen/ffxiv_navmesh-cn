@@ -1,7 +1,6 @@
 using System.Numerics;
-using vnavmesh.Models;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Movement.Planning;
+using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Drivers;
 
@@ -30,6 +29,7 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
     private static int ConsumeReachedWaypoints(MovementExecutionContext context)
     {
         var nextWaypointIndex = context.ActiveWaypointIndex;
+
         while (nextWaypointIndex < context.WaypointCount)
         {
             var target   = Flatten(context.Segment.Waypoints[nextWaypointIndex]);
