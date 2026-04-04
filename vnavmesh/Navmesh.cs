@@ -15,7 +15,7 @@ namespace Navmesh;
 public record class Navmesh(int CustomizationVersion, string BuildSignature, bool CustomizationApplied, DtNavMesh Mesh, VoxelMap? Volume)
 {
 	public static readonly uint Magic = 0x444D564E; // 'NVMD'
-	public static readonly uint Version = 30; // 更新后触发一次全量重构建
+	public static readonly uint Version = 31; // 更新后触发一次全量重构建
 	public const int FLAG_UNREACHABLE = 0x10;
 	public const int AREAID_TELEPORT = 5;
 	public readonly List<(Vector3 Start, Vector3 End)> Links = []; // not serialized! actual links are added directly to the DtNavMesh, this field exists for visualization purposes
@@ -83,7 +83,7 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 		EncodedSegment volumeSegment = default;
 		Parallel.Invoke(
 			() => meshSegment = EncodeSegment(CacheSegmentKind.Mesh, CacheCodec.BrotliFastest, meshWriter => SerializeMesh(meshWriter, Mesh)),
-			() => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.BrotliFastest, volumeWriter => SerializeVolume(volumeWriter, Volume, new()))
+			() => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.BrotliFastest, volumeWriter => SerializeVolume(volumeWriter, Volume))
 		);
 
 		writer.Write(Magic);
@@ -410,12 +410,11 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 
 		var (min, max) = DeserializeBounds(reader);
 		var volume = new VoxelMap(min, max, tilesPerLevel);
-		var workspace = new VolumeCodecWorkspace();
-		DeserializeVolumeTile(reader, volume.RootTile, workspace);
+		DeserializeVolumeTile(reader, volume.RootTile);
 		return volume;
 	}
 
-	private static void SerializeVolume(BinaryWriter writer, VoxelMap? volume, VolumeCodecWorkspace workspace)
+	private static void SerializeVolume(BinaryWriter writer, VoxelMap? volume)
 	{
 		writer.Write(volume != null);
 		if (volume == null)
@@ -426,10 +425,10 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 			writer.Write(l.NumCellsX); // note: current assumption is that all dimensions are identical
 
 		SerializeBounds(writer, volume.RootTile.BoundsMin, volume.RootTile.BoundsMax);
-		SerializeVolumeTile(writer, volume.RootTile, workspace);
+		SerializeVolumeTile(writer, volume.RootTile);
 	}
 
-	private static void DeserializeVolumeTile(BinaryReader reader, VoxelMap.Tile tile, VolumeCodecWorkspace workspace)
+	private static void DeserializeVolumeTile(BinaryReader reader, VoxelMap.Tile tile)
 	{
 		var encoding = (VolumeTileEncoding)reader.ReadByte();
 		switch (encoding)
@@ -453,7 +452,7 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 
 		tile.Subdivision.Clear();
 		var packedBytes = PackedStateBytes(tile.Contents.Length);
-		var packedStates = workspace.PackedStates(packedBytes);
+		var packedStates = GC.AllocateUninitializedArray<byte>(packedBytes);
 		reader.ReadExactly(packedStates);
 
 		for (var i = 0; i < tile.Contents.Length; ++i)
@@ -463,13 +462,13 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 			{
 				VolumeCellState.Empty => 0,
 				VolumeCellState.SolidLeaf => ushort.MaxValue,
-				VolumeCellState.Subtree => DeserializeVolumeSubtile(reader, tile, i, workspace),
+				VolumeCellState.Subtree => DeserializeVolumeSubtile(reader, tile, i),
 				_ => throw new Exception($"未知的体积单元状态: {state}")
 			};
 		}
 	}
 
-	private static ushort DeserializeVolumeSubtile(BinaryReader reader, VoxelMap.Tile parent, int flatIndex, VolumeCodecWorkspace workspace)
+	private static ushort DeserializeVolumeSubtile(BinaryReader reader, VoxelMap.Tile parent, int flatIndex)
 	{
 		var localId = parent.Subdivision.Count;
 		if (localId >= VoxelMap.VoxelIdMask)
@@ -478,16 +477,17 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 		var subBounds = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel((ushort)flatIndex));
 		var child = new VoxelMap.Tile(parent.Owner, subBounds.min, subBounds.max, parent.Level + 1);
 		parent.Subdivision.Add(child);
-		DeserializeVolumeTile(reader, child, workspace);
+		DeserializeVolumeTile(reader, child);
 		return (ushort)(VoxelMap.VoxelOccupiedBit | localId);
 	}
 
-	private static void SerializeVolumeTile(BinaryWriter writer, VoxelMap.Tile tile, VolumeCodecWorkspace workspace)
+	private static void SerializeVolumeTile(BinaryWriter writer, VoxelMap.Tile tile)
 	{
 		var packedBytes = PackedStateBytes(tile.Contents.Length);
-		var packedStates = workspace.PackedStates(packedBytes);
-		var subtreeIds = workspace.SubtreeIds(tile.Contents.Length);
-		packedStates.Clear();
+		// 递归编解码时，父节点仍要继续读取这些数据，不能复用共享缓冲区。
+		var packedStates = GC.AllocateUninitializedArray<byte>(packedBytes);
+		var subtreeIds = GC.AllocateUninitializedArray<ushort>(tile.Contents.Length);
+		packedStates.AsSpan().Clear();
 		var subtreeCount = 0;
 		var allEmpty = true;
 		var allSolidLeaf = tile.Subdivision.Count == 0;
@@ -513,7 +513,7 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 			var localId = subtreeIds[i];
 			if (localId >= tile.Subdivision.Count)
 				throw new Exception($"体积子树索引越界: {localId} / {tile.Subdivision.Count}");
-			SerializeVolumeTile(writer, tile.Subdivision[localId], workspace);
+			SerializeVolumeTile(writer, tile.Subdivision[localId]);
 		}
 	}
 
@@ -636,26 +636,6 @@ public record class Navmesh(int CustomizationVersion, string BuildSignature, boo
 	{
 		if (!BitConverter.IsLittleEndian)
 			throw new PlatformNotSupportedException("缓存格式仅支持小端架构");
-	}
-
-	private sealed class VolumeCodecWorkspace
-	{
-		private byte[] _packedStates = [];
-		private ushort[] _subtreeIds = [];
-
-		public Span<byte> PackedStates(int size)
-		{
-			if (_packedStates.Length < size)
-				_packedStates = GC.AllocateUninitializedArray<byte>(size);
-			return _packedStates.AsSpan(0, size);
-		}
-
-		public Span<ushort> SubtreeIds(int size)
-		{
-			if (_subtreeIds.Length < size)
-				_subtreeIds = GC.AllocateUninitializedArray<ushort>(size);
-			return _subtreeIds.AsSpan(0, size);
-		}
 	}
 
 	private sealed class CountingStream(Stream inner, bool leaveOpen) : Stream
