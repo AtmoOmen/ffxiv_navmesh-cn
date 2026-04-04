@@ -12,7 +12,7 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
 
     public SegmentDriverUpdate Update(MovementExecutionContext context)
     {
-        var nextWaypointIndex = ConsumeReachedWaypoints(context);
+        var nextWaypointIndex = DriverMath.ConsumeGroundWaypoints(context);
         if (nextWaypointIndex >= context.WaypointCount)
             return new(CreateIdleCommand(context.Player.Position), nextWaypointIndex);
 
@@ -25,30 +25,6 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
     public void Exit(MovementExecutionContext context)
     {
     }
-
-    private static int ConsumeReachedWaypoints(MovementExecutionContext context)
-    {
-        var nextWaypointIndex = context.ActiveWaypointIndex;
-
-        while (nextWaypointIndex < context.WaypointCount)
-        {
-            var target   = Flatten(context.Segment.Waypoints[nextWaypointIndex]);
-            var current  = Flatten(context.Player.Position);
-            var previous = Flatten(context.PreviousPosition ?? context.Player.Position);
-
-            if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, Flatten(context.Plan.RequestedDestination)) <= context.Plan.DestinationTolerance)
-                return context.WaypointCount;
-
-            if (DriverMath.DistanceToLineSegment(target, current, previous) > context.PathTolerance)
-                return nextWaypointIndex;
-
-            nextWaypointIndex++;
-        }
-
-        return nextWaypointIndex;
-    }
-
-    private static Vector3 Flatten(Vector3 value) => new(value.X, 0, value.Z);
 
     private static MovementFrameCommand BuildCommand(MovementExecutionContext context, Vector3 desired, bool allowVerticalControl, bool requestJump)
     {

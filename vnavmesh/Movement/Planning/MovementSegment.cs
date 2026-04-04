@@ -8,6 +8,7 @@ internal abstract class MovementSegment
     public abstract MovementSegmentKind    Kind                 { get; }
     public abstract bool                   AllowVerticalControl { get; }
     public          MovementMode           MovementMode         { get; protected init; }
+    public          Vector3                StartPosition        { get; init; }
     public          PathGeometryOwnership  GeometryOwnership    { get; init; }
     public          PathReachabilitySource ReachabilitySource   { get; init; }
     public          float                  CompletionTolerance  { get; init; }

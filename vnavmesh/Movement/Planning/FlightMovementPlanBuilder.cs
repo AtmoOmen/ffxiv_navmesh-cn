@@ -9,8 +9,9 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
     public MovementPlan Build(PostprocessedPath path)
     {
         var segments = new List<MovementSegment>();
+        var shouldNormalizeTakeoffSegment = !IsAirborne;
 
-        if (!IsAirborne)
+        if (shouldNormalizeTakeoffSegment)
         {
             segments.Add
             (
@@ -21,7 +22,15 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
             );
         }
 
-        segments.AddRange(path.Segments.Select(BuildSegment));
+        segments.AddRange(path.Segments.Select(segment =>
+        {
+            var normalizedSegment = shouldNormalizeTakeoffSegment && segment.SegmentKind == MovementSegmentKind.FlightTraverse
+                ? NormalizeTakeoffSegment(segment)
+                : segment;
+            if (segment.SegmentKind == MovementSegmentKind.FlightTraverse)
+                shouldNormalizeTakeoffSegment = false;
+            return BuildSegment(normalizedSegment);
+        }));
 
         return new()
         {
@@ -35,9 +44,26 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
 
     private static bool IsAirborne => Service.Condition[ConditionFlag.InFlight] || Service.Condition[ConditionFlag.Diving];
 
+    private static PostprocessedPathSegment NormalizeTakeoffSegment(PostprocessedPathSegment segment)
+    {
+        var normalizedWaypoints = FlightWaypointNormalizer.NormalizeForTakeoff(segment.Waypoints, segment.StartPosition);
+        return new()
+        {
+            MovementMode         = segment.MovementMode,
+            SegmentKind          = segment.SegmentKind,
+            AllowVerticalControl = segment.AllowVerticalControl,
+            StartPosition        = segment.StartPosition,
+            CompletionTolerance  = segment.CompletionTolerance,
+            GeometryOwnership    = segment.GeometryOwnership,
+            ReachabilitySource   = segment.ReachabilitySource,
+            Waypoints            = normalizedWaypoints
+        };
+    }
+
     private static MovementSegment BuildSegment(PostprocessedPathSegment segment) => new FlightTraverseSegment
     {
         CompletionTolerance = segment.CompletionTolerance,
+        StartPosition       = segment.StartPosition,
         GeometryOwnership   = segment.GeometryOwnership,
         ReachabilitySource  = segment.ReachabilitySource,
         Waypoints           = [.. segment.Waypoints]

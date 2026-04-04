@@ -12,7 +12,7 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
 
     public SegmentDriverUpdate Update(MovementExecutionContext context)
     {
-        var nextWaypointIndex = ConsumeReachedWaypoints(context);
+        var nextWaypointIndex = DriverMath.ConsumeFlightWaypoints(context);
         if (nextWaypointIndex >= context.WaypointCount)
             return new(CreateIdleCommand(context.Player.Position), nextWaypointIndex);
 
@@ -43,27 +43,6 @@ internal sealed class FlightTraverseDriver : IMovementSegmentDriver
 
     public void Exit(MovementExecutionContext context)
     {
-    }
-
-    private static int ConsumeReachedWaypoints(MovementExecutionContext context)
-    {
-        var nextWaypointIndex = context.ActiveWaypointIndex;
-
-        while (nextWaypointIndex < context.WaypointCount)
-        {
-            var current  = context.Player.Position;
-            var previous = context.PreviousPosition ?? current;
-
-            if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, context.Plan.RequestedDestination) <= context.Plan.DestinationTolerance)
-                return context.WaypointCount;
-
-            if (DriverMath.DistanceToLineSegment(context.Segment.Waypoints[nextWaypointIndex], current, previous) > context.PathTolerance)
-                return nextWaypointIndex;
-
-            nextWaypointIndex++;
-        }
-
-        return nextWaypointIndex;
     }
 
     private static MovementFrameCommand CreateIdleCommand(Vector3 current) => new(current, false, false, false, default, default, false);

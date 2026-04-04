@@ -17,6 +17,7 @@ internal sealed class GroundMovementPlanBuilder : IMovementPlanBuilder
     private static MovementSegment BuildSegment(PostprocessedPathSegment segment) => new GroundTraverseSegment
     {
         CompletionTolerance = segment.CompletionTolerance,
+        StartPosition       = segment.StartPosition,
         GeometryOwnership   = segment.GeometryOwnership,
         ReachabilitySource  = segment.ReachabilitySource,
         Waypoints           = [.. segment.Waypoints]
