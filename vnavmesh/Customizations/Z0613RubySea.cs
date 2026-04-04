@@ -1,5 +1,5 @@
-﻿using Navmesh;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using vnavmesh.Navmesh;
 
 namespace vnavmesh.Customizations;
 

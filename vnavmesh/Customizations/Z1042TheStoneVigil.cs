@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using vnavmesh.Navmesh;
+
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1042)]
 class Z1042TheStoneVigil : NavmeshCustomization

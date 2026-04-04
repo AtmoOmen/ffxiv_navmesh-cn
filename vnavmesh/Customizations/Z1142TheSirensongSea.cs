@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using vnavmesh.Navmesh;
+
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1142)]
 class Z1142TheSirensongSea : NavmeshCustomization

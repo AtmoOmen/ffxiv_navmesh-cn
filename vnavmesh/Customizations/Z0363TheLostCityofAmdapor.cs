@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using vnavmesh.Navmesh;
+
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(363)]
 class Z0363TheLostCityofAmdapor : NavmeshCustomization

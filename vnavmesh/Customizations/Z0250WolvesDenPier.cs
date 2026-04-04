@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using vnavmesh.Navmesh;
+
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(250)]
 class Z0250WolvesDenPier : NavmeshCustomization

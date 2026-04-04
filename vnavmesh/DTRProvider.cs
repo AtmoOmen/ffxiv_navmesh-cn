@@ -1,21 +1,23 @@
-﻿using Dalamud.Game.Gui.Dtr;
-using Navmesh.Movement;
-using System;
+﻿using System;
+using Dalamud.Game.Gui.Dtr;
+using vnavmesh.Movement;
+using vnavmesh.Movement.Execution;
+using vnavmesh.Navmesh;
 
-namespace Navmesh;
+namespace vnavmesh;
 
 public class DTRProvider : IDisposable
 {
     private NavmeshManager _manager;
     private AsyncMoveRequest _asyncMove;
-    private FollowPath _followPath;
+    private MovementPlanExecutor _movementExecutor;
     private IDtrBarEntry _dtrBarEntry;
 
-    public DTRProvider(NavmeshManager manager, AsyncMoveRequest asyncMove, FollowPath followPath)
+    public DTRProvider(NavmeshManager manager, AsyncMoveRequest asyncMove, MovementPlanExecutor movementExecutor)
     {
         _manager = manager;
         _asyncMove = asyncMove;
-        _followPath = followPath;
+        _movementExecutor = movementExecutor;
         _dtrBarEntry = Service.DtrBar.Get("vnavmesh");
     }
 
@@ -39,7 +41,7 @@ public class DTRProvider : IDisposable
                 var pathfindInProgress = _manager.PathfindInProgress;
                 var numQueued = _manager.NumQueuedPathfindRequests;
                 var asyncMoveActive = _asyncMove.TaskInProgress;
-                var isMoving = _followPath.Waypoints.Count > 0;
+                var isMoving = _movementExecutor.Waypoints.Count > 0;
                 
                 // Show query status when there's activity
                 if (pathfindInProgress || numQueued > 0)
@@ -59,7 +61,7 @@ public class DTRProvider : IDisposable
             else
             {
                 // Fallback to original simple status for backward compatibility
-                if (_asyncMove.TaskInProgress || _followPath.Waypoints.Count > 0)
+                if (_asyncMove.TaskInProgress || _movementExecutor.Waypoints.Count > 0)
                     statusText = "导航: 算路中";
             }
             

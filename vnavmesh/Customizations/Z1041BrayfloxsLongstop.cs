@@ -1,4 +1,6 @@
-﻿namespace Navmesh.Customizations;
+﻿using vnavmesh.Navmesh;
+
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1041)]
 class Z1041BrayfloxsLongstop : NavmeshCustomization

@@ -1,17 +1,20 @@
-﻿using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using Navmesh.Movement;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Threading;
+using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using vnavmesh.Movement;
+using vnavmesh.Movement.Execution;
+using vnavmesh.Navmesh;
+using vnavmesh.Utils;
 
-namespace Navmesh;
+namespace vnavmesh;
 
 class IPCProvider : IDisposable
 {
     private List<Action> _disposeActions = [];
 
-    public IPCProvider(NavmeshManager navmeshManager, FollowPath followPath, AsyncMoveRequest move, MainWindow mainWindow, DTRProvider dtr)
+    public IPCProvider(NavmeshManager navmeshManager, MovementPlanExecutor movementExecutor, AsyncMoveRequest move, WindowProvider windowProvider, DTRProvider dtr)
     {
         RegisterFunc("Nav.IsReady", () => navmeshManager.Navmesh != null);
         RegisterFunc("Nav.BuildProgress", () => navmeshManager.LoadTaskProgress);
@@ -31,26 +34,26 @@ class IPCProvider : IDisposable
         RegisterFunc("Query.Mesh.NearestPoint", (Vector3 p, float halfExtentXZ, float halfExtentY) => navmeshManager.Query?.FindNearestPointOnMesh(p, halfExtentXZ, halfExtentY));
         RegisterFunc("Query.Mesh.NearestPointReachable", (Vector3 p, float halfExtentXZ, float halfExtentY) => navmeshManager.Query?.FindNearestPointOnMesh(p, halfExtentXZ, halfExtentY, false));
         RegisterFunc("Query.Mesh.PointOnFloor", (Vector3 p, bool allowUnlandable, float halfExtentXZ) => navmeshManager.Query?.FindPointOnFloor(p, halfExtentXZ, allowUnlandable));
-        RegisterFunc("Query.Mesh.FlagToPoint", () => navmeshManager.Query is { } q ? MapUtils.FlagToPoint(q) : null);
+        RegisterFunc("Query.Mesh.FlagToPoint", () => navmeshManager.Query is { } q ? MapUtil.FlagToPoint(q) : null);
 
-        RegisterAction("Path.MoveTo", (List<Vector3> waypoints, bool fly) => followPath.Move(waypoints, !fly));
-        RegisterAction("Path.Stop",   followPath.Stop);
-        RegisterFunc("Path.IsRunning", () => followPath.Waypoints.Count > 0);
-        RegisterFunc("Path.NumWaypoints", () => followPath.Waypoints.Count);
-        RegisterFunc("Path.ListWaypoints", () => followPath.Waypoints);
-        RegisterFunc("Path.GetMovementAllowed", () => followPath.MovementAllowed);
-        RegisterAction("Path.SetMovementAllowed", (bool v) => followPath.MovementAllowed = v);
+        RegisterAction("Path.MoveTo", (List<Vector3> waypoints, bool fly) => movementExecutor.Move(waypoints, !fly));
+        RegisterAction("Path.Stop",   movementExecutor.Stop);
+        RegisterFunc("Path.IsRunning", () => movementExecutor.Waypoints.Count > 0);
+        RegisterFunc("Path.NumWaypoints", () => movementExecutor.Waypoints.Count);
+        RegisterFunc("Path.ListWaypoints", () => movementExecutor.Waypoints);
+        RegisterFunc("Path.GetMovementAllowed", () => movementExecutor.MovementAllowed);
+        RegisterAction("Path.SetMovementAllowed", (bool v) => movementExecutor.MovementAllowed = v);
         RegisterFunc("Path.GetAlignCamera", () => Service.Config.AlignCameraToMovement);
         RegisterAction("Path.SetAlignCamera", (bool v) => { Service.Config.AlignCameraToMovement = v; Service.Config.NotifyModified(); });
-        RegisterFunc("Path.GetTolerance", () => followPath.Tolerance);
-        RegisterAction("Path.SetTolerance", (float v) => followPath.SetNextTolerance(v));
+        RegisterFunc("Path.GetTolerance", () => movementExecutor.Tolerance);
+        RegisterAction("Path.SetTolerance", (float v) => movementExecutor.SetNextTolerance(v));
 
         RegisterFunc("SimpleMove.PathfindAndMoveTo", (Vector3 dest, bool fly) => move.MoveTo(dest, fly));
         RegisterFunc("SimpleMove.PathfindAndMoveCloseTo", (Vector3 dest, bool fly, float range) => move.MoveTo(dest, fly, range));
         RegisterFunc("SimpleMove.PathfindInProgress", () => move.TaskInProgress);
 
-        RegisterFunc("Window.IsOpen", () => mainWindow.IsOpen);
-        RegisterAction("Window.SetOpen", (bool v) => mainWindow.IsOpen = v);
+        RegisterFunc("Window.IsOpen", () => windowProvider.IsOpen);
+        RegisterAction("Window.SetOpen", (bool v) => windowProvider.IsOpen = v);
 
         RegisterFunc("DTR.IsShown", () => Service.Config.EnableDTR);
         RegisterAction("DTR.SetShown", (bool v) => { Service.Config.EnableDTR = v; Service.Config.NotifyModified(); });

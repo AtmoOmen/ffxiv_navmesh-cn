@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using vnavmesh.Navmesh;
 
-namespace Navmesh.Customizations;
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1237)]
 internal class Z1237SinusArdorum : NavmeshCustomization
@@ -54,7 +55,7 @@ internal class Z1237SinusArdorum : NavmeshCustomization
 	const float pi = MathF.PI;
 	const float hpi = pi / 2;
 
-	public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
+	public override void CustomizeMesh(Navmesh.Navmesh mesh, List<uint> festivalLayers)
 	{
 		(Vector3 DepartPoint, Vector3 ArrivePoint) getPoints(Vector3 worldPos, Vector3 rotation)
 		{

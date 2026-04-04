@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using vnavmesh.Navmesh;
 
-namespace Navmesh.Customizations;
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1055)]
 internal class Z1055IslandSanctuary : NavmeshCustomization

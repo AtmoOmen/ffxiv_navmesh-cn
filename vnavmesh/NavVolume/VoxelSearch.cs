@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Numerics;
+using vnavmesh.Utils;
 
-namespace Navmesh.NavVolume;
+namespace vnavmesh.NavVolume;
 
 public class PathfindLoopException(ulong from, ulong to, Vector3 fromP, Vector3 toP) : Exception {
     public readonly ulong FromVoxel = from;

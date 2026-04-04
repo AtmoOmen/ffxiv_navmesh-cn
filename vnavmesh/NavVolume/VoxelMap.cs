@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace Navmesh.NavVolume;
+namespace vnavmesh.NavVolume;
 
 public class VoxelMap
 {

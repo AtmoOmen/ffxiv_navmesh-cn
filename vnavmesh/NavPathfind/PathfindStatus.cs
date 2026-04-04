@@ -1,4 +1,4 @@
-﻿namespace Navmesh;
+﻿namespace vnavmesh.NavPathfind;
 
 internal enum PathfindStatus
 {

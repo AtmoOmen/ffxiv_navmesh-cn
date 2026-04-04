@@ -1,8 +1,9 @@
-﻿using DotRecast.Detour;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.InteropServices;
+using DotRecast.Detour;
+using vnavmesh.Navmesh;
 
-namespace Navmesh.Customizations;
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1252)]
 internal class Z1252OccultCrescentSouthHorn : NavmeshCustomization

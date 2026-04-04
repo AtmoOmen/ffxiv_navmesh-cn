@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 
-namespace Navmesh.NavVolume;
+namespace vnavmesh.NavVolume;
 
 // raw 1/2-bit-per-voxel container
 // for downsampled mips, w is 0 for 'has solids', 1 for 'has non-solids'

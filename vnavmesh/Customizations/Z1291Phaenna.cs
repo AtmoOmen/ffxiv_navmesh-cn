@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using vnavmesh.Navmesh;
 
-namespace Navmesh.Customizations;
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(1291)]
 internal class Z1291Phaenna : NavmeshCustomization
@@ -59,7 +60,7 @@ internal class Z1291Phaenna : NavmeshCustomization
 	const float pi = MathF.PI;
 	const float hpi = pi / 2;
 
-	public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
+	public override void CustomizeMesh(Navmesh.Navmesh mesh, List<uint> festivalLayers)
 	{
 		(Vector3 DepartPoint, Vector3 ArrivePoint) getPoints(Vector3 worldPos, Vector3 rotation)
 		{

@@ -4,7 +4,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Threading;
 
-namespace Navmesh.NavVolume;
+namespace vnavmesh.NavVolume;
 
 public class VoxelPathfind
 {

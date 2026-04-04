@@ -1,6 +1,7 @@
 ﻿using System.Numerics;
+using vnavmesh.Navmesh;
 
-namespace Navmesh.Customizations;
+namespace vnavmesh.Customizations;
 
 [CustomizationTerritory(155)]
 class Z0155CoerthasCentralHighlands : NavmeshCustomization
