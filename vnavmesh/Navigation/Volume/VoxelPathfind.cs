@@ -9,8 +9,6 @@ public class VoxelPathfind
 {
     private const float ScoreEpsilon = 0.00001f;
 
-    private readonly Config _config;
-
     internal readonly record struct SearchTelemetry
     (
         int VisitedNodes,
@@ -24,9 +22,10 @@ public class VoxelPathfind
     {
         public float   GScore;
         public float   HScore;
-        public ulong   Voxel;         // voxel map index corresponding to this node
-        public int     ParentIndex;   // index in the node list of the node we entered from
-        public int     OpenHeapIndex; // -1 if in closed list, otherwise index in open list
+        public ulong   Voxel;
+        public int     ParentIndex;
+        public int     OpenHeapIndex;
+        public bool    Closed;
         public Vector3 Position;
     }
 
@@ -35,29 +34,26 @@ public class VoxelPathfind
     private readonly VoxelMap.Level _l2Desc;
     private readonly List<ulong>    _neighbourScratch = new(64);
 
-    private List<Node>             _nodes      = new(1024); // grow only (TODO: consider chunked vector)
-    private Dictionary<ulong, int> _nodeLookup = new(1024); // voxel -> node index
-    private List<int>              _openList   = new(256);  // heap containing node indices
-    private int                    _bestNodeIndex;
-    private ulong                  _goalVoxel;
-    private Vector3                _goalPos;
-    private bool                   _useRaycast;
-    private float                  _randomnessMultiplier;
-    private bool                   _allowReopen = false; // this is extremely expensive and doesn't seem to actually improve the result
-    private int                    _visitedNodes;
-    private int                    _generatedNodes;
-    private int                    _lineOfSightChecks;
-    private int                    _lineOfSightHits;
-    private int                    _peakOpenListSize;
+    private readonly List<Node>             _nodes      = new(1024);
+    private readonly Dictionary<ulong, int> _nodeLookup = new(1024);
+    private readonly List<int>              _openList   = new(256);
+    private int                             _bestNodeIndex;
+    private ulong                           _goalVoxel;
+    private Vector3                         _goalPos;
+    private bool                            _useRaycast;
+    private int                             _visitedNodes;
+    private int                             _generatedNodes;
+    private int                             _lineOfSightChecks;
+    private int                             _lineOfSightHits;
+    private int                             _peakOpenListSize;
 
     public VoxelMap Volume { get; }
 
     public   Span<Node>      NodeSpan      => CollectionsMarshal.AsSpan(_nodes);
     internal SearchTelemetry LastTelemetry => new(_visitedNodes, _generatedNodes, _lineOfSightChecks, _lineOfSightHits, _peakOpenListSize);
 
-    public VoxelPathfind(VoxelMap volume, Config config)
+    public VoxelPathfind(VoxelMap volume, Config _)
     {
-        _config = config;
         Volume  = volume;
         _l0Desc = volume.Levels[0];
         _l1Desc = volume.Levels[1];
@@ -67,6 +63,31 @@ public class VoxelPathfind
     public List<(ulong voxel, Vector3 p)> FindPath
         (ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos, bool useRaycast, bool returnIntermediatePoints, CancellationToken cancel)
     {
+        if (fromVoxel == toVoxel)
+        {
+            ResetSearchState();
+            _goalVoxel       = toVoxel;
+            _goalPos         = toPos;
+            _bestNodeIndex   = 0;
+            _visitedNodes    = 1;
+            _generatedNodes  = 1;
+            _nodes.Add
+            (
+                new()
+                {
+                    GScore        = 0,
+                    HScore        = 0,
+                    Voxel         = toVoxel,
+                    ParentIndex   = 0,
+                    OpenHeapIndex = -1,
+                    Closed        = true,
+                    Position      = toPos
+                }
+            );
+            _nodeLookup[toVoxel] = 0;
+            return [(toVoxel, toPos)];
+        }
+
         _useRaycast = useRaycast;
         Start(fromVoxel, toVoxel, fromPos, toPos);
         Execute(cancel);
@@ -75,20 +96,11 @@ public class VoxelPathfind
 
     public void Start(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
     {
-        _nodes.Clear();
-        _nodeLookup.Clear();
-        _openList.Clear();
-        _bestNodeIndex        = 0;
-        _randomnessMultiplier = _config.RandomnessMultiplier;
-        _visitedNodes         = 0;
-        _generatedNodes       = 0;
-        _lineOfSightChecks    = 0;
-        _lineOfSightHits      = 0;
-        _peakOpenListSize     = 0;
+        ResetSearchState();
 
         if (fromVoxel == VoxelMap.InvalidVoxel || toVoxel == VoxelMap.InvalidVoxel)
         {
-            Service.Log.Error($"Bad input cells: {fromVoxel:X} -> {toVoxel:X}");
+            Service.Log.Error($"输入体素非法：{fromVoxel:X} -> {toVoxel:X}");
             return;
         }
 
@@ -100,13 +112,14 @@ public class VoxelPathfind
             new()
             {
                 GScore        = 0,
-                HScore        = HeuristicDistance(fromVoxel, fromPos),
+                HScore        = HeuristicDistance(fromPos),
                 Voxel         = fromVoxel,
                 ParentIndex   = 0,
                 OpenHeapIndex = -1,
+                Closed        = false,
                 Position      = fromPos
             }
-        ); // start's parent is self
+        );
         _nodeLookup[fromVoxel] = 0;
         _generatedNodes        = 1;
         AddToOpen(0);
@@ -128,68 +141,75 @@ public class VoxelPathfind
         if (_openList.Count == 0)
             return false;
 
-        var curNodeIndex = PopMinOpen();
+        var currentIndex = PopMinOpen();
+        var nodeSpan     = NodeSpan;
+        ref var current  = ref nodeSpan[currentIndex];
+        current.Closed   = true;
         ++_visitedNodes;
+        UpdateBestNode(currentIndex);
 
-        if (_useRaycast)
-            SetVertex(curNodeIndex);
-
-        var nodeSpan = NodeSpan;
-        ref var curNode = ref nodeSpan[curNodeIndex];
-        UpdateBestNode(curNodeIndex);
-
-        if (curNode.Voxel == _goalVoxel && curNode.HScore <= 0)
+        if (current.Voxel == _goalVoxel)
         {
-            _bestNodeIndex = curNodeIndex;
+            _bestNodeIndex = currentIndex;
             return false;
         }
 
-        VisitNeighbours(curNodeIndex, curNode.Voxel);
+        foreach (var neighbourVoxel in CollectNeighbours(current.Voxel))
+            VisitNeighbour(currentIndex, neighbourVoxel);
+
         return true;
+    }
+
+    private void ResetSearchState()
+    {
+        _nodes.Clear();
+        _nodeLookup.Clear();
+        _openList.Clear();
+        _bestNodeIndex     = 0;
+        _visitedNodes      = 0;
+        _generatedNodes    = 0;
+        _lineOfSightChecks = 0;
+        _lineOfSightHits   = 0;
+        _peakOpenListSize  = 0;
     }
 
     private List<(ulong voxel, Vector3 p)> BuildPathToVisitedNode(int nodeIndex, bool returnIntermediatePoints)
     {
-        var res = new List<(ulong voxel, Vector3 p)>();
+        var result = new List<(ulong voxel, Vector3 p)>();
 
-        if (nodeIndex < _nodes.Count)
+        if ((uint)nodeIndex >= (uint)_nodes.Count)
+            return result;
+
+        var nodeSpan = NodeSpan;
+        result.Add((nodeSpan[nodeIndex].Voxel, nodeSpan[nodeIndex].Position));
+
+        while (nodeSpan[nodeIndex].ParentIndex != nodeIndex)
         {
-            var     nodeSpan = NodeSpan;
-            ref var lastNode = ref nodeSpan[nodeIndex];
-            res.Add((lastNode.Voxel, lastNode.Position));
+            ref var child      = ref nodeSpan[nodeIndex];
+            var     parentIndex = child.ParentIndex;
+            ref var parent      = ref nodeSpan[parentIndex];
 
-            while (nodeSpan[nodeIndex].ParentIndex != nodeIndex)
+            if (returnIntermediatePoints)
             {
-                ref var prevNode  = ref nodeSpan[nodeIndex];
-                var     nextIndex = prevNode.ParentIndex;
-                ref var nextNode  = ref nodeSpan[nextIndex];
-
-                if (returnIntermediatePoints)
+                var delta = parent.Position - child.Position;
+                foreach (var step in VoxelSearch.EnumerateVoxelsInLine(Volume, child.Voxel, parent.Voxel, child.Position, parent.Position))
                 {
-                    var delta = nextNode.Position - prevNode.Position;
-                    foreach (var v in VoxelSearch.EnumerateVoxelsInLine(Volume, prevNode.Voxel, nextNode.Voxel, prevNode.Position, nextNode.Position))
-                    {
-                        if (!v.empty)
-                            continue;
+                    if (!step.empty)
+                        continue;
 
-                        res.Add((v.voxel, prevNode.Position + v.t * delta));
-                    }
+                    result.Add((step.voxel, child.Position + step.t * delta));
                 }
-                else res.Add((nextNode.Voxel, nextNode.Position));
-
-                nodeIndex = nextIndex;
+            }
+            else
+            {
+                result.Add((parent.Voxel, parent.Position));
             }
 
-            res.Reverse();
+            nodeIndex = parentIndex;
         }
 
-        return res;
-    }
-
-    private void VisitNeighbours(int currentIndex, ulong voxel)
-    {
-        foreach (var neighbourVoxel in CollectNeighbours(voxel))
-            VisitNeighbour(currentIndex, neighbourVoxel);
+        result.Reverse();
+        return result;
     }
 
     private List<ulong> CollectNeighbours(ulong voxel)
@@ -230,7 +250,6 @@ public class VoxelPathfind
         if (l2Index != VoxelMap.IndexLevelMask)
         {
             var l2Neighbour = (l2Coords.x + dx, l2Coords.y + dy, l2Coords.z + dz);
-
             if (_l2Desc.InBounds(l2Neighbour))
             {
                 var neighbourVoxel = VoxelMap.EncodeIndex(_l2Desc.VoxelToIndex(l2Neighbour));
@@ -244,13 +263,15 @@ public class VoxelPathfind
         if (l1Index != VoxelMap.IndexLevelMask)
         {
             var l1Neighbour = (l1Coords.x + dx, l1Coords.y + dy, l1Coords.z + dz);
-
             if (_l1Desc.InBounds(l1Neighbour))
             {
                 var neighbourVoxel = VoxelMap.EncodeIndex(_l1Desc.VoxelToIndex(l1Neighbour));
                 neighbourVoxel = VoxelMap.EncodeIndex(l0Index, neighbourVoxel);
 
-                if (Volume.IsEmpty(neighbourVoxel)) AddNeighbourIfEmpty(neighbourVoxel);
+                if (Volume.IsEmpty(neighbourVoxel))
+                {
+                    AddNeighbourIfEmpty(neighbourVoxel);
+                }
                 else if (l2Index != VoxelMap.IndexLevelMask)
                 {
                     var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : _l2Desc.NumCellsX - 1;
@@ -259,7 +280,10 @@ public class VoxelPathfind
                     var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(neighbourVoxel, _l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
                     AddNeighbourIfEmpty(l2NeighbourVoxel);
                 }
-                else CollectBorder(neighbourVoxel, _l2Desc, 2, dx, dy, dz);
+                else
+                {
+                    CollectBorder(neighbourVoxel, _l2Desc, 2, dx, dy, dz);
+                }
 
                 return;
             }
@@ -270,7 +294,6 @@ public class VoxelPathfind
             return;
 
         var l0NeighbourVoxel = VoxelMap.EncodeIndex(_l0Desc.VoxelToIndex(l0Neighbour));
-
         if (Volume.IsEmpty(l0NeighbourVoxel))
         {
             AddNeighbourIfEmpty(l0NeighbourVoxel);
@@ -284,7 +307,10 @@ public class VoxelPathfind
             var l1Z              = dz == 0 ? l1Coords.z : dz > 0 ? 0 : _l1Desc.NumCellsZ - 1;
             var l1NeighbourVoxel = VoxelMap.EncodeSubIndex(l0NeighbourVoxel, _l1Desc.VoxelToIndex(l1X, l1Y, l1Z), 1);
 
-            if (Volume.IsEmpty(l1NeighbourVoxel)) AddNeighbourIfEmpty(l1NeighbourVoxel);
+            if (Volume.IsEmpty(l1NeighbourVoxel))
+            {
+                AddNeighbourIfEmpty(l1NeighbourVoxel);
+            }
             else if (l2Index != VoxelMap.IndexLevelMask)
             {
                 var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : _l2Desc.NumCellsX - 1;
@@ -293,7 +319,10 @@ public class VoxelPathfind
                 var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(l1NeighbourVoxel, _l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
                 AddNeighbourIfEmpty(l2NeighbourVoxel);
             }
-            else CollectBorder(l1NeighbourVoxel, _l2Desc, 2, dx, dy, dz);
+            else
+            {
+                CollectBorder(l1NeighbourVoxel, _l2Desc, 2, dx, dy, dz);
+            }
 
             return;
         }
@@ -306,6 +335,7 @@ public class VoxelPathfind
         var (xmin, xmax) = dx == 0 ? (0, levelDesc.NumCellsX - 1) : dx > 0 ? (0, 0) : (levelDesc.NumCellsX - 1, levelDesc.NumCellsX - 1);
         var (ymin, ymax) = dy == 0 ? (0, levelDesc.NumCellsY - 1) : dy > 0 ? (0, 0) : (levelDesc.NumCellsY - 1, levelDesc.NumCellsY - 1);
         var (zmin, zmax) = dz == 0 ? (0, levelDesc.NumCellsZ - 1) : dz > 0 ? (0, 0) : (levelDesc.NumCellsZ - 1, levelDesc.NumCellsZ - 1);
+
         for (var z = zmin; z <= zmax; ++z)
         for (var x = xmin; x <= xmax; ++x)
         for (var y = ymin; y <= ymax; ++y)
@@ -323,8 +353,14 @@ public class VoxelPathfind
         for (var y = ymin; y <= ymax; ++y)
         {
             var l1Voxel = VoxelMap.EncodeSubIndex(voxel, _l1Desc.VoxelToIndex(x, y, z), 1);
-            if (Volume.IsEmpty(l1Voxel)) AddNeighbourIfEmpty(l1Voxel);
-            else CollectBorder(l1Voxel, _l2Desc, 2, dx, dy, dz);
+            if (Volume.IsEmpty(l1Voxel))
+            {
+                AddNeighbourIfEmpty(l1Voxel);
+            }
+            else
+            {
+                CollectBorder(l1Voxel, _l2Desc, 2, dx, dy, dz);
+            }
         }
     }
 
@@ -334,120 +370,189 @@ public class VoxelPathfind
             _neighbourScratch.Add(voxel);
     }
 
-    private void VisitNeighbour(int currentIndex, ulong nodeVoxel)
+    private void VisitNeighbour(int currentIndex, ulong neighbourVoxel)
     {
-        if (!_nodeLookup.TryGetValue(nodeVoxel, out var nodeIndex))
-        {
-            nodeIndex = _nodes.Count;
-            _nodes.Add(new() { GScore = float.MaxValue, HScore = float.MaxValue, Voxel = nodeVoxel, ParentIndex = currentIndex, OpenHeapIndex = -1 });
-            _nodeLookup[nodeVoxel] = nodeIndex;
-            ++_generatedNodes;
-        }
-        else if (!_allowReopen && _nodes[nodeIndex].OpenHeapIndex < 0)
-        {
+        var nodeIndex = GetOrCreateNode(neighbourVoxel, currentIndex);
+        var nodeSpan  = NodeSpan;
+        ref var node  = ref nodeSpan[nodeIndex];
+        if (node.Closed)
             return;
-        }
 
-        var candidateParentIndex = ResolveExpandedParentIndex(currentIndex);
-        var candidatePosition    = ResolveNodePosition(nodeVoxel, candidateParentIndex);
-        var candidateScore       = CalculateNodeScore(candidateParentIndex, candidatePosition);
-        var nodeSpan            = NodeSpan;
-        ref var candidateNode   = ref nodeSpan[nodeIndex];
+        if (!TryGetBestCandidate(currentIndex, neighbourVoxel, out var bestParentIndex, out var bestPosition, out var bestScore))
+            return;
 
-        if (candidateScore + ScoreEpsilon < candidateNode.GScore)
-        {
-            candidateNode.GScore      = candidateScore;
-            candidateNode.HScore      = HeuristicDistance(nodeVoxel, candidatePosition);
-            candidateNode.ParentIndex = candidateParentIndex;
-            candidateNode.Position    = candidatePosition;
-            AddToOpen(nodeIndex);
-            UpdateBestNode(nodeIndex);
-        }
+        if (bestScore + ScoreEpsilon >= node.GScore)
+            return;
+
+        node.GScore      = bestScore;
+        node.HScore      = HeuristicDistance(bestPosition);
+        node.ParentIndex = bestParentIndex;
+        node.Position    = bestPosition;
+        AddToOpen(nodeIndex);
+        UpdateBestNode(nodeIndex);
     }
 
-    private int ResolveExpandedParentIndex(int currentIndex)
+    private int GetOrCreateNode(ulong voxel, int fallbackParentIndex)
     {
+        if (_nodeLookup.TryGetValue(voxel, out var nodeIndex))
+            return nodeIndex;
+
+        nodeIndex = _nodes.Count;
+        _nodes.Add
+        (
+            new()
+            {
+                GScore        = float.MaxValue,
+                HScore        = float.MaxValue,
+                Voxel         = voxel,
+                ParentIndex   = fallbackParentIndex,
+                OpenHeapIndex = -1,
+                Closed        = false
+            }
+        );
+        _nodeLookup[voxel] = nodeIndex;
+        ++_generatedNodes;
+        return nodeIndex;
+    }
+
+    private bool TryGetBestCandidate(int currentIndex, ulong neighbourVoxel, out int bestParentIndex, out Vector3 bestPosition, out float bestScore)
+    {
+        bestParentIndex = -1;
+        bestPosition    = default;
+        bestScore       = float.MaxValue;
+
+        if (!TryEvaluateCandidate(currentIndex, neighbourVoxel, false, ref bestParentIndex, ref bestPosition, ref bestScore))
+            return false;
+
         if (!_useRaycast)
-            return currentIndex;
+            return true;
 
-        var nodeSpan = NodeSpan;
-        return nodeSpan[currentIndex].ParentIndex;
+        var nodeSpan     = NodeSpan;
+        var ancestorIndex = nodeSpan[currentIndex].ParentIndex;
+        while (ancestorIndex >= 0)
+        {
+            TryEvaluateCandidate(ancestorIndex, neighbourVoxel, true, ref bestParentIndex, ref bestPosition, ref bestScore);
+
+            ref var ancestor = ref nodeSpan[ancestorIndex];
+            if (ancestor.ParentIndex == ancestorIndex)
+                break;
+
+            ancestorIndex = ancestor.ParentIndex;
+        }
+
+        return bestParentIndex >= 0;
     }
 
-    private Vector3 ResolveNodePosition(ulong nodeVoxel, int parentIndex)
+    private bool TryEvaluateCandidate
+    (
+        int         parentIndex,
+        ulong       voxel,
+        bool        requireVisibility,
+        ref int     bestParentIndex,
+        ref Vector3 bestPosition,
+        ref float   bestScore
+    )
     {
-        if (nodeVoxel == _goalVoxel)
+        Span<Vector3> candidatePositions = stackalloc Vector3[3];
+        candidatePositions[0] = ResolveProjectedPosition(voxel, parentIndex);
+        candidatePositions[1] = ResolveGoalAlignedPosition(voxel);
+        candidatePositions[2] = ResolveCenterBiasedPosition(voxel, parentIndex);
+
+        var found = false;
+        for (var i = 0; i < candidatePositions.Length; ++i)
+        {
+            var candidatePosition = candidatePositions[i];
+            if (i > 0 && IsSamePosition(candidatePositions[..i], candidatePosition))
+                continue;
+            var needsVisibilityCheck = requireVisibility || i > 0;
+            if (needsVisibilityCheck && !TryLineOfSight(parentIndex, voxel, candidatePosition))
+                continue;
+
+            var candidateScore = CalculateNodeScore(parentIndex, candidatePosition);
+            if (!IsBetterCandidate(parentIndex, candidatePosition, candidateScore, bestParentIndex, bestPosition, bestScore))
+                continue;
+
+            bestParentIndex = parentIndex;
+            bestPosition    = candidatePosition;
+            bestScore       = candidateScore;
+            found           = true;
+        }
+
+        return found;
+    }
+
+    private Vector3 ResolveProjectedPosition(ulong voxel, int parentIndex)
+    {
+        if (voxel == _goalVoxel)
             return _goalPos;
 
         var nodeSpan = NodeSpan;
-        return Volume.ClampPointToVoxel(nodeVoxel, nodeSpan[parentIndex].Position);
+        return Volume.ClampPointToVoxel(voxel, nodeSpan[parentIndex].Position);
+    }
+
+    private Vector3 ResolveGoalAlignedPosition(ulong voxel)
+    {
+        if (voxel == _goalVoxel)
+            return _goalPos;
+
+        return Volume.ClampPointToVoxel(voxel, _goalPos);
+    }
+
+    private Vector3 ResolveCenterBiasedPosition(ulong voxel, int parentIndex)
+    {
+        if (voxel == _goalVoxel)
+            return _goalPos;
+
+        var nodeSpan      = NodeSpan;
+        var projected     = ResolveProjectedPosition(voxel, parentIndex);
+        var goalAligned   = ResolveGoalAlignedPosition(voxel);
+        var blendedTarget = Vector3.Lerp(projected, goalAligned, 0.5f);
+        return Volume.ClampPointToVoxel(voxel, blendedTarget);
+    }
+
+    private static bool IsSamePosition(ReadOnlySpan<Vector3> existingPositions, Vector3 candidatePosition)
+    {
+        for (var i = 0; i < existingPositions.Length; ++i)
+        {
+            if (Vector3.DistanceSquared(existingPositions[i], candidatePosition) <= ScoreEpsilon * ScoreEpsilon)
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool IsBetterCandidate
+    (
+        int     candidateParentIndex,
+        Vector3 candidatePosition,
+        float   candidateScore,
+        int     currentBestParentIndex,
+        Vector3 currentBestPosition,
+        float   currentBestScore
+    )
+    {
+        if (candidateScore + ScoreEpsilon < currentBestScore)
+            return true;
+        if (currentBestScore + ScoreEpsilon < candidateScore)
+            return false;
+
+        var candidateF = candidateScore + HeuristicDistance(candidatePosition);
+        var currentF   = currentBestScore + HeuristicDistance(currentBestPosition);
+        if (candidateF + ScoreEpsilon < currentF)
+            return true;
+        if (currentF + ScoreEpsilon < candidateF)
+            return false;
+
+        return candidateParentIndex < currentBestParentIndex;
     }
 
     private float CalculateNodeScore(int parentIndex, Vector3 destination)
     {
-        var nodeSpan      = NodeSpan;
-        ref var parent    = ref nodeSpan[parentIndex];
-        var edgeCost      = CalculateEdgeCost(parent.Position, destination);
-        var randomFactor  = _randomnessMultiplier > 0 ? (float)Random.Shared.NextDouble() * _randomnessMultiplier : 0;
-        return parent.GScore + edgeCost + randomFactor;
-    }
-
-    private static float CalculateEdgeCost(Vector3 from, Vector3 to)
-    {
-        var distance          = (from - to).Length();
-        var verticalDifference = MathF.Abs(from.Y - to.Y);
-        var verticalPenalty    = 0.2f * verticalDifference;
-        return distance + verticalPenalty;
-    }
-
-    private void SetVertex(int nodeIndex)
-    {
         var nodeSpan = NodeSpan;
-        ref var node = ref nodeSpan[nodeIndex];
-        if (node.ParentIndex == nodeIndex)
-            return;
-
-        if (TryLineOfSight(node.ParentIndex, node.Voxel, node.Position))
-            return;
-
-        var bestParentIndex = -1;
-        var bestPosition    = default(Vector3);
-        var bestScore       = float.MaxValue;
-
-        foreach (var neighbourVoxel in CollectNeighbours(node.Voxel))
-        {
-            if (!_nodeLookup.TryGetValue(neighbourVoxel, out var neighbourIndex))
-                continue;
-
-            var refreshedSpan = NodeSpan;
-            ref var neighbour = ref refreshedSpan[neighbourIndex];
-            if (neighbour.OpenHeapIndex >= 0)
-                continue;
-
-            var candidatePosition = ResolveNodePosition(node.Voxel, neighbourIndex);
-            if (!TryLineOfSight(neighbourIndex, node.Voxel, candidatePosition))
-                continue;
-
-            var candidateScore = refreshedSpan[neighbourIndex].GScore + CalculateEdgeCost(refreshedSpan[neighbourIndex].Position, candidatePosition);
-            if (candidateScore + ScoreEpsilon < bestScore)
-            {
-                bestParentIndex = neighbourIndex;
-                bestPosition    = candidatePosition;
-                bestScore       = candidateScore;
-            }
-        }
-
-        if (bestParentIndex < 0)
-            return;
-
-        var finalSpan = NodeSpan;
-        ref var current = ref finalSpan[nodeIndex];
-        current.ParentIndex = bestParentIndex;
-        current.Position    = bestPosition;
-        current.GScore      = bestScore;
-        current.HScore      = HeuristicDistance(current.Voxel, bestPosition);
-        UpdateBestNode(nodeIndex);
+        return nodeSpan[parentIndex].GScore + CalculateEdgeCost(nodeSpan[parentIndex].Position, destination);
     }
+
+    private static float CalculateEdgeCost(Vector3 from, Vector3 to) => Vector3.Distance(from, to);
 
     private bool TryLineOfSight(int fromNodeIndex, ulong toVoxel, Vector3 toPosition)
     {
@@ -461,19 +566,20 @@ public class VoxelPathfind
         return true;
     }
 
-    private float HeuristicDistance(ulong nodeVoxel, Vector3 v) => nodeVoxel != _goalVoxel ? (v - _goalPos).Length() * 0.999f : 0;
+    private float HeuristicDistance(Vector3 position) => Vector3.Distance(position, _goalPos);
 
     private void UpdateBestNode(int nodeIndex)
     {
-        if (IsBetterBestNode(nodeIndex, _bestNodeIndex))
+        if (_nodes.Count == 0 || IsBetterBestNode(nodeIndex, _bestNodeIndex))
             _bestNodeIndex = nodeIndex;
     }
 
     private bool IsBetterBestNode(int candidateIndex, int currentIndex)
     {
-        var nodeSpan    = NodeSpan;
+        var nodeSpan      = NodeSpan;
         ref var candidate = ref nodeSpan[candidateIndex];
         ref var current   = ref nodeSpan[currentIndex];
+
         if (candidate.HScore + ScoreEpsilon < current.HScore)
             return true;
         if (current.HScore + ScoreEpsilon < candidate.HScore)
@@ -484,7 +590,6 @@ public class VoxelPathfind
     private void AddToOpen(int nodeIndex)
     {
         ref var node = ref NodeSpan[nodeIndex];
-
         if (node.OpenHeapIndex < 0)
         {
             node.OpenHeapIndex = _openList.Count;
@@ -552,7 +657,10 @@ public class VoxelPathfind
                     nodeSpan[_openList[heapIndex]].OpenHeapIndex = heapIndex;
                     heapIndex                                     = child1;
                 }
-                else break;
+                else
+                {
+                    break;
+                }
             }
             else if (HeapLess(ref nodeSpan[_openList[child2]], ref nodeSpan[nodeIndex]))
             {
@@ -560,21 +668,28 @@ public class VoxelPathfind
                 nodeSpan[_openList[heapIndex]].OpenHeapIndex = heapIndex;
                 heapIndex                                     = child2;
             }
-            else break;
+            else
+            {
+                break;
+            }
         }
 
         _openList[heapIndex]              = nodeIndex;
         nodeSpan[nodeIndex].OpenHeapIndex = heapIndex;
     }
 
-    private static bool HeapLess(ref Node nodeL, ref Node nodeR)
+    private static bool HeapLess(ref Node left, ref Node right)
     {
-        var fl = nodeL.GScore + nodeL.HScore;
-        var fr = nodeR.GScore + nodeR.HScore;
-        if (fl + ScoreEpsilon < fr)
+        var leftF  = left.GScore  + left.HScore;
+        var rightF = right.GScore + right.HScore;
+        if (leftF + ScoreEpsilon < rightF)
             return true;
-        if (fr + ScoreEpsilon < fl)
+        if (rightF + ScoreEpsilon < leftF)
             return false;
-        return nodeL.GScore > nodeR.GScore; // tie-break towards larger g-values
+        if (left.HScore + ScoreEpsilon < right.HScore)
+            return true;
+        if (right.HScore + ScoreEpsilon < left.HScore)
+            return false;
+        return left.GScore > right.GScore;
     }
 }

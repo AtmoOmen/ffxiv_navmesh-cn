@@ -16,7 +16,7 @@ public class PathfindLoopException
     public readonly Vector3 FromPos   = fromP;
     public readonly Vector3 ToPos     = toP;
 
-    public override string Message => $"An infinite loop occurred during the pathfind operation. (from={FromVoxel:X} / {FromPos}, to={ToVoxel:X} / {ToPos})";
+    public override string Message => $"体素寻路射线步进陷入死循环。（起点体素 = {FromVoxel:X} / {FromPos}，终点体素 = {ToVoxel:X} / {ToPos}）";
 }
 
 public static class VoxelSearch
@@ -65,6 +65,9 @@ public static class VoxelSearch
     public static IEnumerable<(ulong voxel, float t, bool empty)> EnumerateVoxelsInLine
         (VoxelMap volume, ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
     {
+        if (fromVoxel == toVoxel || Vector3.DistanceSquared(fromPos, toPos) <= float.Epsilon)
+            yield break;
+
         var origFrom = fromVoxel;
         var ab       = toPos - fromPos;
         var eps      = 0.1f / ab.Length();
@@ -79,6 +82,11 @@ public static class VoxelSearch
 
     public static bool LineOfSight(VoxelMap volume, ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
     {
+        if (fromVoxel == toVoxel)
+            return true;
+        if (Vector3.DistanceSquared(fromPos, toPos) <= float.Epsilon)
+            return false;
+
         var origFrom = fromVoxel;
         var ab       = toPos - fromPos;
         var eps      = 0.1f / ab.Length();
