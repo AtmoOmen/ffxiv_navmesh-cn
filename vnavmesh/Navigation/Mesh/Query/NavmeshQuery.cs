@@ -202,13 +202,13 @@ public partial class NavmeshQuery
     }
 
     public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
-        => Postprocess(PlanMeshPathDetailed(from, to, useRaycast, range, cancel), useStringPulling, _config.PathTolerance, cancel).Waypoints;
+        => Postprocess(PlanMeshPathDetailed(from, to, useRaycast, range, cancel), useStringPulling, cancel).Waypoints;
 
     public List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel)
-        => Postprocess(PlanVolumePathDetailed(from, to, useRaycast, cancel), useStringPulling, _config.PathTolerance, cancel).Waypoints;
+        => Postprocess(PlanVolumePathDetailed(from, to, useRaycast, cancel), useStringPulling, cancel).Waypoints;
 
-    internal PostprocessedPath Postprocess(PlannerResult result, bool useStringPulling, float completionTolerance, CancellationToken cancel) =>
-        _postprocessor.Process(result, useStringPulling, completionTolerance, cancel);
+    internal PostprocessedPath Postprocess(PlannerResult result, bool useStringPulling, CancellationToken cancel) =>
+        _postprocessor.Process(result, useStringPulling, cancel);
 
 
     internal (int x, int z) FindMeshTile(Vector3 position)

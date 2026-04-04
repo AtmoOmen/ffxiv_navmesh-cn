@@ -12,7 +12,7 @@ internal sealed class PathPostprocessor
     public PathPostprocessor(DtNavMeshQuery meshQuery) =>
         _meshQuery = meshQuery;
 
-    public PostprocessedPath Process(PlannerResult result, bool useStringPulling, float completionTolerance, CancellationToken cancel)
+    public PostprocessedPath Process(PlannerResult result, bool useStringPulling, CancellationToken cancel)
     {
         cancel.ThrowIfCancellationRequested();
 
@@ -29,7 +29,7 @@ internal sealed class PathPostprocessor
                     SegmentKind          = segment.SegmentKind,
                     AllowVerticalControl = segment.AllowVerticalControl,
                     StartPosition        = segment.StartPosition,
-                    CompletionTolerance  = completionTolerance,
+                    CompletionTolerance  = 0,
                     GeometryOwnership    = PathGeometryOwnership.Postprocessor,
                     ReachabilitySource   = segment.ReachabilitySource,
                     Waypoints            = waypoints
@@ -49,7 +49,7 @@ internal sealed class PathPostprocessor
     }
 
     public PostprocessedPath CreateExternalInputPath
-        (List<Vector3> waypoints, MovementMode requestedMode, Vector3 requestedDestination, float destinationTolerance, float completionTolerance)
+        (List<Vector3> waypoints, MovementMode requestedMode, Vector3 requestedDestination, float destinationTolerance)
     {
         var segmentKind = requestedMode == MovementMode.Flight ? MovementSegmentKind.FlightTraverse : MovementSegmentKind.GroundTraverse;
         var normalized  = DeduplicateWaypoints(waypoints);
@@ -69,7 +69,7 @@ internal sealed class PathPostprocessor
                     SegmentKind          = segmentKind,
                     AllowVerticalControl = requestedMode == MovementMode.Flight,
                     StartPosition        = normalized.Count > 0 ? normalized[0] : requestedDestination,
-                    CompletionTolerance  = completionTolerance,
+                    CompletionTolerance  = 0,
                     GeometryOwnership    = PathGeometryOwnership.ExternalInput,
                     ReachabilitySource   = PathReachabilitySource.ExternalInput,
                     Waypoints            = normalized

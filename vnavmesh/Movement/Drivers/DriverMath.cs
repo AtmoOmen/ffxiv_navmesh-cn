@@ -6,6 +6,7 @@ namespace vnavmesh.Movement.Drivers;
 internal static class DriverMath
 {
     private const float MinSegmentLengthSq = 0.000001f;
+    private const float SegmentEndCaptureRadius = 0.05f;
 
     public static int ConsumeGroundWaypoints(MovementExecutionContext context) =>
         ConsumeTraverseSegments(context, flatten: true);
@@ -49,13 +50,13 @@ internal static class DriverMath
                 continue;
             }
 
-            if (Vector3.Distance(current, projectedEnd) <= context.PathTolerance)
+            if (Vector3.Distance(current, projectedEnd) <= SegmentEndCaptureRadius)
             {
                 currentTraverseSegmentIndex++;
                 continue;
             }
 
-            if (DistanceToLineSegment(projectedEnd, previous, current) <= context.PathTolerance)
+            if (DistanceToLineSegment(projectedEnd, previous, current) <= SegmentEndCaptureRadius)
             {
                 currentTraverseSegmentIndex++;
                 continue;

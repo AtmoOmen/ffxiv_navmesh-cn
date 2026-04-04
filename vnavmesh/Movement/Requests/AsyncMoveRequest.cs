@@ -74,10 +74,10 @@ public class AsyncMoveRequest : IDisposable
             return false;
         }
 
-        var toleranceStr = range > 0 ? $"，容差 = {range:f3}" : "";
+        var resolvedDestinationTolerance = range > 0 ? range : _executor.ConsumeNextTolerance();
+        var toleranceStr = resolvedDestinationTolerance > 0 ? $"，终点容差 = {resolvedDestinationTolerance:f3}" : "";
         Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
-        var pendingPathTolerance = _executor.ConsumeNextTolerance();
-        _pendingTask = _manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, range, pendingPathTolerance);
+        _pendingTask = _manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance);
         return true;
     }
 

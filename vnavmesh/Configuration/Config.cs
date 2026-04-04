@@ -54,7 +54,7 @@ public class Config : IPluginConfiguration
     private void DrawMovementAndCameraSection()
     {
         DrawCheckbox("玩家产生移动输入时取消当前路径", ref CancelMoveOnUserInput, "手动接管角色时立即停止自动移动。");
-        DrawSliderFloat("路径跟随容差", ref PathTolerance,        0.01f, 1f, "%.2f", "角色与目标点的距离落入该范围后，视为已到达。");
+        DrawSliderFloat("终点容差",   ref PathTolerance,        0.01f, 1f, "%.2f", "角色进入目标点附近该范围后，视为已经到达最终目的地。");
         DrawSliderFloat("寻路随机性",  ref RandomnessMultiplier, 0f,    1f, "%.2f", "数值越高，路径越分散；数值越低，路径越稳定。");
 
         ImGui.Spacing();

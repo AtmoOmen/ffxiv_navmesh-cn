@@ -18,7 +18,7 @@ namespace vnavmesh.Movement.Execution;
 public sealed class MovementPlanExecutor : IDisposable
 {
     public bool                                    MovementAllowed = true;
-    public float                                   Tolerance => _nextToleranceOverride ?? (IsRunning ? _activePathTolerance : _config.PathTolerance);
+    public float                                   Tolerance => _nextToleranceOverride ?? (IsRunning ? _activeDestinationTolerance : _config.PathTolerance);
     public bool                                    IsRunning => _activePlan != null;
     public List<Vector3>                           Waypoints => CollectWaypoints();
     internal event Action<MovementFailureContext>? OnMovementFailure;
@@ -40,7 +40,7 @@ public sealed class MovementPlanExecutor : IDisposable
     private IMovementSegmentDriver? _activeDriver;
     private DateTime                _nextJump;
     private Vector3?                _previousPosition;
-    private float                   _activePathTolerance = 0.05f;
+    private float                   _activeDestinationTolerance = 0.05f;
     private float?                  _nextToleranceOverride;
     private int                     _millisecondsWithNoSignificantMovement;
 
@@ -49,7 +49,7 @@ public sealed class MovementPlanExecutor : IDisposable
         _config                   =  config;
         _manager                  =  manager;
         _sharedPathIsRunning      =  Service.PluginInterface.GetOrCreateData<bool[]>(SharedPathTag, () => [false]);
-        _activePathTolerance      =  _config.PathTolerance;
+        _activeDestinationTolerance = _config.PathTolerance;
         _manager.OnNavmeshChanged += OnNavmeshChanged;
         OnNavmeshChanged(_manager.Navmesh, _manager.Query);
     }
@@ -140,7 +140,7 @@ public sealed class MovementPlanExecutor : IDisposable
         _activePlan                            = plan;
         _activeSegmentIndex                    = 0;
         _segmentWaypointIndices                = new int[plan.Segments.Count];
-        _activePathTolerance                   = plan.Segments[0].CompletionTolerance;
+        _activeDestinationTolerance            = plan.DestinationTolerance;
         _millisecondsWithNoSignificantMovement = 0;
         _previousPosition                      = Service.ObjectTable.LocalPlayer?.Position;
         UpdateSharedState(true);
@@ -156,9 +156,9 @@ public sealed class MovementPlanExecutor : IDisposable
         }
 
         var requestedMode     = ignoreDeltaY ? MovementMode.Ground : MovementMode.Flight;
-        var resolvedGoal      = goalPosition ?? waypoints[^1];
-        var resolvedTolerance = tolerance    ?? ConsumeNextTolerance();
-        var segments          = new List<MovementSegment>();
+        var resolvedGoal                 = goalPosition ?? waypoints[^1];
+        var resolvedDestinationTolerance = destTolerance > 0 ? destTolerance : tolerance ?? ConsumeNextTolerance();
+        var segments                     = new List<MovementSegment>();
         var normalizedWaypoints = requestedMode == MovementMode.Flight && !IsAirborne
             ? FlightWaypointNormalizer.NormalizeForTakeoff(waypoints, Service.ObjectTable.LocalPlayer?.Position ?? waypoints[0])
             : waypoints.ToList();
@@ -181,7 +181,7 @@ public sealed class MovementPlanExecutor : IDisposable
             requestedMode == MovementMode.Flight
                 ? new FlightTraverseSegment
                 {
-                    CompletionTolerance = resolvedTolerance,
+                    CompletionTolerance = 0,
                     StartPosition       = Service.ObjectTable.LocalPlayer?.Position ?? normalizedWaypoints[0],
                     GeometryOwnership   = PathGeometryOwnership.ExternalInput,
                     ReachabilitySource  = PathReachabilitySource.ExternalInput,
@@ -189,7 +189,7 @@ public sealed class MovementPlanExecutor : IDisposable
                 }
                 : new GroundTraverseSegment
                 {
-                    CompletionTolerance = resolvedTolerance,
+                    CompletionTolerance = 0,
                     StartPosition       = Service.ObjectTable.LocalPlayer?.Position ?? normalizedWaypoints[0],
                     GeometryOwnership   = PathGeometryOwnership.ExternalInput,
                     ReachabilitySource  = PathReachabilitySource.ExternalInput,
@@ -204,7 +204,7 @@ public sealed class MovementPlanExecutor : IDisposable
                 RequestedMode        = requestedMode,
                 RequestedDestination = resolvedGoal,
                 FinalDestination     = waypoints[^1],
-                DestinationTolerance = destTolerance,
+                DestinationTolerance = resolvedDestinationTolerance,
                 Segments             = segments
             }
         );
@@ -216,7 +216,7 @@ public sealed class MovementPlanExecutor : IDisposable
         _activePlan                            = null;
         _activeSegmentIndex                    = 0;
         _segmentWaypointIndices                = [];
-        _activePathTolerance                   = _config.PathTolerance;
+        _activeDestinationTolerance            = _config.PathTolerance;
         _millisecondsWithNoSignificantMovement = 0;
         UpdateSharedState(false);
         ResetControllers();
@@ -259,7 +259,6 @@ public sealed class MovementPlanExecutor : IDisposable
             return;
 
         _activeDriver        = ResolveDriver(_activePlan.Segments[_activeSegmentIndex].Kind);
-        _activePathTolerance = _activePlan.Segments[_activeSegmentIndex].CompletionTolerance;
         _activeDriver.Enter(BuildContextForCurrentSegment(previousPosition));
         ConsumeInitialWaypoints(previousPosition);
     }
@@ -284,7 +283,6 @@ public sealed class MovementPlanExecutor : IDisposable
             ActiveWaypointIndex    = _segmentWaypointIndices[_activeSegmentIndex],
             SegmentWaypointIndices = _segmentWaypointIndices,
             MovementAllowed        = MovementAllowed,
-            PathTolerance          = _activePathTolerance,
             PreviousPosition       = previousPosition
         };
 
@@ -301,7 +299,6 @@ public sealed class MovementPlanExecutor : IDisposable
             ActiveWaypointIndex    = _segmentWaypointIndices[_activeSegmentIndex],
             SegmentWaypointIndices = _segmentWaypointIndices,
             MovementAllowed        = MovementAllowed,
-            PathTolerance          = _activePathTolerance,
             PreviousPosition       = previousPosition
         };
     }

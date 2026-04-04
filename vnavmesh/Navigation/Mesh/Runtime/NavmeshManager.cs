@@ -93,7 +93,6 @@ public sealed partial class NavmeshManager : IDisposable
         Vector3           to,
         bool              flying,
         float             range               = 0,
-        float?            completionTolerance = null,
         CancellationToken externalCancel      = default
     )
     {
@@ -121,7 +120,7 @@ public sealed partial class NavmeshManager : IDisposable
                                      var plannerResult = flying
                                                              ? Query.PlanVolumePathDetailed(from, to, UseRaycasts, combined.Token)
                                                              : Query.PlanMeshPathDetailed(from, to, UseRaycasts, range, combined.Token);
-                                     return Query.Postprocess(plannerResult, UseStringPulling, completionTolerance ?? _config.PathTolerance, combined.Token);
+                                     return Query.Postprocess(plannerResult, UseStringPulling, combined.Token);
                                  },
                                  combined.Token
                              );

@@ -15,7 +15,6 @@ internal sealed class MovementExecutionContext
     public required int                ActiveWaypointIndex    { get; init; }
     public required IReadOnlyList<int> SegmentWaypointIndices { get; init; }
     public required bool               MovementAllowed        { get; init; }
-    public required float              PathTolerance          { get; init; }
     public          Vector3?           PreviousPosition       { get; init; }
 
     public int      WaypointCount               => Segment.Waypoints.Count;
