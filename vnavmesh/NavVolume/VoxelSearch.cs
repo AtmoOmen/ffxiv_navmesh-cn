@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 
 namespace Navmesh.NavVolume;
@@ -20,10 +19,7 @@ public static class VoxelSearch
         => volume.RootTile.EnumerateLeafVoxels(center - halfExtent, center + halfExtent);
 
     public static Vector3 FindClosestVoxelPoint(VoxelMap volume, ulong index, Vector3 p, float eps = 0.1f)
-    {
-        var (min, max) = volume.VoxelBounds(index, eps);
-        return Vector3.Clamp(p, min, max);
-    }
+        => volume.ClampPointToVoxel(index, p, eps);
 
     public static ulong FindNearestEmptyVoxel(VoxelMap volume, Vector3 center, Vector3 halfExtent)
     {
@@ -65,24 +61,40 @@ public static class VoxelSearch
         var eps = 0.1f / ab.Length();
         while (fromVoxel != toVoxel)
         {
-            var (vmin, vmax) = volume.VoxelBounds(fromVoxel, 0);
-            // find closest intersection among three (out of six) neighbours
-            // line-plane intersection: Q = A + AB*t, PQ*n=0 => (PA + tAB)*n = 0 => t = AP*n / AB*n
-            var tx = ab.X == 0 ? float.MaxValue : ((ab.X > 0 ? vmax.X : vmin.X) - fromPos.X) / ab.X;
-            var ty = ab.Y == 0 ? float.MaxValue : ((ab.Y > 0 ? vmax.Y : vmin.Y) - fromPos.Y) / ab.Y;
-            var tz = ab.Z == 0 ? float.MaxValue : ((ab.Z > 0 ? vmax.Z : vmin.Z) - fromPos.Z) / ab.Z;
-            var t = Math.Min(Math.Min(tx, ty), Math.Min(tz, 1));
-            // Service.Log.Debug($"{fromVoxel:X} -> {toVoxel:X}: t={tx:f3}x{ty:f3}x{tz:f3}={t:f3}");
-            var tAdj = Math.Min(t + eps, 1);
-            var proj = fromPos + tAdj * ab;
-            var (nextVoxel, nextEmpty) = volume.FindLeafVoxel(proj.Floor());
-            if (nextVoxel == fromVoxel)
-                throw new PathfindLoopException(origFrom, toVoxel, fromPos, toPos);
+            StepLine(volume, origFrom, toVoxel, fromPos, ab, eps, fromVoxel, out var nextVoxel, out var t, out var nextEmpty);
             yield return (nextVoxel, t, nextEmpty);
             fromVoxel = nextVoxel;
         }
     }
 
     public static bool LineOfSight(VoxelMap volume, ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
-        => EnumerateVoxelsInLine(volume, fromVoxel, toVoxel, fromPos, toPos).All(v => v.empty);
+    {
+        var origFrom = fromVoxel;
+        var ab = toPos - fromPos;
+        var eps = 0.1f / ab.Length();
+        while (fromVoxel != toVoxel)
+        {
+            StepLine(volume, origFrom, toVoxel, fromPos, ab, eps, fromVoxel, out var nextVoxel, out _, out var nextEmpty);
+            if (!nextEmpty)
+                return false;
+
+            fromVoxel = nextVoxel;
+        }
+
+        return true;
+    }
+
+    private static void StepLine(VoxelMap volume, ulong origFrom, ulong toVoxel, Vector3 fromPos, Vector3 ab, float eps, ulong fromVoxel, out ulong nextVoxel, out float t, out bool nextEmpty)
+    {
+        var (vmin, vmax) = volume.VoxelBounds(fromVoxel, 0);
+        var tx = ab.X == 0 ? float.MaxValue : ((ab.X > 0 ? vmax.X : vmin.X) - fromPos.X) / ab.X;
+        var ty = ab.Y == 0 ? float.MaxValue : ((ab.Y > 0 ? vmax.Y : vmin.Y) - fromPos.Y) / ab.Y;
+        var tz = ab.Z == 0 ? float.MaxValue : ((ab.Z > 0 ? vmax.Z : vmin.Z) - fromPos.Z) / ab.Z;
+        t = Math.Min(Math.Min(tx, ty), Math.Min(tz, 1));
+        var tAdj = Math.Min(t + eps, 1);
+        var proj = fromPos + tAdj * ab;
+        (nextVoxel, nextEmpty) = volume.FindLeafVoxel(proj.Floor());
+        if (nextVoxel == fromVoxel)
+            throw new PathfindLoopException(origFrom, toVoxel, fromPos, fromPos + ab);
+    }
 }

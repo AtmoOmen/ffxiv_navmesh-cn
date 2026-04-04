@@ -8,6 +8,8 @@ namespace Navmesh.NavVolume;
 
 public class VoxelPathfind
 {
+    internal readonly record struct SearchTelemetry(int VisitedNodes, int GeneratedNodes, int LineOfSightChecks, int LineOfSightHits, int PeakOpenListSize);
+
     public struct Node
     {
         public float GScore;
@@ -19,22 +21,35 @@ public class VoxelPathfind
     }
 
     private VoxelMap _volume;
-    private List<Node> _nodes = new(); // grow only (TODO: consider chunked vector)
-    private Dictionary<ulong, int> _nodeLookup = new(); // voxel -> node index
-    private List<int> _openList = new(); // heap containing node indices
+    private readonly VoxelMap.Level _l0Desc;
+    private readonly VoxelMap.Level _l1Desc;
+    private readonly VoxelMap.Level _l2Desc;
+    private List<Node> _nodes = new(1024); // grow only (TODO: consider chunked vector)
+    private Dictionary<ulong, int> _nodeLookup = new(1024); // voxel -> node index
+    private List<int> _openList = new(256); // heap containing node indices
     private int _bestNodeIndex;
     private ulong _goalVoxel;
     private Vector3 _goalPos;
     private bool _useRaycast;
+    private float _randomnessMultiplier;
     private bool _allowReopen = false; // this is extremely expensive and doesn't seem to actually improve the result
     private float _raycastLimitSq = float.MaxValue;
+    private int _visitedNodes;
+    private int _generatedNodes;
+    private int _lineOfSightChecks;
+    private int _lineOfSightHits;
+    private int _peakOpenListSize;
 
     public VoxelMap Volume => _volume;
     public Span<Node> NodeSpan => CollectionsMarshal.AsSpan(_nodes);
+    internal SearchTelemetry LastTelemetry => new(_visitedNodes, _generatedNodes, _lineOfSightChecks, _lineOfSightHits, _peakOpenListSize);
 
     public VoxelPathfind(VoxelMap volume)
     {
         _volume = volume;
+        _l0Desc = volume.Levels[0];
+        _l1Desc = volume.Levels[1];
+        _l2Desc = volume.Levels[2];
     }
 
     public List<(ulong voxel, Vector3 p)> FindPath(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos, bool useRaycast, bool returnIntermediatePoints, CancellationToken cancel)
@@ -51,6 +66,12 @@ public class VoxelPathfind
         _nodeLookup.Clear();
         _openList.Clear();
         _bestNodeIndex = 0;
+        _randomnessMultiplier = Service.Config.RandomnessMultiplier;
+        _visitedNodes = 0;
+        _generatedNodes = 0;
+        _lineOfSightChecks = 0;
+        _lineOfSightHits = 0;
+        _peakOpenListSize = 0;
         if (fromVoxel == VoxelMap.InvalidVoxel || toVoxel == VoxelMap.InvalidVoxel)
         {
             Service.Log.Error($"Bad input cells: {fromVoxel:X} -> {toVoxel:X}");
@@ -62,6 +83,7 @@ public class VoxelPathfind
 
         _nodes.Add(new() { HScore = HeuristicDistance(fromVoxel, fromPos), Voxel = fromVoxel, ParentIndex = 0, OpenHeapIndex = -1, Position = fromPos }); // start's parent is self
         _nodeLookup[fromVoxel] = 0;
+        _generatedNodes = 1;
         AddToOpen(0);
         //Service.Log.Debug($"volume pathfind: {fromPos} ({fromVoxel:X}) to {toPos} ({toVoxel:X})");
     }
@@ -86,21 +108,10 @@ public class VoxelPathfind
 
         var curNodeIndex = PopMinOpen();
         ref var curNode = ref nodeSpan[curNodeIndex];
+        ++_visitedNodes;
         //Service.Log.Debug($"volume pathfind: considering {curNode.Voxel:X} (#{curNodeIndex}), g={curNode.GScore:f3}, h={curNode.HScore:f3}");
 
-        var curVoxel = curNode.Voxel;
-        foreach (var dest in EnumerateNeighbours(curVoxel, 0, -1, 0))
-            VisitNeighbour(curNodeIndex, dest);
-        foreach (var dest in EnumerateNeighbours(curVoxel, 0, +1, 0))
-            VisitNeighbour(curNodeIndex, dest);
-        foreach (var dest in EnumerateNeighbours(curVoxel, -1, 0, 0))
-            VisitNeighbour(curNodeIndex, dest);
-        foreach (var dest in EnumerateNeighbours(curVoxel, +1, 0, 0))
-            VisitNeighbour(curNodeIndex, dest);
-        foreach (var dest in EnumerateNeighbours(curVoxel, 0, 0, -1))
-            VisitNeighbour(curNodeIndex, dest);
-        foreach (var dest in EnumerateNeighbours(curVoxel, 0, 0, +1))
-            VisitNeighbour(curNodeIndex, dest);
+        VisitNeighbours(curNodeIndex, curNode.Voxel);
         return true;
     }
 
@@ -139,192 +150,164 @@ public class VoxelPathfind
         return res;
     }
 
-    private IEnumerable<ulong> EnumerateNeighbours(ulong voxel, int dx, int dy, int dz)
+    private void VisitNeighbours(int parentIndex, ulong voxel)
     {
-        var l0Desc = _volume.Levels[0];
-        var l1Desc = _volume.Levels[1];
-        var l2Desc = _volume.Levels[2];
-        var l0Index = VoxelMap.DecodeIndex(ref voxel); // should always be valid
-        var l1Index = VoxelMap.DecodeIndex(ref voxel);
-        var l2Index = VoxelMap.DecodeIndex(ref voxel);
-        var l0Coords = l0Desc.IndexToVoxel(l0Index);
-        var l1Coords = l1Desc.IndexToVoxel(l1Index); // not valid if l1 is invalid
-        var l2Coords = l2Desc.IndexToVoxel(l2Index); // not valid if l2 is invalid
+        var encodedVoxel = voxel;
+        var l0Index = VoxelMap.DecodeIndex(ref encodedVoxel);
+        var l1Index = VoxelMap.DecodeIndex(ref encodedVoxel);
+        var l2Index = VoxelMap.DecodeIndex(ref encodedVoxel);
+        var l0Coords = _l0Desc.IndexToVoxel(l0Index);
+        var l1Coords = l1Index != VoxelMap.IndexLevelMask ? _l1Desc.IndexToVoxel(l1Index) : default;
+        var l2Coords = l2Index != VoxelMap.IndexLevelMask ? _l2Desc.IndexToVoxel(l2Index) : default;
 
+        VisitDirection(parentIndex, l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, 0, -1, 0);
+        VisitDirection(parentIndex, l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, 0, +1, 0);
+        VisitDirection(parentIndex, l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, -1, 0, 0);
+        VisitDirection(parentIndex, l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, +1, 0, 0);
+        VisitDirection(parentIndex, l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, 0, 0, -1);
+        VisitDirection(parentIndex, l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, 0, 0, +1);
+    }
+
+    private void VisitDirection(int parentIndex, ushort l0Index, ushort l1Index, ushort l2Index, (int x, int y, int z) l0Coords, (int x, int y, int z) l1Coords, (int x, int y, int z) l2Coords, int dx, int dy, int dz)
+    {
         if (l2Index != VoxelMap.IndexLevelMask)
         {
-            // starting from L2 node
             var l2Neighbour = (l2Coords.x + dx, l2Coords.y + dy, l2Coords.z + dz);
-            if (l2Desc.InBounds(l2Neighbour))
+            if (_l2Desc.InBounds(l2Neighbour))
             {
-                // L2->L2 in same L1 tile
-                var neighbourVoxel = VoxelMap.EncodeIndex(l2Desc.VoxelToIndex(l2Neighbour));
+                var neighbourVoxel = VoxelMap.EncodeIndex(_l2Desc.VoxelToIndex(l2Neighbour));
                 neighbourVoxel = VoxelMap.EncodeIndex(l1Index, neighbourVoxel);
                 neighbourVoxel = VoxelMap.EncodeIndex(l0Index, neighbourVoxel);
-                //Service.Log.Debug($"L2->L2 within L1: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{neighbourVoxel:X}");
-                if (_volume.IsEmpty(neighbourVoxel))
-                {
-                    yield return neighbourVoxel;
-                }
-                // else: L2 is occupied, so we can't go there
-                yield break;
+                VisitNeighbourIfEmpty(parentIndex, neighbourVoxel);
+                return;
             }
         }
 
         if (l1Index != VoxelMap.IndexLevelMask)
         {
-            // starting from L1 node -or- L2 node at the boundary
             var l1Neighbour = (l1Coords.x + dx, l1Coords.y + dy, l1Coords.z + dz);
-            if (l1Desc.InBounds(l1Neighbour))
+            if (_l1Desc.InBounds(l1Neighbour))
             {
-                // L1/L2->L1 in same L0 tile
-                var neighbourVoxel = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(l1Neighbour));
+                var neighbourVoxel = VoxelMap.EncodeIndex(_l1Desc.VoxelToIndex(l1Neighbour));
                 neighbourVoxel = VoxelMap.EncodeIndex(l0Index, neighbourVoxel);
-                //Service.Log.Debug($"L1/L2->L1 within L0: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{neighbourVoxel:X}");
                 if (_volume.IsEmpty(neighbourVoxel))
                 {
-                    // destination L1 is fully empty
-                    yield return neighbourVoxel;
+                    VisitNeighbour(parentIndex, neighbourVoxel);
                 }
                 else if (l2Index != VoxelMap.IndexLevelMask)
                 {
-                    // L2->L2 across L1 border (but in same L0)
-                    int l2X = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
-                    int l2Y = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
-                    int l2Z = dz == 0 ? l2Coords.z : dz > 0 ? 0 : l2Desc.NumCellsZ - 1;
-                    var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(neighbourVoxel, l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
-                    //Service.Log.Debug($"- L2->L1 within L0: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{l2NeighbourVoxel:X}");
-                    if (_volume.IsEmpty(l2NeighbourVoxel))
-                    {
-                        yield return l2NeighbourVoxel;
-                    }
+                    int l2X = dx == 0 ? l2Coords.x : dx > 0 ? 0 : _l2Desc.NumCellsX - 1;
+                    int l2Y = dy == 0 ? l2Coords.y : dy > 0 ? 0 : _l2Desc.NumCellsY - 1;
+                    int l2Z = dz == 0 ? l2Coords.z : dz > 0 ? 0 : _l2Desc.NumCellsZ - 1;
+                    var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(neighbourVoxel, _l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
+                    VisitNeighbourIfEmpty(parentIndex, l2NeighbourVoxel);
                 }
                 else
                 {
-                    // L1->L2 is same L0, enumerate all empty border voxels
-                    foreach (var v in EnumerateBorder(neighbourVoxel, 2, dx, dy, dz))
-                    {
-                        //Service.Log.Debug($"- L1->L2 within L0: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{v:X}");
-                        if (_volume.IsEmpty(v))
-                        {
-                            yield return v;
-                        }
-                    }
+                    VisitBorder(parentIndex, neighbourVoxel, _l2Desc, 2, dx, dy, dz);
                 }
-                yield break;
+
+                return;
             }
         }
 
-        //if (l0Index != VoxelMap.IndexLevelMask) - this is always true
+        var l0Neighbour = (l0Coords.x + dx, l0Coords.y + dy, l0Coords.z + dz);
+        if (!_l0Desc.InBounds(l0Neighbour))
+            return;
+
+        var l0NeighbourVoxel = VoxelMap.EncodeIndex(_l0Desc.VoxelToIndex(l0Neighbour));
+        if (_volume.IsEmpty(l0NeighbourVoxel))
         {
-            // starting from L0 node -or- L1/L2 node at the boundary
-            var l0Neighbour = (l0Coords.x + dx, l0Coords.y + dy, l0Coords.z + dz);
-            if (l0Desc.InBounds(l0Neighbour))
-            {
-                var neighbourVoxel = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(l0Neighbour));
-                //Service.Log.Debug($"L0/L1/L2->L0: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{neighbourVoxel:X}");
-                if (_volume.IsEmpty(neighbourVoxel))
-                {
-                    // destination L0 is fully empty
-                    yield return neighbourVoxel;
-                }
-                else if (l1Index != VoxelMap.IndexLevelMask)
-                {
-                    // L1/L2 across L0 border
-                    int l1X = dx == 0 ? l1Coords.x : dx > 0 ? 0 : l1Desc.NumCellsX - 1;
-                    int l1Y = dy == 0 ? l1Coords.y : dy > 0 ? 0 : l1Desc.NumCellsY - 1;
-                    int l1Z = dz == 0 ? l1Coords.z : dz > 0 ? 0 : l1Desc.NumCellsZ - 1;
-                    var l1NeighbourVoxel = VoxelMap.EncodeSubIndex(neighbourVoxel, l1Desc.VoxelToIndex(l1X, l1Y, l1Z), 1);
-                    //Service.Log.Debug($"- L1/L2->L1: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{l1NeighbourVoxel:X}");
-                    if (_volume.IsEmpty(l1NeighbourVoxel))
-                    {
-                        // L1/L2 -> L1
-                        yield return l1NeighbourVoxel;
-                    }
-                    else if (l2Index != VoxelMap.IndexLevelMask)
-                    {
-                        // L2->L2 across L0 border
-                        int l2X = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
-                        int l2Y = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
-                        int l2Z = dz == 0 ? l2Coords.z : dz > 0 ? 0 : l2Desc.NumCellsZ - 1;
-                        var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(l1NeighbourVoxel, l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
-                        //Service.Log.Debug($"- L2->L2: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{l2NeighbourVoxel:X}");
-                        if (_volume.IsEmpty(l2NeighbourVoxel))
-                        {
-                            yield return l2NeighbourVoxel;
-                        }
-                    }
-                    else
-                    {
-                        // L1->L2 across L0 border
-                        foreach (var v in EnumerateBorder(l1NeighbourVoxel, 2, dx, dy, dz))
-                        {
-                            //Service.Log.Debug($"- L1->L2: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{v:X}");
-                            if (_volume.IsEmpty(v))
-                            {
-                                yield return v;
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    // L0->L1/L2
-                    foreach (var v1 in EnumerateBorder(neighbourVoxel, 1, dx, dy, dz))
-                    {
-                        //Service.Log.Debug($"- L0->L1: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{v1:X}");
-                        if (_volume.IsEmpty(v1))
-                        {
-                            // L0->L1
-                            yield return v1;
-                        }
-                        else
-                        {
-                            foreach (var v2 in EnumerateBorder(v1, 2, dx, dy, dz))
-                            {
-                                //Service.Log.Debug($"-- L0->L2: {voxel:X4}{l2Index:X4}{l1Index:X4}{l0Index:X4}->{v2:X}");
-                                if (_volume.IsEmpty(v2))
-                                {
-                                    // L0->L2
-                                    yield return v2;
-                                }
-                            }
-                        }
-                    }
-                }
-                yield break;
-            }
+            VisitNeighbour(parentIndex, l0NeighbourVoxel);
+            return;
         }
+
+        if (l1Index != VoxelMap.IndexLevelMask)
+        {
+            int l1X = dx == 0 ? l1Coords.x : dx > 0 ? 0 : _l1Desc.NumCellsX - 1;
+            int l1Y = dy == 0 ? l1Coords.y : dy > 0 ? 0 : _l1Desc.NumCellsY - 1;
+            int l1Z = dz == 0 ? l1Coords.z : dz > 0 ? 0 : _l1Desc.NumCellsZ - 1;
+            var l1NeighbourVoxel = VoxelMap.EncodeSubIndex(l0NeighbourVoxel, _l1Desc.VoxelToIndex(l1X, l1Y, l1Z), 1);
+            if (_volume.IsEmpty(l1NeighbourVoxel))
+            {
+                VisitNeighbour(parentIndex, l1NeighbourVoxel);
+            }
+            else if (l2Index != VoxelMap.IndexLevelMask)
+            {
+                int l2X = dx == 0 ? l2Coords.x : dx > 0 ? 0 : _l2Desc.NumCellsX - 1;
+                int l2Y = dy == 0 ? l2Coords.y : dy > 0 ? 0 : _l2Desc.NumCellsY - 1;
+                int l2Z = dz == 0 ? l2Coords.z : dz > 0 ? 0 : _l2Desc.NumCellsZ - 1;
+                var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(l1NeighbourVoxel, _l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
+                VisitNeighbourIfEmpty(parentIndex, l2NeighbourVoxel);
+            }
+            else
+            {
+                VisitBorder(parentIndex, l1NeighbourVoxel, _l2Desc, 2, dx, dy, dz);
+            }
+
+            return;
+        }
+
+        VisitBorderWithSubdivisions(parentIndex, l0NeighbourVoxel, dx, dy, dz);
     }
 
-    private IEnumerable<ulong> EnumerateBorder(ulong voxel, int level, int dx, int dy, int dz)
+    private void VisitBorder(int parentIndex, ulong voxel, VoxelMap.Level levelDesc, int level, int dx, int dy, int dz)
     {
-        var ld = _volume.Levels[level];
-        var (xmin, xmax) = dx == 0 ? (0, ld.NumCellsX - 1) : dx > 0 ? (0, 0) : (ld.NumCellsX - 1, ld.NumCellsX - 1);
-        var (ymin, ymax) = dy == 0 ? (0, ld.NumCellsY - 1) : dy > 0 ? (0, 0) : (ld.NumCellsY - 1, ld.NumCellsY - 1);
-        var (zmin, zmax) = dz == 0 ? (0, ld.NumCellsZ - 1) : dz > 0 ? (0, 0) : (ld.NumCellsZ - 1, ld.NumCellsZ - 1);
-        //Service.Log.Debug($"enum border: {voxel:X} @ {level} + ({dx}, {dy}, {dz}): {xmin}-{xmax}, {ymin}-{ymax}, {zmin}-{zmax}");
+        var (xmin, xmax) = dx == 0 ? (0, levelDesc.NumCellsX - 1) : dx > 0 ? (0, 0) : (levelDesc.NumCellsX - 1, levelDesc.NumCellsX - 1);
+        var (ymin, ymax) = dy == 0 ? (0, levelDesc.NumCellsY - 1) : dy > 0 ? (0, 0) : (levelDesc.NumCellsY - 1, levelDesc.NumCellsY - 1);
+        var (zmin, zmax) = dz == 0 ? (0, levelDesc.NumCellsZ - 1) : dz > 0 ? (0, 0) : (levelDesc.NumCellsZ - 1, levelDesc.NumCellsZ - 1);
         for (int z = zmin; z <= zmax; ++z)
         {
             for (int x = xmin; x <= xmax; ++x)
             {
                 for (int y = ymin; y <= ymax; ++y)
                 {
-                    yield return VoxelMap.EncodeSubIndex(voxel, ld.VoxelToIndex(x, y, z), level);
+                    VisitNeighbourIfEmpty(parentIndex, VoxelMap.EncodeSubIndex(voxel, levelDesc.VoxelToIndex(x, y, z), level));
                 }
             }
         }
     }
 
+    private void VisitBorderWithSubdivisions(int parentIndex, ulong voxel, int dx, int dy, int dz)
+    {
+        var (xmin, xmax) = dx == 0 ? (0, _l1Desc.NumCellsX - 1) : dx > 0 ? (0, 0) : (_l1Desc.NumCellsX - 1, _l1Desc.NumCellsX - 1);
+        var (ymin, ymax) = dy == 0 ? (0, _l1Desc.NumCellsY - 1) : dy > 0 ? (0, 0) : (_l1Desc.NumCellsY - 1, _l1Desc.NumCellsY - 1);
+        var (zmin, zmax) = dz == 0 ? (0, _l1Desc.NumCellsZ - 1) : dz > 0 ? (0, 0) : (_l1Desc.NumCellsZ - 1, _l1Desc.NumCellsZ - 1);
+        for (int z = zmin; z <= zmax; ++z)
+        {
+            for (int x = xmin; x <= xmax; ++x)
+            {
+                for (int y = ymin; y <= ymax; ++y)
+                {
+                    var l1Voxel = VoxelMap.EncodeSubIndex(voxel, _l1Desc.VoxelToIndex(x, y, z), 1);
+                    if (_volume.IsEmpty(l1Voxel))
+                    {
+                        VisitNeighbour(parentIndex, l1Voxel);
+                    }
+                    else
+                    {
+                        VisitBorder(parentIndex, l1Voxel, _l2Desc, 2, dx, dy, dz);
+                    }
+                }
+            }
+        }
+    }
+
+    private void VisitNeighbourIfEmpty(int parentIndex, ulong nodeVoxel)
+    {
+        if (_volume.IsEmpty(nodeVoxel))
+            VisitNeighbour(parentIndex, nodeVoxel);
+    }
+
     private void VisitNeighbour(int parentIndex, ulong nodeVoxel)
     {
-        var nodeIndex = _nodeLookup.GetValueOrDefault(nodeVoxel, -1);
-        if (nodeIndex < 0)
+        if (!_nodeLookup.TryGetValue(nodeVoxel, out var nodeIndex))
         {
             // first time we're visiting this node, calculate heuristic
             nodeIndex = _nodes.Count;
             _nodes.Add(new() { GScore = float.MaxValue, HScore = float.MaxValue, Voxel = nodeVoxel, ParentIndex = parentIndex, OpenHeapIndex = -1 });
             _nodeLookup[nodeVoxel] = nodeIndex;
+            ++_generatedNodes;
         }
         else if (!_allowReopen && _nodes[nodeIndex].OpenHeapIndex < 0)
         {
@@ -334,7 +317,7 @@ public class VoxelPathfind
 
         var nodeSpan = NodeSpan;
         ref var parentNode = ref nodeSpan[parentIndex];
-        var enterPos = nodeVoxel == _goalVoxel ? _goalPos : VoxelSearch.FindClosestVoxelPoint(_volume, nodeVoxel, parentNode.Position);
+        var enterPos = nodeVoxel == _goalVoxel ? _goalPos : _volume.ClampPointToVoxel(nodeVoxel, parentNode.Position);
         var nodeG = CalculateGScore(ref parentNode, nodeVoxel, enterPos, ref parentIndex);
         ref var curNode = ref nodeSpan[nodeIndex];
         if (nodeG + 0.00001f < curNode.GScore)
@@ -354,7 +337,7 @@ public class VoxelPathfind
 
     private float CalculateGScore(ref Node parent, ulong destVoxel, Vector3 destPos, ref int parentIndex)
     {
-        float randomFactor = (float)Random.Shared.NextDouble() * Service.Config.RandomnessMultiplier;
+        float randomFactor = _randomnessMultiplier > 0 ? (float)Random.Shared.NextDouble() * _randomnessMultiplier : 0;
 
         float baseDistance;
         float parentBaseG;
@@ -367,12 +350,23 @@ public class VoxelPathfind
             ref var grandParentNode = ref NodeSpan[grandParentIndex];
             // TODO: invert LoS check to match path reconstruction step?
             var distanceSquared = (grandParentNode.Position - destPos).LengthSquared();
-            if (distanceSquared <= _raycastLimitSq && VoxelSearch.LineOfSight(_volume, grandParentNode.Voxel, destVoxel, grandParentNode.Position, destPos))
+            if (distanceSquared <= _raycastLimitSq)
             {
-                parentIndex = grandParentIndex;
-                baseDistance = MathF.Sqrt(distanceSquared);
-                parentBaseG = grandParentNode.GScore;
-                fromPos = grandParentNode.Position;
+                ++_lineOfSightChecks;
+                if (VoxelSearch.LineOfSight(_volume, grandParentNode.Voxel, destVoxel, grandParentNode.Position, destPos))
+                {
+                    ++_lineOfSightHits;
+                    parentIndex = grandParentIndex;
+                    baseDistance = MathF.Sqrt(distanceSquared);
+                    parentBaseG = grandParentNode.GScore;
+                    fromPos = grandParentNode.Position;
+                }
+                else
+                {
+                    baseDistance = (parent.Position - destPos).Length();
+                    parentBaseG = parent.GScore;
+                    fromPos = parent.Position;
+                }
             }
             else
             {
@@ -403,6 +397,8 @@ public class VoxelPathfind
         {
             node.OpenHeapIndex = _openList.Count;
             _openList.Add(nodeIndex);
+            if (_openList.Count > _peakOpenListSize)
+                _peakOpenListSize = _openList.Count;
         }
         // update location
         PercolateUp(node.OpenHeapIndex);

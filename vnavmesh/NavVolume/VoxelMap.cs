@@ -260,6 +260,28 @@ public class VoxelMap
         }
     }
 
+    internal Vector3 ClampPointToVoxel(ulong voxel, Vector3 p, float eps = 0.1f)
+    {
+        var tile = RootTile;
+        while (true)
+        {
+            var tileIndex = DecodeIndex(ref voxel);
+            if (tileIndex == IndexLevelMask)
+                return Vector3.Clamp(p, tile.BoundsMin + new Vector3(eps), tile.BoundsMax - new Vector3(eps));
+
+            var data = tile.Contents[tileIndex];
+            var id = data & VoxelIdMask;
+            if ((data & VoxelOccupiedBit) == 0 || id == VoxelIdMask)
+            {
+                var (min, max) = tile.CalculateSubdivisionBounds(Levels[tile.Level].IndexToVoxel(tileIndex));
+                var eps3 = new Vector3(eps);
+                return Vector3.Clamp(p, min + eps3, max - eps3);
+            }
+
+            tile = tile.Subdivision[id];
+        }
+    }
+
     public void Build(Voxelizer vox, int tx, int tz)
     {
         var column = BuildRootColumn(vox, tx, tz);

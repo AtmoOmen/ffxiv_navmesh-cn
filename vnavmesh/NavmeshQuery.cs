@@ -212,8 +212,10 @@ public class NavmeshQuery
             return new(PathfindStatus.Failed, [], to, to);
         }
 
+        var locateTimer = Timer.Create();
         var startVoxel = FindNearestVolumeVoxel(from);
         var endVoxel = FindNearestVolumeVoxel(to);
+        var locateDuration = locateTimer.Value();
         Service.Log.Debug($"[算路] 飞行体素 {startVoxel:X} -> {endVoxel:X}");
         if (startVoxel == VoxelMap.InvalidVoxel || endVoxel == VoxelMap.InvalidVoxel)
         {
@@ -221,17 +223,23 @@ public class NavmeshQuery
             return new(PathfindStatus.Failed, [], to, to);
         }
 
-        var timer = Timer.Create();
+        var searchTimer = Timer.Create();
         var voxelPath = VolumeQuery.FindPath(startVoxel, endVoxel, from, to, useRaycast, false, cancel); // TODO: do we need intermediate points for string-pulling algo?
+        var searchDuration = searchTimer.Value();
+        var telemetry = VolumeQuery.LastTelemetry;
         if (voxelPath.Count == 0)
         {
             Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空");
             return new(PathfindStatus.Failed, [], to, to);
         }
-        Service.Log.Debug($"[算路] 飞行路径查询耗时 {timer.Value().TotalSeconds:f3} 秒，路径 = {string.Join(", ", voxelPath.Select(r => $"{r.p} {r.voxel:X}"))}");
+        Service.Log.Debug($"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchDuration.TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，路径点 = {voxelPath.Count}");
 
         // TODO: string-pulling support
-        var waypoints = DeduplicateWaypoints(voxelPath.Select(r => r.p).Append(to));
+        List<Vector3> rawWaypoints = new(voxelPath.Count + 1);
+        foreach (var step in voxelPath)
+            rawWaypoints.Add(step.p);
+        rawWaypoints.Add(to);
+        var waypoints = DeduplicateWaypoints(rawWaypoints);
         return new(PathfindStatus.Complete, waypoints, to, waypoints[^1]);
     }
 
