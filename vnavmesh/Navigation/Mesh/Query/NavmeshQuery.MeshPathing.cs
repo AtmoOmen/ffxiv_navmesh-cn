@@ -52,34 +52,13 @@ public partial class NavmeshQuery
         var resultStatus = pathCandidate.ResultStatus;
 
         if (resultStatus == PathfindStatus.Partial &&
-            TryRepairShortGroundGap(pathCandidate, to, endRef, requestedEndPos, filter, opt, range, cancel, out var repairedResult))
+            TryRepairShortGroundGap(pathCandidate, to, endRef, requestedEndPos, filter, opt, range, cancel, out var repairedResult, out var repairedLastPoly))
         {
-            LogMeshResult(repairedResult, from, startRef, endRef, lastPoly, range, timer.Value());
+            LogMeshResult(repairedResult, from, startRef, endRef, repairedLastPoly, range, timer.Value());
             return repairedResult;
         }
 
-        var result = new PlannerResult
-        {
-            Status               = resultStatus,
-            RequestedMode        = MovementMode.Ground,
-            RequestedDestination = to,
-            FinalDestination     = pathCandidate.FinalDestination,
-            DestinationTolerance = range,
-            Segments =
-            [
-                new()
-                {
-                    MovementMode         = MovementMode.Ground,
-                    SegmentKind          = MovementSegmentKind.GroundTraverse,
-                    AllowVerticalControl = false,
-                    ReachabilitySource   = PathReachabilitySource.Mesh,
-                    GeometryKind         = PlannerSegmentGeometryKind.MeshCorridor,
-                    StartPosition        = pathCandidate.StartPoint,
-                    EndPosition          = pathCandidate.FinalDestination,
-                    Corridor             = [.. LastPath]
-                }
-            ]
-        };
+        var result = BuildGroundPlannerResult(to, range, resultStatus, pathCandidate.FinalDestination, [BuildGroundMeshCorridorSegment(pathCandidate)]);
         LogMeshResult(result, from, startRef, endRef, lastPoly, range, timer.Value());
         return result;
     }
@@ -251,4 +230,48 @@ public partial class NavmeshQuery
 
         return candidate.StartRef < currentBest.StartRef;
     }
+
+    private static PlannerResult BuildGroundPlannerResult
+    (
+        Vector3                           requestedTarget,
+        float                             range,
+        PathfindStatus                    status,
+        Vector3                           finalDestination,
+        IReadOnlyList<PlannerPathSegment> segments
+    ) =>
+        new()
+        {
+            Status               = status,
+            RequestedMode        = MovementMode.Ground,
+            RequestedDestination = requestedTarget,
+            FinalDestination     = finalDestination,
+            DestinationTolerance = range,
+            Segments             = segments
+        };
+
+    private static PlannerPathSegment BuildGroundMeshCorridorSegment(MeshPathCandidate candidate) =>
+        new()
+        {
+            MovementMode         = MovementMode.Ground,
+            SegmentKind          = MovementSegmentKind.GroundTraverse,
+            AllowVerticalControl = false,
+            ReachabilitySource   = PathReachabilitySource.Mesh,
+            GeometryKind         = PlannerSegmentGeometryKind.MeshCorridor,
+            StartPosition        = candidate.StartPoint,
+            EndPosition          = candidate.FinalDestination,
+            Corridor             = [.. candidate.Corridor]
+        };
+
+    private static PlannerPathSegment BuildGroundDiscreteSegment(Vector3 startPosition, params Vector3[] points) =>
+        new()
+        {
+            MovementMode         = MovementMode.Ground,
+            SegmentKind          = MovementSegmentKind.GroundTraverse,
+            AllowVerticalControl = false,
+            ReachabilitySource   = PathReachabilitySource.Mesh,
+            GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+            StartPosition        = startPosition,
+            EndPosition          = points.Length > 0 ? points[^1] : startPosition,
+            Points               = [.. points]
+        };
 }

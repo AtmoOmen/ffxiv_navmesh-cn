@@ -67,10 +67,12 @@ public partial class NavmeshQuery
         DtFindPathOption  opt,
         float             range,
         CancellationToken cancel,
-        out PlannerResult repairedResult
+        out PlannerResult repairedResult,
+        out long          repairedLastPoly
     )
     {
         repairedResult = default!;
+        repairedLastPoly = partialCandidate.LastPoly;
 
         var partialEnd = partialCandidate.FinalDestination;
         var repairCandidates = FindIntersectingMeshPolys
@@ -137,40 +139,22 @@ public partial class NavmeshQuery
             return false;
 
         var bridgePointToAdd = bestResumeCandidate.Value.StartPoint;
-        var mergedWaypoints = new List<Vector3>
-        {
-            partialCandidate.StartPoint
-        };
-        mergedWaypoints.AddRange(partialCandidate.Corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()));
-        mergedWaypoints.Add(partialCandidate.FinalDestination);
-        mergedWaypoints.Add(bridgePointToAdd);
-        mergedWaypoints.AddRange(bestResumeCandidate.Value.Corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()));
-        mergedWaypoints.Add(bestResumeCandidate.Value.FinalDestination);
+        repairedLastPoly = bestResumeCandidate.Value.LastPoly;
+        List<PlannerPathSegment> segments = [BuildGroundMeshCorridorSegment(partialCandidate)];
+        if (Vector3.DistanceSquared(partialCandidate.FinalDestination, bridgePointToAdd) > 0.000001f)
+            segments.Add(BuildGroundDiscreteSegment(partialCandidate.FinalDestination, bridgePointToAdd));
+        segments.Add(BuildGroundMeshCorridorSegment(bestResumeCandidate.Value));
 
         Service.Log.Warning
-            ($"[算路] 已触发短距补桥：partial 终点 = {partialCandidate.FinalDestination:f3}，桥接点 = {bridgePointToAdd:f3}，桥接后结果 = {bestResumeCandidate.Value.ResultStatus}");
-        repairedResult = new()
-        {
-            Status               = bestResumeCandidate.Value.ResultStatus,
-            RequestedMode        = MovementMode.Ground,
-            RequestedDestination = requestedTarget,
-            FinalDestination     = bestResumeCandidate.Value.FinalDestination,
-            DestinationTolerance = range,
-            Segments =
-            [
-                new()
-                {
-                    MovementMode         = MovementMode.Ground,
-                    SegmentKind          = MovementSegmentKind.GroundTraverse,
-                    AllowVerticalControl = false,
-                    ReachabilitySource   = PathReachabilitySource.Mesh,
-                    GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
-                    StartPosition        = partialCandidate.StartPoint,
-                    EndPosition          = bestResumeCandidate.Value.FinalDestination,
-                    Points               = [.. mergedWaypoints]
-                }
-            ]
-        };
+            ($"[算路] 已触发短距补桥：partial 终点 = {partialCandidate.FinalDestination:f3}，桥接点 = {bridgePointToAdd:f3}，桥接后结果 = {bestResumeCandidate.Value.ResultStatus}，段数 = {segments.Count}，结果来源 = 短距补桥 + 续算，最后可达 = {repairedLastPoly:X}");
+        repairedResult = BuildGroundPlannerResult
+        (
+            requestedTarget,
+            range,
+            bestResumeCandidate.Value.ResultStatus,
+            bestResumeCandidate.Value.FinalDestination,
+            segments
+        );
         return true;
     }
 

@@ -5,6 +5,8 @@ namespace vnavmesh.Navigation.Planning;
 
 internal sealed class PostprocessedPath
 {
+    private const float DuplicateWaypointDistanceSq = 0.000001f;
+
     public required PathfindStatus                          Status               { get; init; }
     public required MovementMode                            RequestedMode        { get; init; }
     public required Vector3                                 RequestedDestination { get; init; }
@@ -14,5 +16,19 @@ internal sealed class PostprocessedPath
 
     public bool Succeeded => Status != PathfindStatus.Failed;
 
-    public List<Vector3> Waypoints => [.. Segments.SelectMany(segment => segment.Waypoints)];
+    public List<Vector3> Waypoints
+    {
+        get
+        {
+            List<Vector3> waypoints = [];
+
+            foreach (var waypoint in Segments.SelectMany(segment => segment.Waypoints))
+            {
+                if (waypoints.Count == 0 || Vector3.DistanceSquared(waypoints[^1], waypoint) > DuplicateWaypointDistanceSq)
+                    waypoints.Add(waypoint);
+            }
+
+            return waypoints;
+        }
+    }
 }
