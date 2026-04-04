@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Text.Json;
 using Seeds = System.Collections.Generic.Dictionary<uint, System.Collections.Generic.List<vnavmesh.Navmesh.JsonVec>>;
 

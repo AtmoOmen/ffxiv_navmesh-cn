@@ -1,4 +1,4 @@
-﻿using vnavmesh.Navmesh;
+using vnavmesh.Navmesh;
 
 namespace vnavmesh.Customizations;
 

@@ -1,4 +1,4 @@
-﻿using Dalamud.Game.Gui.Dtr;
+using Dalamud.Game.Gui.Dtr;
 using Dalamud.Plugin.Services;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;

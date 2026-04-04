@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.NavPathfind;

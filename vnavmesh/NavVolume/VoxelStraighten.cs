@@ -1,4 +1,4 @@
-﻿namespace vnavmesh.NavVolume;
+namespace vnavmesh.NavVolume;
 
 // utility to build a 'straight' path (funnel/string-pulling) from the path returned by query
 // we exploit heavily the axis-oriented nature of voxel map

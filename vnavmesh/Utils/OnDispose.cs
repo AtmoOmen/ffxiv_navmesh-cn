@@ -1,4 +1,4 @@
-﻿namespace vnavmesh.Utils;
+namespace vnavmesh.Utils;
 
 // usage: using var x = new OnDispose(action);
 public readonly record struct OnDispose

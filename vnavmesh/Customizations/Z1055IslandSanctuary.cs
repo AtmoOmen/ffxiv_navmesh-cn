@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using vnavmesh.Navmesh;
 
 namespace vnavmesh.Customizations;

@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using vnavmesh.Navmesh;
 
 namespace vnavmesh.Customizations;

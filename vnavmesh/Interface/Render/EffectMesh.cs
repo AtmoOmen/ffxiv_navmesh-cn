@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using SharpDX.D3DCompiler;
 using SharpDX.Direct3D;

@@ -1,4 +1,4 @@
-﻿using Vector3 = System.Numerics.Vector3;
+using Vector3 = System.Numerics.Vector3;
 using Vector4 = System.Numerics.Vector4;
 
 namespace vnavmesh.Interface.Render;

@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using SharpDX.Direct3D;
 using SharpDX.Direct3D11;

@@ -1,4 +1,4 @@
-﻿namespace vnavmesh.Utils;
+namespace vnavmesh.Utils;
 
 // very simple stopwatch timer
 public struct StopWatchTimer

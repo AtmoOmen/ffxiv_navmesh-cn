@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using vnavmesh.Utils;
 
 namespace vnavmesh.NavVolume;

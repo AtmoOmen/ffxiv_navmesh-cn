@@ -1,4 +1,4 @@
-﻿using DotRecast.Detour;
+using DotRecast.Detour;
 using vnavmesh.Navmesh;
 
 namespace vnavmesh.Customizations;

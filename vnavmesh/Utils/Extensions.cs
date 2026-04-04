@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using DotRecast.Core.Numerics;
 
 namespace vnavmesh.Utils;
