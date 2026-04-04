@@ -27,6 +27,7 @@ public sealed class MovementPlanExecutor : IDisposable
     private readonly NavmeshManager            _manager;
     private readonly CameraAlignmentController _camera        = new();
     private readonly MovementInputController   _movement      = new();
+    private readonly MovementUnstuckController _unstuck;
     private readonly GroundTraverseDriver      _groundDriver  = new();
     private readonly FlightTraverseDriver      _flightDriver  = new();
     private readonly TakeoffDriver             _takeoffDriver = new();
@@ -43,12 +44,12 @@ public sealed class MovementPlanExecutor : IDisposable
     private Vector3?                _previousPosition;
     private float                   _activeDestinationTolerance = 0.05f;
     private float?                  _nextToleranceOverride;
-    private int                     _millisecondsWithNoSignificantMovement;
 
     public MovementPlanExecutor(Config config, NavmeshManager manager)
     {
         _config                   =  config;
         _manager                  =  manager;
+        _unstuck                  =  new(config, manager);
         _sharedPathIsRunning      =  Service.PluginInterface.GetOrCreateData<bool[]>(SharedPathTag, () => [false]);
         _activeDestinationTolerance = _config.PathTolerance;
         _manager.OnNavmeshChanged += OnNavmeshChanged;
@@ -77,38 +78,25 @@ public sealed class MovementPlanExecutor : IDisposable
         if (_activePlan == null)
         {
             _previousPosition = frameCurrentPosition;
+            _unstuck.Reset();
             ResetControllers();
             return;
         }
 
+        var pathSuspended = _unstuck.SuspendsPathExecution;
         SyncActiveDriver(player, framePreviousPosition);
-        AdvanceCompletedSegments(player, framePreviousPosition);
+        if (!pathSuspended)
+            AdvanceCompletedSegments(player, framePreviousPosition);
 
         if (_activePlan == null)
         {
             _previousPosition = frameCurrentPosition;
+            _unstuck.Reset();
             ResetControllers();
             return;
         }
 
         SyncActiveDriver(player, framePreviousPosition);
-
-        if (_config.StopOnStuck && _previousPosition.HasValue)
-        {
-            var delta    = framework.UpdateDelta.Milliseconds / 1000f;
-            var distance = delta > 0 ? Vector3.Distance(frameCurrentPosition, framePreviousPosition) / delta : 0;
-            if (distance <= _config.StuckTolerance)
-                _millisecondsWithNoSignificantMovement += framework.UpdateDelta.Milliseconds;
-            else
-                _millisecondsWithNoSignificantMovement = 0;
-
-            if (_millisecondsWithNoSignificantMovement >= _config.StuckTimeoutMs)
-            {
-                Fail(MovementFailureReason.Stuck);
-                _previousPosition = frameCurrentPosition;
-                return;
-            }
-        }
 
         if (_config.CancelMoveOnUserInput && _movement.UserInput)
         {
@@ -117,7 +105,24 @@ public sealed class MovementPlanExecutor : IDisposable
             return;
         }
 
-        var context = BuildContext(player, framePreviousPosition);
+        var context       = BuildContext(player, framePreviousPosition);
+        var unstuckUpdate = _unstuck.Update(context, SuspendsUnstuck());
+        if (unstuckUpdate.RequestRepath)
+        {
+            Fail(MovementFailureReason.RepathRequiredAfterUnstuck);
+            _previousPosition = frameCurrentPosition;
+            return;
+        }
+
+        if (unstuckUpdate.SuspendPathExecution || _unstuck.SuspendsPathExecution)
+        {
+            GameplayActivityBridge.ResetAFKTime();
+            if (unstuckUpdate.OverrideCommand is { } overrideCommand)
+                ApplyFrameCommand(overrideCommand, frameCurrentPosition);
+            _previousPosition = frameCurrentPosition;
+            return;
+        }
+
         GameplayActivityBridge.ResetAFKTime();
         var update = _activeDriver!.Update(context);
 
@@ -131,7 +136,7 @@ public sealed class MovementPlanExecutor : IDisposable
             return;
         }
 
-        ApplyFrameCommand(update.Command, frameCurrentPosition);
+        ApplyFrameCommand(unstuckUpdate.OverrideCommand ?? update.Command, frameCurrentPosition);
         _previousPosition = frameCurrentPosition;
     }
 
@@ -145,8 +150,8 @@ public sealed class MovementPlanExecutor : IDisposable
         _activeSegmentIndex                    = 0;
         _segmentWaypointIndices                = new int[plan.Segments.Count];
         _activeDestinationTolerance            = plan.DestinationTolerance;
-        _millisecondsWithNoSignificantMovement = 0;
         _previousPosition                      = Service.ObjectTable.LocalPlayer?.Position;
+        _unstuck.Reset();
         UpdateSharedState(true);
         EnterCurrentSegment(_previousPosition);
     }
@@ -221,7 +226,7 @@ public sealed class MovementPlanExecutor : IDisposable
         _activeSegmentIndex                    = 0;
         _segmentWaypointIndices                = [];
         _activeDestinationTolerance            = _config.PathTolerance;
-        _millisecondsWithNoSignificantMovement = 0;
+        _unstuck.Reset();
         UpdateSharedState(false);
         ResetControllers();
     }
@@ -264,6 +269,7 @@ public sealed class MovementPlanExecutor : IDisposable
 
         var context  = BuildContextForCurrentSegment(previousPosition);
         _activeDriver = ResolveDriver(context);
+        _unstuck.Reset();
         _activeDriver.Enter(context);
         ConsumeInitialWaypoints(previousPosition);
     }
@@ -298,6 +304,7 @@ public sealed class MovementPlanExecutor : IDisposable
             _activeDriver.Exit(BuildContextForCurrentSegment(previousPosition));
 
         _activeDriver = driver;
+        _unstuck.Reset();
         _activeDriver.Enter(BuildContextForCurrentSegment(previousPosition));
     }
 
@@ -467,6 +474,9 @@ public sealed class MovementPlanExecutor : IDisposable
         Stop();
 
     private void UpdateSharedState(bool isRunning) => _sharedPathIsRunning[0] = isRunning;
+
+    private bool SuspendsUnstuck() =>
+        ReferenceEquals(_activeDriver, _takeoffDriver) || _activePlan == null || _activeSegmentIndex >= _activePlan.Segments.Count;
 
     private static bool IsAirborne => Service.Condition[ConditionFlag.InFlight] || Service.Condition[ConditionFlag.Diving];
 }

@@ -2,6 +2,6 @@ namespace vnavmesh.Movement.Planning;
 
 internal enum MovementFailureReason
 {
-    Stuck,
+    RepathRequiredAfterUnstuck,
     TakeoffUnavailable
 }

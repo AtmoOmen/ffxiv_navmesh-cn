@@ -19,9 +19,8 @@ public class Config : IPluginConfiguration
     public bool  ForceShowGameCollision;
     public bool  CancelMoveOnUserInput;
     public bool  StopOnStuck;
-    public float StuckTolerance       = 0.05f;
-    public int   StuckTimeoutMs       = 500;
-    public bool  RetryOnStuck         = true;
+    public float UnstuckDetectionSeconds = 2f;
+    public float UnstuckCooldownSeconds  = 3f;
     public float PathTolerance        = 0.05f;
     public float RandomnessMultiplier = 1f;
     public int   BuildMaxCores        = 1;
@@ -67,20 +66,19 @@ public class Config : IPluginConfiguration
 
     private void DrawStuckHandlingSection()
     {
-        DrawCheckbox("卡住时停止寻路", ref StopOnStuck, "检测到角色长时间几乎不移动时，停止当前寻路。");
+        DrawCheckbox("启用自动防卡", ref StopOnStuck, "检测到角色长时间无法推进路径时，自动尝试跳跃或短时脱困。");
 
         if (!StopOnStuck)
         {
-            ImGui.TextDisabled("启用后可进一步配置卡住判定与自动重试逻辑。");
+            ImGui.TextDisabled("启用后可进一步配置卡住判定时长与冷却期。");
             return;
         }
 
         ImGui.Spacing();
         using var indent = ImRaii.PushIndent();
 
-        DrawSliderFloat("卡住判定阈值 (米/秒)", ref StuckTolerance, 0.5f, 3f, "%.2f", "每帧最小移动距离低于此值时，视为没有明显移动。");
-        DrawSliderInt("卡住超时时间 (毫秒)", ref StuckTimeoutMs, 100, 10_000, "%d", "持续低于阈值达到该时长后，判定为卡住。");
-        DrawCheckbox("停止后自动重新寻路", ref RetryOnStuck, "启用后会在卡住停止后尝试重新规划路径。");
+        DrawSliderFloat("卡住判定时长 (秒)", ref UnstuckDetectionSeconds, 0.5f, 10f, "%.1f", "持续几乎没有实际位移达到该时长后，开始尝试脱困。");
+        DrawSliderFloat("脱困冷却期 (秒)", ref UnstuckCooldownSeconds, 0.5f, 10f, "%.1f", "每次随机位移脱困结束后，暂停重新判定卡住的时间。");
     }
 
     private void DrawPerformanceSection()
