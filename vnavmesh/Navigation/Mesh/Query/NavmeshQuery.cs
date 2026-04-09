@@ -17,6 +17,9 @@ public partial class NavmeshQuery
     private const    float  StartPolyCandidateMaxHorizontalDistance = 4.0f;
     private const    float  StartPolyCandidateMaxVerticalDistance   = 3.0f;
     private const    float  StartPolyCandidateAboveTolerance        = 0.75f;
+    private const    float  StartSupportProbeRadius                 = 0.35f;
+    private const    int    StartSupportProbeCount                  = 8;
+    private const    float  StartSupportMatchDistance               = 0.20f;
     private const    int    MaxStartPolyCandidatesToEvaluate        = 8;
     private const    float  ShortGapRepairSearchHalfExtentXZ        = 4.0f;
     private const    float  ShortGapRepairSearchHalfExtentY         = 2.5f;
@@ -53,7 +56,10 @@ public partial class NavmeshQuery
         long    PolyRef,
         Vector3 ProjectedPoint,
         float   HorizontalDistanceSq,
-        float   VerticalDelta
+        float   VerticalDelta,
+        bool    IsRequestedStart,
+        bool    IsPointOverPoly,
+        int     SupportProbeHits
     )
     {
         public float VerticalDistanceAbs => MathF.Abs(VerticalDelta);
@@ -72,6 +78,9 @@ public partial class NavmeshQuery
         public long    StartRef   => StartCandidate.PolyRef;
         public Vector3 StartPoint => StartCandidate.ProjectedPoint;
         public long    LastPoly   => Corridor.Count > 0 ? Corridor[^1] : 0;
+        public bool    IsRequestedStart => StartCandidate.IsRequestedStart;
+        public bool    IsPointOverPoly  => StartCandidate.IsPointOverPoly;
+        public int     SupportProbeHits => StartCandidate.SupportProbeHits;
 
         public float DistanceToRequestedTargetSq(Vector3 requestedTarget) => Vector3.DistanceSquared(FinalDestination, requestedTarget);
     }
@@ -241,10 +250,23 @@ public partial class NavmeshQuery
     }
 
     public Vector3? FindNearestPointOnMeshPoly
-        (Vector3 p, long poly) => MeshQuery.ClosestPointOnPoly(poly, p.SystemToRecast(), out var closest, out _).Succeeded() ? closest.RecastToSystem() : null;
+        (Vector3 p, long poly) => TryClosestPointOnPolyWithFlags(p, poly, out var closest, out _) ? closest : null;
 
     public Vector3? FindNearestPointOnMesh(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5, bool allowUnreachable = true) => FindNearestPointOnMeshPoly
         (p, FindNearestMeshPoly(p, halfExtentXZ, halfExtentY, allowUnreachable));
+
+    private bool TryClosestPointOnPolyWithFlags(Vector3 point, long poly, out Vector3 closestPoint, out bool isOverPoly)
+    {
+        if (MeshQuery.ClosestPointOnPoly(poly, point.SystemToRecast(), out var closest, out isOverPoly).Succeeded())
+        {
+            closestPoint = closest.RecastToSystem();
+            return true;
+        }
+
+        closestPoint = default;
+        isOverPoly   = false;
+        return false;
+    }
 
     // finds the point on the mesh within specified x/z tolerance and with largest Y that is still smaller than p.Y
     public Vector3? FindPointOnFloor(Vector3 p, float halfExtentXZ = 5, bool allowUnreachable = true)

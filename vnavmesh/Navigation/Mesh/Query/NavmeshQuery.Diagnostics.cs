@@ -57,6 +57,90 @@ public partial class NavmeshQuery
         }
     }
 
+    private void LogStartCandidateDecision
+    (
+        MeshPathCandidate  selected,
+        Vector3            requestedTarget,
+        long               requestedStartRef,
+        MeshPathCandidate? requestedSuccessful,
+        bool               requestedFailed,
+        bool               lockedByRequested
+    )
+    {
+        Service.Log.Debug
+        (
+            $"[算路] 已选起点多边形 {selected.StartRef:X}，投影点 = {selected.StartPoint:f3}，结果 = {selected.ResultStatus}，requested = {(selected.IsRequestedStart ? 1 : 0)}，overPoly = {(selected.IsPointOverPoly ? 1 : 0)}，supportHits = {selected.SupportProbeHits}"
+        );
+
+        if (lockedByRequested)
+        {
+            Service.Log.Information($"[算路] 起点锁定：原始候选 = {requestedStartRef:X}，原因 = 原始候选在 over-poly 内且算路成功。");
+            return;
+        }
+
+        if (selected.StartRef == requestedStartRef)
+        {
+            Service.Log.Debug
+            (
+                $"[算路] 起点保持：原始候选 = {requestedStartRef:X}，原因 = {BuildStartKeepReason(selected, requestedSuccessful, requestedFailed)}。"
+            );
+            return;
+        }
+
+        Service.Log.Warning
+        (
+            $"[算路] 起点替换：原始候选 = {requestedStartRef:X}，选中 = {selected.StartRef:X}，原因 = {BuildStartReplacementReason(selected, requestedTarget, requestedSuccessful, requestedFailed)}。"
+        );
+    }
+
+    private static string BuildStartKeepReason(MeshPathCandidate selected, MeshPathCandidate? requestedSuccessful, bool requestedFailed)
+    {
+        if (requestedFailed)
+            return "原始候选已恢复可用且综合评分最优";
+
+        if (requestedSuccessful == null)
+            return "原始候选通过筛选并最终胜出";
+
+        if (selected.IsPointOverPoly)
+            return "原始候选在 over-poly 内并保持最优";
+
+        return "原始候选在候选竞争中综合评分最优";
+    }
+
+    private static string BuildStartReplacementReason
+        (MeshPathCandidate selected, Vector3 requestedTarget, MeshPathCandidate? requestedSuccessful, bool requestedFailed)
+    {
+        if (requestedSuccessful == null)
+            return requestedFailed ? "原始候选算路失败" : "原始候选未通过有效路径评估";
+
+        var requested = requestedSuccessful.Value;
+        if (!requested.IsPointOverPoly && selected.IsPointOverPoly)
+            return "原始候选不在 over-poly，且选中候选在 over-poly";
+
+        if (selected.SupportProbeHits > requested.SupportProbeHits)
+            return "原始候选的 support 命中更低";
+
+        var selectedRank  = ResultStatusRank(selected.ResultStatus);
+        var requestedRank = ResultStatusRank(requested.ResultStatus);
+        if (selectedRank < requestedRank)
+            return $"选中候选路径状态更优（{selected.ResultStatus} > {requested.ResultStatus}）";
+
+        var selectedDistance  = selected.DistanceToRequestedTargetSq(requestedTarget);
+        var requestedDistance = requested.DistanceToRequestedTargetSq(requestedTarget);
+        if (!NearlyEqual(selectedDistance, requestedDistance) && selectedDistance < requestedDistance)
+            return "选中候选更接近最终目的地";
+
+        if (!NearlyEqual(selected.StartCandidate.VerticalDistanceAbs, requested.StartCandidate.VerticalDistanceAbs) &&
+            selected.StartCandidate.VerticalDistanceAbs < requested.StartCandidate.VerticalDistanceAbs)
+            return "选中候选的垂直偏移更小";
+
+        if (!NearlyEqual(selected.StartCandidate.HorizontalDistanceSq, requested.StartCandidate.HorizontalDistanceSq) &&
+            selected.StartCandidate.HorizontalDistanceSq < requested.StartCandidate.HorizontalDistanceSq)
+            return "选中候选的水平偏移更小";
+
+        return "选中候选综合评分更优";
+    }
+
     private bool TryRepairShortGroundGap
     (
         MeshPathCandidate partialCandidate,
@@ -87,11 +171,9 @@ public partial class NavmeshQuery
 
             cancel.ThrowIfCancellationRequested();
 
-            var projectedPoint = FindNearestPointOnMeshPoly(partialEnd, poly);
-            if (projectedPoint == null)
+            if (!TryClosestPointOnPolyWithFlags(partialEnd, poly, out var bridgePoint, out var isPointOverPoly))
                 continue;
 
-            var bridgePoint              = projectedPoint.Value;
             var bridgeDelta              = bridgePoint - partialEnd;
             var bridgeHorizontalDistance = new Vector2(bridgeDelta.X, bridgeDelta.Z).Length();
             var bridgeVerticalDistance   = MathF.Abs(bridgeDelta.Y);
@@ -109,7 +191,7 @@ public partial class NavmeshQuery
 
             var resumeCandidate = BuildMeshPathCandidate
             (
-                new(poly, bridgePoint, bridgeHorizontalDistance * bridgeHorizontalDistance, bridgePoint.Y - partialEnd.Y),
+                new(poly, bridgePoint, bridgeHorizontalDistance * bridgeHorizontalDistance, bridgePoint.Y - partialEnd.Y, false, isPointOverPoly, CountStartSupportProbeHits(partialEnd, poly)),
                 corridor,
                 status,
                 requestedEndPos,
