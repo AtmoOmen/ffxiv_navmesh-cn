@@ -60,12 +60,32 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
         };
     }
 
-    private static MovementSegment BuildSegment(PostprocessedPathSegment segment) => new FlightTraverseSegment
+    private static MovementSegment BuildSegment(PostprocessedPathSegment segment) => segment.SegmentKind switch
     {
-        CompletionTolerance = segment.CompletionTolerance,
-        StartPosition       = segment.StartPosition,
-        GeometryOwnership   = segment.GeometryOwnership,
-        ReachabilitySource  = segment.ReachabilitySource,
-        Waypoints           = [.. segment.Waypoints]
+        MovementSegmentKind.FlightTraverse => new FlightTraverseSegment
+        {
+            CompletionTolerance = segment.CompletionTolerance,
+            StartPosition       = segment.StartPosition,
+            GeometryOwnership   = segment.GeometryOwnership,
+            ReachabilitySource  = segment.ReachabilitySource,
+            Waypoints           = [.. segment.Waypoints]
+        },
+        MovementSegmentKind.GroundTraverse => new GroundTraverseSegment
+        {
+            CompletionTolerance = segment.CompletionTolerance,
+            StartPosition       = segment.StartPosition,
+            GeometryOwnership   = segment.GeometryOwnership,
+            ReachabilitySource  = segment.ReachabilitySource,
+            Waypoints           = [.. segment.Waypoints]
+        },
+        MovementSegmentKind.Takeoff => new TakeoffSegment
+        {
+            CompletionTolerance = segment.CompletionTolerance,
+            StartPosition       = segment.StartPosition,
+            GeometryOwnership   = segment.GeometryOwnership,
+            ReachabilitySource  = segment.ReachabilitySource,
+            Waypoints           = [.. segment.Waypoints]
+        },
+        _ => throw new ArgumentOutOfRangeException(nameof(segment.SegmentKind), segment.SegmentKind, "未知移动阶段")
     };
 }
