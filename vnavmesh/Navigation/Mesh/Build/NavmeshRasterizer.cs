@@ -110,7 +110,7 @@ public class NavmeshRasterizer
     {
         internal sealed class TerrainSpanBuffer
         {
-            internal struct Entry
+            private struct Entry
             {
                 public int Next;
                 public int Y0;
@@ -118,11 +118,10 @@ public class NavmeshRasterizer
                 public int AreaId;
             }
 
-            private int[]   _cellHeads    = [];
-            private Entry[] _entries      = GC.AllocateUninitializedArray<Entry>(1024);
-            private Entry[] _sortScratch  = GC.AllocateUninitializedArray<Entry>(64);
-            private Entry[] _mergeScratch = GC.AllocateUninitializedArray<Entry>(64);
-            private int     _entryCount   = 1;
+            private int[]   _cellHeads = [];
+            private Entry[] _entries   = GC.AllocateUninitializedArray<Entry>(1024);
+            private int     _nextFree  = 1;
+            private int     _freeList;
             private readonly List<int> _touchedCells = new();
 
             internal void Reset(int cellCount)
@@ -135,63 +134,91 @@ public class NavmeshRasterizer
                         _cellHeads[_touchedCells[i]] = 0;
                 }
 
-                _entryCount = 1;
+                _nextFree = 1;
+                _freeList = 0;
                 _touchedCells.Clear();
             }
 
-            internal void Add(int cellIndex, int y0, int y1, int areaId)
+            internal void Add(int cellIndex, int y0, int y1, int areaId, int minSpanGap, int walkableClimbThreshold)
             {
                 ref var head = ref _cellHeads[cellIndex];
                 if (head == 0)
                     _touchedCells.Add(cellIndex);
+
+                var prevMaxY = y0 - minSpanGap - 1;
+                var nextMinY = y1 + minSpanGap + 1;
+                var prev     = 0;
+                var curr     = head;
+
+                while (curr != 0)
+                {
+                    ref var current = ref _entries[curr];
+                    if (current.Y0 > nextMinY)
+                        break;
+
+                    if (current.Y1 < prevMaxY)
+                    {
+                        prev = curr;
+                        curr = current.Next;
+                        continue;
+                    }
+
+                    var heightDiff = current.Y1 - y1;
+                    if (heightDiff > walkableClimbThreshold || heightDiff >= -walkableClimbThreshold && current.AreaId > areaId)
+                        areaId = current.AreaId;
+                    y0 = Math.Min(y0, current.Y0);
+                    y1 = Math.Max(y1, current.Y1);
+
+                    var next = current.Next;
+                    Free(curr);
+                    if (prev == 0)
+                        head = next;
+                    else
+                        _entries[prev].Next = next;
+                    curr = next;
+                }
 
                 var entryIndex = Alloc();
                 ref var entry  = ref _entries[entryIndex];
                 entry.Y0       = y0;
                 entry.Y1       = y1;
                 entry.AreaId   = areaId;
-                entry.Next     = head;
-                head           = entryIndex;
+                entry.Next     = curr;
+                if (prev == 0)
+                    head = entryIndex;
+                else
+                    _entries[prev].Next = entryIndex;
             }
 
             internal IReadOnlyList<int> TouchedCells => _touchedCells;
 
-            internal int EntryCount(int cellIndex)
-            {
-                var count = 0;
-                for (var entryIndex = _cellHeads[cellIndex]; entryIndex != 0; entryIndex = _entries[entryIndex].Next)
-                    ++count;
-                return count;
-            }
+            internal int Head(int cellIndex) => _cellHeads[cellIndex];
 
-            internal int CopyCellEntries(int cellIndex, Span<Entry> destination)
+            internal (int y0, int y1, int areaId, int next) Read(int entryIndex)
             {
-                var count = 0;
-                for (var entryIndex = _cellHeads[cellIndex]; entryIndex != 0; entryIndex = _entries[entryIndex].Next)
-                    destination[count++] = _entries[entryIndex];
-                return count;
-            }
-
-            internal Entry[] EnsureSortScratch(int count)
-            {
-                if (_sortScratch.Length < count)
-                    Array.Resize(ref _sortScratch, Math.Max(_sortScratch.Length * 2, count));
-                return _sortScratch;
-            }
-
-            internal Entry[] EnsureMergeScratch(int count)
-            {
-                if (_mergeScratch.Length < count)
-                    Array.Resize(ref _mergeScratch, Math.Max(_mergeScratch.Length * 2, count));
-                return _mergeScratch;
+                ref var entry = ref _entries[entryIndex];
+                return (entry.Y0, entry.Y1, entry.AreaId, entry.Next);
             }
 
             private int Alloc()
             {
-                if (_entryCount == _entries.Length)
+                if (_freeList != 0)
+                {
+                    var index = _freeList;
+                    _freeList = _entries[index].Next;
+                    return index;
+                }
+
+                if (_nextFree == _entries.Length)
                     Array.Resize(ref _entries, _entries.Length * 2);
 
-                return _entryCount++;
+                return _nextFree++;
+            }
+
+            private void Free(int entryIndex)
+            {
+                _entries[entryIndex].Next = _freeList;
+                _freeList                 = entryIndex;
             }
         }
 
@@ -254,17 +281,6 @@ public class NavmeshRasterizer
             _terrainSpanBuffer ??= new();
             _terrainSpanBuffer.Reset(cellCount);
             return _terrainSpanBuffer;
-        }
-    }
-
-    private sealed class TerrainSpanEntryComparer : IComparer<ScratchBuffers.TerrainSpanBuffer.Entry>
-    {
-        internal static readonly TerrainSpanEntryComparer Instance = new();
-
-        public int Compare(ScratchBuffers.TerrainSpanBuffer.Entry lhs, ScratchBuffers.TerrainSpanBuffer.Entry rhs)
-        {
-            var compare = lhs.Y0.CompareTo(rhs.Y0);
-            return compare != 0 ? compare : lhs.Y1.CompareTo(rhs.Y1);
         }
     }
 
@@ -1200,7 +1216,7 @@ public class NavmeshRasterizer
         if (_terrainSpans != null)
         {
             var cellIndex = z * _heightfield.width + x;
-            _terrainSpans.Add(cellIndex, y0, y1, areaId);
+            _terrainSpans.Add(cellIndex, y0, y1, areaId, _minSpanGap, _walkableClimbThreshold);
             return;
         }
 
@@ -1216,141 +1232,17 @@ public class NavmeshRasterizer
         for (var i = 0; i < touchedCells.Count; ++i)
         {
             var cellIndex = touchedCells[i];
-            var entryCount = _terrainSpans.EntryCount(cellIndex);
-            if (entryCount == 0)
-                continue;
+            var z         = cellIndex / _heightfield.width;
+            var x         = cellIndex - z * _heightfield.width;
+            var entry     = _terrainSpans.Head(cellIndex);
 
-            var sortScratch  = _terrainSpans.EnsureSortScratch(entryCount);
-            var sortCount    = _terrainSpans.CopyCellEntries(cellIndex, sortScratch.AsSpan(0, entryCount));
-            if (sortCount == 0)
-                continue;
-
-            Array.Sort(sortScratch, 0, sortCount, TerrainSpanEntryComparer.Instance);
-
-            var mergedScratch = _terrainSpans.EnsureMergeScratch(sortCount);
-            var mergedCount   = MergeTerrainCellSpans(sortScratch, sortCount, mergedScratch);
-            FlushTerrainCell(cellIndex, mergedScratch, mergedCount);
-        }
-    }
-
-    private int MergeTerrainCellSpans
-    (
-        ScratchBuffers.TerrainSpanBuffer.Entry[] source,
-        int                                      count,
-        ScratchBuffers.TerrainSpanBuffer.Entry[] destination
-    )
-    {
-        var mergedCount = 0;
-
-        for (var i = 0; i < count; ++i)
-        {
-            var current = source[i];
-            if (mergedCount == 0)
+            while (entry != 0)
             {
-                destination[mergedCount++] = current;
-                continue;
+                var (y0, y1, areaId, next) = _terrainSpans.Read(entry);
+                AddSpan(x, z, y0, y1, areaId, false);
+                entry = next;
             }
-
-            ref var previous = ref destination[mergedCount - 1];
-            if (previous.Y1 < current.Y0 - _minSpanGap - 1)
-            {
-                destination[mergedCount++] = current;
-                continue;
-            }
-
-            var areaId     = current.AreaId;
-            var heightDiff = previous.Y1 - current.Y1;
-            if (heightDiff > _walkableClimbThreshold || heightDiff >= -_walkableClimbThreshold && previous.AreaId > areaId)
-                areaId = previous.AreaId;
-
-            previous.Y0     = Math.Min(previous.Y0, current.Y0);
-            previous.Y1      = Math.Max(previous.Y1, current.Y1);
-            previous.AreaId  = areaId;
-            previous.Next    = 0;
         }
-
-        return mergedCount;
-    }
-
-    private void FlushTerrainCell(int cellIndex, ScratchBuffers.TerrainSpanBuffer.Entry[] terrainSpans, int terrainSpanCount)
-    {
-        var existingSpan = _heightfield.spans[cellIndex];
-        RcSpan? outputHead = null;
-        RcSpan? outputTail = null;
-        var     hasPending = false;
-        var     pendingY0  = 0;
-        var     pendingY1  = 0;
-        var     pendingArea = 0;
-        var     terrainIndex = 0;
-
-        void FlushPending()
-        {
-            var span = AllocSpan();
-            span.smin = pendingY0;
-            span.smax = pendingY1;
-            span.area = pendingArea;
-            span.next = null;
-
-            if (outputHead == null)
-                outputHead = span;
-            else
-                outputTail!.next = span;
-            outputTail = span;
-        }
-
-        void Consume(int y0, int y1, int areaId)
-        {
-            if (!hasPending)
-            {
-                hasPending  = true;
-                pendingY0   = y0;
-                pendingY1   = y1;
-                pendingArea = areaId;
-                return;
-            }
-
-            if (pendingY1 < y0 - _minSpanGap - 1)
-            {
-                FlushPending();
-                pendingY0   = y0;
-                pendingY1   = y1;
-                pendingArea = areaId;
-                return;
-            }
-
-            var heightDiff = pendingY1 - y1;
-            if (heightDiff > _walkableClimbThreshold || heightDiff >= -_walkableClimbThreshold && pendingArea > areaId)
-                areaId = pendingArea;
-
-            pendingY0   = Math.Min(pendingY0, y0);
-            pendingY1   = Math.Max(pendingY1, y1);
-            pendingArea = areaId;
-        }
-
-        while (terrainIndex < terrainSpanCount || existingSpan != null)
-        {
-            var takeTerrain = existingSpan == null ||
-                              terrainIndex < terrainSpanCount &&
-                              terrainSpans[terrainIndex].Y0 < existingSpan.smin;
-
-            if (takeTerrain)
-            {
-                ref var terrainSpan = ref terrainSpans[terrainIndex++];
-                Consume(terrainSpan.Y0, terrainSpan.Y1, terrainSpan.AreaId);
-                continue;
-            }
-
-            var existing = existingSpan!;
-            var nextSpan = existing.next;
-            Consume(existing.smin, existing.smax, existing.area);
-            FreeSpan(existing);
-            existingSpan = nextSpan;
-        }
-
-        if (hasPending)
-            FlushPending();
-
-        _heightfield.spans[cellIndex] = outputHead;
     }
 
     private void WriteVolumeSpan(int x, int z, int y0, int y1, bool includeInVolume)
