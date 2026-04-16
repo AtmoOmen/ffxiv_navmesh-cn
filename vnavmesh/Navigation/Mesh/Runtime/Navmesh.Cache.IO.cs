@@ -49,6 +49,18 @@ public partial record class Navmesh
         return (value, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
     }
 
+    private static (T Value, CacheSegmentTelemetry Telemetry) DecodeSegment<T>(Stream source, CacheSegmentDescriptor descriptor, Func<BinaryReader, T> deserialize)
+    {
+        var       timer          = StopWatchTimer.Create();
+        var       segmentStream  = new SegmentReadStream(source, descriptor.Offset, descriptor.CompressedBytes);
+        var       countingStream = CreateSegmentReadStream(segmentStream, descriptor.Codec, out var disposableStream);
+        using var _              = disposableStream;
+        using var segmentReader  = new BinaryReader(countingStream);
+        var       value          = deserialize(segmentReader);
+        DrainToEnd(countingStream);
+        return (value, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
+    }
+
     private static void DrainToEnd(Stream stream)
     {
         Span<byte> buffer = stackalloc byte[4096];

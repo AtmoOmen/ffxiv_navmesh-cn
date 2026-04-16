@@ -14,7 +14,7 @@ public partial record class Navmesh
 )
 {
     public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 33;         // 更新后触发一次全量重构建
+    public static readonly uint Version = 34;         // 更新后触发一次全量重构建
 
     public int GeneratedClimbDownLinkCount { get; set; }
     public int GeneratedEdgeJumpLinkCount  { get; set; }
@@ -66,7 +66,6 @@ public partial record class Navmesh
         var meshSegment   = meshDescriptor   ?? throw new Exception("缓存缺少 Mesh 段");
         var volumeSegment = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
         var meshPayload   = ReadSegmentPayload(reader.BaseStream, meshSegment);
-        var volumePayload = ReadSegmentPayload(reader.BaseStream, volumeSegment);
 
         DtNavMesh?            mesh            = null;
         VoxelMap?             volume          = null;
@@ -75,7 +74,7 @@ public partial record class Navmesh
         Parallel.Invoke
         (
             () => (mesh, meshTelemetry)     = DecodeSegment(meshSegment,   meshPayload,   DeserializeMesh),
-            () => (volume, volumeTelemetry) = DecodeSegment(volumeSegment, volumePayload, DeserializeVolume)
+            () => (volume, volumeTelemetry) = DecodeSegment(reader.BaseStream, volumeSegment, DeserializeVolume)
         );
         return new(new(customizationVersion, buildSignature, customizationApplied, mesh!, volume), new(meshTelemetry, volumeTelemetry));
     }
@@ -89,7 +88,7 @@ public partial record class Navmesh
         Parallel.Invoke
         (
             () => meshSegment   = EncodeSegment(CacheSegmentKind.Mesh,   CacheCodec.BrotliFastest, meshWriter => SerializeMesh(meshWriter, Mesh)),
-            () => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.BrotliFastest, volumeWriter => SerializeVolume(volumeWriter, Volume))
+            () => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.None, volumeWriter => SerializeVolume(volumeWriter, Volume))
         );
 
         writer.Write(Magic);
@@ -105,7 +104,7 @@ public partial record class Navmesh
         var volumeDescriptor = new CacheSegmentDescriptor
         (
             CacheSegmentKind.Volume,
-            CacheCodec.BrotliFastest,
+            CacheCodec.None,
             payloadOffset + meshSegment.Payload.LongLength,
             volumeSegment.Payload.LongLength,
             volumeSegment.UncompressedBytes
