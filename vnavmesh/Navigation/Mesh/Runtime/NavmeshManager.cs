@@ -83,7 +83,7 @@ public sealed partial class NavmeshManager : IDisposable
 
     public async Task<List<Vector3>> QueryPath(Vector3 from, Vector3 to, bool flying, float range = 0, CancellationToken externalCancel = default)
     {
-        var result = await QueryPathDetailed(from, to, flying, range, externalCancel: externalCancel);
+        var result = await QueryPathDetailed(from, to, flying, range, externalCancel);
         return result.Waypoints;
     }
 
@@ -92,8 +92,8 @@ public sealed partial class NavmeshManager : IDisposable
         Vector3           from,
         Vector3           to,
         bool              flying,
-        float             range               = 0,
-        CancellationToken externalCancel      = default
+        float             range          = 0,
+        CancellationToken externalCancel = default
     )
     {
         if (_currentCTS == null)

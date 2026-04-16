@@ -1,4 +1,3 @@
-using System.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Navigation.Volume;
 
@@ -14,8 +13,8 @@ public partial record class Navmesh
     VoxelMap? Volume
 )
 {
-    public static readonly uint Magic            = 0x444D564E; // 'NVMD'
-    public static readonly uint Version          = 33;         // 更新后触发一次全量重构建
+    public static readonly uint Magic   = 0x444D564E; // 'NVMD'
+    public static readonly uint Version = 33;         // 更新后触发一次全量重构建
 
     public int GeneratedClimbDownLinkCount { get; set; }
     public int GeneratedEdgeJumpLinkCount  { get; set; }

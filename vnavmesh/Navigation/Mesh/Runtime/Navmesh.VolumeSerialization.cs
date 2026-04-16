@@ -69,10 +69,8 @@ public partial record class Navmesh
 
             var subtreeCount = 0;
             for (var i = 0; i < tile.Contents.Length; ++i)
-            {
-                if (((VolumeCellState)(packedStates[i >> 2] >> (i & 3) * 2 & 0x3)) == VolumeCellState.Subtree)
+                if ((VolumeCellState)(packedStates[i >> 2] >> (i & 3) * 2 & 0x3) == VolumeCellState.Subtree)
                     ++subtreeCount;
-            }
 
             tile.EnsureSubdivisionCapacity(subtreeCount);
 
