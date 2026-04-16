@@ -1,7 +1,5 @@
 using System.Numerics;
-using DotRecast.Core.Numerics;
 using DotRecast.Detour;
-using vnavmesh.Bootstrap;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Shared.Utilities;
 
@@ -14,8 +12,6 @@ internal sealed class PathPostprocessor
 {
     private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
     private const float COLLINEAR_WAYPOINT_TOLERANCE  = 0.01f;
-    private const float GROUND_SMOOTH_STEP_SIZE       = 0.5f;
-    private const float GROUND_SMOOTH_SLOP            = 0.01f;
     private const int   MAX_SMOOTH_PATH_POINTS        = 102400;
 
     public PostprocessedPath Process(PlannerResult result, bool useStringPulling, CancellationToken cancel)
@@ -72,97 +68,9 @@ internal sealed class PathPostprocessor
             return [];
 
         if (useStringPulling)
-            return BuildSmoothMeshWaypoints(segment);
+            return BuildStraightPathWaypoints(segment, [.. segment.Corridor]);
 
         return DeduplicateWaypoints(segment.Corridor.Select(r => meshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
-    }
-
-    private List<Vector3> BuildSmoothMeshWaypoints(PlannerPathSegment segment)
-    {
-        var path = segment.Corridor.ToArray();
-        var pathCount = path.Length;
-        if (pathCount == 0)
-            return [];
-
-        var navMesh  = meshQuery.GetAttachedNavMesh();
-        var filter   = new DtQueryDefaultFilter();
-        var startPos = segment.StartPosition.SystemToRecast();
-        var endPos   = segment.EndPosition.SystemToRecast();
-
-        if (meshQuery.ClosestPointOnPoly(path[0], startPos, out var iterPos, out _).Failed())
-            return BuildStraightPathWaypoints(segment, path);
-        if (meshQuery.ClosestPointOnPoly(path[pathCount - 1], endPos, out var targetPos, out _).Failed())
-            return BuildStraightPathWaypoints(segment, path);
-
-        List<Vector3> waypoints = [iterPos.RecastToSystem()];
-        Span<long> visited = stackalloc long[16];
-
-        while (pathCount > 0 && waypoints.Count < MAX_SMOOTH_PATH_POINTS)
-        {
-            if (!DtPathUtils.GetSteerTarget(meshQuery, iterPos, targetPos, GROUND_SMOOTH_SLOP, path, pathCount, out var steerPos, out var steerFlags, out var steerRef))
-                break;
-
-            var endOfPath         = (steerFlags & DtStraightPathFlags.DT_STRAIGHTPATH_END) != 0;
-            var offMeshConnection = (steerFlags & DtStraightPathFlags.DT_STRAIGHTPATH_OFFMESH_CONNECTION) != 0;
-            var delta             = RcVec3f.Subtract(steerPos, iterPos);
-            var len               = MathF.Sqrt(RcVec3f.Dot(delta, delta));
-
-            if ((endOfPath || offMeshConnection) && len < GROUND_SMOOTH_STEP_SIZE)
-                len = 1f;
-            else
-                len = GROUND_SMOOTH_STEP_SIZE / len;
-
-            var moveTarget = RcVec.Mad(iterPos, delta, len);
-            var moveStatus = meshQuery.MoveAlongSurface(path[0], iterPos, moveTarget, filter, out var result, visited, out var visitedCount, visited.Length);
-            if (moveStatus.Failed())
-                return BuildStraightPathWaypoints(segment, path);
-
-            iterPos   = result;
-            pathCount = DtPathUtils.MergeCorridorStartMoved(path, pathCount, path.Length, visited, visitedCount);
-            pathCount = DtPathUtils.FixupShortcuts(path, pathCount, meshQuery);
-
-            if (pathCount > 0 && meshQuery.GetPolyHeight(path[0], result, out var height).Succeeded())
-                iterPos.Y = height;
-
-            if (endOfPath && DtPathUtils.InRange(iterPos, steerPos, GROUND_SMOOTH_SLOP, 1f))
-            {
-                iterPos = targetPos;
-                waypoints.Add(iterPos.RecastToSystem());
-                break;
-            }
-
-            if (offMeshConnection && DtPathUtils.InRange(iterPos, steerPos, GROUND_SMOOTH_SLOP, 1f))
-            {
-                RcVec3f offMeshStart = default;
-                RcVec3f offMeshEnd   = default;
-                long    prevRef      = 0;
-                long    polyRef      = path[0];
-                var     pathIndex    = 0;
-
-                while (pathIndex < pathCount && polyRef != steerRef)
-                {
-                    prevRef = polyRef;
-                    polyRef = path[pathIndex];
-                    pathIndex++;
-                }
-
-                for (var i = pathIndex; i < pathCount; ++i)
-                    path[i - pathIndex] = path[i];
-                pathCount -= pathIndex;
-
-                if (navMesh.GetOffMeshConnectionPolyEndPoints(prevRef, polyRef, ref offMeshStart, ref offMeshEnd).Succeeded())
-                {
-                    waypoints.Add(offMeshStart.RecastToSystem());
-                    iterPos = offMeshEnd;
-                    if (pathCount > 0 && meshQuery.GetPolyHeight(path[0], iterPos, out var offMeshHeight).Succeeded())
-                        iterPos.Y = offMeshHeight;
-                }
-            }
-
-            waypoints.Add(iterPos.RecastToSystem());
-        }
-
-        return DeduplicateWaypoints(waypoints);
     }
 
     private List<Vector3> BuildStraightPathWaypoints(PlannerPathSegment segment, long[] corridor)

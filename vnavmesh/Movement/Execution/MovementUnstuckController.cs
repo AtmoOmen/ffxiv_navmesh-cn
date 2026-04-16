@@ -24,18 +24,6 @@ internal sealed class MovementUnstuckController
     private const float  MAX_RECOVERY_TARGET_DISTANCE = 35f;
     private const int    RANDOM_TARGET_RESOLVE_ATTEMPTS = 12;
 
-    private static readonly Vector2[] SampleDirections =
-    [
-        Vector2.UnitX,
-        Vector2.Normalize(new(1, 1)),
-        Vector2.UnitY,
-        Vector2.Normalize(new(-1, 1)),
-        -Vector2.UnitX,
-        Vector2.Normalize(new(-1, -1)),
-        -Vector2.UnitY,
-        Vector2.Normalize(new(1, -1))
-    ];
-
     private DateTime _lastMovement    = DateTime.MinValue;
     private DateTime _unstuckStart    = DateTime.MinValue;
     private DateTime _lastCheck       = DateTime.MinValue;
@@ -188,10 +176,8 @@ internal sealed class MovementUnstuckController
 
     private static Vector3? ResolveRandomGroundTarget(NavmeshQuery query, Vector3 origin)
     {
-        var radius    = RandomDistance();
-        var direction = SampleDirections[Random.Shared.Next(SampleDirections.Length)];
-        var sample    = origin + new Vector3(direction.X * radius, 0, direction.Y * radius);
-        var target    = query.FindPointOnFloor(sample, radius) ?? query.FindNearestPointOnMesh(sample, radius, 8f);
+        var radius = RandomDistance();
+        var target = query.FindRandomPointOnMeshAroundCircle(origin, radius, false);
         return target is { } resolved && IsValidRecoveryTarget(origin, resolved, flatten: true) ? resolved : null;
     }
 
@@ -203,8 +189,8 @@ internal sealed class MovementUnstuckController
 
         var radius         = RandomDistance();
         var verticalOffset = Random.Shared.NextSingle() * 16f - 8f;
-        var direction      = SampleDirections[Random.Shared.Next(SampleDirections.Length)];
-        var sample         = origin + new Vector3(direction.X * radius, verticalOffset, direction.Y * radius);
+        var angle          = Random.Shared.NextSingle() * MathF.Tau;
+        var sample         = origin + new Vector3(MathF.Cos(angle) * radius, verticalOffset, MathF.Sin(angle) * radius);
         var voxel          = query.FindNearestVolumeVoxel(sample, 4f, 4f);
         if (voxel == VoxelMap.InvalidVoxel)
             return null;

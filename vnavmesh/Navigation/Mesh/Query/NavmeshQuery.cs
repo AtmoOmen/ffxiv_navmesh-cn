@@ -1,4 +1,5 @@
 using System.Numerics;
+using DotRecast.Core;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Bootstrap;
@@ -280,6 +281,20 @@ public partial class NavmeshQuery
 
     public Vector3? FindNearestPointOnMesh(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5, bool allowUnreachable = true) => FindNearestPointOnMeshPoly
         (p, FindNearestMeshPoly(p, halfExtentXZ, halfExtentY, allowUnreachable));
+
+    public Vector3? FindRandomPointOnMeshAroundCircle(Vector3 center, float maxRadius, bool allowUnreachable = true)
+    {
+        if (maxRadius <= 0)
+            return null;
+
+        var filter   = allowUnreachable ? _filter : _reachableFilter;
+        var startRef = FindNearestMeshPoly(center, 8, 8, allowUnreachable);
+        if (startRef == 0)
+            return null;
+
+        var status = MeshQuery.FindRandomPointWithinCircle(startRef, center.SystemToRecast(), maxRadius, filter, new RcRand(Random.Shared.NextInt64()), out _, out var point);
+        return status.Succeeded() ? point.RecastToSystem() : null;
+    }
 
     private bool TryClosestPointOnPolyWithFlags(Vector3 point, long poly, out Vector3 closestPoint, out bool isOverPoly)
     {
