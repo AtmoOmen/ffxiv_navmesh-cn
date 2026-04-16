@@ -309,6 +309,31 @@ public class VoxelMap
         return new() { Contents = contents, Subdivision = subdivision };
     }
 
+    public RootColumnBuildResult BuildRootColumn(Voxelizer vox, Voxelizer[] mipScratch, int tx, int tz)
+    {
+        BuildMipChain(vox, mipScratch);
+        var ny          = Levels[0].NumCellsY;
+        var contents    = new ushort[ny];
+        var subdivision = new List<Tile>();
+        for (var ty = 0; ty < ny; ++ty)
+            contents[ty] = BuildTileContent(vox, mipScratch, RootTile, subdivision, tx, ty, tz, 0, ty, 0);
+        return new() { Contents = contents, Subdivision = subdivision };
+    }
+
+    private void BuildMipChain(Voxelizer leaf, Voxelizer[] mipScratch)
+    {
+        if (mipScratch.Length != Levels.Length - 1)
+            throw new ArgumentException("体积分层缓存长度与体积层级不匹配", nameof(mipScratch));
+
+        var current = leaf;
+        for (var level = Levels.Length - 2; level >= 0; --level)
+        {
+            ref readonly var nextLevel = ref Levels[level + 1];
+            current.DownsampleInto(mipScratch[level], nextLevel.NumCellsX, nextLevel.NumCellsY, nextLevel.NumCellsZ);
+            current = mipScratch[level];
+        }
+    }
+
     private ushort BuildTileContent(Voxelizer vox, Tile parent, List<Tile> rootSubdivision, int rootX, int rootY, int rootZ, int leafX, int leafY, int leafZ)
     {
         var level = parent.Level;
@@ -344,6 +369,45 @@ public class VoxelMap
                 leafX + x * childScaleX,
                 leafY + y * childScaleY,
                 leafZ + z * childScaleZ
+            );
+
+        return (ushort)(VoxelOccupiedBit | localId);
+    }
+
+    private ushort BuildTileContent(Voxelizer vox, Voxelizer[] mipScratch, Tile parent, List<Tile> rootSubdivision, int rootX, int rootY, int rootZ, int cellX, int cellY, int cellZ)
+    {
+        var level          = parent.Level;
+        var source         = level == Levels.Length - 1 ? vox : mipScratch[level];
+        var (solid, empty) = source.Get(cellX, cellY, cellZ);
+        if (!solid) return 0;
+
+        if (!empty) return VoxelOccupiedBit | VoxelIdMask;
+
+        var index = parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ);
+        var (min, max) = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel(index));
+        if (parent.Level + 1 >= Levels.Length)
+            throw new InvalidOperationException("体积列构建遇到超出层级的混合体素");
+        var tile    = new Tile(this, min, max, parent.Level + 1);
+        var localId = rootSubdivision.Count;
+        rootSubdivision.Add(tile);
+
+        ref var l           = ref Levels[tile.Level];
+        ushort  i           = 0;
+        for (var z = 0; z < l.NumCellsZ; ++z)
+        for (var x = 0; x < l.NumCellsX; ++x)
+        for (var y = 0; y < l.NumCellsY; ++y, ++i)
+            tile.Contents[i] = BuildTileContent
+            (
+                vox,
+                mipScratch,
+                tile,
+                tile.Subdivision,
+                x,
+                y,
+                z,
+                cellX * l.NumCellsX + x,
+                cellY * l.NumCellsY + y,
+                cellZ * l.NumCellsZ + z
             );
 
         return (ushort)(VoxelOccupiedBit | localId);

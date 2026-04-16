@@ -457,7 +457,7 @@ internal class DebugNavmeshCustom : IDisposable
             _tree.LeafNode($"{phase.Name}：{phase.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms，占比 {phase.ShareOfPhaseTicks:P1}，最慢 {phase.SlowestTileX}x{phase.SlowestTileZ}");
 
         foreach (var tile in telemetry.SlowTiles)
-            _tree.LeafNode($"慢瓦片 {tile.TileX}x{tile.TileZ}：{tile.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms，几何 {tile.GeometryInstanceCount}，地形 {tile.TerrainInstanceCount}，地形分块 {tile.TerrainPartCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}");
+            _tree.LeafNode($"慢瓦片 {tile.TileX}x{tile.TileZ}：{tile.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms，几何 job {tile.GeometryJobCount}，地形 job {tile.TerrainJobCount}，唯一 job {tile.UniqueJobCount}，Primitive {tile.PrimitiveCount}，span 权重 {tile.EstimatedSpanWeight}，紧凑前 span {tile.PreCompactSpanCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}");
     }
 
     private HeightfieldComparison CompareHeightfields(int tx, int tz, SceneExtractor scene)

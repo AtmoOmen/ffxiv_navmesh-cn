@@ -26,7 +26,10 @@ public partial class NavmeshBuilder
         TimeSpan                       parallelDuration,
         int                            configuredBuildMaxCores,
         int                            maxAvailableCores,
-        int                            threadCount
+        int                            threadCount,
+        int                            uniqueRasterJobCount,
+        int                            totalRasterJobReferences,
+        long                           preparedTerrainBytes
     )
     {
         List<BuildPhaseSummary> phases    = [];
@@ -85,15 +88,18 @@ public partial class NavmeshBuilder
             (
                 new()
                 {
-                    TileX                 = tile.TileX,
-                    TileZ                 = tile.TileZ,
-                    TotalTicks            = tile.TotalTicks,
-                    GeometryInstanceCount = tile.GeometryInstanceCount,
-                    TerrainInstanceCount  = tile.TerrainInstanceCount,
-                    TerrainPartCount      = tile.TerrainPartCount,
-                    PolyCount             = tile.PolyCount,
-                    VertCount             = tile.VertCount,
-                    DetailTriCount        = tile.DetailTriCount
+                    TileX               = tile.TileX,
+                    TileZ               = tile.TileZ,
+                    TotalTicks          = tile.TotalTicks,
+                    GeometryJobCount    = tile.GeometryJobCount,
+                    TerrainJobCount     = tile.TerrainJobCount,
+                    UniqueJobCount      = tile.UniqueJobCount,
+                    PrimitiveCount      = tile.PrimitiveCount,
+                    EstimatedSpanWeight = tile.EstimatedSpanWeight,
+                    PreCompactSpanCount = tile.PreCompactSpanCount,
+                    PolyCount           = tile.PolyCount,
+                    VertCount           = tile.VertCount,
+                    DetailTriCount      = tile.DetailTriCount
                 }
             );
         }
@@ -105,6 +111,9 @@ public partial class NavmeshBuilder
             ThreadCount             = threadCount,
             ParallelTicks           = parallelDuration.Ticks,
             AggregatedPhaseTicks    = aggregatedPhaseTicks,
+            UniqueRasterJobCount    = uniqueRasterJobCount,
+            JobCoverageMultiplier   = uniqueRasterJobCount > 0 ? totalRasterJobReferences / (double)uniqueRasterJobCount : 0,
+            PreparedTerrainBytes    = preparedTerrainBytes,
             Phases                  = phases,
             SlowTiles               = slowTiles
         };
@@ -115,6 +124,10 @@ public partial class NavmeshBuilder
         Service.Log.Debug
         (
             $"[NavmeshBuilder] 构建线程信息：配置核心数 = {telemetry.ConfiguredBuildMaxCores}，可用核心数 = {telemetry.MaxAvailableCores}，实际线程数 = {telemetry.ThreadCount}"
+        );
+        Service.Log.Debug
+        (
+            $"[NavmeshBuilder] Raster job 统计：唯一 job 数 = {telemetry.UniqueRasterJobCount}，覆盖倍率 = {telemetry.JobCoverageMultiplier:f2}，预变换缓存 = {telemetry.PreparedTerrainBytes / 1024.0 / 1024.0:f2} MiB"
         );
         Service.Log.Debug("[NavmeshBuilder] 阶段统计（总计 / 单瓦片均值 / 最慢瓦片）");
 
@@ -140,7 +153,7 @@ public partial class NavmeshBuilder
         {
             Service.Log.Debug
             (
-                $"[NavmeshBuilder] 慢瓦片 {tile.TileX}x{tile.TileZ}: 几何实例 {tile.GeometryInstanceCount}，地形实例 {tile.TerrainInstanceCount}，地形分块 {tile.TerrainPartCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}"
+                $"[NavmeshBuilder] 慢瓦片 {tile.TileX}x{tile.TileZ}: 几何 job {tile.GeometryJobCount}，地形 job {tile.TerrainJobCount}，唯一 job {tile.UniqueJobCount}，Primitive {tile.PrimitiveCount}，预估 span 权重 {tile.EstimatedSpanWeight}，紧凑前 span {tile.PreCompactSpanCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}"
             );
         }
     }

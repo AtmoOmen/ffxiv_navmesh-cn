@@ -11,6 +11,24 @@ namespace vnavmesh.Navigation.Mesh.Build;
 
 using static DotRecast.Recast.RcRecast;
 
+internal sealed class PreparedTerrainGeometry
+{
+    public required float[] WorldVertexTriples { get; init; }
+    public long MemoryBytes => (long)WorldVertexTriples.Length * sizeof(float);
+}
+
+internal sealed class RasterJob
+{
+    public required SceneExtractor.MeshType      MeshType           { get; init; }
+    public required SceneExtractor.MeshPart      Part               { get; init; }
+    public required SceneExtractor.MeshInstance  Instance           { get; init; }
+    public required AABB                         WorldBounds        { get; init; }
+    public required int                          PrimitiveCount     { get; init; }
+    public required int                          VertexCount        { get; init; }
+    public required bool                         TerrainLike        { get; init; }
+    public          PreparedTerrainGeometry?     PreparedTerrain    { get; init; }
+}
+
 // utility to rasterize various meshes into a heightfield
 public class NavmeshRasterizer
 {
@@ -240,6 +258,13 @@ public class NavmeshRasterizer
         }
     }
 
+    internal static PreparedTerrainGeometry PrepareTerrainGeometry(SceneExtractor.MeshPart part, SceneExtractor.MeshInstance instance)
+    {
+        var worldVertexTriples = GC.AllocateUninitializedArray<float>(part.Vertices.Count * 3);
+        TransformVerticesPacked(instance, part.VertexSpan, worldVertexTriples);
+        return new() { WorldVertexTriples = worldVertexTriples };
+    }
+
     public void Rasterize(SceneExtractor geom, SceneExtractor.MeshType types, bool perMeshInteriors, bool solidBelowNonManifold)
     {
         foreach (var (name, mesh) in geom.Meshes)
@@ -341,6 +366,36 @@ public class NavmeshRasterizer
         if (!perMeshInteriors) FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
     }
 
+    internal void Rasterize(ReadOnlySpan<RasterJob> jobs, bool perMeshInteriors, bool solidBelowNonManifold)
+    {
+        foreach (ref readonly var job in jobs)
+        {
+            if (RasterizeJob(job, out var minY) && perMeshInteriors)
+            {
+                var z0 = Math.Clamp((int)((job.WorldBounds.Min.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
+                var z1 = Math.Clamp((int)((job.WorldBounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
+                var x0 = Math.Clamp((int)((job.WorldBounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
+                var x1 = Math.Clamp((int)((job.WorldBounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
+                FillInterior(z0, z1, x0, x1, solidBelowNonManifold ? minY : _maxY);
+            }
+        }
+
+        if (!perMeshInteriors)
+            FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
+    }
+
+    internal bool RasterizeJob(RasterJob job, out int minimalY)
+    {
+        minimalY = _maxY;
+        if (!IntersectsHeightfield(job.WorldBounds))
+            return false;
+
+        if (job.TerrainLike && job.PreparedTerrain != null)
+            return RasterizePreparedTerrainPart(job, job.PreparedTerrain, out minimalY);
+
+        return RasterizePart(job.MeshType, job.Part, job.Instance, out minimalY);
+    }
+
     // if it returns true, the mesh borders were rasterized, so intersection set could be modified
     public bool RasterizeMesh(SceneExtractor.Mesh mesh, SceneExtractor.MeshInstance instance, out int minimalY)
     {
@@ -359,6 +414,17 @@ public class NavmeshRasterizer
         return true;
     }
 
+    private bool RasterizePreparedTerrainPart(RasterJob job, PreparedTerrainGeometry prepared, out int minimalY)
+    {
+        minimalY = _maxY;
+        var vertexCount = job.VertexCount;
+        Span<OutFlags> stackOutFlags = stackalloc OutFlags[256];
+        var outFlags = vertexCount <= 256 ? stackOutFlags[..vertexCount] : _scratch.OutFlags(vertexCount);
+        ComputeOutFlags(prepared.WorldVertexTriples, outFlags);
+        RasterizeTerrainLikePart(job.Part.PrimitiveSpan, job.Instance, prepared.WorldVertexTriples, outFlags, ref minimalY);
+        return true;
+    }
+
     public bool RasterizePart(SceneExtractor.MeshType meshType, SceneExtractor.MeshPart part, SceneExtractor.MeshInstance instance, out int minimalY)
     {
         minimalY = _maxY;
@@ -369,18 +435,18 @@ public class NavmeshRasterizer
         Span<float>    stackWorldTriples  = stackalloc float[256 * 3];
         Span<OutFlags> stackOutFlags      = stackalloc OutFlags[256];
         var            vertexCount        = part.Vertices.Count;
-        var            outFlags           = vertexCount <= 256 ? stackOutFlags : _scratch.OutFlags(vertexCount);
+        var            outFlags           = vertexCount <= 256 ? stackOutFlags[..vertexCount] : _scratch.OutFlags(vertexCount);
         var            terrainLike        = (meshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
 
         if (terrainLike)
         {
-            var worldTriples = vertexCount <= 256 ? stackWorldTriples : _scratch.WorldVertexTriples(vertexCount);
+            var worldTriples = vertexCount <= 256 ? stackWorldTriples[..(vertexCount * 3)] : _scratch.WorldVertexTriples(vertexCount);
             TransformVerticesPacked(instance, part.VertexSpan, worldTriples, outFlags);
             RasterizeTerrainLikePart(part.PrimitiveSpan, instance, worldTriples, outFlags, ref minimalY);
         }
         else
         {
-            var worldVertices = vertexCount <= 256 ? stackWorldVertices : _scratch.WorldVertices(vertexCount);
+            var worldVertices = vertexCount <= 256 ? stackWorldVertices[..vertexCount] : _scratch.WorldVertices(vertexCount);
             TransformVertices(instance, part.VertexSpan, worldVertices, outFlags);
             RasterizeGeneralPart(part.PrimitiveSpan, instance, worldVertices, outFlags, ref minimalY);
         }
@@ -392,7 +458,7 @@ public class NavmeshRasterizer
     (
         ReadOnlySpan<SceneExtractor.Primitive> primitives,
         SceneExtractor.MeshInstance            instance,
-        Span<float>                            worldVertices,
+        ReadOnlySpan<float>                    worldVertices,
         Span<OutFlags>                         outFlags,
         ref int                                minimalY
     )
@@ -973,7 +1039,58 @@ public class NavmeshRasterizer
         }
     }
 
-    private static void CopyVertexTriplet(Span<float> destination, int destinationOffset, Span<float> source, int sourceOffset)
+    private static void TransformVerticesPacked(SceneExtractor.MeshInstance instance, ReadOnlySpan<Vector3> localVertices, Span<float> outWorld)
+    {
+        var wt    = instance.WorldTransform;
+        var axisX = wt.Row0;
+        var axisY = wt.Row1;
+        var axisZ = wt.Row2;
+        var trans = wt.Row3;
+        ref var srcRef = ref MemoryMarshal.GetReference(localVertices);
+
+        for (var i = 0; i < localVertices.Length; ++i)
+        {
+            var v      = Unsafe.Add(ref srcRef, i);
+            var w      = axisX * v.X + axisY * v.Y + axisZ * v.Z + trans;
+            var offset = i * 3;
+            outWorld[offset]     = w.X;
+            outWorld[offset + 1] = w.Y;
+            outWorld[offset + 2] = w.Z;
+        }
+    }
+
+    private void ComputeOutFlags(ReadOnlySpan<float> worldVertices, Span<OutFlags> outFlags)
+    {
+        if (worldVertices.Length < outFlags.Length * 3)
+            throw new ArgumentException($"顶点缓存长度不足, 顶点数 = {outFlags.Length}, float 数 = {worldVertices.Length}", nameof(worldVertices));
+
+        var bminX = _heightfield.bmin.X;
+        var bminY = _heightfield.bmin.Y;
+        var bminZ = _heightfield.bmin.Z;
+        var bmaxX = _heightfield.bmax.X;
+        var bmaxY = _heightfield.bmax.Y;
+        var bmaxZ = _heightfield.bmax.Z;
+
+        for (var i = 0; i < outFlags.Length; ++i)
+        {
+            var offset = i * 3;
+            var x      = worldVertices[offset];
+            var y      = worldVertices[offset + 1];
+            var z      = worldVertices[offset + 2];
+
+            OutFlags f = 0;
+            if (x <= bminX) f |= OutFlags.NegX;
+            if (x >= bmaxX) f |= OutFlags.PosX;
+            if (y <= bminY) f |= OutFlags.NegY;
+            if (y >= bmaxY) f |= OutFlags.PosY;
+            if (z <= bminZ) f |= OutFlags.NegZ;
+            if (z >= bmaxZ) f |= OutFlags.PosZ;
+
+            outFlags[i] = f;
+        }
+    }
+
+    private static void CopyVertexTriplet(Span<float> destination, int destinationOffset, ReadOnlySpan<float> source, int sourceOffset)
     {
         destination[destinationOffset]     = source[sourceOffset];
         destination[destinationOffset + 1] = source[sourceOffset + 1];

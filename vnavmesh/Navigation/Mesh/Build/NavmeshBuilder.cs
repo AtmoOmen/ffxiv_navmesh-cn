@@ -47,9 +47,12 @@ public partial class NavmeshBuilder
         public required int  TileX                 { get; init; }
         public required int  TileZ                 { get; init; }
         public required long TotalTicks            { get; init; }
-        public required int  GeometryInstanceCount { get; init; }
-        public required int  TerrainInstanceCount  { get; init; }
-        public required int  TerrainPartCount      { get; init; }
+        public required int  GeometryJobCount      { get; init; }
+        public required int  TerrainJobCount       { get; init; }
+        public required int  UniqueJobCount        { get; init; }
+        public required int  PrimitiveCount        { get; init; }
+        public required int  EstimatedSpanWeight   { get; init; }
+        public required int  PreCompactSpanCount   { get; init; }
         public required int  PolyCount             { get; init; }
         public required int  VertCount             { get; init; }
         public required int  DetailTriCount        { get; init; }
@@ -62,6 +65,9 @@ public partial class NavmeshBuilder
         public required int                              ThreadCount             { get; init; }
         public required long                             ParallelTicks           { get; init; }
         public required long                             AggregatedPhaseTicks    { get; init; }
+        public required int                              UniqueRasterJobCount    { get; init; }
+        public required double                           JobCoverageMultiplier   { get; init; }
+        public required long                             PreparedTerrainBytes    { get; init; }
         public required IReadOnlyList<BuildPhaseSummary> Phases                  { get; init; }
         public required IReadOnlyList<SlowTileSummary>   SlowTiles               { get; init; }
     }
@@ -99,11 +105,12 @@ public partial class NavmeshBuilder
 
     private sealed class TileBuildInput
     {
-        public required int GeometryStart { get; init; }
-        public required int GeometryCount { get; init; }
-        public required int TerrainPartStart     { get; init; }
-        public required int TerrainPartCount     { get; init; }
-        public required int TerrainInstanceCount { get; init; }
+        public required int GeometryJobStart     { get; init; }
+        public required int GeometryJobCount     { get; init; }
+        public required int TerrainJobStart      { get; init; }
+        public required int TerrainJobCount      { get; init; }
+        public required int PrimitiveCount       { get; init; }
+        public required int EstimatedSpanWeight  { get; init; }
     }
 
     private sealed class TileBuildResult
@@ -112,9 +119,12 @@ public partial class NavmeshBuilder
         public required int                             TileZ                 { get; init; }
         public required long                            TotalTicks            { get; init; }
         public required long[]                          PhaseTicks            { get; init; }
-        public required int                             GeometryInstanceCount { get; init; }
-        public required int                             TerrainInstanceCount  { get; init; }
-        public required int                             TerrainPartCount      { get; init; }
+        public required int                             GeometryJobCount      { get; init; }
+        public required int                             TerrainJobCount       { get; init; }
+        public required int                             PrimitiveCount        { get; init; }
+        public required int                             UniqueJobCount        { get; init; }
+        public required int                             EstimatedSpanWeight   { get; init; }
+        public required int                             PreCompactSpanCount   { get; init; }
         public required int                             PolyCount             { get; init; }
         public required int                             VertCount             { get; init; }
         public required int                             DetailTriCount        { get; init; }
@@ -154,15 +164,18 @@ public partial class NavmeshBuilder
     public BuildTelemetrySummary? LastBuildTelemetry { get; private set; }
 
     private readonly NavmeshCustomization                                               _customization;
-    private readonly TileBuildInput[]                                                   _tileInputs;
-    private readonly int[]                                                              _tileBuildOrder;
-    private readonly (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] _geometryInstances;
-    private readonly NavmeshRasterizer.PartInstance[]                                   _terrainParts;
+    private readonly TileBuildInput[]                         _tileInputs;
+    private readonly int[]                                    _tileBuildOrder;
+    private readonly RasterJob[]                              _geometryJobs;
+    private readonly RasterJob[]                              _terrainJobs;
     private readonly ThreadLocal<BuildThreadScratch>                                    _threadScratch = new(() => new(), true);
     private readonly float                                                              _tileWidthWorld;
     private readonly float                                                              _tileHeightWorld;
     private readonly float                                                              _invTileWidthWorld;
     private readonly float                                                              _invTileHeightWorld;
+    private readonly int                                                                _uniqueRasterJobCount;
+    private readonly int                                                                _totalRasterJobReferences;
+    private readonly long                                                               _preparedTerrainBytes;
 
     private int   _walkableClimbVoxels;
     private int   _walkableHeightVoxels;
@@ -254,10 +267,13 @@ public partial class NavmeshBuilder
 
         var bucketTimer    = StopWatchTimer.Create();
         var bucketedInputs = BucketTileInputs();
-        _tileInputs        = bucketedInputs.Inputs;
-        _tileBuildOrder    = bucketedInputs.TileBuildOrder;
-        _geometryInstances = bucketedInputs.GeometryInstances;
-        _terrainParts      = bucketedInputs.TerrainParts;
+        _tileInputs              = bucketedInputs.Inputs;
+        _tileBuildOrder          = bucketedInputs.TileBuildOrder;
+        _geometryJobs            = bucketedInputs.GeometryJobs;
+        _terrainJobs             = bucketedInputs.TerrainJobs;
+        _uniqueRasterJobCount    = bucketedInputs.UniqueRasterJobCount;
+        _totalRasterJobReferences = bucketedInputs.TotalRasterJobReferences;
+        _preparedTerrainBytes    = bucketedInputs.PreparedTerrainBytes;
         Service.Log.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
     }
 

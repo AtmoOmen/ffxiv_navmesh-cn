@@ -7,71 +7,96 @@ namespace vnavmesh.Navigation.Mesh.Build;
 
 public partial class NavmeshBuilder
 {
-    private (TileBuildInput[] Inputs, int[] TileBuildOrder, (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] GeometryInstances, NavmeshRasterizer.PartInstance[] TerrainParts)
+    private (TileBuildInput[] Inputs, int[] TileBuildOrder, RasterJob[] GeometryJobs, RasterJob[] TerrainJobs, int UniqueRasterJobCount, int TotalRasterJobReferences, long PreparedTerrainBytes)
         BucketTileInputs()
     {
-        var tileCount              = NumTilesX * NumTilesZ;
-        var geometryCounts         = new int[tileCount];
-        var terrainInstanceCounts  = new int[tileCount];
-        var terrainPartCounts      = new int[tileCount];
+        var tileCount          = NumTilesX * NumTilesZ;
+        var geometryCounts     = new int[tileCount];
+        var terrainCounts      = new int[tileCount];
+        var primitiveCounts    = new int[tileCount];
+        var spanWeights        = new int[tileCount];
+        List<RasterJob> geometryJobs = [];
+        List<RasterJob> terrainJobs  = [];
+        var totalRasterJobReferences = 0;
+        long preparedTerrainBytes    = 0;
 
         foreach (var mesh in Scene.Meshes.Values)
         {
             foreach (var instance in mesh.Instances)
             {
-                GetTileRange(instance.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
-                var isGeometry =
-                    (mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0;
-                var isTerrain = (mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
-
-                for (var z = minZ; z <= maxZ; ++z)
-                {
-                    var rowBase = z * NumTilesX;
-
-                    for (var x = minX; x <= maxX; ++x)
-                    {
-                        var index = rowBase + x;
-                        if (isGeometry)
-                            ++geometryCounts[index];
-                        else if (isTerrain)
-                            ++terrainInstanceCounts[index];
-                    }
-                }
-
-                if (!isTerrain)
-                    continue;
-
                 foreach (var part in mesh.Parts)
                 {
-                    GetTileRange(instance.WorldTransform, part.LocalBounds, out minX, out maxX, out minZ, out maxZ);
+                    var worldBounds    = TransformBounds(instance.WorldTransform, part.LocalBounds);
+                    var primitiveCount = part.Primitives.Count;
+                    var vertexCount    = part.Vertices.Count;
+                    if (primitiveCount == 0 || vertexCount == 0)
+                        continue;
+
+                    GetTileRange(worldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
+                    var terrainLike = (mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
+                    var coverage   = (maxX - minX + 1) * (maxZ - minZ + 1);
+                    var spanWeight = EstimateSpanWeight(primitiveCount, vertexCount, terrainLike, coverage);
+                    PreparedTerrainGeometry? preparedTerrain = null;
+                    if (terrainLike)
+                    {
+                        preparedTerrain      = NavmeshRasterizer.PrepareTerrainGeometry(part, instance);
+                        preparedTerrainBytes += preparedTerrain.MemoryBytes;
+                    }
+
+                    var job = new RasterJob
+                    {
+                        MeshType        = mesh.MeshType,
+                        Part            = part,
+                        Instance        = instance,
+                        WorldBounds     = worldBounds,
+                        PrimitiveCount  = primitiveCount,
+                        VertexCount     = vertexCount,
+                        TerrainLike     = terrainLike,
+                        PreparedTerrain = preparedTerrain
+                    };
 
                     for (var z = minZ; z <= maxZ; ++z)
                     {
                         var rowBase = z * NumTilesX;
 
                         for (var x = minX; x <= maxX; ++x)
-                            ++terrainPartCounts[rowBase + x];
+                        {
+                            var index = rowBase + x;
+                            if (terrainLike)
+                                ++terrainCounts[index];
+                            else
+                                ++geometryCounts[index];
+                            primitiveCounts[index] += primitiveCount;
+                            spanWeights[index]     += spanWeight;
+                            ++totalRasterJobReferences;
+                        }
                     }
+
+                    if (terrainLike)
+                        terrainJobs.Add(job);
+                    else
+                        geometryJobs.Add(job);
                 }
             }
         }
 
         var result        = new TileBuildInput[tileCount];
         var geometryTotal = 0;
-        var terrainPartTotal = 0;
+        var terrainTotal  = 0;
 
         for (var i = 0; i < tileCount; ++i)
         {
             result[i] = new()
             {
-                GeometryStart         = geometryTotal,
-                GeometryCount         = geometryCounts[i],
-                TerrainPartStart      = terrainPartTotal,
-                TerrainPartCount      = terrainPartCounts[i],
-                TerrainInstanceCount  = terrainInstanceCounts[i]
+                GeometryJobStart    = geometryTotal,
+                GeometryJobCount    = geometryCounts[i],
+                TerrainJobStart     = terrainTotal,
+                TerrainJobCount     = terrainCounts[i],
+                PrimitiveCount      = primitiveCounts[i],
+                EstimatedSpanWeight = spanWeights[i]
             };
-            geometryTotal    += geometryCounts[i];
-            terrainPartTotal += terrainPartCounts[i];
+            geometryTotal += geometryCounts[i];
+            terrainTotal  += terrainCounts[i];
         }
 
         var tileBuildOrder = new int[tileCount];
@@ -82,68 +107,51 @@ public partial class NavmeshBuilder
             tileBuildOrder,
             (lhs, rhs) =>
             {
-                var leftWeight  = terrainPartCounts[lhs] * 16 + terrainInstanceCounts[lhs] * 8 + geometryCounts[lhs] * 4;
-                var rightWeight = terrainPartCounts[rhs] * 16 + terrainInstanceCounts[rhs] * 8 + geometryCounts[rhs] * 4;
+                var leftWeight  = spanWeights[lhs];
+                var rightWeight = spanWeights[rhs];
                 var compare     = rightWeight.CompareTo(leftWeight);
                 return compare != 0 ? compare : lhs.CompareTo(rhs);
             }
         );
 
-        var geometryInstances = new (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[geometryTotal];
-        var terrainParts      = new NavmeshRasterizer.PartInstance[terrainPartTotal];
-        var geometryOffsets   = new int[tileCount];
-        var terrainPartOffsets = new int[tileCount];
+        var geometryJobsByTile = new RasterJob[geometryTotal];
+        var terrainJobsByTile  = new RasterJob[terrainTotal];
+        var geometryOffsets    = new int[tileCount];
+        var terrainOffsets     = new int[tileCount];
 
         for (var i = 0; i < tileCount; ++i)
         {
-            geometryOffsets[i] = result[i].GeometryStart;
-            terrainPartOffsets[i] = result[i].TerrainPartStart;
+            geometryOffsets[i] = result[i].GeometryJobStart;
+            terrainOffsets[i]  = result[i].TerrainJobStart;
         }
 
-        foreach (var mesh in Scene.Meshes.Values)
+        foreach (var job in geometryJobs)
         {
-            foreach (var instance in mesh.Instances)
+            GetTileRange(job.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
+            for (var z = minZ; z <= maxZ; ++z)
             {
-                GetTileRange(instance.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
-                var isGeometry =
-                    (mesh.MeshType & (SceneExtractor.MeshType.FileMesh | SceneExtractor.MeshType.CylinderMesh | SceneExtractor.MeshType.AnalyticShape)) != 0;
-                var isTerrain = (mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
-
-                for (var z = minZ; z <= maxZ; ++z)
-                {
-                    var rowBase = z * NumTilesX;
-
-                    for (var x = minX; x <= maxX; ++x)
-                    {
-                        var index = rowBase + x;
-                        if (isGeometry)
-                            geometryInstances[geometryOffsets[index]++] = (mesh, instance);
-                    }
-                }
-
-                if (!isTerrain)
-                    continue;
-
-                foreach (var part in mesh.Parts)
-                {
-                    GetTileRange(instance.WorldTransform, part.LocalBounds, out minX, out maxX, out minZ, out maxZ);
-
-                    for (var z = minZ; z <= maxZ; ++z)
-                    {
-                        var rowBase = z * NumTilesX;
-
-                        for (var x = minX; x <= maxX; ++x)
-                        {
-                            var index = rowBase + x;
-                            terrainParts[terrainPartOffsets[index]++] = new(mesh.MeshType, part, instance);
-                        }
-                    }
-                }
+                var rowBase = z * NumTilesX;
+                for (var x = minX; x <= maxX; ++x)
+                    geometryJobsByTile[geometryOffsets[rowBase + x]++] = job;
             }
         }
 
-        return (result, tileBuildOrder, geometryInstances, terrainParts);
+        foreach (var job in terrainJobs)
+        {
+            GetTileRange(job.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
+            for (var z = minZ; z <= maxZ; ++z)
+            {
+                var rowBase = z * NumTilesX;
+                for (var x = minX; x <= maxX; ++x)
+                    terrainJobsByTile[terrainOffsets[rowBase + x]++] = job;
+            }
+        }
+
+        return (result, tileBuildOrder, geometryJobsByTile, terrainJobsByTile, geometryJobs.Count + terrainJobs.Count, totalRasterJobReferences, preparedTerrainBytes);
     }
+
+    private static int EstimateSpanWeight(int primitiveCount, int vertexCount, bool terrainLike, int coverage)
+        => primitiveCount * (terrainLike ? 12 : 4) + vertexCount * (terrainLike ? 3 : 1) + coverage * (terrainLike ? 16 : 4);
 
     private void GetTileRange(AABB bounds, out int minX, out int maxX, out int minZ, out int maxZ)
     {
@@ -160,6 +168,11 @@ public partial class NavmeshBuilder
 
     private void GetTileRange(Matrix4x3 worldTransform, AABB localBounds, out int minX, out int maxX, out int minZ, out int maxZ)
     {
+        GetTileRange(TransformBounds(worldTransform, localBounds), out minX, out maxX, out minZ, out maxZ);
+    }
+
+    private static AABB TransformBounds(Matrix4x3 worldTransform, AABB localBounds)
+    {
         var localCenter = (localBounds.Min + localBounds.Max) * 0.5f;
         var localExtent = (localBounds.Max - localBounds.Min) * 0.5f;
         var axisX       = worldTransform.Row0;
@@ -167,8 +180,7 @@ public partial class NavmeshBuilder
         var axisZ       = worldTransform.Row2;
         var center      = axisX * localCenter.X + axisY * localCenter.Y + axisZ * localCenter.Z + worldTransform.Row3;
         var extent      = Abs(axisX) * localExtent.X + Abs(axisY) * localExtent.Y + Abs(axisZ) * localExtent.Z;
-        var worldBounds = new AABB { Min = center - extent, Max = center + extent };
-        GetTileRange(worldBounds, out minX, out maxX, out minZ, out maxZ);
+        return new() { Min = center - extent, Max = center + extent };
     }
 
     private static Vector3 Abs(Vector3 value) => new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));

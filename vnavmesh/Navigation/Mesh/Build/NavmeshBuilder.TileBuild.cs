@@ -37,7 +37,17 @@ public partial class NavmeshBuilder
         );
 
         var parallelDuration = buildTimer.Value();
-        LastBuildTelemetry = SummarizeBuildTelemetry(builtTiles, parallelDuration, _config.BuildMaxCores, Environment.ProcessorCount, threadCount);
+        LastBuildTelemetry = SummarizeBuildTelemetry
+        (
+            builtTiles,
+            parallelDuration,
+            _config.BuildMaxCores,
+            Environment.ProcessorCount,
+            threadCount,
+            _uniqueRasterJobCount,
+            _totalRasterJobReferences,
+            _preparedTerrainBytes
+        );
         Service.Log.Debug
         (
             $"[NavmeshBuilder] 并行瓦片构建耗时 {parallelDuration.TotalMilliseconds:f1} ms，配置核心数 = {_config.BuildMaxCores}，可用核心数 = {Environment.ProcessorCount}，实际线程数 = {threadCount}"
@@ -100,10 +110,10 @@ public partial class NavmeshBuilder
         var scratch = _threadScratch.Value!;
         scratch.Reset();
         EnsureVolumeScratch(scratch);
-        var totalStart        = Stopwatch.GetTimestamp();
-        var telemetry         = new RcContext();
-        var geometryInstances = _geometryInstances.AsSpan(input.GeometryStart, input.GeometryCount);
-        var terrainParts      = _terrainParts.AsSpan(input.TerrainPartStart, input.TerrainPartCount);
+        var totalStart   = Stopwatch.GetTimestamp();
+        var telemetry    = new RcContext();
+        var geometryJobs = _geometryJobs.AsSpan(input.GeometryJobStart, input.GeometryJobCount);
+        var terrainJobs  = _terrainJobs.AsSpan(input.TerrainJobStart, input.TerrainJobCount);
 
         var tileBoundsMin = new Vector3(BoundsMin.X     + x * _tileWidthWorld, BoundsMin.Y, BoundsMin.Z     + z * _tileHeightWorld);
         var tileBoundsMax = new Vector3(tileBoundsMin.X + _tileWidthWorld,     BoundsMax.Y, tileBoundsMin.Z + _tileHeightWorld);
@@ -136,13 +146,13 @@ public partial class NavmeshBuilder
         );
 
         var phaseStart = Stopwatch.GetTimestamp();
-        rasterizer.Rasterize(geometryInstances, SceneExtractor.MeshType.All, true, true);
+        rasterizer.Rasterize(geometryJobs, true, true);
         scratch.PhaseTicks[(int)BuildPhase.RasterizeGeometry] += ElapsedTimeSpanTicks(phaseStart);
 
-        if (!terrainParts.IsEmpty)
+        if (!terrainJobs.IsEmpty)
         {
             phaseStart = Stopwatch.GetTimestamp();
-            rasterizer.Rasterize(terrainParts, SceneExtractor.MeshType.All, false, true);
+            rasterizer.Rasterize(terrainJobs, false, true);
             scratch.PhaseTicks[(int)BuildPhase.RasterizeTerrain] += ElapsedTimeSpanTicks(phaseStart);
         }
 
@@ -155,7 +165,8 @@ public partial class NavmeshBuilder
         if (Settings.Filtering.HasFlag(NavmeshSettings.Filter.WalkableLowHeightSpans))
             RcFilters.FilterWalkableLowHeightSpans(telemetry, _walkableHeightVoxels, shf);
 
-        var chf = RcCompacts.BuildCompactHeightfield(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
+        var preCompactSpanCount = CountWalkableSpans(shf);
+        var chf                 = RcCompacts.BuildCompactHeightfield(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
         RcAreas.ErodeWalkableArea(telemetry, _walkableRadiusVoxels, chf);
         RcAreas.MedianFilterWalkableArea(telemetry, chf);
 
@@ -185,7 +196,9 @@ public partial class NavmeshBuilder
 
         var detailSampleDist     = Settings.FastBuild || Settings.DetailSampleDist < 0.9f ? 0 : Settings.CellSize * Settings.DetailSampleDist;
         var detailSampleMaxError = Settings.CellHeight * Settings.DetailMaxSampleError;
-        var dmesh                = RcMeshDetails.BuildPolyMeshDetail(telemetry, pmesh, chf, detailSampleDist, detailSampleMaxError);
+        RcPolyMeshDetail? dmesh  = null;
+        if (detailSampleDist > 0 && pmesh.npolys > 0)
+            dmesh = RcMeshDetails.BuildPolyMeshDetail(telemetry, pmesh, chf, detailSampleDist, detailSampleMaxError);
 
         var navmeshConfig = new DtNavMeshCreateParams
         {
@@ -348,16 +361,18 @@ public partial class NavmeshBuilder
         Array.Copy(scratch.PhaseTicks, phaseTicks, phaseTicks.Length);
 
         var totalTicks = ElapsedTimeSpanTicks(totalStart);
-        Service.Log.Debug($"[NavmeshBuilder] 瓦片 {x}x{z} 构建耗时 {TicksToMilliseconds(totalTicks):f1} ms");
         return new()
         {
             TileX                 = x,
             TileZ                 = z,
             TotalTicks            = totalTicks,
             PhaseTicks            = phaseTicks,
-            GeometryInstanceCount = input.GeometryCount,
-            TerrainInstanceCount  = input.TerrainInstanceCount,
-            TerrainPartCount      = input.TerrainPartCount,
+            GeometryJobCount      = input.GeometryJobCount,
+            TerrainJobCount       = input.TerrainJobCount,
+            PrimitiveCount        = input.PrimitiveCount,
+            UniqueJobCount        = input.GeometryJobCount + input.TerrainJobCount,
+            EstimatedSpanWeight   = input.EstimatedSpanWeight,
+            PreCompactSpanCount   = preCompactSpanCount,
             PolyCount             = pmesh.npolys,
             VertCount             = pmesh.nverts,
             DetailTriCount        = dmesh?.ntris ?? 0,
@@ -371,6 +386,23 @@ public partial class NavmeshBuilder
 
     private static long ElapsedTimeSpanTicks(long startTimestamp)
         => (long)((Stopwatch.GetTimestamp() - startTimestamp) * (double)TimeSpan.TicksPerSecond / Stopwatch.Frequency);
+
+    private static int CountWalkableSpans(RcHeightfield heightfield)
+    {
+        var spanCount  = 0;
+        var cellCount  = heightfield.width * heightfield.height;
+
+        for (var cellIndex = 0; cellIndex < cellCount; ++cellIndex)
+        {
+            for (var span = heightfield.spans[cellIndex]; span != null; span = span.next)
+            {
+                if (span.area != DotRecast.Recast.RcRecast.RC_NULL_AREA)
+                    ++spanCount;
+            }
+        }
+
+        return spanCount;
+    }
 
     private static double TicksToMilliseconds(long ticks)
         => ticks / (double)TimeSpan.TicksPerMillisecond;
