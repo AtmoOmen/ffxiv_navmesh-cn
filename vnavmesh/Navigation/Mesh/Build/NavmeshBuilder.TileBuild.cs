@@ -36,8 +36,11 @@ public partial class NavmeshBuilder
         );
 
         var parallelDuration = buildTimer.Value();
-        LastBuildTelemetry = SummarizeBuildTelemetry(builtTiles, parallelDuration);
-        Service.Log.Debug($"[NavmeshBuilder] 并行瓦片构建耗时 {parallelDuration.TotalMilliseconds:f1} ms，线程数 = {threadCount}");
+        LastBuildTelemetry = SummarizeBuildTelemetry(builtTiles, parallelDuration, _config.BuildMaxCores, Environment.ProcessorCount, threadCount);
+        Service.Log.Debug
+        (
+            $"[NavmeshBuilder] 并行瓦片构建耗时 {parallelDuration.TotalMilliseconds:f1} ms，配置核心数 = {_config.BuildMaxCores}，可用核心数 = {Environment.ProcessorCount}，实际线程数 = {threadCount}"
+        );
         LogBuildTelemetry(LastBuildTelemetry);
         return builtTiles;
     }
@@ -93,7 +96,7 @@ public partial class NavmeshBuilder
         var totalStart        = Stopwatch.GetTimestamp();
         var telemetry         = new RcContext();
         var geometryInstances = _geometryInstances.AsSpan(input.GeometryStart, input.GeometryCount);
-        var terrainInstances  = _terrainInstances.AsSpan(input.TerrainStart, input.TerrainCount);
+        var terrainParts      = _terrainParts.AsSpan(input.TerrainPartStart, input.TerrainPartCount);
 
         var tileBoundsMin = new Vector3(BoundsMin.X     + x * _tileWidthWorld, BoundsMin.Y, BoundsMin.Z     + z * _tileHeightWorld);
         var tileBoundsMax = new Vector3(tileBoundsMin.X + _tileWidthWorld,     BoundsMax.Y, tileBoundsMin.Z + _tileHeightWorld);
@@ -129,10 +132,10 @@ public partial class NavmeshBuilder
         rasterizer.Rasterize(geometryInstances, SceneExtractor.MeshType.All, true, true);
         scratch.PhaseTicks[(int)BuildPhase.RasterizeGeometry] += ElapsedTimeSpanTicks(phaseStart);
 
-        if (!terrainInstances.IsEmpty)
+        if (!terrainParts.IsEmpty)
         {
             phaseStart = Stopwatch.GetTimestamp();
-            rasterizer.Rasterize(terrainInstances, SceneExtractor.MeshType.All, false, true);
+            rasterizer.Rasterize(terrainParts, SceneExtractor.MeshType.All, false, true);
             scratch.PhaseTicks[(int)BuildPhase.RasterizeTerrain] += ElapsedTimeSpanTicks(phaseStart);
         }
 
@@ -167,7 +170,7 @@ public partial class NavmeshBuilder
         for (var i = 0; i < pmesh.npolys; ++i)
             pmesh.flags[i] = 1;
 
-        var detailSampleDist     = Settings.DetailSampleDist < 0.9f ? 0 : Settings.CellSize * Settings.DetailSampleDist;
+        var detailSampleDist     = Settings.FastBuild || Settings.DetailSampleDist < 0.9f ? 0 : Settings.CellSize * Settings.DetailSampleDist;
         var detailSampleMaxError = Settings.CellHeight * Settings.DetailMaxSampleError;
         var dmesh                = RcMeshDetails.BuildPolyMeshDetail(telemetry, pmesh, chf, detailSampleDist, detailSampleMaxError);
 
@@ -301,7 +304,8 @@ public partial class NavmeshBuilder
             TotalTicks            = totalTicks,
             PhaseTicks            = phaseTicks,
             GeometryInstanceCount = input.GeometryCount,
-            TerrainInstanceCount  = input.TerrainCount,
+            TerrainInstanceCount  = input.TerrainInstanceCount,
+            TerrainPartCount      = input.TerrainPartCount,
             PolyCount             = pmesh.npolys,
             VertCount             = pmesh.nverts,
             DetailTriCount        = dmesh?.ntris ?? 0,

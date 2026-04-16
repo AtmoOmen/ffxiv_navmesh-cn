@@ -34,6 +34,7 @@ public class NavmeshSettings
     public int         PolyMaxVerts               = 6;
     public float       DetailSampleDist           = 6f;
     public float       DetailMaxSampleError       = 1f;
+    public bool        FastBuild;
 
     public bool  GenerateEdgeClimbLinks;
     public bool  GenerateEdgeJumpLinks;
@@ -76,6 +77,7 @@ public class NavmeshSettings
         appendInt(nameof(PolyMaxVerts), PolyMaxVerts);
         appendFloat(nameof(DetailSampleDist),     DetailSampleDist);
         appendFloat(nameof(DetailMaxSampleError), DetailMaxSampleError);
+        appendBool(nameof(FastBuild), FastBuild);
         appendBool(nameof(GenerateEdgeClimbLinks), GenerateEdgeClimbLinks);
         appendBool(nameof(GenerateEdgeJumpLinks),  GenerateEdgeJumpLinks);
         appendFloat(nameof(GroundTolerance),     GroundTolerance);
@@ -333,6 +335,7 @@ public class NavmeshSettings
             细节网格表面与高度场数据的最大偏离距离 (仅用于高度细节) [限制: >= 0] [单位: 世界]
             """
         ); // TODO: verify that it's actually in voxels
+        ImGui.Checkbox("快速构建（关闭细节网格）", ref FastBuild);
         DrawConfigInt
         (
             ref NumTiles[0],

@@ -15,7 +15,7 @@ public partial record class Navmesh
 )
 {
     public static readonly uint Magic            = 0x444D564E; // 'NVMD'
-    public static readonly uint Version          = 31;         // 更新后触发一次全量重构建
+    public static readonly uint Version          = 32;         // 更新后触发一次全量重构建
     public const           int  FLAG_UNREACHABLE = 0x10;
     public const           int  AREAID_TELEPORT  = 5;
 

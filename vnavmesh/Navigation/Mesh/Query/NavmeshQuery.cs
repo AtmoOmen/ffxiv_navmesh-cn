@@ -109,16 +109,6 @@ public partial class NavmeshQuery
         public bool  IsAboveTarget       => VerticalDelta > EndPolyCandidateAboveTolerance;
     }
 
-    private class IntersectQuery : IDtPolyQuery
-    {
-        public readonly List<long> Result = [];
-
-        public void Process(DtMeshTile tile, ReadOnlySpan<int> polys, ReadOnlySpan<long> polyRefs, int count)
-        {
-            Result.AddRange(polyRefs[..count]);
-        }
-    }
-
     private sealed class RandomnessFilter
     (
         IDtQueryFilter inner
@@ -271,9 +261,18 @@ public partial class NavmeshQuery
 
     public List<long> FindIntersectingMeshPolys(Vector3 p, Vector3 halfExtent, bool allowUnreachable = true)
     {
-        IntersectQuery query = new();
-        MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), allowUnreachable ? _filter : _reachableFilter, query);
-        return query.Result;
+        var capacity = 256;
+
+        while (true)
+        {
+            var refs  = new long[capacity];
+            var query = new DtCollectPolysQuery(refs, refs.Length);
+            MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), allowUnreachable ? _filter : _reachableFilter, query);
+            if (!query.Overflowed())
+                return [.. refs.AsSpan(0, query.NumCollected()).ToArray()];
+
+            capacity *= 2;
+        }
     }
 
     public Vector3? FindNearestPointOnMeshPoly

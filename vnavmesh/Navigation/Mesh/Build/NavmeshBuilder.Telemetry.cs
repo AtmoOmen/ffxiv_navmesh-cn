@@ -20,10 +20,24 @@ public partial class NavmeshBuilder
         }
     }
 
-    private static BuildTelemetrySummary SummarizeBuildTelemetry(IReadOnlyList<TileBuildResult> builtTiles, TimeSpan parallelDuration)
+    private static BuildTelemetrySummary SummarizeBuildTelemetry
+    (
+        IReadOnlyList<TileBuildResult> builtTiles,
+        TimeSpan                       parallelDuration,
+        int                            configuredBuildMaxCores,
+        int                            maxAvailableCores,
+        int                            threadCount
+    )
     {
         List<BuildPhaseSummary> phases    = [];
         var                     tileCount = builtTiles.Count;
+        long                    aggregatedPhaseTicks = 0;
+
+        for (var phaseIndex = 0; phaseIndex < (int)BuildPhase.Count; ++phaseIndex)
+        {
+            foreach (var tile in builtTiles)
+                aggregatedPhaseTicks += tile.PhaseTicks[phaseIndex];
+        }
 
         for (var phaseIndex = 0; phaseIndex < (int)BuildPhase.Count; ++phaseIndex)
         {
@@ -57,7 +71,8 @@ public partial class NavmeshBuilder
                     AverageTicks = totalTicks / Math.Max(tileCount, 1),
                     MaxTicks     = maxTicks,
                     SlowestTileX = slowestTileX,
-                    SlowestTileZ = slowestTileZ
+                    SlowestTileZ = slowestTileZ,
+                    ShareOfPhaseTicks = aggregatedPhaseTicks > 0 ? totalTicks / (double)aggregatedPhaseTicks : 0
                 }
             );
         }
@@ -75,6 +90,7 @@ public partial class NavmeshBuilder
                     TotalTicks            = tile.TotalTicks,
                     GeometryInstanceCount = tile.GeometryInstanceCount,
                     TerrainInstanceCount  = tile.TerrainInstanceCount,
+                    TerrainPartCount      = tile.TerrainPartCount,
                     PolyCount             = tile.PolyCount,
                     VertCount             = tile.VertCount,
                     DetailTriCount        = tile.DetailTriCount
@@ -84,23 +100,35 @@ public partial class NavmeshBuilder
 
         return new()
         {
-            ParallelTicks = parallelDuration.Ticks,
-            Phases        = phases,
-            SlowTiles     = slowTiles
+            ConfiguredBuildMaxCores = configuredBuildMaxCores,
+            MaxAvailableCores       = maxAvailableCores,
+            ThreadCount             = threadCount,
+            ParallelTicks           = parallelDuration.Ticks,
+            AggregatedPhaseTicks    = aggregatedPhaseTicks,
+            Phases                  = phases,
+            SlowTiles               = slowTiles
         };
     }
 
     private static void LogBuildTelemetry(BuildTelemetrySummary telemetry)
     {
+        Service.Log.Debug
+        (
+            $"[NavmeshBuilder] 构建线程信息：配置核心数 = {telemetry.ConfiguredBuildMaxCores}，可用核心数 = {telemetry.MaxAvailableCores}，实际线程数 = {telemetry.ThreadCount}"
+        );
         Service.Log.Debug("[NavmeshBuilder] 阶段统计（总计 / 单瓦片均值 / 最慢瓦片）");
 
         foreach (var phase in telemetry.Phases)
         {
             Service.Log.Debug
             (
-                $"[NavmeshBuilder] {phase.Name}: 总计 {TicksToMilliseconds(phase.TotalTicks):f1} ms，均值 {TicksToMilliseconds(phase.AverageTicks):f2} ms，最慢瓦片 {phase.SlowestTileX}x{phase.SlowestTileZ} = {TicksToMilliseconds(phase.MaxTicks):f1} ms"
+                $"[NavmeshBuilder] {phase.Name}: 总计 {TicksToMilliseconds(phase.TotalTicks):f1} ms，占比 {phase.ShareOfPhaseTicks:P1}，均值 {TicksToMilliseconds(phase.AverageTicks):f2} ms，最慢瓦片 {phase.SlowestTileX}x{phase.SlowestTileZ} = {TicksToMilliseconds(phase.MaxTicks):f1} ms"
             );
         }
+
+        var detailPhase = telemetry.Phases.FirstOrDefault(phase => phase.Name == "Recast: 细节网格");
+        if (detailPhase != null && detailPhase.ShareOfPhaseTicks >= 0.30)
+            Service.Log.Information("[NavmeshBuilder] 细节网格耗时占比较高，如仅需快速验证，可启用“快速构建（关闭细节网格）”");
 
         if (telemetry.SlowTiles.Count > 0)
         {
@@ -112,7 +140,7 @@ public partial class NavmeshBuilder
         {
             Service.Log.Debug
             (
-                $"[NavmeshBuilder] 慢瓦片 {tile.TileX}x{tile.TileZ}: 几何实例 {tile.GeometryInstanceCount}，地形实例 {tile.TerrainInstanceCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}"
+                $"[NavmeshBuilder] 慢瓦片 {tile.TileX}x{tile.TileZ}: 几何实例 {tile.GeometryInstanceCount}，地形实例 {tile.TerrainInstanceCount}，地形分块 {tile.TerrainPartCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}"
             );
         }
     }

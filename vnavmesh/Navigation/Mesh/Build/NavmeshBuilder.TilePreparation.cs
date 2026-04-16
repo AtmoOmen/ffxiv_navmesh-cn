@@ -1,3 +1,4 @@
+using System.Numerics;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
@@ -6,12 +7,13 @@ namespace vnavmesh.Navigation.Mesh.Build;
 
 public partial class NavmeshBuilder
 {
-    private (TileBuildInput[] Inputs, int[] TileBuildOrder, (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] GeometryInstances, (
-        SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] TerrainInstances) BucketTileInputs()
+    private (TileBuildInput[] Inputs, int[] TileBuildOrder, (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] GeometryInstances, NavmeshRasterizer.PartInstance[] TerrainParts)
+        BucketTileInputs()
     {
-        var tileCount      = NumTilesX * NumTilesZ;
-        var geometryCounts = new int[tileCount];
-        var terrainCounts  = new int[tileCount];
+        var tileCount              = NumTilesX * NumTilesZ;
+        var geometryCounts         = new int[tileCount];
+        var terrainInstanceCounts  = new int[tileCount];
+        var terrainPartCounts      = new int[tileCount];
 
         foreach (var mesh in Scene.Meshes.Values)
         {
@@ -32,7 +34,23 @@ public partial class NavmeshBuilder
                         if (isGeometry)
                             ++geometryCounts[index];
                         else if (isTerrain)
-                            ++terrainCounts[index];
+                            ++terrainInstanceCounts[index];
+                    }
+                }
+
+                if (!isTerrain)
+                    continue;
+
+                foreach (var part in mesh.Parts)
+                {
+                    GetTileRange(instance.WorldTransform, part.LocalBounds, out minX, out maxX, out minZ, out maxZ);
+
+                    for (var z = minZ; z <= maxZ; ++z)
+                    {
+                        var rowBase = z * NumTilesX;
+
+                        for (var x = minX; x <= maxX; ++x)
+                            ++terrainPartCounts[rowBase + x];
                     }
                 }
             }
@@ -40,19 +58,20 @@ public partial class NavmeshBuilder
 
         var result        = new TileBuildInput[tileCount];
         var geometryTotal = 0;
-        var terrainTotal  = 0;
+        var terrainPartTotal = 0;
 
         for (var i = 0; i < tileCount; ++i)
         {
             result[i] = new()
             {
-                GeometryStart = geometryTotal,
-                GeometryCount = geometryCounts[i],
-                TerrainStart  = terrainTotal,
-                TerrainCount  = terrainCounts[i]
+                GeometryStart         = geometryTotal,
+                GeometryCount         = geometryCounts[i],
+                TerrainPartStart      = terrainPartTotal,
+                TerrainPartCount      = terrainPartCounts[i],
+                TerrainInstanceCount  = terrainInstanceCounts[i]
             };
-            geometryTotal += geometryCounts[i];
-            terrainTotal  += terrainCounts[i];
+            geometryTotal    += geometryCounts[i];
+            terrainPartTotal += terrainPartCounts[i];
         }
 
         var tileBuildOrder = new int[tileCount];
@@ -63,22 +82,22 @@ public partial class NavmeshBuilder
             tileBuildOrder,
             (lhs, rhs) =>
             {
-                var leftWeight  = terrainCounts[lhs] * 32 + geometryCounts[lhs] * 4;
-                var rightWeight = terrainCounts[rhs] * 32 + geometryCounts[rhs] * 4;
+                var leftWeight  = terrainPartCounts[lhs] * 16 + terrainInstanceCounts[lhs] * 8 + geometryCounts[lhs] * 4;
+                var rightWeight = terrainPartCounts[rhs] * 16 + terrainInstanceCounts[rhs] * 8 + geometryCounts[rhs] * 4;
                 var compare     = rightWeight.CompareTo(leftWeight);
                 return compare != 0 ? compare : lhs.CompareTo(rhs);
             }
         );
 
         var geometryInstances = new (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[geometryTotal];
-        var terrainInstances  = new (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[terrainTotal];
+        var terrainParts      = new NavmeshRasterizer.PartInstance[terrainPartTotal];
         var geometryOffsets   = new int[tileCount];
-        var terrainOffsets    = new int[tileCount];
+        var terrainPartOffsets = new int[tileCount];
 
         for (var i = 0; i < tileCount; ++i)
         {
             geometryOffsets[i] = result[i].GeometryStart;
-            terrainOffsets[i]  = result[i].TerrainStart;
+            terrainPartOffsets[i] = result[i].TerrainPartStart;
         }
 
         foreach (var mesh in Scene.Meshes.Values)
@@ -99,14 +118,31 @@ public partial class NavmeshBuilder
                         var index = rowBase + x;
                         if (isGeometry)
                             geometryInstances[geometryOffsets[index]++] = (mesh, instance);
-                        else if (isTerrain)
-                            terrainInstances[terrainOffsets[index]++] = (mesh, instance);
+                    }
+                }
+
+                if (!isTerrain)
+                    continue;
+
+                foreach (var part in mesh.Parts)
+                {
+                    GetTileRange(instance.WorldTransform, part.LocalBounds, out minX, out maxX, out minZ, out maxZ);
+
+                    for (var z = minZ; z <= maxZ; ++z)
+                    {
+                        var rowBase = z * NumTilesX;
+
+                        for (var x = minX; x <= maxX; ++x)
+                        {
+                            var index = rowBase + x;
+                            terrainParts[terrainPartOffsets[index]++] = new(mesh.MeshType, part, instance);
+                        }
                     }
                 }
             }
         }
 
-        return (result, tileBuildOrder, geometryInstances, terrainInstances);
+        return (result, tileBuildOrder, geometryInstances, terrainParts);
     }
 
     private void GetTileRange(AABB bounds, out int minX, out int maxX, out int minZ, out int maxZ)
@@ -121,6 +157,21 @@ public partial class NavmeshBuilder
         minZ = Math.Clamp(minZ, 0, NumTilesZ - 1);
         maxZ = Math.Clamp(maxZ, 0, NumTilesZ - 1);
     }
+
+    private void GetTileRange(Matrix4x3 worldTransform, AABB localBounds, out int minX, out int maxX, out int minZ, out int maxZ)
+    {
+        var localCenter = (localBounds.Min + localBounds.Max) * 0.5f;
+        var localExtent = (localBounds.Max - localBounds.Min) * 0.5f;
+        var axisX       = worldTransform.Row0;
+        var axisY       = worldTransform.Row1;
+        var axisZ       = worldTransform.Row2;
+        var center      = axisX * localCenter.X + axisY * localCenter.Y + axisZ * localCenter.Z + worldTransform.Row3;
+        var extent      = Abs(axisX) * localExtent.X + Abs(axisY) * localExtent.Y + Abs(axisZ) * localExtent.Z;
+        var worldBounds = new AABB { Min = center - extent, Max = center + extent };
+        GetTileRange(worldBounds, out minX, out maxX, out minZ, out maxZ);
+    }
+
+    private static Vector3 Abs(Vector3 value) => new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
 
     private void EnsureVolumeScratch(BuildThreadScratch scratch)
     {

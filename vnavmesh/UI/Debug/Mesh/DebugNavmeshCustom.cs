@@ -115,6 +115,7 @@ internal class DebugNavmeshCustom : IDisposable
         public DtNavMeshQuery? MeshQuery => _task != null && _task.IsCompletedSuccessfully ? _query?.MeshQuery : null;
         public VoxelMap? Volume => _task != null && _task.IsCompletedSuccessfully ? _builder?.Navmesh.Volume : null;
         public VoxelPathfind? VolumeQuery => _task != null && _task.IsCompletedSuccessfully ? _query?.VolumeQuery : null;
+        public NavmeshBuilder.BuildTelemetrySummary? BuildTelemetry => _task != null && _task.IsCompletedSuccessfully ? _builder?.LastBuildTelemetry : null;
 
         public void Dispose() =>
             Clear();
@@ -268,6 +269,12 @@ internal class DebugNavmeshCustom : IDisposable
 
         if (_navmesh.CurrentState != AsyncBuilder.State.Ready)
             return;
+
+        using (var nt = _tree.Node("构建诊断"))
+        {
+            if (nt.Opened)
+                DrawBuildTelemetry();
+        }
 
         ImGui.InputFloat("X", ref _dest.X);
         ImGui.InputFloat("Y", ref _dest.Y);
@@ -432,6 +439,27 @@ internal class DebugNavmeshCustom : IDisposable
         _navmesh.Clear();
     }
 
+    private void DrawBuildTelemetry()
+    {
+        var telemetry = _navmesh.BuildTelemetry;
+        if (telemetry == null)
+        {
+            _tree.LeafNode("当前没有构建统计");
+            return;
+        }
+
+        _tree.LeafNode($"配置核心数：{telemetry.ConfiguredBuildMaxCores}");
+        _tree.LeafNode($"可用核心数：{telemetry.MaxAvailableCores}");
+        _tree.LeafNode($"实际线程数：{telemetry.ThreadCount}");
+        _tree.LeafNode($"并行构建耗时：{telemetry.ParallelTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms");
+
+        foreach (var phase in telemetry.Phases)
+            _tree.LeafNode($"{phase.Name}：{phase.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms，占比 {phase.ShareOfPhaseTicks:P1}，最慢 {phase.SlowestTileX}x{phase.SlowestTileZ}");
+
+        foreach (var tile in telemetry.SlowTiles)
+            _tree.LeafNode($"慢瓦片 {tile.TileX}x{tile.TileZ}：{tile.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms，几何 {tile.GeometryInstanceCount}，地形 {tile.TerrainInstanceCount}，地形分块 {tile.TerrainPartCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}");
+    }
+
     private HeightfieldComparison CompareHeightfields(int tx, int tz, SceneExtractor scene)
     {
         var telemetry               = new RcContext();
@@ -454,7 +482,7 @@ internal class DebugNavmeshCustom : IDisposable
         tileBoundsMax.X += borderSizeWorld;
         tileBoundsMax.Z += borderSizeWorld;
 
-        var timer = StopWatchTimer.Create();
+        var timerOld = StopWatchTimer.Create();
         var shfOld = new RcHeightfield
         (
             tileSizeXVoxels,
@@ -467,8 +495,9 @@ internal class DebugNavmeshCustom : IDisposable
         );
         var rasterizerOld = new NavmeshRasterizer(shfOld, walkableNormalThreshold, walkableClimbVoxels, 0, false, null, telemetry);
         rasterizerOld.RasterizeOld(scene, SceneExtractor.MeshType.All);
-        var dur1 = (float)timer.Value().TotalSeconds;
+        var dur1 = (float)timerOld.Value().TotalSeconds;
 
+        var timerNew = StopWatchTimer.Create();
         var shfNew = new RcHeightfield
         (
             tileSizeXVoxels,
@@ -481,7 +510,7 @@ internal class DebugNavmeshCustom : IDisposable
         );
         var rasterizerNew = new NavmeshRasterizer(shfNew, walkableNormalThreshold, walkableClimbVoxels, 0, false, null, telemetry);
         rasterizerNew.Rasterize(scene, SceneExtractor.MeshType.All, false, false);
-        var dur2 = (float)timer.Value().TotalSeconds;
+        var dur2 = (float)timerNew.Value().TotalSeconds;
 
         var identical = true;
         var ispan     = 0;

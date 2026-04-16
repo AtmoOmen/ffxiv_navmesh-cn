@@ -31,12 +31,13 @@ public partial class NavmeshBuilder
 
     public sealed class BuildPhaseSummary
     {
-        public required string Name         { get; init; }
-        public required long   TotalTicks   { get; init; }
-        public required long   AverageTicks { get; init; }
-        public required long   MaxTicks     { get; init; }
-        public required int    SlowestTileX { get; init; }
-        public required int    SlowestTileZ { get; init; }
+        public required string Name              { get; init; }
+        public required long   TotalTicks        { get; init; }
+        public required long   AverageTicks      { get; init; }
+        public required long   MaxTicks          { get; init; }
+        public required int    SlowestTileX      { get; init; }
+        public required int    SlowestTileZ      { get; init; }
+        public required double ShareOfPhaseTicks { get; init; }
     }
 
     public sealed class SlowTileSummary
@@ -46,6 +47,7 @@ public partial class NavmeshBuilder
         public required long TotalTicks            { get; init; }
         public required int  GeometryInstanceCount { get; init; }
         public required int  TerrainInstanceCount  { get; init; }
+        public required int  TerrainPartCount      { get; init; }
         public required int  PolyCount             { get; init; }
         public required int  VertCount             { get; init; }
         public required int  DetailTriCount        { get; init; }
@@ -53,9 +55,13 @@ public partial class NavmeshBuilder
 
     public sealed class BuildTelemetrySummary
     {
-        public required long                             ParallelTicks { get; init; }
-        public required IReadOnlyList<BuildPhaseSummary> Phases        { get; init; }
-        public required IReadOnlyList<SlowTileSummary>   SlowTiles     { get; init; }
+        public required int                              ConfiguredBuildMaxCores { get; init; }
+        public required int                              MaxAvailableCores       { get; init; }
+        public required int                              ThreadCount             { get; init; }
+        public required long                             ParallelTicks           { get; init; }
+        public required long                             AggregatedPhaseTicks    { get; init; }
+        public required IReadOnlyList<BuildPhaseSummary> Phases                  { get; init; }
+        public required IReadOnlyList<SlowTileSummary>   SlowTiles               { get; init; }
     }
 
     private enum BuildPhase
@@ -93,8 +99,9 @@ public partial class NavmeshBuilder
     {
         public required int GeometryStart { get; init; }
         public required int GeometryCount { get; init; }
-        public required int TerrainStart  { get; init; }
-        public required int TerrainCount  { get; init; }
+        public required int TerrainPartStart     { get; init; }
+        public required int TerrainPartCount     { get; init; }
+        public required int TerrainInstanceCount { get; init; }
     }
 
     private sealed class TileBuildResult
@@ -105,6 +112,7 @@ public partial class NavmeshBuilder
         public required long[]                          PhaseTicks            { get; init; }
         public required int                             GeometryInstanceCount { get; init; }
         public required int                             TerrainInstanceCount  { get; init; }
+        public required int                             TerrainPartCount      { get; init; }
         public required int                             PolyCount             { get; init; }
         public required int                             VertCount             { get; init; }
         public required int                             DetailTriCount        { get; init; }
@@ -145,7 +153,7 @@ public partial class NavmeshBuilder
     private readonly TileBuildInput[]                                                   _tileInputs;
     private readonly int[]                                                              _tileBuildOrder;
     private readonly (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] _geometryInstances;
-    private readonly (SceneExtractor.Mesh Mesh, SceneExtractor.MeshInstance Instance)[] _terrainInstances;
+    private readonly NavmeshRasterizer.PartInstance[]                                   _terrainParts;
     private readonly ThreadLocal<BuildThreadScratch>                                    _threadScratch = new(() => new(), true);
     private readonly float                                                              _tileWidthWorld;
     private readonly float                                                              _tileHeightWorld;
@@ -230,7 +238,7 @@ public partial class NavmeshBuilder
         _tileInputs        = bucketedInputs.Inputs;
         _tileBuildOrder    = bucketedInputs.TileBuildOrder;
         _geometryInstances = bucketedInputs.GeometryInstances;
-        _terrainInstances  = bucketedInputs.TerrainInstances;
+        _terrainParts      = bucketedInputs.TerrainParts;
         Service.Log.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
     }
 

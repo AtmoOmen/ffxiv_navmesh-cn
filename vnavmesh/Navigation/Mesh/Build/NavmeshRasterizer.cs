@@ -14,9 +14,12 @@ using static DotRecast.Recast.RcRecast;
 // utility to rasterize various meshes into a heightfield
 public class NavmeshRasterizer
 {
+    public readonly record struct PartInstance(SceneExtractor.MeshType MeshType, SceneExtractor.MeshPart Part, SceneExtractor.MeshInstance Instance);
+
     public sealed class ScratchBuffers
     {
         private Vector3[]        _worldVertices = [];
+        private float[]          _worldVertexTriples = [];
         private OutFlags[]       _outFlags      = [];
         private uint[]           _solidSort     = [];
         private int[]            _solidVoxel    = [];
@@ -27,6 +30,14 @@ public class NavmeshRasterizer
             if (_worldVertices.Length < count)
                 _worldVertices = GC.AllocateUninitializedArray<Vector3>(count);
             return _worldVertices.AsSpan(0, count);
+        }
+
+        internal Span<float> WorldVertexTriples(int vertexCount)
+        {
+            var valueCount = vertexCount * 3;
+            if (_worldVertexTriples.Length < valueCount)
+                _worldVertexTriples = GC.AllocateUninitializedArray<float>(valueCount);
+            return _worldVertexTriples.AsSpan(0, valueCount);
         }
 
         internal Span<OutFlags> OutFlags(int count)
@@ -304,6 +315,32 @@ public class NavmeshRasterizer
         if (!perMeshInteriors) FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
     }
 
+    public void Rasterize
+    (
+        ReadOnlySpan<PartInstance> parts,
+        SceneExtractor.MeshType    types,
+        bool                       perMeshInteriors,
+        bool                       solidBelowNonManifold
+    )
+    {
+        foreach (var partInstance in parts)
+        {
+            if ((partInstance.MeshType & types) == SceneExtractor.MeshType.None)
+                continue;
+
+            if (RasterizePart(partInstance.MeshType, partInstance.Part, partInstance.Instance, out var minY) && perMeshInteriors)
+            {
+                var z0 = Math.Clamp((int)((partInstance.Instance.WorldBounds.Min.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
+                var z1 = Math.Clamp((int)((partInstance.Instance.WorldBounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
+                var x0 = Math.Clamp((int)((partInstance.Instance.WorldBounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
+                var x1 = Math.Clamp((int)((partInstance.Instance.WorldBounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
+                FillInterior(z0, z1, x0, x1, solidBelowNonManifold ? minY : _maxY);
+            }
+        }
+
+        if (!perMeshInteriors) FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
+    }
+
     // if it returns true, the mesh borders were rasterized, so intersection set could be modified
     public bool RasterizeMesh(SceneExtractor.Mesh mesh, SceneExtractor.MeshInstance instance, out int minimalY)
     {
@@ -311,28 +348,41 @@ public class NavmeshRasterizer
         if (!IntersectsHeightfield(instance.WorldBounds))
             return false;
 
-        Span<Vector3>  stackWorldVertices = stackalloc Vector3[256];
-        Span<OutFlags> stackOutFlags      = stackalloc OutFlags[256];
-        var            parts              = mesh.PartSpan;
-        var            terrainLike        = (mesh.MeshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
+        var parts = mesh.PartSpan;
 
         for (var partIndex = 0; partIndex < parts.Length; ++partIndex)
         {
-            var part = parts[partIndex];
-            if (!IntersectsHeightfield(instance.WorldTransform, part.LocalBounds))
-                continue;
+            if (RasterizePart(mesh.MeshType, parts[partIndex], instance, out var partMinY))
+                minimalY = Math.Min(minimalY, partMinY);
+        }
 
-            var vertexCount   = part.Vertices.Count;
+        return true;
+    }
+
+    public bool RasterizePart(SceneExtractor.MeshType meshType, SceneExtractor.MeshPart part, SceneExtractor.MeshInstance instance, out int minimalY)
+    {
+        minimalY = _maxY;
+        if (!IntersectsHeightfield(instance.WorldTransform, part.LocalBounds))
+            return false;
+
+        Span<Vector3>  stackWorldVertices = stackalloc Vector3[256];
+        Span<float>    stackWorldTriples  = stackalloc float[256 * 3];
+        Span<OutFlags> stackOutFlags      = stackalloc OutFlags[256];
+        var            vertexCount        = part.Vertices.Count;
+        var            outFlags           = vertexCount <= 256 ? stackOutFlags : _scratch.OutFlags(vertexCount);
+        var            terrainLike        = (meshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
+
+        if (terrainLike)
+        {
+            var worldTriples = vertexCount <= 256 ? stackWorldTriples : _scratch.WorldVertexTriples(vertexCount);
+            TransformVerticesPacked(instance, part.VertexSpan, worldTriples, outFlags);
+            RasterizeTerrainLikePart(part.PrimitiveSpan, instance, worldTriples, outFlags, ref minimalY);
+        }
+        else
+        {
             var worldVertices = vertexCount <= 256 ? stackWorldVertices : _scratch.WorldVertices(vertexCount);
-            var outFlags      = vertexCount <= 256 ? stackOutFlags : _scratch.OutFlags(vertexCount);
-
-            // fill vertex buffer
             TransformVertices(instance, part.VertexSpan, worldVertices, outFlags);
-
-            if (terrainLike)
-                RasterizeTerrainLikePart(part.PrimitiveSpan, instance, worldVertices, outFlags, ref minimalY);
-            else
-                RasterizeGeneralPart(part.PrimitiveSpan, instance, worldVertices, outFlags, ref minimalY);
+            RasterizeGeneralPart(part.PrimitiveSpan, instance, worldVertices, outFlags, ref minimalY);
         }
 
         return true;
@@ -342,23 +392,140 @@ public class NavmeshRasterizer
     (
         ReadOnlySpan<SceneExtractor.Primitive> primitives,
         SceneExtractor.MeshInstance            instance,
-        Span<Vector3>                          worldVertices,
+        Span<float>                            worldVertices,
         Span<OutFlags>                         outFlags,
         ref int                                minimalY
     )
-        => RasterizePrimitiveSpan(primitives, instance, worldVertices, outFlags, ref minimalY);
+    {
+        Span<float> clipBuffer    = stackalloc float[7 * 3 * 4];
+        var         cellZSize     = _heightfield.cs;
+        var         cellXSize     = _heightfield.cs;
+        var         inverseCellY  = _invCellY;
+        var         heightfieldY  = _heightfield.bmin.Y;
+        var         heightfieldX  = _heightfield.bmin.X;
+        var         heightfieldZ  = _heightfield.bmin.Z;
+        ref var     primitiveRef  = ref MemoryMarshal.GetReference(primitives);
+
+        for (var primitiveIndex = 0; primitiveIndex < primitives.Length; ++primitiveIndex)
+        {
+            ref readonly var p = ref Unsafe.Add(ref primitiveRef, primitiveIndex);
+            if ((outFlags[p.V1] & outFlags[p.V2] & outFlags[p.V3]) != OutFlags.None)
+                continue;
+
+            var offset1 = p.V1 * 3;
+            var offset2 = p.V2 * 3;
+            var offset3 = p.V3 * 3;
+            var v1x     = worldVertices[offset1];
+            var v1y     = worldVertices[offset1 + 1];
+            var v1z     = worldVertices[offset1 + 2];
+            var v2x     = worldVertices[offset2];
+            var v2y     = worldVertices[offset2 + 1];
+            var v2z     = worldVertices[offset2 + 2];
+            var v3x     = worldVertices[offset3];
+            var v3y     = worldVertices[offset3 + 1];
+            var v3z     = worldVertices[offset3 + 2];
+            var v12x    = v2x - v1x;
+            var v12y    = v2y - v1y;
+            var v12z    = v2z - v1z;
+            var v13x    = v3x - v1x;
+            var v13y    = v3y - v1y;
+            var v13z    = v3z - v1z;
+            var crossX  = v12y * v13z - v12z * v13y;
+            var crossY  = v12z * v13x - v12x * v13z;
+            var crossZ  = v12x * v13y - v12y * v13x;
+            var lenSq   = crossX * crossX + crossY * crossY + crossZ * crossZ;
+            if (lenSq == 0)
+                continue;
+
+            var flags           = p.Flags & ~instance.ForceClearPrimFlags | instance.ForceSetPrimFlags;
+            var realSolid       = !flags.HasFlag(SceneExtractor.PrimitiveFlags.FlyThrough);
+            var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
+            var unwalkable = flags.HasFlag
+                                 (SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
+                             unwalkableSlope                                     ||
+                             _voxelizer != null                                      &&
+                             flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable) &&
+                             !flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
+            var areaId          = unwalkable ? 0 : RC_WALKABLE_AREA;
+            var inverseCrossY   = _iset != null && crossY != 0 ? -1.0f / crossY : 0;
+            var normalUp        = crossY > 0;
+            var minZ            = Math.Min(v1z, Math.Min(v2z, v3z));
+            var maxZ            = Math.Max(v1z, Math.Max(v2z, v3z));
+            var z0              = Math.Clamp((int)((minZ - heightfieldZ) * _invCellXZ), -1, _heightfield.height - 1);
+            var z1              = Math.Clamp((int)((maxZ - heightfieldZ) * _invCellXZ), 0,  _heightfield.height - 1);
+            var sourceOffset    = 0;
+            var rowOffset       = 7 * 3;
+            var tmpOffset       = rowOffset + 7 * 3;
+            var remainOffset    = tmpOffset + 7 * 3;
+            var numInput        = 3;
+
+            CopyVertexTriplet(clipBuffer, sourceOffset, worldVertices, offset1);
+            CopyVertexTriplet(clipBuffer, sourceOffset + 3, worldVertices, offset2);
+            CopyVertexTriplet(clipBuffer, sourceOffset + 6, worldVertices, offset3);
+
+            for (var z = z0; z <= z1; ++z)
+            {
+                DividePoly(clipBuffer, sourceOffset, numInput, rowOffset, out var numRow, tmpOffset, out numInput, heightfieldZ + (z + 1) * cellZSize, 2);
+                (sourceOffset, tmpOffset) = (tmpOffset, sourceOffset);
+
+                if (numRow < 3 || z < 0)
+                    continue;
+
+                FindAxisBounds(clipBuffer, rowOffset, numRow, 0, out var minX, out var maxX);
+                var x0 = (int)((minX - heightfieldX) * _invCellXZ);
+                var x1 = (int)((maxX - heightfieldX) * _invCellXZ);
+                if (x1 < 0 || x0 >= _heightfield.width)
+                    continue;
+
+                x0 = Math.Clamp(x0, -1, _heightfield.width - 1);
+                x1 = Math.Clamp(x1, 0,  _heightfield.width - 1);
+
+                var numRemaining = numRow;
+                var cellZMid     = heightfieldZ + (z + 0.5f) * cellZSize;
+
+                for (var x = x0; x <= x1; ++x)
+                {
+                    DividePoly(clipBuffer, rowOffset, numRemaining, tmpOffset, out var numCell, remainOffset, out numRemaining, heightfieldX + (x + 1) * cellXSize, 0);
+                    (rowOffset, remainOffset) = (remainOffset, rowOffset);
+
+                    if (numCell < 3 || x < 0)
+                        continue;
+
+                    FindAxisBounds(clipBuffer, tmpOffset, numCell, 1, out var minY, out var maxY);
+                    var y0 = (int)MathF.Floor((minY - heightfieldY) * inverseCellY);
+                    var y1 = (int)MathF.Ceiling((maxY - heightfieldY) * inverseCellY);
+                    if (y1 < 0 || y0 >= _maxY)
+                        continue;
+
+                    y0 = Math.Clamp(y0, 0, _maxY - 1);
+                    y1 = Math.Clamp(y1, y0, _maxY - 1);
+                    AddSpan(x, z, y0, y1, areaId, realSolid);
+
+                    if (realSolid && _iset != null && inverseCrossY != 0)
+                    {
+                        minimalY = Math.Min(minimalY, y0);
+                        var cellXMid = heightfieldX + (x + 0.5f) * cellXSize;
+                        var apx      = cellXMid  - v1x;
+                        var apz      = cellZMid  - v1z;
+                        var c        = (apz * v12x - apx * v12z) * inverseCrossY;
+                        var b        = (apx * v13z - apz * v13x) * inverseCrossY;
+
+                        if (c >= 0 && b >= 0 && c + b <= 1)
+                        {
+                            var intersectY = v1y + b * v12y + c * v13y;
+                            if (normalUp && y0 > 0)
+                                _iset.Add(x, y0 - 1, z, intersectY, true);
+                            else if (!normalUp && y1 < _maxY - 1)
+                                _iset.Add(x, y1 + 1, z, intersectY, false);
+                        }
+                    }
+                }
+
+            }
+        }
+    }
 
     private void RasterizeGeneralPart
-    (
-        ReadOnlySpan<SceneExtractor.Primitive> primitives,
-        SceneExtractor.MeshInstance            instance,
-        Span<Vector3>                          worldVertices,
-        Span<OutFlags>                         outFlags,
-        ref int                                minimalY
-    )
-        => RasterizePrimitiveSpan(primitives, instance, worldVertices, outFlags, ref minimalY);
-
-    private void RasterizePrimitiveSpan
     (
         ReadOnlySpan<SceneExtractor.Primitive> primitives,
         SceneExtractor.MeshInstance            instance,
@@ -524,12 +691,21 @@ public class NavmeshRasterizer
             y0 = mergeBelow ? Math.Min(y0, currSpan.smin) : Math.Max(y0, currSpan.smax);
             y1 = Math.Max(y1, currSpan.smax);
 
-            // free merged span; note that prev would still point to it, we'll fix it later
-            currSpan = currSpan.next;
+            var nextSpan = currSpan.next;
+            if (prevSpan == null)
+                cellHead = nextSpan;
+            else
+                prevSpan.next = nextSpan;
+            FreeSpan(currSpan);
+            currSpan = nextSpan;
         }
 
         // insert new span
-        var newSpan = new RcSpan { smin = y0, smax = y1, area = areaId, next = currSpan };
+        var newSpan = AllocSpan();
+        newSpan.smin = y0;
+        newSpan.smax = y1;
+        newSpan.area = areaId;
+        newSpan.next = currSpan;
         if (prevSpan == null)
             cellHead = newSpan;
         else
@@ -554,6 +730,35 @@ public class NavmeshRasterizer
                 }
             }
         }
+    }
+
+    private RcSpan AllocSpan()
+    {
+        if (_heightfield.freelist == null)
+        {
+            var spanPool = new RcSpanPool { next = _heightfield.pools };
+            _heightfield.pools = spanPool;
+
+            RcSpan? freeList = null;
+            for (var i = spanPool.items.Length - 1; i >= 0; --i)
+            {
+                spanPool.items[i].next = freeList;
+                freeList               = spanPool.items[i];
+            }
+
+            _heightfield.freelist = freeList;
+        }
+
+        var span = _heightfield.freelist!;
+        _heightfield.freelist = span.next;
+        span.next = null;
+        return span;
+    }
+
+    private void FreeSpan(RcSpan span)
+    {
+        span.next = _heightfield.freelist;
+        _heightfield.freelist = span;
     }
 
     // TODO: maintain non-empty cells in intersection set?
@@ -728,6 +933,140 @@ public class NavmeshRasterizer
             outWorld[i] = w;
             outFlags[i] = f;
         }
+    }
+
+    private void TransformVerticesPacked(SceneExtractor.MeshInstance instance, ReadOnlySpan<Vector3> localVertices, Span<float> outWorld, Span<OutFlags> outFlags)
+    {
+        var wt    = instance.WorldTransform;
+        var axisX = wt.Row0;
+        var axisY = wt.Row1;
+        var axisZ = wt.Row2;
+        var trans = wt.Row3;
+
+        var bminX = _heightfield.bmin.X;
+        var bminY = _heightfield.bmin.Y;
+        var bminZ = _heightfield.bmin.Z;
+        var bmaxX = _heightfield.bmax.X;
+        var bmaxY = _heightfield.bmax.Y;
+        var bmaxZ = _heightfield.bmax.Z;
+
+        ref var srcRef = ref MemoryMarshal.GetReference(localVertices);
+
+        for (var i = 0; i < localVertices.Length; ++i)
+        {
+            var v = Unsafe.Add(ref srcRef, i);
+            var w = axisX * v.X + axisY * v.Y + axisZ * v.Z + trans;
+
+            OutFlags f          = 0;
+            if (w.X <= bminX) f |= OutFlags.NegX;
+            if (w.X >= bmaxX) f |= OutFlags.PosX;
+            if (w.Y <= bminY) f |= OutFlags.NegY;
+            if (w.Y >= bmaxY) f |= OutFlags.PosY;
+            if (w.Z <= bminZ) f |= OutFlags.NegZ;
+            if (w.Z >= bmaxZ) f |= OutFlags.PosZ;
+
+            var offset         = i * 3;
+            outWorld[offset]   = w.X;
+            outWorld[offset+1] = w.Y;
+            outWorld[offset+2] = w.Z;
+            outFlags[i]        = f;
+        }
+    }
+
+    private static void CopyVertexTriplet(Span<float> destination, int destinationOffset, Span<float> source, int sourceOffset)
+    {
+        destination[destinationOffset]     = source[sourceOffset];
+        destination[destinationOffset + 1] = source[sourceOffset + 1];
+        destination[destinationOffset + 2] = source[sourceOffset + 2];
+    }
+
+    private static void FindAxisBounds(Span<float> vertices, int offset, int count, int axis, out float min, out float max)
+    {
+        min = vertices[offset + axis];
+        max = min;
+
+        for (var i = 1; i < count; ++i)
+        {
+            var value = vertices[offset + i * 3 + axis];
+            min = Math.Min(min, value);
+            max = Math.Max(max, value);
+        }
+    }
+
+    private static void DividePoly
+    (
+        Span<float> vertices,
+        int inputOffset,
+        int inputCount,
+        int outputOffset1,
+        out int outputCount1,
+        int outputOffset2,
+        out int outputCount2,
+        float axisOffset,
+        int axis
+    )
+    {
+        Span<float> axisDelta = stackalloc float[12];
+        for (var i = 0; i < inputCount; ++i)
+            axisDelta[i] = axisOffset - vertices[inputOffset + i * 3 + axis];
+
+        var count1 = 0;
+        var count2 = 0;
+
+        var previousIndex = inputCount - 1;
+        for (var currentIndex = 0; currentIndex < inputCount; previousIndex = currentIndex, ++currentIndex)
+        {
+            var currentDelta = axisDelta[currentIndex];
+            var previousDelta = axisDelta[previousIndex];
+            var sameSide = (currentDelta >= 0) == (previousDelta >= 0);
+            if (!sameSide)
+            {
+                var previousVertexOffset = inputOffset + previousIndex * 3;
+                var currentVertexOffset  = inputOffset + currentIndex * 3;
+                var outputVertex1Offset  = outputOffset1 + count1 * 3;
+                var outputVertex2Offset  = outputOffset2 + count2 * 3;
+                var interpolation        = previousDelta / (previousDelta - currentDelta);
+
+                for (var axisIndex = 0; axisIndex < 3; ++axisIndex)
+                {
+                    var value = vertices[previousVertexOffset + axisIndex] +
+                                (vertices[currentVertexOffset + axisIndex] - vertices[previousVertexOffset + axisIndex]) * interpolation;
+                    vertices[outputVertex1Offset + axisIndex] = value;
+                    vertices[outputVertex2Offset + axisIndex] = value;
+                }
+
+                ++count1;
+                ++count2;
+
+                if (currentDelta > 0)
+                {
+                    CopyVertexTriplet(vertices, outputOffset1 + count1 * 3, vertices, currentVertexOffset);
+                    ++count1;
+                }
+                else if (currentDelta < 0)
+                {
+                    CopyVertexTriplet(vertices, outputOffset2 + count2 * 3, vertices, currentVertexOffset);
+                    ++count2;
+                }
+            }
+            else
+            {
+                var currentVertexOffset = inputOffset + currentIndex * 3;
+                if (currentDelta >= 0)
+                {
+                    CopyVertexTriplet(vertices, outputOffset1 + count1 * 3, vertices, currentVertexOffset);
+                    ++count1;
+                    if (currentDelta != 0)
+                        continue;
+                }
+
+                CopyVertexTriplet(vertices, outputOffset2 + count2 * 3, vertices, currentVertexOffset);
+                ++count2;
+            }
+        }
+
+        outputCount1 = count1;
+        outputCount2 = count2;
     }
 
     private static (float min, float max) MinMaxX(Span<Vector3> vertices, int count)
