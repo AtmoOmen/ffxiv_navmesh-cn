@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Threading.Tasks;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Bootstrap;
@@ -85,52 +86,30 @@ public partial class NavmeshQuery
         if (candidates.Count == 0)
             return null;
 
+        var candidateBatch = candidates.Take(MaxStartPolyCandidatesToEvaluate).ToArray();
+
         MeshPathCandidate? best                = null;
         MeshPathCandidate? requestedSuccessful = null;
         MeshPathCandidate? requestedLocked     = null;
         List<string>       candidateLogs       = [];
         var                requestedFailed     = false;
 
-        foreach (var candidate in candidates.Take(MaxStartPolyCandidatesToEvaluate))
+        var evaluations = EvaluateStartPathCandidates(candidateBatch, to, endRef, requestedEndPos, filter, opt, range, cancel);
+        foreach (var evaluation in evaluations)
         {
-            cancel.ThrowIfCancellationRequested();
+            if (!string.IsNullOrEmpty(evaluation.Log))
+                candidateLogs.Add(evaluation.Log);
 
-            var corridor = new List<long>();
-            var status   = MeshQuery.FindPath(candidate.PolyRef, endRef, candidate.ProjectedPoint.SystemToRecast(), requestedEndPos, filter, ref corridor, opt);
+            if (evaluation.RequestedFailed)
+                requestedFailed = true;
 
-            if (status.Failed() || corridor.Count == 0)
-            {
-                if (candidate.IsRequestedStart)
-                    requestedFailed = true;
-                candidateLogs.Add
-                (
-                    $"{candidate.PolyRef:X}: 失败 ({status})，requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}"
-                );
+            if (evaluation.PathCandidate is not { } pathCandidate)
                 continue;
-            }
 
-            var pathCandidate = BuildMeshPathCandidate(candidate, corridor, status, requestedEndPos, to, endRef, range);
-
-            if (pathCandidate.ResultStatus == PathfindStatus.Failed)
-            {
-                if (candidate.IsRequestedStart)
-                    requestedFailed = true;
-                candidateLogs.Add
-                (
-                    $"{candidate.PolyRef:X}: 失败（无法投影最终可达点），requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}"
-                );
-                continue;
-            }
-
-            candidateLogs.Add
-            (
-                $"{candidate.PolyRef:X}: {pathCandidate.ResultStatus}，requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}，距目标 {MathF.Sqrt(pathCandidate.DistanceToRequestedTargetSq(to)):f3}，水平偏移 {MathF.Sqrt(candidate.HorizontalDistanceSq):f3}，高差 {candidate.VerticalDelta:f3}"
-            );
-
-            if (candidate.IsRequestedStart)
+            if (pathCandidate.IsRequestedStart)
                 requestedSuccessful = pathCandidate;
 
-            if (candidate.IsRequestedStart && candidate.IsPointOverPoly)
+            if (pathCandidate.IsRequestedStart && pathCandidate.IsPointOverPoly)
                 requestedLocked = pathCandidate;
 
             if (best == null || IsBetterStartPathCandidate(pathCandidate, best.Value, to))
@@ -150,6 +129,88 @@ public partial class NavmeshQuery
             LogStartCandidateDecision(selected, to, requestedStartRef, requestedSuccessful, requestedFailed, false);
 
         return best;
+    }
+
+    private StartCandidateEvaluation[] EvaluateStartPathCandidates
+    (
+        IReadOnlyList<MeshPolyCandidate> candidates,
+        Vector3                          requestedTarget,
+        long                             endRef,
+        RcVec3f                          requestedEndPos,
+        IDtQueryFilter                   filter,
+        DtFindPathOption                 opt,
+        float                            range,
+        CancellationToken                cancel
+    )
+    {
+        var result = new StartCandidateEvaluation[candidates.Count];
+        if (candidates.Count == 0)
+            return result;
+
+        if (candidates.Count > 1 && Environment.ProcessorCount > 1)
+        {
+            Parallel.For
+            (
+                0,
+                candidates.Count,
+                new ParallelOptions { CancellationToken = cancel, MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, candidates.Count) },
+                i => result[i] = EvaluateStartPathCandidate(candidates[i], requestedTarget, endRef, requestedEndPos, filter, opt, range)
+            );
+        }
+        else
+        {
+            for (var i = 0; i < candidates.Count; ++i)
+            {
+                cancel.ThrowIfCancellationRequested();
+                result[i] = EvaluateStartPathCandidate(candidates[i], requestedTarget, endRef, requestedEndPos, filter, opt, range);
+            }
+        }
+
+        return result;
+    }
+
+    private StartCandidateEvaluation EvaluateStartPathCandidate
+    (
+        MeshPolyCandidate candidate,
+        Vector3           requestedTarget,
+        long              endRef,
+        RcVec3f           requestedEndPos,
+        IDtQueryFilter    filter,
+        DtFindPathOption  opt,
+        float             range
+    )
+    {
+        var query    = new DtNavMeshQuery(MeshQuery.GetAttachedNavMesh());
+        var corridor = new List<long>();
+        var status   = query.FindPath(candidate.PolyRef, endRef, candidate.ProjectedPoint.SystemToRecast(), requestedEndPos, filter, ref corridor, opt);
+
+        if (status.Failed() || corridor.Count == 0)
+        {
+            return new
+            (
+                null,
+                $"{candidate.PolyRef:X}: 失败 ({status})，requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}",
+                candidate.IsRequestedStart
+            );
+        }
+
+        var pathCandidate = BuildMeshPathCandidate(query, candidate, corridor, status, requestedEndPos, requestedTarget, endRef, range);
+        if (pathCandidate.ResultStatus == PathfindStatus.Failed)
+        {
+            return new
+            (
+                null,
+                $"{candidate.PolyRef:X}: 失败（无法投影最终可达点），requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}",
+                candidate.IsRequestedStart
+            );
+        }
+
+        return new
+        (
+            pathCandidate,
+            $"{candidate.PolyRef:X}: {pathCandidate.ResultStatus}，requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}，距目标 {MathF.Sqrt(pathCandidate.DistanceToRequestedTargetSq(requestedTarget)):f3}，水平偏移 {MathF.Sqrt(candidate.HorizontalDistanceSq):f3}，高差 {candidate.VerticalDelta:f3}",
+            false
+        );
     }
 
     private List<MeshPolyCandidate> CollectStartPolyCandidates(Vector3 from, long requestedStartRef)
@@ -258,8 +319,19 @@ public partial class NavmeshQuery
         return hits;
     }
 
+    private readonly record struct StartCandidateEvaluation
+    (
+        MeshPathCandidate? PathCandidate,
+        string             Log,
+        bool               RequestedFailed
+    );
+
     private MeshPathCandidate BuildMeshPathCandidate
         (MeshPolyCandidate startCandidate, List<long> corridor, DtStatus status, RcVec3f requestedEndPos, Vector3 requestedTarget, long endRef, float range)
+        => BuildMeshPathCandidate(MeshQuery, startCandidate, corridor, status, requestedEndPos, requestedTarget, endRef, range);
+
+    private static MeshPathCandidate BuildMeshPathCandidate
+        (DtNavMeshQuery query, MeshPolyCandidate startCandidate, List<long> corridor, DtStatus status, RcVec3f requestedEndPos, Vector3 requestedTarget, long endRef, float range)
     {
         var     lastPoly     = corridor[^1];
         var     resultStatus = PathfindStatus.Complete;
@@ -267,7 +339,7 @@ public partial class NavmeshQuery
 
         if (status.IsPartial() || lastPoly != endRef)
         {
-            var closestStatus = MeshQuery.ClosestPointOnPoly(lastPoly, requestedEndPos, out var projectedEndPos, out _);
+            var closestStatus = query.ClosestPointOnPoly(lastPoly, requestedEndPos, out var projectedEndPos, out _);
             if (closestStatus.Failed())
                 return new(startCandidate, status, PathfindStatus.Failed, startCandidate.ProjectedPoint, corridor);
 

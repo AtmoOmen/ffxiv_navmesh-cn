@@ -1,5 +1,8 @@
 using System.Numerics;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
 
@@ -9,6 +12,7 @@ public class VoxelPathfind
 {
     private const float ScoreEpsilon = 0.00001f;
     private const int   MaxAncestorLookback = 6;
+    private const int   ParallelNeighbourThreshold = 4;
 
     private enum CandidateKind : byte
     {
@@ -34,6 +38,14 @@ public class VoxelPathfind
         int PeakOpenListSize
     );
 
+    private readonly record struct NeighbourEvaluation
+    (
+        ulong   Voxel,
+        int     BestParentIndex,
+        Vector3 BestPosition,
+        float   BestScore
+    );
+
     public struct Node
     {
         public float   GScore;
@@ -54,7 +66,7 @@ public class VoxelPathfind
     private readonly List<Node>             _nodes      = new(1024);
     private readonly Dictionary<ulong, int> _nodeLookup = new(1024);
     private readonly List<int>              _openList   = new(256);
-    private readonly Dictionary<VisibilityKey, bool> _visibilityCache = new(4096);
+    private readonly ConcurrentDictionary<VisibilityKey, bool> _visibilityCache = new(Environment.ProcessorCount, 4096);
     private int                             _bestNodeIndex;
     private ulong                           _goalVoxel;
     private Vector3                         _goalPos;
@@ -175,8 +187,33 @@ public class VoxelPathfind
             return false;
         }
 
-        foreach (var neighbourVoxel in CollectNeighbours(current.Voxel))
-            VisitNeighbour(currentIndex, neighbourVoxel);
+        var neighbours = CollectNeighbours(current.Voxel);
+        if (ShouldParallelizeNeighbourEvaluation(neighbours.Count))
+        {
+            var evaluations = new NeighbourEvaluation?[neighbours.Count];
+            Parallel.For
+            (
+                0,
+                neighbours.Count,
+                new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, neighbours.Count) },
+                i =>
+                {
+                    if (TryGetBestCandidate(currentIndex, neighbours[i], out var bestParentIndex, out var bestPosition, out var bestScore))
+                        evaluations[i] = new(neighbours[i], bestParentIndex, bestPosition, bestScore);
+                }
+            );
+
+            foreach (var evaluation in evaluations)
+            {
+                if (evaluation is { } resolved)
+                    ApplyNeighbourEvaluation(resolved);
+            }
+        }
+        else
+        {
+            foreach (var neighbourVoxel in neighbours)
+                VisitNeighbour(currentIndex, neighbourVoxel);
+        }
 
         return true;
     }
@@ -446,22 +483,24 @@ public class VoxelPathfind
 
     private void VisitNeighbour(int currentIndex, ulong neighbourVoxel)
     {
-        var nodeIndex = GetOrCreateNode(neighbourVoxel, currentIndex);
-        var nodeSpan  = NodeSpan;
-        ref var node  = ref nodeSpan[nodeIndex];
-        if (node.Closed)
-            return;
-
         if (!TryGetBestCandidate(currentIndex, neighbourVoxel, out var bestParentIndex, out var bestPosition, out var bestScore))
             return;
 
-        if (bestScore + ScoreEpsilon >= node.GScore)
+        ApplyNeighbourEvaluation(new(neighbourVoxel, bestParentIndex, bestPosition, bestScore));
+    }
+
+    private void ApplyNeighbourEvaluation(NeighbourEvaluation evaluation)
+    {
+        var nodeIndex = GetOrCreateNode(evaluation.Voxel, evaluation.BestParentIndex);
+        var nodeSpan  = NodeSpan;
+        ref var node  = ref nodeSpan[nodeIndex];
+        if (node.Closed || evaluation.BestScore + ScoreEpsilon >= node.GScore)
             return;
 
-        node.GScore      = bestScore;
-        node.HScore      = HeuristicDistance(bestPosition);
-        node.ParentIndex = bestParentIndex;
-        node.Position    = bestPosition;
+        node.GScore      = evaluation.BestScore;
+        node.HScore      = HeuristicDistance(evaluation.BestPosition);
+        node.ParentIndex = evaluation.BestParentIndex;
+        node.Position    = evaluation.BestPosition;
         unchecked
         {
             ++node.Revision;
@@ -667,17 +706,20 @@ public class VoxelPathfind
         if (_visibilityCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
-        ++_lineOfSightChecks;
+        Interlocked.Increment(ref _lineOfSightChecks);
         var visible = VoxelSearch.LineOfSight(Volume, fromNode.Voxel, toVoxel, fromNode.Position, toPosition);
-        _visibilityCache[cacheKey] = visible;
-        if (!visible)
-            return false;
+        if (!_visibilityCache.TryAdd(cacheKey, visible))
+            return _visibilityCache[cacheKey];
 
-        ++_lineOfSightHits;
-        return true;
+        if (visible)
+            Interlocked.Increment(ref _lineOfSightHits);
+        return visible;
     }
 
     private float HeuristicDistance(Vector3 position) => Vector3.Distance(position, _goalPos);
+
+    private static bool ShouldParallelizeNeighbourEvaluation(int count) =>
+        count >= ParallelNeighbourThreshold && Environment.ProcessorCount > 1;
 
     private void UpdateBestNode(int nodeIndex)
     {
