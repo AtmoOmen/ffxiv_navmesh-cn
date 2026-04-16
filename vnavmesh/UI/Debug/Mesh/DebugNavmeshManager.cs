@@ -98,6 +98,24 @@ internal class DebugNavmeshManager : IDisposable
         if (ImGui.Button("使用体素寻路至目标"))
             _asyncMove.MoveTo(_target, true);
 
+        using (var nd = _tree.Node("地面寻路统计"))
+        {
+            if (nd.Opened)
+            {
+                var diagnostics = _manager.Query.GetGroundDiagnostics();
+                var partialRate = diagnostics.GroundQueries > 0 ? diagnostics.PartialQueries / (double)diagnostics.GroundQueries : 0;
+                _tree.LeafNode($"总查询次数：{diagnostics.GroundQueries}");
+                _tree.LeafNode($"Partial 次数：{diagnostics.PartialQueries}，占比 {partialRate:P1}");
+                _tree.LeafNode($"疑似接缝截断：{diagnostics.SuspectedTileSeamCutoffs}");
+                _tree.LeafNode($"any-angle 选中：{diagnostics.AnyAnglePreferred}");
+                _tree.LeafNode($"普通 A* 回退：{diagnostics.ClassicFallbacks}");
+                _tree.LeafNode($"起点重选：{diagnostics.StartReplacements}");
+                _tree.LeafNode($"终点重选：{diagnostics.EndReplacements}");
+                _tree.LeafNode($"自动向下攀爬链接：{diagnostics.GeneratedClimbLinksAccepted}");
+                _tree.LeafNode($"自动边缘跳跃链接：{diagnostics.GeneratedJumpLinksAccepted}");
+            }
+        }
+
         DrawPosition("玩家", playerPos);
         DrawPosition("目标", _target);
         DrawPosition("旗帜", MapUtil.FlagToPoint(_manager.Query)        ?? default);

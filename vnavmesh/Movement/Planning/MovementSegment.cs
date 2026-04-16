@@ -13,4 +13,5 @@ internal abstract class MovementSegment
     public          PathReachabilitySource ReachabilitySource   { get; init; }
     public          float                  CompletionTolerance  { get; init; }
     public          IReadOnlyList<Vector3> Waypoints            { get; init; } = [];
+    public          GroundCorridorPayload? GroundCorridor       { get; init; }
 }

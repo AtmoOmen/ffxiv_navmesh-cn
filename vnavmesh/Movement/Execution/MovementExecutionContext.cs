@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using vnavmesh.Configuration;
 using vnavmesh.Movement.Planning;
+using vnavmesh.Navigation.Mesh.Query;
 
 namespace vnavmesh.Movement.Execution;
 
@@ -9,6 +10,7 @@ internal sealed class MovementExecutionContext
 {
     public required Config             Config                 { get; init; }
     public required IPlayerCharacter   Player                 { get; init; }
+    public required NavmeshQuery?      Query                  { get; init; }
     public required MovementPlan       Plan                   { get; init; }
     public required int                SegmentIndex           { get; init; }
     public required MovementSegment    Segment                { get; init; }

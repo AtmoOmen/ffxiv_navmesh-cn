@@ -313,6 +313,7 @@ public sealed class MovementPlanExecutor : IDisposable
         {
             Config                 = _config,
             Player                 = player,
+            Query                  = _manager.Query,
             Plan                   = _activePlan!,
             SegmentIndex           = _activeSegmentIndex,
             Segment                = _activePlan!.Segments[_activeSegmentIndex],
@@ -329,6 +330,7 @@ public sealed class MovementPlanExecutor : IDisposable
         {
             Config                 = _config,
             Player                 = player,
+            Query                  = _manager.Query,
             Plan                   = _activePlan!,
             SegmentIndex           = _activeSegmentIndex,
             Segment                = _activePlan!.Segments[_activeSegmentIndex],

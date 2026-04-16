@@ -56,7 +56,8 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
             CompletionTolerance  = segment.CompletionTolerance,
             GeometryOwnership    = segment.GeometryOwnership,
             ReachabilitySource   = segment.ReachabilitySource,
-            Waypoints            = normalizedWaypoints
+            Waypoints            = normalizedWaypoints,
+            GroundCorridor       = segment.GroundCorridor
         };
     }
 
@@ -68,7 +69,8 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
             StartPosition       = segment.StartPosition,
             GeometryOwnership   = segment.GeometryOwnership,
             ReachabilitySource  = segment.ReachabilitySource,
-            Waypoints           = [.. segment.Waypoints]
+            Waypoints           = [.. segment.Waypoints],
+            GroundCorridor      = segment.GroundCorridor
         },
         MovementSegmentKind.GroundTraverse => new GroundTraverseSegment
         {
@@ -76,7 +78,8 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
             StartPosition       = segment.StartPosition,
             GeometryOwnership   = segment.GeometryOwnership,
             ReachabilitySource  = segment.ReachabilitySource,
-            Waypoints           = [.. segment.Waypoints]
+            Waypoints           = [.. segment.Waypoints],
+            GroundCorridor      = segment.GroundCorridor
         },
         MovementSegmentKind.Takeoff => new TakeoffSegment
         {
@@ -84,7 +87,8 @@ internal sealed class FlightMovementPlanBuilder : IMovementPlanBuilder
             StartPosition       = segment.StartPosition,
             GeometryOwnership   = segment.GeometryOwnership,
             ReachabilitySource  = segment.ReachabilitySource,
-            Waypoints           = [.. segment.Waypoints]
+            Waypoints           = [.. segment.Waypoints],
+            GroundCorridor      = segment.GroundCorridor
         },
         _ => throw new ArgumentOutOfRangeException(nameof(segment.SegmentKind), segment.SegmentKind, "未知移动阶段")
     };

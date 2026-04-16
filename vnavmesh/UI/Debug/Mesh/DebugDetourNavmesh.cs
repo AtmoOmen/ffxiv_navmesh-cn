@@ -2,6 +2,7 @@ using System.Numerics;
 using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Bootstrap;
+using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Shared.Utilities;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
@@ -27,15 +28,23 @@ public class DebugDetourNavmesh : DebugRecast
     private PerTile[]       _perTile;
     private List<long>      _path;
 
-    private static Vector4 _colAreaNull     = new(0, 0, 0, 0.25f);
-    private static Vector4 _colAreaWalkable = new(0, 0.75f, 1.0f, 0.5f);
-    private static Vector4 _colClosedList   = new(1.0f, 0.75f, 1.0f, 0.5f);
+    private static Vector4 _colAreaNull      = new(0.00f, 0.00f, 0.00f, 0.25f);
+    private static Vector4 _colAreaGround    = new(0.00f, 0.75f, 1.00f, 0.50f);
+    private static Vector4 _colAreaClimb     = new(0.18f, 0.80f, 0.44f, 0.60f);
+    private static Vector4 _colAreaJump      = new(0.20f, 0.60f, 0.86f, 0.60f);
+    private static Vector4 _colAreaManual    = new(0.95f, 0.61f, 0.07f, 0.60f);
+    private static Vector4 _colAreaTeleport  = new(0.91f, 0.30f, 0.24f, 0.60f);
+    private static Vector4 _colClosedList    = new(1.00f, 0.75f, 1.00f, 0.50f);
 
     private enum InstanceID
     {
         Tile,
         AreaNull,
-        AreaWalkable,
+        AreaGround,
+        AreaClimb,
+        AreaJump,
+        AreaManual,
+        AreaTeleport,
         ClosedList,
         Count
     }
@@ -236,7 +245,11 @@ public class DebugDetourNavmesh : DebugRecast
             // instances differ only by color
             builder.AddInstance(new(Matrix4x3.Identity, IntColor(tileIndex, 0.75f)));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaNull));
-            builder.AddInstance(new(Matrix4x3.Identity, _colAreaWalkable));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaGround));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaClimb));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaJump));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaManual));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaTeleport));
             builder.AddInstance(new(Matrix4x3.Identity, _colClosedList));
 
             for (var i = 0; i < tile.data.header.vertCount; ++i)
@@ -285,7 +298,11 @@ public class DebugDetourNavmesh : DebugRecast
             // instances differ only by color
             builder.AddInstance(new(Matrix4x3.Identity, IntColor(tileIndex, 0.75f)));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaNull));
-            builder.AddInstance(new(Matrix4x3.Identity, _colAreaWalkable));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaGround));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaClimb));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaJump));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaManual));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaTeleport));
             builder.AddInstance(new(Matrix4x3.Identity, _colClosedList));
 
             for (var i = 0; i < tile.data.header.vertCount; ++i)
@@ -376,7 +393,7 @@ public class DebugDetourNavmesh : DebugRecast
             // triangles
             var instance = _query != null && _query.IsInClosedList(EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
                            !colorByArea ? InstanceID.Tile :
-                           poly.GetArea() == 0 ? InstanceID.AreaNull : InstanceID.AreaWalkable;
+                           InstanceForArea((NavmeshArea)poly.GetArea());
             var mesh = visu.Meshes[poly.index] with { FirstInstance = (int)instance };
             visu.DrawManual(_dd.RenderContext, mesh);
 
@@ -462,7 +479,7 @@ public class DebugDetourNavmesh : DebugRecast
         // triangles
         var instance = _query != null && _query.IsInClosedList(EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
                        !colorByArea ? InstanceID.Tile :
-                       poly.GetArea() == 0 ? InstanceID.AreaNull : InstanceID.AreaWalkable;
+                       InstanceForArea((NavmeshArea)poly.GetArea());
         var mesh = visu.Meshes[poly.index] with { FirstInstance = (int)instance };
         visu.DrawManual(_dd.RenderContext, mesh);
 
@@ -494,6 +511,17 @@ public class DebugDetourNavmesh : DebugRecast
     }
 
     private void VisualizeVertex(Vector3 v) => _dd.DrawWorldPoint(v, 5, 0xff0000ff, 2);
+
+    private static InstanceID InstanceForArea(NavmeshArea area) => area switch
+    {
+        NavmeshArea.Null               => InstanceID.AreaNull,
+        NavmeshArea.Ground             => InstanceID.AreaGround,
+        NavmeshArea.GeneratedClimbDown => InstanceID.AreaClimb,
+        NavmeshArea.GeneratedEdgeJump  => InstanceID.AreaJump,
+        NavmeshArea.ManualOffMesh      => InstanceID.AreaManual,
+        NavmeshArea.Teleport           => InstanceID.AreaTeleport,
+        _                              => InstanceID.AreaGround
+    };
 
     private Vector3 GetVertex(DtMeshTile tile, int i)
     {

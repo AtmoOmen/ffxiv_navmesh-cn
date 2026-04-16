@@ -115,7 +115,7 @@ public sealed partial class NavmeshManager
         Log($"Customization for '{scene.TerritoryID}': {customization.GetType()}");
 
         var layers         = scene.FestivalLayers.ToList();
-        var buildSignature = customization.GetBuildSettings(scene).BuildSignature(customization.IsFlyingSupported(scene));
+        var buildSignature = NavmeshBuilder.ComputeBuildSignature(scene, customization);
         var cache          = new FileInfo($"{_cacheDir.FullName}/{cacheKey}.navmesh");
 
         if (allowLoadFromCache && TryLoadFromCache(cache, customization, buildSignature, layers, totalTimer, out var cachedResult))

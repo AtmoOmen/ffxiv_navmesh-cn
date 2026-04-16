@@ -7,6 +7,7 @@ using DotRecast.Detour.Extras.Jumplink;
 using DotRecast.Recast;
 using vnavmesh.Bootstrap;
 using vnavmesh.Navigation.Customizations;
+using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
 using vnavmesh.Shared.Utilities;
@@ -49,10 +50,14 @@ public partial class NavmeshBuilder
     {
         var                   mergeTimer   = StopWatchTimer.Create();
         List<RcBuilderResult> debugResults = collectIntermediates ? new(builtTiles.Count) : [];
+        var                   climbLinks   = 0;
+        var                   jumpLinks    = 0;
 
         for (var tileIndex = 0; tileIndex < builtTiles.Count; ++tileIndex)
         {
             var built = builtTiles[tileIndex];
+            climbLinks += built.GeneratedClimbLinks;
+            jumpLinks  += built.GeneratedJumpLinks;
             if (built.MeshData != null)
                 Navmesh.Mesh.AddTile(built.MeshData, 0, 0, out _);
 
@@ -63,6 +68,8 @@ public partial class NavmeshBuilder
                 debugResults.Add(built.DebugResult);
         }
 
+        Navmesh.GeneratedClimbDownLinkCount = climbLinks;
+        Navmesh.GeneratedEdgeJumpLinkCount  = jumpLinks;
         Service.Log.Debug($"[NavmeshBuilder] 结果合并耗时 {mergeTimer.Value().TotalMilliseconds:f1} ms");
         return debugResults;
     }
@@ -150,6 +157,7 @@ public partial class NavmeshBuilder
 
         var chf = RcCompacts.BuildCompactHeightfield(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
         RcAreas.ErodeWalkableArea(telemetry, _walkableRadiusVoxels, chf);
+        RcAreas.MedianFilterWalkableArea(telemetry, chf);
 
         var regionMinArea   = (int)(Settings.RegionMinSize   * Settings.RegionMinSize);
         var regionMergeArea = (int)(Settings.RegionMergeSize * Settings.RegionMergeSize);
@@ -162,13 +170,18 @@ public partial class NavmeshBuilder
         else if (Settings.Partitioning == RcPartition.MONOTONE) RcRegions.BuildRegionsMonotone(telemetry, chf, regionMinArea, regionMergeArea);
         else RcRegions.BuildLayerRegions(telemetry, chf, regionMinArea);
 
-        var polyMaxEdgeLenVoxels = (int)(Settings.PolyMaxEdgeLen / Settings.CellSize);
+        var effectivePolyMaxEdgeLen = Settings.PolyMaxEdgeLen > 0 ? Settings.PolyMaxEdgeLen : Settings.AgentRadius * 8f;
+        var polyMaxEdgeLenVoxels = (int)(effectivePolyMaxEdgeLen / Settings.CellSize);
         var cset = RcContours.BuildContours
             (telemetry, chf, Settings.PolyMaxSimplificationError, polyMaxEdgeLenVoxels, RcBuildContoursFlags.RC_CONTOUR_TESS_WALL_EDGES);
 
         var pmesh = RcMeshs.BuildPolyMesh(telemetry, cset, Settings.PolyMaxVerts);
         for (var i = 0; i < pmesh.npolys; ++i)
-            pmesh.flags[i] = 1;
+        {
+            var area = pmesh.areas[i] == 0 ? NavmeshArea.Null : NavmeshArea.Ground;
+            pmesh.areas[i] = (int)area;
+            pmesh.flags[i] = area == NavmeshArea.Null ? (int)NavmeshPolyFlags.None : (int)NavmeshPolyFlags.Ground;
+        }
 
         var detailSampleDist     = Settings.FastBuild || Settings.DetailSampleDist < 0.9f ? 0 : Settings.CellSize * Settings.DetailSampleDist;
         var detailSampleMaxError = Settings.CellHeight * Settings.DetailMaxSampleError;
@@ -204,6 +217,8 @@ public partial class NavmeshBuilder
 
         RcBuilderResult? builderResult   = null;
         DtJumpLinkBuilder? jumpLinkBuilder = null;
+        var generatedClimbLinks = 0;
+        var generatedJumpLinks  = 0;
 
         if (captureIntermediates || Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks)
         {
@@ -212,8 +227,11 @@ public partial class NavmeshBuilder
                 jumpLinkBuilder = new([builderResult]);
         }
 
-        void addConnections(List<DtJumpLink> links)
+        HashSet<(int Kind, int StartX, int StartY, int StartZ, int EndX, int EndY, int EndZ)> acceptedLinks = [];
+
+        int addConnections(List<DtJumpLink> links, NavmeshArea area, NavmeshPolyFlags flags, NavmeshOffMeshKind kind)
         {
+            var acceptedCount = 0;
             foreach (var link in links)
             {
                 RcVec3f prev = default;
@@ -223,14 +241,36 @@ public partial class NavmeshBuilder
                     var p = link.startSamples[i].p;
                     var q = link.endSamples[i].p;
 
-                    if (i == 0 || RcVec.Dist2D(prev, p) > Settings.AgentRadius)
+                    if (i != 0 && RcVec.Dist2D(prev, p) <= Settings.AgentRadius)
+                        continue;
+
+                    var start = p.RecastToSystem();
+                    var end   = q.RecastToSystem();
+                    var delta = end - start;
+                    var horizontalDistanceSq = delta.X * delta.X + delta.Z * delta.Z;
+                    var verticalDistanceAbs  = MathF.Abs(delta.Y);
+                    if (horizontalDistanceSq <= Settings.AgentRadius * Settings.AgentRadius * 4 && verticalDistanceAbs <= Settings.AgentMaxClimb * 1.25f)
+                        continue;
+
+                    if (verticalDistanceAbs > Settings.EdgeJumpMaxDrop + Settings.AgentHeight)
+                        continue;
+
+                    var key = ((int)kind, Quantize(start.X), Quantize(start.Y), Quantize(start.Z), Quantize(end.X), Quantize(end.Y), Quantize(end.Z));
+                    if (!acceptedLinks.Add(key))
+                        continue;
+
                     {
-                        navmeshConfig.AddOffMeshConnection(p.RecastToSystem(), q.RecastToSystem(), Settings.AgentRadius);
+                        navmeshConfig.AddOffMeshConnection(start, end, Settings.AgentRadius, false, 0, area, flags, kind);
                         prev = p;
+                        acceptedCount++;
                     }
                 }
             }
+
+            return acceptedCount;
         }
+
+        static int Quantize(float value) => (int)MathF.Round(value * 4f);
 
         if ((Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks) && jumpLinkBuilder != null)
         {
@@ -252,7 +292,13 @@ public partial class NavmeshBuilder
                     -Settings.ClimbDownMinHeight,
                     0
                 );
-                addConnections(jumpLinkBuilder.Build(cfg, DtJumpLinkType.EDGE_CLIMB_DOWN));
+                generatedClimbLinks = addConnections
+                (
+                    jumpLinkBuilder.Build(cfg, DtJumpLinkType.EDGE_CLIMB_DOWN),
+                    NavmeshArea.GeneratedClimbDown,
+                    NavmeshPolyFlags.GeneratedClimbDown,
+                    NavmeshOffMeshKind.GeneratedClimbDown
+                );
             }
 
             if (Settings.GenerateEdgeJumpLinks)
@@ -271,7 +317,13 @@ public partial class NavmeshBuilder
                     -Settings.EdgeJumpMinDrop,
                     Settings.EdgeJumpHeight
                 );
-                addConnections(jumpLinkBuilder.Build(cfg, DtJumpLinkType.EDGE_JUMP));
+                generatedJumpLinks = addConnections
+                (
+                    jumpLinkBuilder.Build(cfg, DtJumpLinkType.EDGE_JUMP),
+                    NavmeshArea.GeneratedEdgeJump,
+                    NavmeshPolyFlags.GeneratedEdgeJump,
+                    NavmeshOffMeshKind.GeneratedEdgeJump
+                );
             }
 
             scratch.PhaseTicks[(int)BuildPhase.BuildJumpLinks] += ElapsedTimeSpanTicks(phaseStart);
@@ -309,6 +361,8 @@ public partial class NavmeshBuilder
             PolyCount             = pmesh.npolys,
             VertCount             = pmesh.nverts,
             DetailTriCount        = dmesh?.ntris ?? 0,
+            GeneratedClimbLinks   = generatedClimbLinks,
+            GeneratedJumpLinks    = generatedJumpLinks,
             MeshData              = navmeshData,
             VolumeColumn          = volumeColumn,
             DebugResult           = captureIntermediates ? builderResult : null

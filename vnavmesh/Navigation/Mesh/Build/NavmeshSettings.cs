@@ -20,7 +20,7 @@ public class NavmeshSettings
     }
 
     public float       CellSize                   = 0.25f;
-    public float       CellHeight                 = 0.25f;
+    public float       CellHeight                 = 0.125f;
     public float       AgentHeight                = 2.0f;
     public float       AgentRadius                = 0.5f;
     public float       AgentMaxClimb              = 0.5f;
@@ -28,8 +28,8 @@ public class NavmeshSettings
     public Filter      Filtering                  = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
     public float       RegionMinSize              = 8;
     public float       RegionMergeSize            = 20;
-    public RcPartition Partitioning               = RcPartition.MONOTONE;
-    public float       PolyMaxEdgeLen             = 8f;
+    public RcPartition Partitioning               = RcPartition.LAYERS;
+    public float       PolyMaxEdgeLen             = 0f;
     public float       PolyMaxSimplificationError = 1.1f;
     public int         PolyMaxVerts               = 6;
     public float       DetailSampleDist           = 6f;
@@ -47,15 +47,16 @@ public class NavmeshSettings
     public float EdgeJumpMaxDrop     = 500f;
     public float EdgeJumpMinDrop     = 1.5f;
 
-    // we assume that bounds are constant -1024 to 1024 along each axis (since that's the quantization range of position in some packets)
-    // there is some code that relies on tiling being power-of-2
-    // current values mean 128x128x128 L1 tiles -> 16x16x16 L2 tiles -> 2x2x2 voxels
-    public int[] NumTiles = [16, 8, 8];
+    public float GroundTileSize = 64f;
+    public int   GroundTileCountMax = 32;
+
+    // first level count follows ground tiles; this array only controls further volume subdivision
+    public int[] VolumeTiles = [8, 8];
 
     public NavmeshSettings Clone()
     {
         var clone = (NavmeshSettings)MemberwiseClone();
-        clone.NumTiles = (int[])NumTiles.Clone();
+        clone.VolumeTiles = (int[])VolumeTiles.Clone();
         return clone;
     }
 
@@ -89,7 +90,9 @@ public class NavmeshSettings
         appendFloat(nameof(EdgeJumpMaxDrop),     EdgeJumpMaxDrop);
         appendFloat(nameof(EdgeJumpMinDrop),     EdgeJumpMinDrop);
         appendBool("Flyable", flyable);
-        appendText(nameof(NumTiles), string.Join(',', NumTiles));
+        appendFloat(nameof(GroundTileSize), GroundTileSize);
+        appendInt(nameof(GroundTileCountMax), GroundTileCountMax);
+        appendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
         return sb.ToString();
 
         void appendFloat(string key, float value)
@@ -336,40 +339,10 @@ public class NavmeshSettings
             """
         ); // TODO: verify that it's actually in voxels
         ImGui.Checkbox("快速构建（关闭细节网格）", ref FastBuild);
-        DrawConfigInt
-        (
-            ref NumTiles[0],
-            1,
-            32,
-            1,
-            "L1 瓦片数量",
-            """
-            一级细分的每轴瓦片数，必须为 2 的幂次。[限制：1 <= 值 <= 32]
-            同时影响导航网格与导航体积。
-            """
-        );
-        DrawConfigInt
-        (
-            ref NumTiles[1],
-            1,
-            32,
-            1,
-            "L2 瓦片数量",
-            """
-            L2 层沿 X 轴的瓦片数量
-            """
-        );
-        DrawConfigInt
-        (
-            ref NumTiles[2],
-            1,
-            32,
-            1,
-            "L3 体素数量",
-            """
-            L3 层每瓦片沿 X 轴的体素数量
-            """
-        );
+        DrawConfigFloat(ref GroundTileSize, 32, 128, 1, "地面区块目标尺寸", "按场景占用范围自动推导地面区块数量时使用的目标世界尺寸");
+        DrawConfigInt(ref GroundTileCountMax, 1, 32, 1, "地面区块数量上限", "自动推导地面区块数量时的单轴上限");
+        DrawConfigInt(ref VolumeTiles[0], 1, 32, 1, "体积 L2 瓦片数量", "体积第二层细分的每轴瓦片数");
+        DrawConfigInt(ref VolumeTiles[1], 1, 32, 1, "体积 L3 体素数量", "体积最底层每轴体素数");
 
         ImGui.Checkbox("生成向下攀爬链接", ref GenerateEdgeClimbLinks);
         ImGui.Checkbox("生成向下跳跃链接", ref GenerateEdgeJumpLinks);

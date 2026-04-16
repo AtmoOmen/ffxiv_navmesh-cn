@@ -26,7 +26,7 @@ public sealed class NavmeshBuildProfile
     public float?       PolyMaxEdgeLenOverride;
     public float?       PolyMaxSimplificationErrorOverride;
     public float?       AgentRadiusOverride;
-    public int[]?       NumTilesOverride;
+    public int[]?       VolumeTilesOverride;
     public float?       DetailSampleDistOverride;
     public bool?        GenerateEdgeClimbLinksOverride;
     public bool?        GenerateEdgeJumpLinksOverride;
@@ -49,8 +49,8 @@ public sealed class NavmeshBuildProfile
             settings.PolyMaxSimplificationError = polyMaxSimplificationError;
         if (AgentRadiusOverride is { } agentRadius)
             settings.AgentRadius = agentRadius;
-        if (NumTilesOverride is { } numTiles)
-            settings.NumTiles = (int[])numTiles.Clone();
+        if (VolumeTilesOverride is { } volumeTiles)
+            settings.VolumeTiles = (int[])volumeTiles.Clone();
         if (DetailSampleDistOverride is { } detailSampleDist)
             settings.DetailSampleDist = detailSampleDist;
         if (GenerateEdgeClimbLinksOverride is { } generateEdgeClimbLinks)
@@ -94,7 +94,7 @@ public class NavmeshCustomization
 
     protected static void LinkPoints(Navmesh nmesh, Vector3 startPos, Vector3 endPos)
     {
-        nmesh.Links.Add((startPos, endPos));
+        nmesh.Links.Add(new(startPos, endPos, NavmeshOffMeshKind.Teleport, false, 0));
         var mesh     = nmesh.Mesh;
         var refstart = InsertPointPoly(mesh, startPos, true);
         var refend   = InsertPointPoly(mesh, endPos,   false);
@@ -125,9 +125,9 @@ public class NavmeshCustomization
         {
             firstLink = DT_NULL_LINK,
             vertCount = 1,
-            flags     = 1
+            flags     = (int)NavmeshPolyFlags.Teleport
         };
-        p.SetArea(Navmesh.AREAID_TELEPORT);
+        p.SetArea((int)NavmeshArea.Teleport);
         p.SetPolyType(DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION);
         p.verts[0] = startTile.data.header.vertCount;
 
@@ -277,7 +277,28 @@ public static class SceneExtensions
 public static class CreateParamsExtensions
 {
     public static void AddOffMeshConnection
-        (this DtNavMeshCreateParams config, Vector3 ptA, Vector3 ptB, float radius = 0.5f, bool bidirectional = false, int userID = 0)
+    (
+        this DtNavMeshCreateParams config,
+        Vector3                   ptA,
+        Vector3                   ptB,
+        float                     radius = 0.5f,
+        bool                      bidirectional = false,
+        int                       userID = 0
+    ) =>
+        config.AddOffMeshConnection(ptA, ptB, radius, bidirectional, userID, NavmeshArea.ManualOffMesh, NavmeshPolyFlags.ManualOffMesh, NavmeshOffMeshKind.ManualOffMesh);
+
+    public static void AddOffMeshConnection
+    (
+        this DtNavMeshCreateParams config,
+        Vector3                   ptA,
+        Vector3                   ptB,
+        float                     radius,
+        bool                      bidirectional,
+        int                       userID,
+        NavmeshArea               area,
+        NavmeshPolyFlags          flags,
+        NavmeshOffMeshKind        kind
+    )
     {
         bool insideTile(Vector3 p)
         {
@@ -285,19 +306,7 @@ public static class CreateParamsExtensions
         }
 
         var aInside = insideTile(ptA);
-        var bInside = insideTile(ptB);
-
-        if (aInside != bInside)
-        {
-            Service.Log.Error
-            (
-                "This off-mesh connection would span two tiles, but Recast doesn't support these. Please adjust the endpoints or customize the mesh tile size so that both points are inside one tile."
-            );
-            Service.Log.Error($"Bounding box of matched tile: {config.bmin} <=> {config.bmax}");
-            throw new ArgumentException("Invalid inter-tile off-mesh connection");
-        }
-
-        if (!aInside && !bInside)
+        if (!aInside)
             return;
 
         Extend(ref config.offMeshConVerts, 6);
@@ -312,7 +321,7 @@ public static class CreateParamsExtensions
         config.offMeshConDir[^1] = bidirectional ? DT_OFFMESH_CON_BIDIR : 0;
 
         Extend(ref config.offMeshConFlags, 1);
-        config.offMeshConFlags[^1] = 1;
+        config.offMeshConFlags[^1] = (int)flags;
 
         config.offMeshConCount++;
 
@@ -320,10 +329,12 @@ public static class CreateParamsExtensions
         config.offMeshConRad[^1] = radius;
 
         Extend(ref config.offMeshConAreas, 1);
-        config.offMeshConAreas[^1] = RC_WALKABLE_AREA;
+        config.offMeshConAreas[^1] = (int)area;
 
         Extend(ref config.offMeshConUserID, 1);
         config.offMeshConUserID[^1] = userID;
+
+        Service.Log.Debug($"[NavmeshBuilder] 已加入离网连接: 类型 = {kind}, 区域 = {area}, 标记 = {flags}, 起点 = {ptA:f3}, 终点 = {ptB:f3}, 双向 = {bidirectional}");
     }
 
     private static void Extend<T>([NotNull] ref T[]? arr, int add)

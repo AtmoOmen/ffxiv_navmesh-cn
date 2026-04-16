@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Threading;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Bootstrap;
@@ -37,10 +38,12 @@ public partial class NavmeshQuery
         switch (result.Status)
         {
             case PathfindStatus.Partial:
+                Interlocked.Increment(ref _partialGroundQueryCount);
                 Service.Log.Warning(message);
 
                 if (diagnostic.IsSuspectedTileSeamCutoff)
                 {
+                    Interlocked.Increment(ref _suspectedTileSeamCutoffCount);
                     Service.Log.Warning
                     (
                         $"[SuspectedTileSeamCutoff] 疑似区块接缝截断：起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}"
@@ -91,6 +94,7 @@ public partial class NavmeshQuery
         (
             $"[算路] 起点替换：原始候选 = {requestedStartRef:X}，选中 = {selected.StartRef:X}，原因 = {BuildStartReplacementReason(selected, requestedTarget, requestedSuccessful, requestedFailed)}。"
         );
+        Interlocked.Increment(ref _startReplacementCount);
     }
 
     private static string BuildStartKeepReason(MeshPathCandidate selected, MeshPathCandidate? requestedSuccessful, bool requestedFailed)
@@ -141,7 +145,7 @@ public partial class NavmeshQuery
         return "选中候选综合评分更优";
     }
 
-    private bool TryRepairShortGroundGap
+    private bool TryRepairGroundGap
     (
         MeshPathCandidate partialCandidate,
         Vector3           requestedTarget,
@@ -156,6 +160,160 @@ public partial class NavmeshQuery
     )
     {
         repairedResult = default!;
+        repairedLastPoly = partialCandidate.LastPoly;
+
+        if (TryRepairGroundGapByRaycast(partialCandidate, requestedTarget, requestedEndPos, filter, range, out repairedResult, out repairedLastPoly))
+            return true;
+
+        if (TryRepairGroundGapByMoveAlongSurface(partialCandidate, requestedTarget, endRef, requestedEndPos, filter, opt, range, out repairedResult, out repairedLastPoly))
+            return true;
+
+        return TryRepairGroundGapByNearbyContinuation(partialCandidate, requestedTarget, endRef, requestedEndPos, filter, opt, range, cancel, out repairedResult, out repairedLastPoly);
+    }
+
+    private bool TryRepairGroundGapByRaycast
+    (
+        MeshPathCandidate partialCandidate,
+        Vector3           requestedTarget,
+        RcVec3f           requestedEndPos,
+        IDtQueryFilter    filter,
+        float             range,
+        out PlannerResult repairedResult,
+        out long          repairedLastPoly
+    )
+    {
+        repairedResult   = default!;
+        repairedLastPoly = partialCandidate.LastPoly;
+
+        Span<long> visited = stackalloc long[MaxPathPolys];
+        var status = MeshQuery.Raycast
+        (
+            partialCandidate.LastPoly,
+            partialCandidate.FinalDestination.SystemToRecast(),
+            requestedEndPos,
+            filter,
+            out var hitT,
+            out _,
+            visited,
+            out var visitedCount,
+            visited.Length
+        );
+        if (status.Failed() || hitT < 0.99f)
+            return false;
+
+        repairedLastPoly = visitedCount > 0 ? visited[visitedCount - 1] : partialCandidate.LastPoly;
+        repairedResult   = BuildGroundPlannerResult
+        (
+            requestedTarget,
+            range,
+            range > 0 && Vector3.Distance(partialCandidate.FinalDestination, requestedTarget) <= range ? PathfindStatus.ReachedWithinRange : PathfindStatus.Complete,
+            requestedTarget,
+            [BuildGroundMeshCorridorSegment(partialCandidate), BuildGroundDiscreteSegment(partialCandidate.FinalDestination, requestedTarget)]
+        );
+        Service.Log.Warning($"[算路] Partial 修复命中 Raycast：起点 = {partialCandidate.FinalDestination:f3}，终点 = {requestedTarget:f3}，最后多边形 = {repairedLastPoly:X}");
+        return true;
+    }
+
+    private bool TryRepairGroundGapByMoveAlongSurface
+    (
+        MeshPathCandidate partialCandidate,
+        Vector3           requestedTarget,
+        long              endRef,
+        RcVec3f           requestedEndPos,
+        IDtQueryFilter    filter,
+        DtFindPathOption  opt,
+        float             range,
+        out PlannerResult repairedResult,
+        out long          repairedLastPoly
+    )
+    {
+        repairedResult   = default!;
+        repairedLastPoly = partialCandidate.LastPoly;
+
+        Span<long> visited = stackalloc long[32];
+        var status = MeshQuery.MoveAlongSurface
+        (
+            partialCandidate.LastPoly,
+            partialCandidate.FinalDestination.SystemToRecast(),
+            requestedEndPos,
+            filter,
+            out var moved,
+            visited,
+            out var visitedCount,
+            visited.Length
+        );
+        if (status.Failed() || visitedCount == 0)
+            return false;
+
+        var movedPoint   = moved.RecastToSystem();
+        var movedDelta   = movedPoint - partialCandidate.FinalDestination;
+        var movedPoly    = visited[visitedCount - 1];
+        var movedDistSq  = movedDelta.X * movedDelta.X + movedDelta.Z * movedDelta.Z;
+        var verticalDist = MathF.Abs(movedDelta.Y);
+        if (movedDistSq <= 0.000001f || verticalDist > ShortGapRepairMaxVerticalDelta)
+            return false;
+
+        if (Vector3.Distance(movedPoint, requestedTarget) <= MathF.Max(range, 0.15f))
+        {
+            repairedLastPoly = movedPoly;
+            repairedResult   = BuildGroundPlannerResult
+            (
+                requestedTarget,
+                range,
+                range > 0 ? PathfindStatus.ReachedWithinRange : PathfindStatus.Complete,
+                movedPoint,
+                [BuildGroundMeshCorridorSegment(partialCandidate), BuildGroundDiscreteSegment(partialCandidate.FinalDestination, movedPoint)]
+            );
+            Service.Log.Warning($"[算路] Partial 修复命中 MoveAlongSurface：终点已贴近目标，桥接点 = {movedPoint:f3}，最后多边形 = {repairedLastPoly:X}");
+            return true;
+        }
+
+        if (!TryClosestPointOnPolyWithFlags(movedPoint, movedPoly, out var bridgePoint, out var isPointOverPoly))
+            return false;
+
+        var resumeStatus = FindPath(MeshQuery, movedPoly, endRef, bridgePoint.SystemToRecast(), requestedEndPos, filter, opt, out var corridor);
+        if (resumeStatus.Failed() || corridor.Count == 0)
+            return false;
+
+        var resumeCandidate = BuildMeshPathCandidate
+        (
+            new(movedPoly, bridgePoint, Vector3.DistanceSquared(bridgePoint, partialCandidate.FinalDestination), bridgePoint.Y - partialCandidate.FinalDestination.Y, false, isPointOverPoly, CountStartSupportProbeHits(partialCandidate.FinalDestination, movedPoly)),
+            corridor,
+            resumeStatus,
+            requestedEndPos,
+            requestedTarget,
+            endRef,
+            GroundQueryMode.Classic,
+            range
+        );
+        if (resumeCandidate.ResultStatus == PathfindStatus.Failed)
+            return false;
+
+        repairedLastPoly = resumeCandidate.LastPoly;
+        List<PlannerPathSegment> segments = [BuildGroundMeshCorridorSegment(partialCandidate)];
+        if (Vector3.DistanceSquared(partialCandidate.FinalDestination, bridgePoint) > 0.000001f)
+            segments.Add(BuildGroundDiscreteSegment(partialCandidate.FinalDestination, bridgePoint));
+        segments.Add(BuildGroundMeshCorridorSegment(resumeCandidate));
+        repairedResult = BuildGroundPlannerResult(requestedTarget, range, resumeCandidate.ResultStatus, resumeCandidate.FinalDestination, segments);
+        Service.Log.Warning($"[算路] Partial 修复命中 MoveAlongSurface + 续算：桥接点 = {bridgePoint:f3}，结果 = {resumeCandidate.ResultStatus}，最后多边形 = {repairedLastPoly:X}");
+        return true;
+    }
+
+    private bool TryRepairGroundGapByNearbyContinuation
+    (
+        MeshPathCandidate partialCandidate,
+        Vector3           requestedTarget,
+        long              endRef,
+        RcVec3f           requestedEndPos,
+        IDtQueryFilter    filter,
+        DtFindPathOption  opt,
+        float             range,
+        CancellationToken cancel,
+        out PlannerResult repairedResult,
+        out long          repairedLastPoly
+    )
+    {
+        repairedResult   = default!;
         repairedLastPoly = partialCandidate.LastPoly;
 
         var partialEnd = partialCandidate.FinalDestination;
@@ -196,6 +354,7 @@ public partial class NavmeshQuery
                 requestedEndPos,
                 requestedTarget,
                 endRef,
+                GroundQueryMode.Classic,
                 range
             );
 

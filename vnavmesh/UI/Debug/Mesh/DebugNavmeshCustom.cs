@@ -465,7 +465,7 @@ internal class DebugNavmeshCustom : IDisposable
         var telemetry               = new RcContext();
         var boundsMin               = new Vector3(-1024);
         var boundsMax               = new RcVec3f(1024);
-        var numTilesXZ              = _settings.Settings.NumTiles[0];
+        var numTilesXZ              = Math.Max(1, _navmesh.Intermediates?.NumTilesX ?? _settings.Settings.GroundTileCountMax);
         var tileWidth               = (boundsMax.X - boundsMin.X) / numTilesXZ;
         var tileHeight              = (boundsMax.Z - boundsMin.Z) / numTilesXZ;
         var walkableClimbVoxels     = (int)MathF.Floor(_settings.Settings.AgentMaxClimb / _settings.Settings.CellHeight);
@@ -539,7 +539,7 @@ internal class DebugNavmeshCustom : IDisposable
     {
         float dur1       = 0, dur2 = 0;
         var   identical  = true;
-        var   numTilesXZ = _settings.Settings.NumTiles[0];
+        var   numTilesXZ = Math.Max(1, _navmesh.Intermediates?.NumTilesX ?? _settings.Settings.GroundTileCountMax);
 
         for (var tz = 0; tz < numTilesXZ; ++tz)
         for (var tx = 0; tx < numTilesXZ; ++tx)

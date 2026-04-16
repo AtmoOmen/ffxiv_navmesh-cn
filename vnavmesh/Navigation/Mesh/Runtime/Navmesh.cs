@@ -15,11 +15,12 @@ public partial record class Navmesh
 )
 {
     public static readonly uint Magic            = 0x444D564E; // 'NVMD'
-    public static readonly uint Version          = 32;         // 更新后触发一次全量重构建
-    public const           int  FLAG_UNREACHABLE = 0x10;
-    public const           int  AREAID_TELEPORT  = 5;
+    public static readonly uint Version          = 33;         // 更新后触发一次全量重构建
 
-    public readonly List<(Vector3 Start, Vector3 End)>
+    public int GeneratedClimbDownLinkCount { get; set; }
+    public int GeneratedEdgeJumpLinkCount  { get; set; }
+
+    public readonly List<NavmeshLink>
         Links = []; // not serialized! actual links are added directly to the DtNavMesh, this field exists for visualization purposes
 
     // throws an exception on failure

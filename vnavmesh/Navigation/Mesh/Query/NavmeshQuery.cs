@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Threading;
 using DotRecast.Core;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
@@ -83,7 +84,12 @@ public partial class NavmeshQuery
         DtStatus          QueryStatus,
         PathfindStatus    ResultStatus,
         Vector3           FinalDestination,
-        List<long>        Corridor
+        List<long>        Corridor,
+        GroundQueryMode   QueryMode,
+        float             PathLength,
+        int               WeightedLinkPenalty,
+        int               OffMeshTransitionCount,
+        int               AreaCrossingCount
     )
     {
         public long    StartRef   => StartCandidate.PolyRef;
@@ -94,6 +100,25 @@ public partial class NavmeshQuery
         public int     SupportProbeHits => StartCandidate.SupportProbeHits;
 
         public float DistanceToRequestedTargetSq(Vector3 requestedTarget) => Vector3.DistanceSquared(FinalDestination, requestedTarget);
+    }
+
+    private enum GroundQueryMode
+    {
+        AnyAngle,
+        Classic
+    }
+
+    public sealed class GroundPathDiagnosticsSnapshot
+    {
+        public required long GroundQueries                 { get; init; }
+        public required long PartialQueries                { get; init; }
+        public required long SuspectedTileSeamCutoffs      { get; init; }
+        public required long AnyAnglePreferred             { get; init; }
+        public required long ClassicFallbacks              { get; init; }
+        public required long StartReplacements             { get; init; }
+        public required long EndReplacements               { get; init; }
+        public required long GeneratedClimbLinksAccepted   { get; init; }
+        public required long GeneratedJumpLinksAccepted    { get; init; }
     }
 
     private readonly record struct MeshEndCandidate
@@ -115,8 +140,8 @@ public partial class NavmeshQuery
         IDtQueryFilter inner
     ) : IDtQueryFilter
     {
-        public float RandomnessMultiplier;
-        public ulong RandomSeed;
+        public float RandomnessMultiplier = 0;
+        public ulong RandomSeed = 0;
 
         public float GetCost
         (
@@ -138,7 +163,7 @@ public partial class NavmeshQuery
             if (mult <= 0 || nextPoly == null)
                 return cost;
 
-            if (curPoly.GetArea() == Navmesh.AREAID_TELEPORT && nextPoly.GetArea() == Navmesh.AREAID_TELEPORT)
+            if (curPoly.GetArea() == (int)NavmeshArea.Teleport && nextPoly.GetArea() == (int)NavmeshArea.Teleport)
                 return cost;
 
             var a     = (ulong)Math.Min(curRef, nextRef);
@@ -172,9 +197,22 @@ public partial class NavmeshQuery
         }
     }
 
-    public class TeleportAwareFilter : IDtQueryFilter
+    public class GroundAreaCostFilter : IDtQueryFilter
     {
-        private readonly DtQueryDefaultFilter _f = new();
+        private readonly DtQueryDefaultFilter _filter = new((int)NavmeshPolyFlags.AllTraversable, (int)NavmeshPolyFlags.Unreachable, CreateAreaCosts());
+
+        private static float[] CreateAreaCosts()
+        {
+            var costs = new float[DT_MAX_AREAS];
+            Array.Fill(costs, 1f);
+            costs[(int)NavmeshArea.Null]               = float.MaxValue;
+            costs[(int)NavmeshArea.Ground]             = 1.0f;
+            costs[(int)NavmeshArea.GeneratedClimbDown] = 1.8f;
+            costs[(int)NavmeshArea.GeneratedEdgeJump]  = 2.6f;
+            costs[(int)NavmeshArea.ManualOffMesh]      = 1.35f;
+            costs[(int)NavmeshArea.Teleport]           = 1.15f;
+            return costs;
+        }
 
         public float GetCost
         (
@@ -190,42 +228,42 @@ public partial class NavmeshQuery
             DtMeshTile nextTile,
             DtPoly     nextPoly
         )
-        {
-            var cst = _f.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
-            // increase cost of regular connections instead of reducing cost of off-mesh connections, since lowering cost interferes with heuristic
-            if (!(curPoly.GetArea() == Navmesh.AREAID_TELEPORT && nextPoly?.GetArea() == Navmesh.AREAID_TELEPORT))
-                cst *= 3;
-            return cst;
-        }
+            => _filter.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
 
-
-        public virtual bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => true;
-    }
-
-    public class FloodFillAwareFilter : TeleportAwareFilter
-    {
-        public override bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) =>
-            (poly.flags & Navmesh.FLAG_UNREACHABLE) == 0;
+        public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => _filter.PassFilter(refs, tile, poly);
     }
 
     public           DtNavMeshQuery      MeshQuery;
     public           VoxelPathfind?      VolumeQuery;
     private readonly PathPostprocessor   _postprocessor;
+    private readonly Navmesh             _navmesh;
     private readonly IDtQueryFilter      _filter         = new DtQueryDefaultFilter();
-    private readonly TeleportAwareFilter _teleportFilter = new();
+    private readonly GroundAreaCostFilter _groundFilter = new();
     private readonly RandomnessFilter    _randomnessFilter;
-    private readonly IDtQueryFilter      _reachableFilter = new FloodFillAwareFilter();
+    private readonly IDtQueryFilter       _reachableFilter;
+
+    private long _groundQueryCount;
+    private long _partialGroundQueryCount;
+    private long _suspectedTileSeamCutoffCount;
+    private long _anyAnglePreferredCount;
+    private long _classicFallbackCount;
+    private long _startReplacementCount;
+    private long _endReplacementCount;
+
+    internal IDtQueryFilter GroundFilter => _groundFilter;
 
     public List<long> LastPath { get; } = [];
 
     public NavmeshQuery(Navmesh navmesh, Config config)
     {
+        _navmesh  = navmesh;
         _config   = config;
         MeshQuery = new(navmesh.Mesh /*, s => Service.Log.Debug(s)*/);
         if (navmesh.Volume != null)
             VolumeQuery = new(navmesh.Volume, _config);
         _postprocessor    = new(MeshQuery);
-        _randomnessFilter = new(_teleportFilter);
+        _randomnessFilter = new(_groundFilter);
+        _reachableFilter  = _groundFilter;
     }
 
     public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
@@ -389,4 +427,18 @@ public partial class NavmeshQuery
 
         return result;
     }
+
+    public GroundPathDiagnosticsSnapshot GetGroundDiagnostics() =>
+        new()
+        {
+            GroundQueries               = Interlocked.Read(ref _groundQueryCount),
+            PartialQueries              = Interlocked.Read(ref _partialGroundQueryCount),
+            SuspectedTileSeamCutoffs    = Interlocked.Read(ref _suspectedTileSeamCutoffCount),
+            AnyAnglePreferred           = Interlocked.Read(ref _anyAnglePreferredCount),
+            ClassicFallbacks            = Interlocked.Read(ref _classicFallbackCount),
+            StartReplacements           = Interlocked.Read(ref _startReplacementCount),
+            EndReplacements             = Interlocked.Read(ref _endReplacementCount),
+            GeneratedClimbLinksAccepted = _navmesh.GeneratedClimbDownLinkCount,
+            GeneratedJumpLinksAccepted  = _navmesh.GeneratedEdgeJumpLinkCount
+        };
 }

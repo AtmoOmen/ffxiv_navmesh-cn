@@ -14,4 +14,5 @@ internal sealed class PlannerPathSegment
     public required Vector3                    EndPosition          { get; init; }
     public          IReadOnlyList<long>        Corridor             { get; init; } = [];
     public          IReadOnlyList<Vector3>     Points               { get; init; } = [];
+    public          GroundCorridorPayload?     GroundCorridor       { get; init; }
 }

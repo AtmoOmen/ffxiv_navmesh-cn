@@ -20,6 +20,7 @@ internal sealed class GroundMovementPlanBuilder : IMovementPlanBuilder
         StartPosition       = segment.StartPosition,
         GeometryOwnership   = segment.GeometryOwnership,
         ReachabilitySource  = segment.ReachabilitySource,
-        Waypoints           = [.. segment.Waypoints]
+        Waypoints           = [.. segment.Waypoints],
+        GroundCorridor      = segment.GroundCorridor
     };
 }

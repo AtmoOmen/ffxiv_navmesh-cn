@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.7.34221.43
@@ -18,6 +18,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Detour.Extras", "DotRecast\src\DotRecast.Detour.Extras\DotRecast.Detour.Extras.csproj", "{55E26212-7003-F164-4095-7C1D49BE99ED}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Detour.Crowd", "DotRecast\src\DotRecast.Detour.Crowd\DotRecast.Detour.Crowd.csproj", "{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -75,6 +77,14 @@ Global
 		{55E26212-7003-F164-4095-7C1D49BE99ED}.Release|Any CPU.Build.0 = Release|Any CPU
 		{55E26212-7003-F164-4095-7C1D49BE99ED}.Release|x64.ActiveCfg = Release|Any CPU
 		{55E26212-7003-F164-4095-7C1D49BE99ED}.Release|x64.Build.0 = Release|Any CPU
+		{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}.Debug|x64.Build.0 = Debug|Any CPU
+		{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}.Release|x64.ActiveCfg = Release|Any CPU
+		{CE30D64E-4435-4A86-8C97-8F2DEDBBAB26}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -19,6 +19,8 @@ using static DotRecast.Detour.DtDetour;
 public partial class NavmeshBuilder
 {
     private readonly Config _config;
+    private const float WorldBoundsMin = -1024f;
+    private const float WorldBoundsMax = 1024f;
 
     public record struct Intermediates
     (
@@ -116,6 +118,8 @@ public partial class NavmeshBuilder
         public required int                             PolyCount             { get; init; }
         public required int                             VertCount             { get; init; }
         public required int                             DetailTriCount        { get; init; }
+        public required int                             GeneratedClimbLinks   { get; init; }
+        public required int                             GeneratedJumpLinks    { get; init; }
         public          DtMeshData?                     MeshData;
         public          VoxelMap.RootColumnBuildResult? VolumeColumn;
         public          RcBuilderResult?                DebugResult;
@@ -172,6 +176,16 @@ public partial class NavmeshBuilder
     private int   _voxelizerNumY = 1;
     private int   _voxelizerNumZ = 1;
 
+    public static string ComputeBuildSignature(SceneDefinition scene, NavmeshCustomization customization)
+    {
+        var settings = customization.GetBuildSettings(scene);
+        var flyable  = customization.IsFlyingSupported(scene);
+        var extract  = new SceneExtractor(scene);
+        customization.CustomizeScene(extract);
+        var groundTiles = ResolveGroundTileCount(extract, settings);
+        return $"{settings.BuildSignature(flyable)}GroundTiles={groundTiles};";
+    }
+
     public NavmeshBuilder(SceneDefinition scene, NavmeshCustomization customization, Config config)
     {
         _config  = config;
@@ -186,9 +200,10 @@ public partial class NavmeshBuilder
         customization.CustomizeScene(Scene);
         var extractDuration = extractTimer.Value();
 
-        BoundsMin = new(-1024);
-        BoundsMax = new(1024);
-        NumTilesX = NumTilesZ = Settings.NumTiles[0];
+        BoundsMin = new(WorldBoundsMin);
+        BoundsMax = new(WorldBoundsMax);
+        NumTilesX = NumTilesZ = ResolveGroundTileCount(Scene, Settings);
+        BuildSignature = $"{BuildSignature}GroundTiles={NumTilesX};";
         Service.Log.Debug($"[NavmeshBuilder] 开始构建 {NumTilesX}x{NumTilesZ} 路网，自定义 = {customization.GetType()} v{customization.Version}");
         Service.Log.Debug($"[NavmeshBuilder] 场景提取耗时 {extractDuration.TotalMilliseconds:f1} ms");
 
@@ -208,7 +223,10 @@ public partial class NavmeshBuilder
 
         var navmesh = new DtNavMesh();
         navmesh.Init(navmeshParams, Settings.PolyMaxVerts);
-        var volume  = Flyable ? new VoxelMap(BoundsMin, BoundsMax, Settings.NumTiles) : null;
+        var volumeTiles = new int[Settings.VolumeTiles.Length + 1];
+        volumeTiles[0] = NumTilesX;
+        Array.Copy(Settings.VolumeTiles, 0, volumeTiles, 1, Settings.VolumeTiles.Length);
+        var volume  = Flyable ? new VoxelMap(BoundsMin, BoundsMax, volumeTiles) : null;
         Navmesh = new(customization.Version, BuildSignature, false, navmesh, volume);
 
         _walkableClimbVoxels     = (int)MathF.Floor(Settings.AgentMaxClimb / Settings.CellHeight);
@@ -222,11 +240,12 @@ public partial class NavmeshBuilder
 
         if (volume != null)
         {
-            _voxelizerNumY = Settings.NumTiles[0];
+            _voxelizerNumX = 1;
+            _voxelizerNumY = NumTilesX;
+            _voxelizerNumZ = 1;
 
-            for (var i = 1; i < Settings.NumTiles.Length; ++i)
+            foreach (var n in Settings.VolumeTiles)
             {
-                var n = Settings.NumTiles[i];
                 _voxelizerNumX *= n;
                 _voxelizerNumY *= n;
                 _voxelizerNumZ *= n;
@@ -252,5 +271,34 @@ public partial class NavmeshBuilder
     {
         var builtTiles = BuildTileResults(true, onTileFinished);
         return MergeBuiltTiles(builtTiles, true);
+    }
+
+    private static int ResolveGroundTileCount(SceneExtractor scene, NavmeshSettings settings)
+    {
+        var min = new Vector3(float.MaxValue);
+        var max = new Vector3(float.MinValue);
+        var found = false;
+
+        foreach (var mesh in scene.Meshes.Values)
+        {
+            foreach (var instance in mesh.Instances)
+            {
+                min = Vector3.Min(min, instance.WorldBounds.Min);
+                max = Vector3.Max(max, instance.WorldBounds.Max);
+                found = true;
+            }
+        }
+
+        if (!found)
+            return 16;
+
+        var occupiedSpan = MathF.Max(max.X - min.X, max.Z - min.Z);
+        var targetTileCount = (int)MathF.Ceiling(occupiedSpan / settings.GroundTileSize);
+        targetTileCount = Math.Clamp(targetTileCount, 1, settings.GroundTileCountMax);
+        var pow2 = 1;
+        while (pow2 < targetTileCount)
+            pow2 <<= 1;
+
+        return Math.Clamp(pow2, 1, settings.GroundTileCountMax);
     }
 }

@@ -1,6 +1,7 @@
 using System.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Movement.Planning;
+using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Planning;
@@ -22,21 +23,7 @@ internal sealed class PathPostprocessor
 
         foreach (var segment in result.Segments)
         {
-            var waypoints = BuildWaypoints(segment, useStringPulling, cancel);
-            segments.Add
-            (
-                new()
-                {
-                    MovementMode         = segment.MovementMode,
-                    SegmentKind          = segment.SegmentKind,
-                    AllowVerticalControl = segment.AllowVerticalControl,
-                    StartPosition        = segment.StartPosition,
-                    CompletionTolerance  = 0,
-                    GeometryOwnership    = PathGeometryOwnership.Postprocessor,
-                    ReachabilitySource   = segment.ReachabilitySource,
-                    Waypoints            = waypoints
-                }
-            );
+            segments.Add(BuildSegment(segment, useStringPulling, cancel));
         }
 
         return new()
@@ -50,22 +37,43 @@ internal sealed class PathPostprocessor
         };
     }
 
-    private List<Vector3> BuildWaypoints(PlannerPathSegment segment, bool useStringPulling, CancellationToken cancel)
+    private PostprocessedPathSegment BuildSegment(PlannerPathSegment segment, bool useStringPulling, CancellationToken cancel)
     {
         cancel.ThrowIfCancellationRequested();
 
-        return segment.GeometryKind switch
+        var groundCorridor = segment.MovementMode == MovementMode.Ground && segment.GeometryKind == PlannerSegmentGeometryKind.MeshCorridor
+            ? BuildGroundCorridor(segment)
+            : segment.GroundCorridor;
+        var waypoints = segment.GeometryKind switch
         {
-            PlannerSegmentGeometryKind.MeshCorridor   => BuildMeshWaypoints(segment, useStringPulling),
+            PlannerSegmentGeometryKind.MeshCorridor   => BuildMeshWaypoints(segment, groundCorridor, useStringPulling),
             PlannerSegmentGeometryKind.DiscretePoints => BuildDiscreteWaypoints(segment),
             _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
         };
+
+        return new()
+        {
+            MovementMode         = segment.MovementMode,
+            SegmentKind          = segment.SegmentKind,
+            AllowVerticalControl = segment.AllowVerticalControl,
+            StartPosition        = segment.StartPosition,
+            CompletionTolerance  = 0,
+            GeometryOwnership    = PathGeometryOwnership.Postprocessor,
+            ReachabilitySource   = segment.ReachabilitySource,
+            Waypoints            = waypoints,
+            GroundCorridor       = groundCorridor
+        };
     }
 
-    private List<Vector3> BuildMeshWaypoints(PlannerPathSegment segment, bool useStringPulling)
+    private List<Vector3> BuildMeshWaypoints(PlannerPathSegment segment, GroundCorridorPayload? groundCorridor, bool useStringPulling)
     {
         if (segment.Corridor.Count == 0)
             return [];
+
+        if (groundCorridor != null)
+            return useStringPulling
+                ? [.. groundCorridor.Corners.Select(c => c.Position)]
+                : DeduplicateWaypoints(segment.Corridor.Select(r => meshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
 
         if (useStringPulling)
             return BuildStraightPathWaypoints(segment, [.. segment.Corridor]);
@@ -77,11 +85,124 @@ internal sealed class PathPostprocessor
     {
         var straightPath   = new DtStraightPath[MAX_SMOOTH_PATH_POINTS];
         var straightStatus = meshQuery.FindStraightPath
-            (segment.StartPosition.SystemToRecast(), segment.EndPosition.SystemToRecast(), corridor, corridor.Length, straightPath, out var straightPathCount, straightPath.Length, 0);
+            (
+                segment.StartPosition.SystemToRecast(),
+                segment.EndPosition.SystemToRecast(),
+                corridor,
+                corridor.Length,
+                straightPath,
+                out var straightPathCount,
+                straightPath.Length,
+                DtStraightPathOptions.DT_STRAIGHTPATH_AREA_CROSSINGS
+            );
         if (straightStatus.Failed())
             throw new InvalidOperationException("地面路径后处理失败：无法生成平滑路径");
 
         return DeduplicateWaypoints(straightPath.AsSpan(0, straightPathCount).ToArray().Select(p => p.pos.RecastToSystem()));
+    }
+
+    private GroundCorridorPayload? BuildGroundCorridor(PlannerPathSegment segment)
+    {
+        if (segment.Corridor.Count == 0)
+            return null;
+
+        var corners = BuildGroundCorners(segment, [.. segment.Corridor]);
+        return new()
+        {
+            PolyRefs    = [.. segment.Corridor],
+            Target      = segment.EndPosition,
+            Corners     = corners,
+            LinkMarkers = BuildGroundLinkMarkers(corners)
+        };
+    }
+
+    private IReadOnlyList<GroundPathCorner> BuildGroundCorners(PlannerPathSegment segment, long[] corridor)
+    {
+        var straightPath = new DtStraightPath[MAX_SMOOTH_PATH_POINTS];
+        var straightStatus = meshQuery.FindStraightPath
+        (
+            segment.StartPosition.SystemToRecast(),
+            segment.EndPosition.SystemToRecast(),
+            corridor,
+            corridor.Length,
+            straightPath,
+            out var straightPathCount,
+            straightPath.Length,
+            DtStraightPathOptions.DT_STRAIGHTPATH_AREA_CROSSINGS
+        );
+        if (straightStatus.Failed())
+            throw new InvalidOperationException("地面路径后处理失败：无法提取 corridor 角点");
+
+        List<GroundPathCorner> result = [];
+
+        for (var i = 0; i < straightPathCount; i++)
+        {
+            var rawCorner = straightPath[i];
+            var position  = rawCorner.pos.RecastToSystem();
+            var area      = ResolveArea(corridor, rawCorner.refs);
+            var linkKind  = ResolveLinkKind(area, rawCorner.flags);
+            var corner = new GroundPathCorner
+            (
+                position,
+                rawCorner.refs,
+                rawCorner.flags,
+                area,
+                linkKind
+            );
+
+            if (result.Count == 0)
+            {
+                result.Add(corner);
+                continue;
+            }
+
+            var previous = result[^1];
+            if (Vector3.DistanceSquared(previous.Position, corner.Position) > DUPLICATE_WAYPOINT_DISTANCE_SQ ||
+                previous.Area != corner.Area ||
+                previous.LinkKind != corner.LinkKind ||
+                previous.StraightPathFlags != corner.StraightPathFlags)
+            {
+                result.Add(corner);
+            }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<GroundLinkMarker> BuildGroundLinkMarkers(IReadOnlyList<GroundPathCorner> corners)
+    {
+        List<GroundLinkMarker> markers = [];
+        for (var i = 0; i < corners.Count; i++)
+        {
+            if (corners[i].LinkKind is not { } kind)
+                continue;
+
+            markers.Add(new(i, corners[i].Position, corners[i].PolyRef, kind));
+        }
+
+        return markers;
+    }
+
+    private NavmeshArea ResolveArea(long[] corridor, long polyRef)
+    {
+        var resolvedRef = polyRef != 0 ? polyRef : corridor[^1];
+        meshQuery.GetAttachedNavMesh().GetTileAndPolyByRefUnsafe(resolvedRef, out _, out var poly);
+        return (NavmeshArea)poly.GetArea();
+    }
+
+    private static NavmeshOffMeshKind? ResolveLinkKind(NavmeshArea area, byte straightPathFlags)
+    {
+        if ((straightPathFlags & DtStraightPathFlags.DT_STRAIGHTPATH_OFFMESH_CONNECTION) == 0)
+            return null;
+
+        return area switch
+        {
+            NavmeshArea.GeneratedClimbDown => NavmeshOffMeshKind.GeneratedClimbDown,
+            NavmeshArea.GeneratedEdgeJump  => NavmeshOffMeshKind.GeneratedEdgeJump,
+            NavmeshArea.ManualOffMesh      => NavmeshOffMeshKind.ManualOffMesh,
+            NavmeshArea.Teleport           => NavmeshOffMeshKind.Teleport,
+            _                              => null
+        };
     }
 
     private static List<Vector3> BuildDiscreteWaypoints(PlannerPathSegment segment)

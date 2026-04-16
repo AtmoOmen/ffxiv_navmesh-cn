@@ -286,13 +286,13 @@ public sealed partial class NavmeshManager : IDisposable
 
                 if (reachablePolys.Contains(pref))
                 {
-                    if (Navmesh.Mesh.SetPolyFlags(pref, fl & ~Navmesh.FLAG_UNREACHABLE).Failed())
+                    if (Navmesh.Mesh.SetPolyFlags(pref, fl & ~(int)NavmeshPolyFlags.Unreachable).Failed())
                         Log($"failed to set flags for {pref:X}");
                 }
                 else
                 {
                     pruneCount++;
-                    if (Navmesh.Mesh.SetPolyFlags(pref, fl | Navmesh.FLAG_UNREACHABLE).Failed())
+                    if (Navmesh.Mesh.SetPolyFlags(pref, fl | (int)NavmeshPolyFlags.Unreachable).Failed())
                         Log($"failed to set flags for {pref:X}");
                 }
             }
