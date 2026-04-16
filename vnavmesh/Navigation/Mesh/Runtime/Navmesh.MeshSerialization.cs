@@ -3,19 +3,22 @@ using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Runtime;
 
+using static DotRecast.Detour.DtDetour;
+
 public partial record class Navmesh
 {
     private static DtNavMesh DeserializeMesh(BinaryReader reader)
     {
         var numTiles = reader.ReadInt32();
         var opts     = DeserializeMeshParams(reader);
-        var result   = new DtNavMesh(opts, reader.ReadInt32());
+        var result   = new DtNavMesh();
+        result.Init(opts, reader.ReadInt32());
 
         for (var i = 0; i < numTiles; ++i)
         {
             var tileRef = reader.ReadInt64();
             var tile    = DeserializeMeshTile(reader);
-            result.AddTile(tile, i, tileRef);
+            result.AddTile(tile, i, tileRef, out _);
         }
 
         return result;
@@ -23,7 +26,15 @@ public partial record class Navmesh
 
     private static void SerializeMesh(BinaryWriter writer, DtNavMesh mesh)
     {
-        writer.Write(mesh.GetTileCount());
+        var numTiles = 0;
+        for (var i = 0; i < mesh.GetMaxTiles(); ++i)
+        {
+            var tile = mesh.GetTile(i);
+            if (tile?.data?.header != null)
+                ++numTiles;
+        }
+
+        writer.Write(numTiles);
         SerializeMeshParams(writer, mesh.GetParams());
         writer.Write(mesh.GetMaxVertsPerPoly());
 
@@ -59,8 +70,8 @@ public partial record class Navmesh
     {
         var tile = new DtMeshData();
         tile.header                = new();
-        tile.header.magic          = DtNavMesh.DT_NAVMESH_MAGIC;
-        tile.header.version        = DtNavMesh.DT_NAVMESH_VERSION;
+        tile.header.magic          = DT_NAVMESH_MAGIC;
+        tile.header.version        = DT_NAVMESH_VERSION;
         tile.header.x              = reader.ReadInt32();
         tile.header.y              = reader.ReadInt32();
         tile.header.layer          = reader.ReadInt32();
@@ -109,12 +120,12 @@ public partial record class Navmesh
         for (var i = 0; i < tile.header.bvNodeCount; ++i)
         {
             var node = tile.bvTree[i] = new();
-            node.bmin[0] = reader.ReadInt32();
-            node.bmin[1] = reader.ReadInt32();
-            node.bmin[2] = reader.ReadInt32();
-            node.bmax[0] = reader.ReadInt32();
-            node.bmax[1] = reader.ReadInt32();
-            node.bmax[2] = reader.ReadInt32();
+            node.bmin.X = reader.ReadInt32();
+            node.bmin.Y = reader.ReadInt32();
+            node.bmin.Z = reader.ReadInt32();
+            node.bmax.X = reader.ReadInt32();
+            node.bmax.Y = reader.ReadInt32();
+            node.bmax.Z = reader.ReadInt32();
             node.i       = reader.ReadInt32();
         }
 

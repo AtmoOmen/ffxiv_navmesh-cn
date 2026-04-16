@@ -13,6 +13,9 @@ using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Customizations;
 
+using static DotRecast.Detour.DtDetour;
+using static DotRecast.Recast.RcRecast;
+
 public sealed class NavmeshBuildProfile
 {
     public RcPartition? PartitioningOverride;
@@ -99,14 +102,14 @@ public class NavmeshCustomization
         mesh.GetTileAndPolyByRefUnsafe(refstart, out var startTile, out var startPoly);
 
         // start point -> end point link
-        var idx  = mesh.AllocLink(startTile);
+        var idx  = AllocLink(startTile);
         var link = startTile.links[idx];
         link.refs                            = refend;
         link.edge                            = 0;
         link.side                            = 0;
         link.bmin                            = link.bmax = 0;
-        link.next                            = startTile.polyLinks[startPoly.index];
-        startTile.polyLinks[startPoly.index] = idx;
+        link.next                            = startPoly.firstLink;
+        startPoly.firstLink                  = idx;
     }
 
     private static long InsertPointPoly(DtNavMesh mesh, Vector3 pos, bool start)
@@ -120,6 +123,7 @@ public class NavmeshCustomization
         mesh.GetTileAndPolyByRefUnsafe(startRef, out var startTile, out var startPoly);
         var p = new DtPoly(startTile.data.header.polyCount, 1)
         {
+            firstLink = DT_NULL_LINK,
             vertCount = 1,
             flags     = 1
         };
@@ -138,32 +142,39 @@ public class NavmeshCustomization
         startTile.data.verts[^2] = startPolyPoint.Y;
         startTile.data.verts[^1] = startPolyPoint.Z;
 
-        Array.Resize(ref startTile.polyLinks, startTile.polyLinks.Length + 1);
-        startTile.polyLinks[^1] = DtNavMesh.DT_NULL_LINK;
-
-        var salt     = DtNavMesh.DecodePolyIdSalt(startRef);
-        var pointRef = DtNavMesh.EncodePolyId(salt, startTile.index, p.index);
+        var salt     = DecodePolyIdSalt(startRef);
+        var pointRef = EncodePolyId(salt, startTile.index, p.index);
 
         // link point to the polygon it lies inside
-        var idx  = mesh.AllocLink(startTile);
+        var idx  = AllocLink(startTile);
         var link = startTile.links[idx];
         link.refs                    = startRef;
         link.edge                    = 0;
         link.side                    = 0xff;
         link.bmin                    = link.bmax = 0;
-        startTile.polyLinks[p.index] = idx;
+        p.firstLink                  = idx;
 
         // link owning polygon to point
-        idx                                  = mesh.AllocLink(startTile);
+        idx                                  = AllocLink(startTile);
         link                                 = startTile.links[idx];
         link.refs                            = pointRef;
         link.edge                            = 0xff;
         link.side                            = 0xff;
         link.bmin                            = link.bmax = 0;
-        link.next                            = startTile.polyLinks[startPoly.index];
-        startTile.polyLinks[startPoly.index] = idx;
+        link.next                            = startPoly.firstLink;
+        startPoly.firstLink                  = idx;
 
         return pointRef;
+    }
+
+    private static int AllocLink(DtMeshTile tile)
+    {
+        if (tile.linksFreeList == DT_NULL_LINK)
+            throw new InvalidOperationException("导航网格链接池已耗尽");
+
+        var linkIndex = tile.linksFreeList;
+        tile.linksFreeList = tile.links[linkIndex].next;
+        return linkIndex;
     }
 }
 
@@ -298,7 +309,7 @@ public static class CreateParamsExtensions
         config.offMeshConVerts[^1] = ptB.Z;
 
         Extend(ref config.offMeshConDir, 1);
-        config.offMeshConDir[^1] = bidirectional ? DtNavMesh.DT_OFFMESH_CON_BIDIR : 0;
+        config.offMeshConDir[^1] = bidirectional ? DT_OFFMESH_CON_BIDIR : 0;
 
         Extend(ref config.offMeshConFlags, 1);
         config.offMeshConFlags[^1] = 1;
@@ -309,7 +320,7 @@ public static class CreateParamsExtensions
         config.offMeshConRad[^1] = radius;
 
         Extend(ref config.offMeshConAreas, 1);
-        config.offMeshConAreas[^1] = RcConstants.RC_WALKABLE_AREA;
+        config.offMeshConAreas[^1] = RC_WALKABLE_AREA;
 
         Extend(ref config.offMeshConUserID, 1);
         config.offMeshConUserID[^1] = userID;

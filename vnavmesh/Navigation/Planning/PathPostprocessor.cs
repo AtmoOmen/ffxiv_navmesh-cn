@@ -69,13 +69,14 @@ internal sealed class PathPostprocessor
 
         if (useStringPulling)
         {
-            var straightPath = new List<DtStraightPath>();
+            var corridor = segment.Corridor.ToArray();
+            var straightPath = new DtStraightPath[1024];
             var straightStatus = meshQuery.FindStraightPath
-                (segment.StartPosition.SystemToRecast(), segment.EndPosition.SystemToRecast(), [.. segment.Corridor], ref straightPath, 1024, 0);
+                (segment.StartPosition.SystemToRecast(), segment.EndPosition.SystemToRecast(), corridor, corridor.Length, straightPath, out var straightPathCount, straightPath.Length, 0);
             if (straightStatus.Failed())
                 throw new InvalidOperationException("地面路径后处理失败：无法生成 string-pulling 路径");
 
-            return DeduplicateWaypoints(straightPath.Select(p => p.pos.RecastToSystem()));
+            return DeduplicateWaypoints(straightPath.AsSpan(0, straightPathCount).ToArray().Select(p => p.pos.RecastToSystem()));
         }
 
         return DeduplicateWaypoints(segment.Corridor.Select(r => meshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));

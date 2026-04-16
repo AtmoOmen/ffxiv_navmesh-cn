@@ -180,9 +180,8 @@ public partial class NavmeshQuery
         float             range
     )
     {
-        var query    = new DtNavMeshQuery(MeshQuery.GetAttachedNavMesh());
-        var corridor = new List<long>();
-        var status   = query.FindPath(candidate.PolyRef, endRef, candidate.ProjectedPoint.SystemToRecast(), requestedEndPos, filter, ref corridor, opt);
+        var query  = new DtNavMeshQuery(MeshQuery.GetAttachedNavMesh());
+        var status = FindPath(query, candidate.PolyRef, endRef, candidate.ProjectedPoint.SystemToRecast(), requestedEndPos, filter, opt, out var corridor);
 
         if (status.Failed() || corridor.Count == 0)
         {
@@ -349,6 +348,46 @@ public partial class NavmeshQuery
         else finalDestination = requestedEndPos.RecastToSystem();
 
         return new(startCandidate, status, resultStatus, finalDestination, corridor);
+    }
+
+    private static DtStatus FindPath
+    (
+        DtNavMeshQuery   query,
+        long             startRef,
+        long             endRef,
+        RcVec3f          startPos,
+        RcVec3f          endPos,
+        IDtQueryFilter   filter,
+        DtFindPathOption opt,
+        out List<long>   corridor
+    )
+    {
+        var buffer = new long[MaxPathPolys];
+        corridor   = [];
+
+        if (opt.options != 0)
+        {
+            var status = query.InitSlicedFindPath(startRef, endRef, startPos, endPos, filter, opt.options);
+            if (status.Failed())
+                return status;
+
+            do
+            {
+                status = query.UpdateSlicedFindPath(MaxPathPolys, out _);
+            }
+            while (status.InProgress());
+
+            if (status.Failed())
+                return status;
+
+            status = query.FinalizeSlicedFindPath(buffer, out var count, buffer.Length);
+            corridor = [.. buffer.AsSpan(0, count).ToArray()];
+            return status;
+        }
+
+        var directStatus = query.FindPath(startRef, endRef, startPos, endPos, filter, buffer, out var directCount, buffer.Length);
+        corridor = [.. buffer.AsSpan(0, directCount).ToArray()];
+        return directStatus;
     }
 
     private MeshEndCandidate? ResolveBestEndPathCandidate(Vector3 requestedTarget, long requestedEndRef)

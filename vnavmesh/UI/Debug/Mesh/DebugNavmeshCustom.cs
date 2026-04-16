@@ -161,7 +161,7 @@ internal class DebugNavmeshCustom : IDisposable
                 if (includeTiles)
                 {
                     foreach (var result in _builder.BuildTiles())
-                        _intermediates.Tiles[result.tileX, result.tileZ] = result;
+                        _intermediates.Tiles[result.TileX, result.TileZ] = result;
 
                     //int x = 9, z = 15;
                     //_intermediates.Tiles[x, z] = _builder.BuildTile(x, z);
@@ -391,16 +391,16 @@ internal class DebugNavmeshCustom : IDisposable
 
         _debugTiles ??= new PerTile[_navmesh.Intermediates!.NumTilesX, _navmesh.Intermediates.NumTilesZ];
         var debug = _debugTiles[x, z] ??= new();
-        debug.DrawSolidHeightfield ??= new(inter.GetSolidHeightfield(), _tree, _dd);
+        debug.DrawSolidHeightfield ??= new(inter.SolidHeightfiled, _tree, _dd);
         debug.DrawSolidHeightfield.Draw();
-        debug.DrawCompactHeightfield ??= new(inter.GetCompactHeightfield(), _tree, _dd);
+        debug.DrawCompactHeightfield ??= new(inter.CompactHeightfield, _tree, _dd);
         debug.DrawCompactHeightfield.Draw();
-        debug.DrawContourSet ??= new(inter.GetContourSet(), _tree, _dd);
+        debug.DrawContourSet ??= new(inter.ContourSet, _tree, _dd);
         debug.DrawContourSet.Draw();
-        debug.DrawPolyMesh ??= new(inter.GetMesh(), _tree, _dd);
+        debug.DrawPolyMesh ??= new(inter.Mesh, _tree, _dd);
         debug.DrawPolyMesh.Draw();
 
-        if (inter.GetMeshDetail() is { } det)
+        if (inter.MeshDetail is { } det)
         {
             debug.DrawPolyMeshDetail ??= new(det, _tree, _dd);
             debug.DrawPolyMeshDetail.Draw();
@@ -492,16 +492,14 @@ internal class DebugNavmeshCustom : IDisposable
             var so = shfOld.spans[ispan];
             var sn = shfNew.spans[ispan];
 
-            while (so != 0 && sn != 0)
+            while (so != null && sn != null)
             {
-                ref var spanOld = ref shfOld.Span(so);
-                ref var spanNew = ref shfNew.Span(sn);
-                identical &= spanOld.smin == spanNew.smin && spanOld.smax == spanNew.smax && spanOld.area == spanNew.area;
-                so        =  spanOld.next;
-                sn        =  spanNew.next;
+                identical &= so.smin == sn.smin && so.smax == sn.smax && so.area == sn.area;
+                so        =  so.next;
+                sn        =  sn.next;
             }
 
-            identical &= so == 0 && sn == 0;
+            identical &= so == null && sn == null;
             ispan++;
         }
 

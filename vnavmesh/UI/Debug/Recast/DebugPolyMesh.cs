@@ -9,6 +9,8 @@ using vnavmesh.UI.Rendering;
 
 namespace vnavmesh.UI.Debug.Recast;
 
+using static DotRecast.Recast.RcRecast;
+
 public class DebugPolyMesh : DebugRecast
 {
     private RcPolyMesh       _mesh;
@@ -67,7 +69,7 @@ public class DebugPolyMesh : DebugRecast
                         for (var j = 0; j < _mesh.nvp; ++j)
                         {
                             var vertex = _mesh.polys[i * 2 * _mesh.nvp + j];
-                            if (vertex == RcConstants.RC_MESH_NULL_IDX)
+                            if (vertex == RC_MESH_NULL_IDX)
                                 break;
                             if (_tree.LeafNode
                                     ($"顶点 {j}：#{vertex} = {_mesh.verts[3 * vertex]}x{_mesh.verts[3 * vertex + 1]}x{_mesh.verts[3 * vertex + 2]}").SelectedOrHovered)
@@ -77,7 +79,7 @@ public class DebugPolyMesh : DebugRecast
                         for (var j = 0; j < _mesh.nvp; ++j)
                         {
                             var adj = _mesh.polys[i * 2 * _mesh.nvp + _mesh.nvp + j];
-                            if (adj == RcConstants.RC_MESH_NULL_IDX)
+                            if (adj == RC_MESH_NULL_IDX)
                                 break;
                             if (_tree.LeafNode($"邻接 {j}：{adj}").SelectedOrHovered)
                                 VisualizePolygon(adj);
@@ -113,7 +115,7 @@ public class DebugPolyMesh : DebugRecast
                 var offset = i * _mesh.nvp * 2;
                 for (var j = 2; j < _mesh.nvp; ++j)
                     builder.AddTriangle(_mesh.polys[offset], _mesh.polys[offset + j], _mesh.polys[offset + j - 1]); // flipped for dx order
-                var numTriangles = _mesh.polys.AsSpan(offset, _mesh.nvp).IndexOf(RcConstants.RC_MESH_NULL_IDX);
+                var numTriangles = _mesh.polys.AsSpan(offset, _mesh.nvp).IndexOf(RC_MESH_NULL_IDX);
                 if (numTriangles < 0)
                     numTriangles = _mesh.nvp;
                 numTriangles = Math.Max(numTriangles - 2, 0);
@@ -145,7 +147,7 @@ public class DebugPolyMesh : DebugRecast
     {
         var offset = index * _mesh.nvp * 2;
 
-        if (_mesh.polys[offset] != RcConstants.RC_MESH_NULL_IDX)
+        if (_mesh.polys[offset] != RC_MESH_NULL_IDX)
         {
             var from = GetVertex(_mesh.polys[offset]);
             var adj  = _mesh.polys[offset + _mesh.nvp];
@@ -153,7 +155,7 @@ public class DebugPolyMesh : DebugRecast
             for (var i = 1; i < _mesh.nvp; ++i)
             {
                 var v = _mesh.polys[offset + i];
-                if (v == RcConstants.RC_MESH_NULL_IDX)
+                if (v == RC_MESH_NULL_IDX)
                     break;
                 var to = GetVertex(v);
                 VisualizeEdge(from, to, adj);
@@ -166,7 +168,7 @@ public class DebugPolyMesh : DebugRecast
     }
 
     private void VisualizeEdge(Vector3 from, Vector3 to, int adj) => _dd.DrawWorldLine
-        (from, to, adj == RcConstants.RC_MESH_NULL_IDX ? 0xd8403000 : 0x80403000, adj == RcConstants.RC_MESH_NULL_IDX ? 2 : 1);
+        (from, to, adj == RC_MESH_NULL_IDX ? 0xd8403000 : 0x80403000, adj == RC_MESH_NULL_IDX ? 2 : 1);
 
     private void VisualizeVertex(int index) => _dd.DrawWorldPoint(GetVertex(index), 5, 0xff0000ff);
 

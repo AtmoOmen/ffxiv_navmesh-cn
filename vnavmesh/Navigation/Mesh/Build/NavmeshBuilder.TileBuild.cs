@@ -51,7 +51,7 @@ public partial class NavmeshBuilder
         {
             var built = builtTiles[tileIndex];
             if (built.MeshData != null)
-                Navmesh.Mesh.AddTile(built.MeshData, 0, 0);
+                Navmesh.Mesh.AddTile(built.MeshData, 0, 0, out _);
 
             if (Navmesh.Volume != null && built.VolumeColumn != null)
                 MergeTileColumn(Navmesh.Volume, tileIndex % NumTilesX, tileIndex / NumTilesX, built.VolumeColumn);
@@ -200,7 +200,7 @@ public partial class NavmeshBuilder
         _customization.CustomizeSettings(navmeshConfig);
 
         RcBuilderResult? builderResult   = null;
-        JumpLinkBuilder? jumpLinkBuilder = null;
+        DtJumpLinkBuilder? jumpLinkBuilder = null;
 
         if (captureIntermediates || Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks)
         {
@@ -209,7 +209,7 @@ public partial class NavmeshBuilder
                 jumpLinkBuilder = new([builderResult]);
         }
 
-        void addConnections(List<JumpLink> links)
+        void addConnections(List<DtJumpLink> links)
         {
             foreach (var link in links)
             {
@@ -220,7 +220,7 @@ public partial class NavmeshBuilder
                     var p = link.startSamples[i].p;
                     var q = link.endSamples[i].p;
 
-                    if (i == 0 || RcVecUtils.Dist2D(prev, p) > Settings.AgentRadius)
+                    if (i == 0 || RcVec.Dist2D(prev, p) > Settings.AgentRadius)
                     {
                         navmeshConfig.AddOffMeshConnection(p.RecastToSystem(), q.RecastToSystem(), Settings.AgentRadius);
                         prev = p;
@@ -235,7 +235,7 @@ public partial class NavmeshBuilder
 
             if (Settings.GenerateEdgeClimbLinks)
             {
-                var cfg = new JumpLinkBuilderConfig
+                var cfg = new DtJumpLinkBuilderConfig
                 (
                     Settings.CellSize,
                     Settings.CellHeight,
@@ -249,12 +249,12 @@ public partial class NavmeshBuilder
                     -Settings.ClimbDownMinHeight,
                     0
                 );
-                addConnections(jumpLinkBuilder.Build(cfg, JumpLinkType.EDGE_CLIMB_DOWN));
+                addConnections(jumpLinkBuilder.Build(cfg, DtJumpLinkType.EDGE_CLIMB_DOWN));
             }
 
             if (Settings.GenerateEdgeJumpLinks)
             {
-                var cfg = new JumpLinkBuilderConfig
+                var cfg = new DtJumpLinkBuilderConfig
                 (
                     Settings.CellSize,
                     Settings.CellHeight,
@@ -268,7 +268,7 @@ public partial class NavmeshBuilder
                     -Settings.EdgeJumpMinDrop,
                     Settings.EdgeJumpHeight
                 );
-                addConnections(jumpLinkBuilder.Build(cfg, JumpLinkType.EDGE_JUMP));
+                addConnections(jumpLinkBuilder.Build(cfg, DtJumpLinkType.EDGE_JUMP));
             }
 
             scratch.PhaseTicks[(int)BuildPhase.BuildJumpLinks] += ElapsedTimeSpanTicks(phaseStart);

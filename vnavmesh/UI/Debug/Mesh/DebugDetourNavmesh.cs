@@ -10,6 +10,8 @@ using vnavmesh.UI.Rendering;
 
 namespace vnavmesh.UI.Debug.Mesh;
 
+using static DotRecast.Detour.DtDetour;
+
 public class DebugDetourNavmesh : DebugRecast
 {
     private struct PerTile
@@ -114,7 +116,7 @@ public class DebugDetourNavmesh : DebugRecast
                                     if (_tree.LeafNode($"{p.verts[k]} ({GetVertex(tile, p.verts[k])})，邻接={p.neis[k]:X}").SelectedOrHovered)
                                         VisualizeVertex(GetVertex(tile, p.verts[k]));
 
-                                for (var k = tile.polyLinks[p.index]; k != DtNavMesh.DT_NULL_LINK; k = tile.links[k].next)
+                                for (var k = p.firstLink; k != DT_NULL_LINK; k = tile.links[k].next)
                                 {
                                     var link = tile.links[k];
                                     if (_tree.LeafNode($"链接 {k}：引用={link.refs:X}，边缘={link.edge}，侧面={link.side}，bmin={link.bmin}，bmax={link.bmax}").SelectedOrHovered)
@@ -372,7 +374,7 @@ public class DebugDetourNavmesh : DebugRecast
             if (poly.vertCount < 3)
                 return;
             // triangles
-            var instance = _query != null && _query.IsInClosedList(DtNavMesh.EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
+            var instance = _query != null && _query.IsInClosedList(EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
                            !colorByArea ? InstanceID.Tile :
                            poly.GetArea() == 0 ? InstanceID.AreaNull : InstanceID.AreaWalkable;
             var mesh = visu.Meshes[poly.index] with { FirstInstance = (int)instance };
@@ -391,11 +393,11 @@ public class DebugDetourNavmesh : DebugRecast
                 {
                     color = 0x20403000;
 
-                    if ((poly.neis[i] & DtNavMesh.DT_EXT_LINK) != 0)
+                    if ((poly.neis[i] & DT_EXT_LINK) != 0)
                     {
                         var con = false;
 
-                        for (var k = tile.polyLinks[poly.index]; k != DtNavMesh.DT_NULL_LINK; k = tile.links[k].next)
+                        for (var k = poly.firstLink; k != DT_NULL_LINK; k = tile.links[k].next)
                             if (tile.links[k].edge == i)
                             {
                                 con = true;
@@ -458,7 +460,7 @@ public class DebugDetourNavmesh : DebugRecast
     private void VisualizeDetailSubmeshWithEdges(DtMeshTile tile, EffectMesh.Data visu, DtPoly poly, bool colorByArea, bool highlight)
     {
         // triangles
-        var instance = _query != null && _query.IsInClosedList(DtNavMesh.EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
+        var instance = _query != null && _query.IsInClosedList(EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
                        !colorByArea ? InstanceID.Tile :
                        poly.GetArea() == 0 ? InstanceID.AreaNull : InstanceID.AreaWalkable;
         var mesh = visu.Meshes[poly.index] with { FirstInstance = (int)instance };
@@ -478,9 +480,9 @@ public class DebugDetourNavmesh : DebugRecast
             var v1     = GetDetailVertex(tile, poly, v1i);
             var v2     = GetDetailVertex(tile, poly, v2i);
             var v3     = GetDetailVertex(tile, poly, v3i);
-            _dd.DrawWorldLine(v1, v2, color, (DtNavMesh.GetDetailTriEdgeFlags(flags, 0) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
-            _dd.DrawWorldLine(v2, v3, color, (DtNavMesh.GetDetailTriEdgeFlags(flags, 1) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
-            _dd.DrawWorldLine(v3, v1, color, (DtNavMesh.GetDetailTriEdgeFlags(flags, 2) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
+            _dd.DrawWorldLine(v1, v2, color, (GetDetailTriEdgeFlags(flags, 0) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
+            _dd.DrawWorldLine(v2, v3, color, (GetDetailTriEdgeFlags(flags, 1) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
+            _dd.DrawWorldLine(v3, v1, color, (GetDetailTriEdgeFlags(flags, 2) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
         }
     }
 

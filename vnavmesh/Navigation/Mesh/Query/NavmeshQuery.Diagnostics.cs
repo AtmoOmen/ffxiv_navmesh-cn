@@ -180,8 +180,7 @@ public partial class NavmeshQuery
             if (bridgeHorizontalDistance > ShortGapRepairMaxBridgeDistance || bridgeVerticalDistance > ShortGapRepairMaxVerticalDelta)
                 continue;
 
-            var corridor = new List<long>();
-            var status   = MeshQuery.FindPath(poly, endRef, bridgePoint.SystemToRecast(), requestedEndPos, filter, ref corridor, opt);
+            var status = FindPath(MeshQuery, poly, endRef, bridgePoint.SystemToRecast(), requestedEndPos, filter, opt, out var corridor);
 
             if (status.Failed() || corridor.Count == 0)
             {

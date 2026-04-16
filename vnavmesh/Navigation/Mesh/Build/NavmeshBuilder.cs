@@ -12,6 +12,8 @@ using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Build;
 
+using static DotRecast.Detour.DtDetour;
+
 // utility for building a navmesh from scene data
 // individual tiles can be built concurrently
 public partial class NavmeshBuilder
@@ -188,7 +190,7 @@ public partial class NavmeshBuilder
             tileWidth  = (BoundsMax.X - BoundsMin.X) / NumTilesX,
             tileHeight = (BoundsMax.Z - BoundsMin.Z) / NumTilesZ,
             maxTiles   = NumTilesX                   * NumTilesZ,
-            maxPolys   = 1 << DtNavMesh.DT_POLY_BITS
+            maxPolys   = 1 << DT_POLY_BITS
         };
 
         _tileWidthWorld     = navmeshParams.tileWidth;
@@ -196,7 +198,8 @@ public partial class NavmeshBuilder
         _invTileWidthWorld  = 1.0f / _tileWidthWorld;
         _invTileHeightWorld = 1.0f / _tileHeightWorld;
 
-        var navmesh = new DtNavMesh(navmeshParams, Settings.PolyMaxVerts);
+        var navmesh = new DtNavMesh();
+        navmesh.Init(navmeshParams, Settings.PolyMaxVerts);
         var volume  = Flyable ? new VoxelMap(BoundsMin, BoundsMax, Settings.NumTiles) : null;
         Navmesh = new(customization.Version, BuildSignature, false, navmesh, volume);
 

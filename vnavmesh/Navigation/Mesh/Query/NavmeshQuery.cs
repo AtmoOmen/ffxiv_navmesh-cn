@@ -10,6 +10,8 @@ using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Query;
 
+using static DotRecast.Detour.DtDetour;
+
 public partial class NavmeshQuery
 {
     private readonly Config _config;
@@ -34,6 +36,7 @@ public partial class NavmeshQuery
     private const    float  SuspectedTileSeamGapMaxDistance         = 3.0f;
     private const    float  SuspectedTileSeamBoundaryMaxDistance    = 1.0f;
     private const    float  VolumeBoundsClampEpsilon                = 0.1f;
+    private const    int    MaxPathPolys                            = 4096;
 
     private readonly record struct TileCoord
     (
@@ -110,7 +113,10 @@ public partial class NavmeshQuery
     {
         public readonly List<long> Result = [];
 
-        public void Process(DtMeshTile tile, DtPoly poly, long refs) => Result.Add(refs);
+        public void Process(DtMeshTile tile, ReadOnlySpan<int> polys, ReadOnlySpan<long> polyRefs, int count)
+        {
+            Result.AddRange(polyRefs[..count]);
+        }
     }
 
     private sealed class RandomnessFilter
@@ -359,7 +365,7 @@ public partial class NavmeshQuery
 
             MeshQuery.GetAttachedNavMesh().GetTileAndPolyByRefUnsafe(next, out var nextTile, out var nextPoly);
 
-            for (var i = nextTile.polyLinks[nextPoly.index]; i != DtNavMesh.DT_NULL_LINK; i = nextTile.links[i].next)
+            for (var i = nextPoly.firstLink; i != DT_NULL_LINK; i = nextTile.links[i].next)
             {
                 var neighbourRef = nextTile.links[i].refs;
                 if (neighbourRef != 0)
