@@ -3,3 +3,5 @@ obj/
 bin/
 *.user
 .idea/
+docs/
+outputs/

@@ -35,7 +35,7 @@ internal static class DriverMath
         var current                     = Project(context.Player.Position, flatten);
         var previous                    = Project(context.PreviousPosition ?? context.Player.Position, flatten);
 
-        if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, Project(context.Plan.RequestedDestination, flatten)) <= context.Plan.DestinationTolerance)
+        if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, Project(context.Plan.FinalDestination, flatten)) <= context.Plan.DestinationTolerance)
             return context.TraverseSegmentCount;
 
         while (context.TryGetCurrentTraverseSegment(currentTraverseSegmentIndex, out var segmentStart, out var segmentEnd))

@@ -1,6 +1,7 @@
 using System.Numerics;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
+using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Planning;
@@ -21,12 +22,18 @@ public partial class NavmeshQuery
     private const    int    StartSupportProbeCount                  = 8;
     private const    float  StartSupportMatchDistance               = 0.20f;
     private const    int    MaxStartPolyCandidatesToEvaluate        = 8;
+    private const    float  EndPolyCandidateHalfExtentXZ            = 5.0f;
+    private const    float  EndPolyCandidateHalfExtentY             = 8.0f;
+    private const    float  EndPolyCandidateMaxHorizontalDistance   = 4.0f;
+    private const    float  EndPolyCandidateMaxVerticalDistance     = 8.0f;
+    private const    float  EndPolyCandidateAboveTolerance          = 0.25f;
     private const    float  ShortGapRepairSearchHalfExtentXZ        = 4.0f;
     private const    float  ShortGapRepairSearchHalfExtentY         = 2.5f;
     private const    float  ShortGapRepairMaxBridgeDistance         = 3.5f;
     private const    float  ShortGapRepairMaxVerticalDelta          = 1.0f;
     private const    float  SuspectedTileSeamGapMaxDistance         = 3.0f;
     private const    float  SuspectedTileSeamBoundaryMaxDistance    = 1.0f;
+    private const    float  VolumeBoundsClampEpsilon                = 0.1f;
 
     private readonly record struct TileCoord
     (
@@ -83,6 +90,20 @@ public partial class NavmeshQuery
         public int     SupportProbeHits => StartCandidate.SupportProbeHits;
 
         public float DistanceToRequestedTargetSq(Vector3 requestedTarget) => Vector3.DistanceSquared(FinalDestination, requestedTarget);
+    }
+
+    private readonly record struct MeshEndCandidate
+    (
+        long    PolyRef,
+        Vector3 ProjectedPoint,
+        float   HorizontalDistanceSq,
+        float   VerticalDelta,
+        bool    IsRequestedEnd,
+        bool    IsPointOverPoly
+    )
+    {
+        public float VerticalDistanceAbs => MathF.Abs(VerticalDelta);
+        public bool  IsAboveTarget       => VerticalDelta > EndPolyCandidateAboveTolerance;
     }
 
     private class IntersectQuery : IDtPolyQuery
@@ -276,11 +297,49 @@ public partial class NavmeshQuery
     }
 
     // returns VoxelMap.InvalidVoxel if not found, otherwise voxel index
-    public ulong FindNearestVolumeVoxel
-        (Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5) => VolumeQuery != null
-                                                                          ? VoxelSearch.FindNearestEmptyVoxel
-                                                                              (VolumeQuery.Volume, p, new(halfExtentXZ, halfExtentY, halfExtentXZ))
-                                                                          : VoxelMap.InvalidVoxel;
+    public ulong FindNearestVolumeVoxel(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5)
+    {
+        if (VolumeQuery == null)
+            return VoxelMap.InvalidVoxel;
+
+        var volume     = VolumeQuery.Volume;
+        var halfExtent = new Vector3(halfExtentXZ, halfExtentY, halfExtentXZ);
+        var voxel      = VoxelSearch.FindNearestEmptyVoxel(volume, p, halfExtent);
+        if (voxel != VoxelMap.InvalidVoxel)
+            return voxel;
+
+        var boundsMin = volume.RootTile.BoundsMin + new Vector3(VolumeBoundsClampEpsilon);
+        var boundsMax = volume.RootTile.BoundsMax - new Vector3(VolumeBoundsClampEpsilon);
+        var clamped   = Vector3.Clamp(p, boundsMin, boundsMax);
+        var usedClamp = Vector3.DistanceSquared(clamped, p) > 0.000001f;
+
+        if (usedClamp)
+        {
+            voxel = VoxelSearch.FindNearestEmptyVoxel(volume, clamped, halfExtent);
+            if (voxel != VoxelMap.InvalidVoxel)
+            {
+                Service.Log.Debug($"[算路] 体素定位改用边界贴靠点：原始位置 = {p:f3}，贴靠后 = {clamped:f3}，搜索范围 = {halfExtent:f3}");
+                return voxel;
+            }
+        }
+
+        ReadOnlySpan<float> fallbackMultipliers = [2f, 4f, 8f, 16f];
+        foreach (var multiplier in fallbackMultipliers)
+        {
+            var expandedHalfExtent = new Vector3(halfExtentXZ * multiplier, halfExtentY * multiplier, halfExtentXZ * multiplier);
+            voxel = VoxelSearch.FindNearestEmptyVoxel(volume, usedClamp ? clamped : p, expandedHalfExtent);
+            if (voxel == VoxelMap.InvalidVoxel)
+                continue;
+
+            Service.Log.Debug
+            (
+                $"[算路] 体素定位触发扩搜：原始位置 = {p:f3}，搜索中心 = {(usedClamp ? clamped : p):f3}，搜索范围 = {expandedHalfExtent:f3}"
+            );
+            return voxel;
+        }
+
+        return VoxelMap.InvalidVoxel;
+    }
 
     // collect all mesh polygons reachable from specified polygon
     public HashSet<long> FindReachableMeshPolys(params long[] starting)
