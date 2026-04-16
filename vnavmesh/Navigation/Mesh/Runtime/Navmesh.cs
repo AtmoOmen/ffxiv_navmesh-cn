@@ -14,7 +14,7 @@ public partial record class Navmesh
 )
 {
     public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 34;         // 更新后触发一次全量重构建
+    public static readonly uint Version = 35;         // 更新后触发一次全量重构建
 
     public int GeneratedClimbDownLinkCount { get; set; }
     public int GeneratedEdgeJumpLinkCount  { get; set; }
@@ -30,11 +30,11 @@ public partial record class Navmesh
         var magic   = reader.ReadUInt32();
         var version = reader.ReadUInt32();
         if (magic != Magic || version != Version)
-            throw new Exception("Incorrect header");
+            throw new Exception("缓存头无效");
 
         var customizationVersion = reader.ReadInt32();
         if (customizationVersion != expectedCustomizationVersion)
-            throw new Exception("Outdated customization version");
+            throw new Exception("缓存定制版本已过期");
 
         var buildSignature = reader.ReadString();
         if (buildSignature != expectedBuildSignature)
@@ -87,7 +87,7 @@ public partial record class Navmesh
         EncodedSegment volumeSegment = default;
         Parallel.Invoke
         (
-            () => meshSegment   = EncodeSegment(CacheSegmentKind.Mesh,   CacheCodec.BrotliFastest, meshWriter => SerializeMesh(meshWriter, Mesh)),
+            () => meshSegment   = EncodeSegment(CacheSegmentKind.Mesh,   CacheCodec.None, meshWriter => SerializeMesh(meshWriter, Mesh)),
             () => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.None, volumeWriter => SerializeVolume(volumeWriter, Volume))
         );
 
@@ -100,11 +100,17 @@ public partial record class Navmesh
         writer.Write(2);
         var payloadOffset = writer.BaseStream.Position + 2L * CacheSegmentDescriptorSize;
         var meshDescriptor = new CacheSegmentDescriptor
-            (CacheSegmentKind.Mesh, CacheCodec.BrotliFastest, payloadOffset, meshSegment.Payload.LongLength, meshSegment.UncompressedBytes);
+        (
+            CacheSegmentKind.Mesh,
+            meshSegment.Codec,
+            payloadOffset,
+            meshSegment.Payload.LongLength,
+            meshSegment.UncompressedBytes
+        );
         var volumeDescriptor = new CacheSegmentDescriptor
         (
             CacheSegmentKind.Volume,
-            CacheCodec.None,
+            volumeSegment.Codec,
             payloadOffset + meshSegment.Payload.LongLength,
             volumeSegment.Payload.LongLength,
             volumeSegment.UncompressedBytes
@@ -125,8 +131,7 @@ public partial record class Navmesh
 
     private enum CacheCodec
     {
-        None          = 0,
-        BrotliFastest = 1
+        None = 0
     }
 
     private enum VolumeTileEncoding : byte
@@ -171,6 +176,7 @@ public partial record class Navmesh
 
     private readonly record struct EncodedSegment
     (
+        CacheCodec            Codec,
         byte[]                Payload,
         long                  UncompressedBytes,
         CacheSegmentTelemetry Telemetry

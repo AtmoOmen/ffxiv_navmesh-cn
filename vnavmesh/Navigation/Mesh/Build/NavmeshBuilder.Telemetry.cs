@@ -69,7 +69,7 @@ public partial class NavmeshBuilder
             (
                 new()
                 {
-                    Name         = _phaseNames[phaseIndex],
+                    Name         = PhaseNames[phaseIndex],
                     TotalTicks   = totalTicks,
                     AverageTicks = totalTicks / Math.Max(tileCount, 1),
                     MaxTicks     = maxTicks,
@@ -127,7 +127,7 @@ public partial class NavmeshBuilder
         );
         Service.Log.Debug
         (
-            $"[NavmeshBuilder] Raster job 统计：唯一 job 数 = {telemetry.UniqueRasterJobCount}，覆盖倍率 = {telemetry.JobCoverageMultiplier:f2}，预变换缓存 = {telemetry.PreparedTerrainBytes / 1024.0 / 1024.0:f2} MiB"
+            $"[NavmeshBuilder] Raster job 统计：唯一 job 数 = {telemetry.UniqueRasterJobCount}，覆盖倍率 = {telemetry.JobCoverageMultiplier:f2}，地形预处理缓存 = {telemetry.PreparedTerrainBytes / 1024.0 / 1024.0:f2} MiB"
         );
         Service.Log.Debug("[NavmeshBuilder] 阶段统计（总计 / 单瓦片均值 / 最慢瓦片）");
 

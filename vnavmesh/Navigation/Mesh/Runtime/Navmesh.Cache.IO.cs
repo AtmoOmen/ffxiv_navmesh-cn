@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.IO.Compression;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Shared.Utilities;
@@ -23,7 +22,7 @@ public partial record class Navmesh
         }
 
         var payload = payloadStream.ToArray();
-        return new(payload, countingStream.BytesProcessed, new(kind, payload.LongLength, countingStream.BytesProcessed, timer.Value()));
+        return new(codec, payload, countingStream.BytesProcessed, new(kind, payload.LongLength, countingStream.BytesProcessed, timer.Value()));
     }
 
     private static byte[] ReadSegmentPayload(Stream source, CacheSegmentDescriptor descriptor)
@@ -72,28 +71,20 @@ public partial record class Navmesh
 
     private static CountingStream CreateSegmentWriteStream(Stream destination, CacheCodec codec, out IDisposable disposableStream)
     {
-        var stream = codec switch
-        {
-            CacheCodec.None          => destination,
-            CacheCodec.BrotliFastest => new BrotliStream(destination, CompressionLevel.Fastest, true),
-            _                        => throw new Exception($"Unsupported cache codec: {codec}")
-        };
+        if (codec != CacheCodec.None)
+            throw new Exception($"不支持的缓存编码: {codec}");
 
-        var counting = new CountingStream(stream, codec == CacheCodec.None);
+        var counting = new CountingStream(destination, true);
         disposableStream = counting;
         return counting;
     }
 
     private static CountingStream CreateSegmentReadStream(Stream source, CacheCodec codec, out IDisposable disposableStream)
     {
-        var stream = codec switch
-        {
-            CacheCodec.None          => source,
-            CacheCodec.BrotliFastest => new BrotliStream(source, CompressionMode.Decompress, true),
-            _                        => throw new Exception($"Unsupported cache codec: {codec}")
-        };
+        if (codec != CacheCodec.None)
+            throw new Exception($"不支持的缓存编码: {codec}");
 
-        var counting = new CountingStream(stream, codec == CacheCodec.None);
+        var counting = new CountingStream(source, true);
         disposableStream = counting;
         return counting;
     }

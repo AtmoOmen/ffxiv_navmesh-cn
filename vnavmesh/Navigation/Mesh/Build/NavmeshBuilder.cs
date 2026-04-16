@@ -135,7 +135,7 @@ public partial class NavmeshBuilder
         public          RcBuilderResult?                DebugResult;
     }
 
-    private static readonly string[] _phaseNames =
+    private static readonly string[] PhaseNames =
     [
         "普通几何光栅化",
         "地形与平面光栅化",
@@ -162,20 +162,22 @@ public partial class NavmeshBuilder
     public string                 BuildSignature;
     public Navmesh                Navmesh; // should not be accessed while building tiles
     public BuildTelemetrySummary? LastBuildTelemetry { get; private set; }
+    public long                   TotalEstimatedTileWeight => _totalEstimatedTileWeight;
 
-    private readonly NavmeshCustomization                                               _customization;
-    private readonly TileBuildInput[]                         _tileInputs;
-    private readonly int[]                                    _tileBuildOrder;
-    private readonly RasterJob[]                              _geometryJobs;
-    private readonly RasterJob[]                              _terrainJobs;
-    private readonly ThreadLocal<BuildThreadScratch>                                    _threadScratch = new(() => new(), true);
-    private readonly float                                                              _tileWidthWorld;
-    private readonly float                                                              _tileHeightWorld;
-    private readonly float                                                              _invTileWidthWorld;
-    private readonly float                                                              _invTileHeightWorld;
-    private readonly int                                                                _uniqueRasterJobCount;
-    private readonly int                                                                _totalRasterJobReferences;
-    private readonly long                                                               _preparedTerrainBytes;
+    private readonly NavmeshCustomization            _customization;
+    private readonly TileBuildInput[]                _tileInputs;
+    private readonly int[]                           _tileBuildOrder;
+    private readonly RasterJob[]                     _geometryJobs;
+    private readonly RasterJob[]                     _terrainJobs;
+    private readonly ThreadLocal<BuildThreadScratch> _threadScratch = new(() => new(), true);
+    private readonly float                           _tileWidthWorld;
+    private readonly float                           _tileHeightWorld;
+    private readonly float                           _invTileWidthWorld;
+    private readonly float                           _invTileHeightWorld;
+    private readonly int                             _uniqueRasterJobCount;
+    private readonly int                             _totalRasterJobReferences;
+    private readonly long                            _preparedTerrainBytes;
+    private readonly long                            _totalEstimatedTileWeight;
 
     private int   _walkableClimbVoxels;
     private int   _walkableHeightVoxels;
@@ -274,16 +276,17 @@ public partial class NavmeshBuilder
         _uniqueRasterJobCount    = bucketedInputs.UniqueRasterJobCount;
         _totalRasterJobReferences = bucketedInputs.TotalRasterJobReferences;
         _preparedTerrainBytes    = bucketedInputs.PreparedTerrainBytes;
+        _totalEstimatedTileWeight = bucketedInputs.TotalEstimatedTileWeight;
         Service.Log.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
     }
 
-    public void Build(Action? onTileFinished = null)
+    public void Build(Action<int>? onTileFinished = null)
     {
         var builtTiles = BuildTileResults(false, onTileFinished);
         MergeBuiltTiles(builtTiles, false);
     }
 
-    public List<RcBuilderResult> BuildTiles(Action? onTileFinished = null)
+    public List<RcBuilderResult> BuildTiles(Action<int>? onTileFinished = null)
     {
         var builtTiles = BuildTileResults(true, onTileFinished);
         return MergeBuiltTiles(builtTiles, true);

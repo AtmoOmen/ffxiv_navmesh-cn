@@ -84,13 +84,16 @@ public class VoxelMap
 
         public Level LevelDesc => Owner.Levels[Level];
 
-        public Tile(VoxelMap owner, Vector3 boundsMin, Vector3 boundsMax, int level)
+        public Tile(VoxelMap owner, Vector3 boundsMin, Vector3 boundsMax, int level, bool clearContents = true)
         {
             Owner     = owner;
             BoundsMin = boundsMin;
             BoundsMax = boundsMax;
             Level     = level;
-            Contents  = new ushort[owner.Levels[level].NumCellsTotal];
+            var cellCount = owner.Levels[level].NumCellsTotal;
+            Contents = clearContents
+                           ? new ushort[cellCount]
+                           : GC.AllocateUninitializedArray<ushort>(cellCount);
         }
 
         public (int x, int y, int z) WorldToVoxel(Vector3 v)
@@ -331,8 +334,8 @@ public class VoxelMap
     public RootColumnBuildResult BuildRootColumn(Voxelizer vox, int tx, int tz)
     {
         var ny          = Levels[0].NumCellsY;
-        var contents    = new ushort[ny];
-        var subdivision = new List<Tile>();
+        var contents    = GC.AllocateUninitializedArray<ushort>(ny);
+        var subdivision = new List<Tile>(64);
         for (var ty = 0; ty < ny; ++ty)
             contents[ty] = BuildTileContent(vox, RootTile, subdivision, tx, ty, tz, 0, ty * _leafScaleY[0], 0);
         return new() { Contents = contents, Subdivision = subdivision };
@@ -342,8 +345,8 @@ public class VoxelMap
     {
         BuildMipChain(vox, mipScratch);
         var ny          = Levels[0].NumCellsY;
-        var contents    = new ushort[ny];
-        var subdivision = new List<Tile>();
+        var contents    = GC.AllocateUninitializedArray<ushort>(ny);
+        var subdivision = new List<Tile>(64);
         for (var ty = 0; ty < ny; ++ty)
             contents[ty] = BuildTileContent(vox, mipScratch, RootTile, subdivision, tx, ty, tz, 0, ty, 0);
         return new() { Contents = contents, Subdivision = subdivision };
@@ -375,7 +378,7 @@ public class VoxelMap
         var (min, max) = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel(index));
         if (parent.Level + 1 >= Levels.Length)
             throw new InvalidOperationException("体积列构建遇到超出层级的混合体素");
-        var tile    = new Tile(this, min, max, parent.Level + 1);
+        var tile    = new Tile(this, min, max, parent.Level + 1, false);
         var localId = rootSubdivision.Count;
         rootSubdivision.Add(tile);
 
@@ -416,7 +419,7 @@ public class VoxelMap
         var (min, max) = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel(index));
         if (parent.Level + 1 >= Levels.Length)
             throw new InvalidOperationException("体积列构建遇到超出层级的混合体素");
-        var tile    = new Tile(this, min, max, parent.Level + 1);
+        var tile    = new Tile(this, min, max, parent.Level + 1, false);
         var localId = rootSubdivision.Count;
         rootSubdivision.Add(tile);
 

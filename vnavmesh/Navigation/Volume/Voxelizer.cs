@@ -52,10 +52,9 @@ public class Voxelizer
             for (var z = 0; z < sizeZ; ++z)
             for (var x = 0; x < sizeX; ++x)
             {
-                var startIndex      = VoxelToIndex(x0 + x, y0, z0 + z);
-                var segmentAnySolid = RangeAnySet(_solidWords, startIndex, sizeY);
+                var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
+                var (segmentAnySolid, segmentAllSolid) = RangeClassify(_solidWords, startIndex, sizeY);
                 anySolid |= segmentAnySolid;
-                var segmentAllSolid = RangeAllSet(_solidWords, startIndex, sizeY);
                 allSolid &= segmentAllSolid;
                 if (anySolid && !allSolid)
                     return (true, true);
@@ -70,8 +69,9 @@ public class Voxelizer
         for (var x = 0; x < sizeX; ++x)
         {
             var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-            anySolid |= RangeAnySet(_solidWords, startIndex, sizeY);
-            anyEmpty |= RangeAnySet(_emptyWords, startIndex, sizeY);
+            var (segmentAnySolid, segmentAnyEmpty) = RangeClassifyPair(_solidWords, _emptyWords, startIndex, sizeY);
+            anySolid |= segmentAnySolid;
+            anyEmpty |= segmentAnyEmpty;
             if (anySolid && anyEmpty)
                 return (true, true);
         }
@@ -175,6 +175,61 @@ public class Voxelizer
         }
 
         return false;
+    }
+
+    private static (bool anySet, bool allSet) RangeClassify(ulong[] words, int startIndex, int length)
+    {
+        var index     = startIndex;
+        var remaining = length;
+        var anySet    = false;
+        var allSet    = true;
+
+        while (remaining > 0)
+        {
+            var wordIndex = index >> 6;
+            var bitOffset = index & 63;
+            var bitCount  = Math.Min(64 - bitOffset, remaining);
+            var mask = bitCount == 64
+                           ? ulong.MaxValue
+                           : (1UL << bitCount) - 1 << bitOffset;
+            var value = words[wordIndex] & mask;
+            if (value != 0)
+                anySet = true;
+            if (value != mask)
+                allSet = false;
+            if (anySet && !allSet)
+                return (true, false);
+            index     += bitCount;
+            remaining -= bitCount;
+        }
+
+        return (anySet, allSet);
+    }
+
+    private static (bool anySet1, bool anySet2) RangeClassifyPair(ulong[] words1, ulong[] words2, int startIndex, int length)
+    {
+        var index     = startIndex;
+        var remaining = length;
+        var anySet1   = false;
+        var anySet2   = false;
+
+        while (remaining > 0)
+        {
+            var wordIndex = index >> 6;
+            var bitOffset = index & 63;
+            var bitCount  = Math.Min(64 - bitOffset, remaining);
+            var mask = bitCount == 64
+                           ? ulong.MaxValue
+                           : (1UL << bitCount) - 1 << bitOffset;
+            anySet1 |= (words1[wordIndex] & mask) != 0;
+            anySet2 |= (words2[wordIndex] & mask) != 0;
+            if (anySet1 && anySet2)
+                return (true, true);
+            index     += bitCount;
+            remaining -= bitCount;
+        }
+
+        return (anySet1, anySet2);
     }
 
     private static bool RangeAllSet(ulong[] words, int startIndex, int length)

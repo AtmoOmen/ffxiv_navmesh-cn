@@ -123,13 +123,13 @@ public sealed partial class NavmeshManager
 
         cancel.ThrowIfCancellationRequested();
 
-        var buildTimer    = StopWatchTimer.Create();
-        var builder       = new NavmeshBuilder(scene, customization, _config);
-        var deltaProgress = 0.99f / (builder.NumTilesX * builder.NumTilesZ);
+        var buildTimer         = StopWatchTimer.Create();
+        var builder            = new NavmeshBuilder(scene, customization, _config);
+        var totalProgressWeight = Math.Max(builder.TotalEstimatedTileWeight, 1);
         builder.Build
-        (() =>
+        (weight =>
             {
-                _loadTaskProgress += deltaProgress;
+                _loadTaskProgress += 0.99f * weight / totalProgressWeight;
                 cancel.ThrowIfCancellationRequested();
             }
         );
