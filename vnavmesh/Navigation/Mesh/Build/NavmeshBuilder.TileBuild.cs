@@ -86,7 +86,7 @@ public partial class NavmeshBuilder
 
     private static void MergeTileColumn(VoxelMap parent, int x, int z, VoxelMap.RootColumnBuildResult column)
     {
-        var shift       = parent.RootTile.Subdivision.Count;
+        var shift       = parent.RootTile.SubdivisionCount;
         var ny          = parent.Levels[0].NumCellsY;
         var parentIndex = parent.Levels[0].VoxelToIndex(x, 0, z);
 
@@ -102,7 +102,7 @@ public partial class NavmeshBuilder
             parent.RootTile.Contents[parentIndex + y] = contents;
         }
 
-        parent.RootTile.Subdivision.AddRange(column.Subdivision);
+        parent.RootTile.AddSubdivisions(column.Subdivision);
     }
 
     private TileBuildResult BuildTileCore(int x, int z, TileBuildInput input, bool captureIntermediates)

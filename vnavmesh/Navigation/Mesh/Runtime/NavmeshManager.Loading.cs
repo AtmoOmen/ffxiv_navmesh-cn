@@ -162,7 +162,7 @@ public sealed partial class NavmeshManager
         {
             var cacheReadTimer = StopWatchTimer.Create();
             Log($"Loading cache: {cache.FullName}");
-            using var stream      = cache.OpenRead();
+            using var stream      = new FileStream(cache.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan);
             using var reader      = new BinaryReader(stream);
             var       cacheResult = Navmesh.Deserialize(reader, customization.Version, buildSignature);
             var       mesh        = cacheResult.Navmesh;

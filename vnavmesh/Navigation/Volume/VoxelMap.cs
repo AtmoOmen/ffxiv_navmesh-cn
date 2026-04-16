@@ -64,6 +64,8 @@ public class VoxelMap
 
     public class Tile
     {
+        private List<Tile>? _subdivision;
+
         public VoxelMap Owner     { get; init; }
         public Vector3  BoundsMin { get; init; }
         public Vector3  BoundsMax { get; init; }
@@ -76,7 +78,9 @@ public class VoxelMap
             init;
         } // high bit unset: empty voxel (TODO: region id in low bits?); high bit set: voxel with solid geometry (VoxelIdMask if leaf, subvoxel index otherwise); order is (y,x,z)
 
-        public List<Tile> Subdivision { get; init; } = new();
+        public List<Tile> Subdivision => _subdivision ??= [];
+
+        public int SubdivisionCount => _subdivision?.Count ?? 0;
 
         public Level LevelDesc => Owner.Levels[Level];
 
@@ -120,7 +124,7 @@ public class VoxelMap
             data &= VoxelIdMask;
             if (data == VoxelIdMask) return (EncodeIndex(idx), false); // occupied leaf
 
-            var sub = Subdivision[data].FindLeafVoxel(p, false); // guaranteed to be in bounds
+            var sub = _subdivision![data].FindLeafVoxel(p, false); // guaranteed to be in bounds
             return (EncodeIndex(idx, sub.index), sub.empty);
         }
 
@@ -148,11 +152,36 @@ public class VoxelMap
                 if (data == VoxelIdMask) yield return (EncodeIndex(idx), false); // occupied leaf
                 else
                 {
-                    foreach (var sub in Subdivision[data].EnumerateLeafVoxels(bmin, bmax))
+                    foreach (var sub in _subdivision![data].EnumerateLeafVoxels(bmin, bmax))
                         yield return (EncodeIndex(idx, sub.index), sub.empty);
                 }
             }
         }
+
+        public void ClearSubdivision() => _subdivision?.Clear();
+
+        public void EnsureSubdivisionCapacity(int capacity)
+        {
+            if (capacity <= 0)
+                return;
+
+            if (_subdivision == null)
+                _subdivision = new(capacity);
+            else if (_subdivision.Capacity < capacity)
+                _subdivision.Capacity = capacity;
+        }
+
+        public void AddSubdivision(Tile child) => (_subdivision ??= []).Add(child);
+
+        public void AddSubdivisions(IEnumerable<Tile> children)
+        {
+            if (children is List<Tile> list && list.Count > 0)
+                EnsureSubdivisionCapacity(SubdivisionCount + list.Count);
+
+            Subdivision.AddRange(children);
+        }
+
+        public Tile GetSubdivision(int index) => _subdivision![index];
     }
 
     public sealed class RootColumnBuildResult
@@ -237,7 +266,7 @@ public class VoxelMap
             data &= VoxelIdMask;
             if (data == VoxelIdMask)
                 return false; // found non-empty leaf
-            tile = tile.Subdivision[data];
+            tile = tile.GetSubdivision(data);
         }
     }
 
@@ -262,7 +291,7 @@ public class VoxelMap
                 return (bb.min + eps3, bb.max - eps3);
             }
 
-            tile = tile.Subdivision[id];
+            tile = tile.GetSubdivision(id);
         }
     }
 
@@ -286,7 +315,7 @@ public class VoxelMap
                 return Vector3.Clamp(p, min + eps3, max - eps3);
             }
 
-            tile = tile.Subdivision[id];
+            tile = tile.GetSubdivision(id);
         }
     }
 
@@ -296,7 +325,7 @@ public class VoxelMap
         var ny     = Levels[0].NumCellsY;
         var idx    = Levels[0].VoxelToIndex(tx, 0, tz);
         Array.Copy(column.Contents, 0, RootTile.Contents, idx, ny);
-        RootTile.Subdivision.AddRange(column.Subdivision);
+        RootTile.AddSubdivisions(column.Subdivision);
     }
 
     public RootColumnBuildResult BuildRootColumn(Voxelizer vox, int tx, int tz)

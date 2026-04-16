@@ -1,3 +1,4 @@
+using System.Buffers;
 using vnavmesh.Navigation.Volume;
 
 namespace vnavmesh.Navigation.Mesh.Runtime;
@@ -45,11 +46,11 @@ public partial record class Navmesh
         {
             case VolumeTileEncoding.Empty:
                 Array.Clear(tile.Contents);
-                tile.Subdivision.Clear();
+                tile.ClearSubdivision();
                 return;
             case VolumeTileEncoding.SolidLeaf:
                 Array.Fill(tile.Contents, ushort.MaxValue);
-                tile.Subdivision.Clear();
+                tile.ClearSubdivision();
                 return;
             case VolumeTileEncoding.Mixed:
                 break;
@@ -57,33 +58,51 @@ public partial record class Navmesh
                 throw new Exception($"未知的体积编码类型: {encoding}");
         }
 
-        tile.Subdivision.Clear();
+        tile.ClearSubdivision();
         var packedBytes  = PackedStateBytes(tile.Contents.Length);
-        var packedStates = GC.AllocateUninitializedArray<byte>(packedBytes);
-        reader.ReadExactly(packedStates);
+        var rentedStates = ArrayPool<byte>.Shared.Rent(packedBytes);
+        var packedStates = rentedStates.AsSpan(0, packedBytes);
 
-        for (var i = 0; i < tile.Contents.Length; ++i)
+        try
         {
-            var state = (VolumeCellState)(packedStates[i >> 2] >> (i & 3) * 2 & 0x3);
-            tile.Contents[i] = state switch
+            reader.BaseStream.ReadExactly(packedStates);
+
+            var subtreeCount = 0;
+            for (var i = 0; i < tile.Contents.Length; ++i)
             {
-                VolumeCellState.Empty     => 0,
-                VolumeCellState.SolidLeaf => ushort.MaxValue,
-                VolumeCellState.Subtree   => DeserializeVolumeSubtile(reader, tile, i),
-                _                         => throw new Exception($"未知的体积单元状态: {state}")
-            };
+                if (((VolumeCellState)(packedStates[i >> 2] >> (i & 3) * 2 & 0x3)) == VolumeCellState.Subtree)
+                    ++subtreeCount;
+            }
+
+            tile.EnsureSubdivisionCapacity(subtreeCount);
+
+            for (var i = 0; i < tile.Contents.Length; ++i)
+            {
+                var state = (VolumeCellState)(packedStates[i >> 2] >> (i & 3) * 2 & 0x3);
+                tile.Contents[i] = state switch
+                {
+                    VolumeCellState.Empty     => 0,
+                    VolumeCellState.SolidLeaf => ushort.MaxValue,
+                    VolumeCellState.Subtree   => DeserializeVolumeSubtile(reader, tile, i),
+                    _                         => throw new Exception($"未知的体积单元状态: {state}")
+                };
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rentedStates);
         }
     }
 
     private static ushort DeserializeVolumeSubtile(BinaryReader reader, VoxelMap.Tile parent, int flatIndex)
     {
-        var localId = parent.Subdivision.Count;
+        var localId = parent.SubdivisionCount;
         if (localId >= VoxelMap.VoxelIdMask)
             throw new Exception("体积子树数量超出上限");
 
         var subBounds = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel((ushort)flatIndex));
         var child     = new VoxelMap.Tile(parent.Owner, subBounds.min, subBounds.max, parent.Level + 1);
-        parent.Subdivision.Add(child);
+        parent.AddSubdivision(child);
         DeserializeVolumeTile(reader, child);
         return (ushort)(VoxelMap.VoxelOccupiedBit | localId);
     }
@@ -91,37 +110,44 @@ public partial record class Navmesh
     private static void SerializeVolumeTile(BinaryWriter writer, VoxelMap.Tile tile)
     {
         var packedBytes  = PackedStateBytes(tile.Contents.Length);
-        var packedStates = GC.AllocateUninitializedArray<byte>(packedBytes);
-        var subtreeIds   = GC.AllocateUninitializedArray<ushort>(tile.Contents.Length);
-        packedStates.AsSpan().Clear();
-        var subtreeCount = 0;
+        var rentedStates = ArrayPool<byte>.Shared.Rent(packedBytes);
+        var packedStates = rentedStates.AsSpan(0, packedBytes);
+        packedStates.Clear();
         var allEmpty     = true;
-        var allSolidLeaf = tile.Subdivision.Count == 0;
+        var allSolidLeaf = tile.SubdivisionCount == 0;
 
-        for (var i = 0; i < tile.Contents.Length; ++i)
+        try
         {
-            var cell  = tile.Contents[i];
-            var state = ClassifyCell(cell);
-            packedStates[i >> 2] |= (byte)((byte)state << (i & 3) * 2);
-            allEmpty             &= state == VolumeCellState.Empty;
-            allSolidLeaf         &= state == VolumeCellState.SolidLeaf;
-            if (state == VolumeCellState.Subtree)
-                subtreeIds[subtreeCount++] = (ushort)(cell & VoxelMap.VoxelIdMask);
+            for (var i = 0; i < tile.Contents.Length; ++i)
+            {
+                var cell  = tile.Contents[i];
+                var state = ClassifyCell(cell);
+                packedStates[i >> 2] |= (byte)((byte)state << (i & 3) * 2);
+                allEmpty             &= state == VolumeCellState.Empty;
+                allSolidLeaf         &= state == VolumeCellState.SolidLeaf;
+            }
+
+            var encoding = allEmpty ? VolumeTileEncoding.Empty : allSolidLeaf ? VolumeTileEncoding.SolidLeaf : VolumeTileEncoding.Mixed;
+            writer.Write((byte)encoding);
+            if (encoding != VolumeTileEncoding.Mixed)
+                return;
+
+            writer.BaseStream.Write(packedStates);
+
+            for (var i = 0; i < tile.Contents.Length; ++i)
+            {
+                if (ClassifyCell(tile.Contents[i]) != VolumeCellState.Subtree)
+                    continue;
+
+                var localId = tile.Contents[i] & VoxelMap.VoxelIdMask;
+                if (localId >= tile.SubdivisionCount)
+                    throw new Exception($"体积子树索引越界: {localId} / {tile.SubdivisionCount}");
+                SerializeVolumeTile(writer, tile.GetSubdivision(localId));
+            }
         }
-
-        var encoding = allEmpty ? VolumeTileEncoding.Empty : allSolidLeaf ? VolumeTileEncoding.SolidLeaf : VolumeTileEncoding.Mixed;
-        writer.Write((byte)encoding);
-        if (encoding != VolumeTileEncoding.Mixed)
-            return;
-
-        writer.Write(packedStates);
-
-        for (var i = 0; i < subtreeCount; ++i)
+        finally
         {
-            var localId = subtreeIds[i];
-            if (localId >= tile.Subdivision.Count)
-                throw new Exception($"体积子树索引越界: {localId} / {tile.Subdivision.Count}");
-            SerializeVolumeTile(writer, tile.Subdivision[localId]);
+            ArrayPool<byte>.Shared.Return(rentedStates);
         }
     }
 
