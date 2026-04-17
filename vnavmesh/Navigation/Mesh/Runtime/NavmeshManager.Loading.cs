@@ -65,8 +65,6 @@ public sealed partial class NavmeshManager
                     OnNavmeshChanged?.Invoke(Navmesh, Query);
                     if (buildResult.CacheFile != null)
                         QueueCacheWrite(cacheKey, buildResult.CacheFile, navmesh);
-                    else if (navmesh.Volume is { HasDeferredTree: true } deferredVolume)
-                        QueueVolumeWarmup(cacheKey, deferredVolume);
                 },
                 cts.Token
             );
@@ -185,23 +183,4 @@ public sealed partial class NavmeshManager
         }
     }
 
-    private void QueueVolumeWarmup(string cacheKey, vnavmesh.Navigation.Volume.VoxelMap volume)
-    {
-        var warmTask = Task.Run
-        (
-            () =>
-            {
-                var timer = StopWatchTimer.Create();
-                volume.EnsureMaterialized();
-                Log($"后台体积预热完成 '{cacheKey}'，耗时 {timer.Value().TotalMilliseconds:f1} ms");
-            }
-        );
-        _ = warmTask.ContinueWith
-        (
-            LogTaskError,
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default
-        );
-    }
 }

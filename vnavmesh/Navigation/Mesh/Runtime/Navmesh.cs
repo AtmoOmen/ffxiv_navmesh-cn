@@ -63,21 +63,14 @@ public partial record class Navmesh
             }
         }
 
-        var meshSegment    = meshDescriptor   ?? throw new Exception("缓存缺少 Mesh 段");
-        var volumeSegment  = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
+        var meshSegment     = meshDescriptor   ?? throw new Exception("缓存缺少 Mesh 段");
+        var volumeSegment   = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
         var requiresRewrite = volumeSegment.Codec != CacheCodec.FastLz;
-        var meshPayload   = ReadSegmentPayload(reader.BaseStream, meshSegment);
-        var volumePayload = ReadSegmentPayload(reader.BaseStream, volumeSegment);
-
-        DtNavMesh?            mesh            = null;
-        VoxelMap?             volume          = null;
-        CacheSegmentTelemetry meshTelemetry   = default;
-        CacheSegmentTelemetry volumeTelemetry = default;
-        Parallel.Invoke
-        (
-            () => (mesh, meshTelemetry)     = DecodeSegment(meshSegment,   meshPayload,   DeserializeMesh),
-            () => (volume, volumeTelemetry) = DecodeSegment(volumeSegment, volumePayload, DeserializeVolume)
-        );
+        var source = reader.BaseStream;
+        var (mesh, meshTelemetry) = DecodeSegment(meshSegment, source, DeserializeMesh);
+        var (volume, volumeTelemetry) = volumeSegment.Codec == CacheCodec.FastLz
+                                            ? DecodeDeferredVolumeSegment(volumeSegment, source)
+                                            : DecodeSegment(volumeSegment, source, DeserializeVolume);
         return new(new(customizationVersion, buildSignature, customizationApplied, mesh!, volume), new(meshTelemetry, volumeTelemetry), requiresRewrite);
     }
 

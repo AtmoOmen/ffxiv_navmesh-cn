@@ -3,12 +3,31 @@ using System.Buffers.Binary;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Navigation.Volume;
+using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Runtime;
 
 public partial record class Navmesh
 {
     private static VoxelMap? DeserializeVolume(BinaryReader reader)
+    {
+        var volume = DeserializeVolumeHeader(reader);
+        if (volume == null)
+            return null;
+
+        if (TryCaptureDeferredVolumeTree(reader.BaseStream, out var payload, out var offset, out var length))
+        {
+            volume.SetDeferredTreePayload(payload, offset, length);
+            reader.BaseStream.Position = reader.BaseStream.Length;
+        }
+        else
+        {
+            DeserializeVolumeTile(reader, volume.RootTile);
+        }
+        return volume;
+    }
+
+    private static VoxelMap? DeserializeVolumeHeader(BinaryReader reader)
     {
         if (!reader.ReadBoolean())
             return null;
@@ -22,16 +41,20 @@ public partial record class Navmesh
             l = reader.ReadInt32();
 
         var (min, max) = DeserializeBounds(reader);
-        var volume = new VoxelMap(min, max, tilesPerLevel);
-        if (TryCaptureDeferredVolumeTree(reader.BaseStream, out var payload, out var offset, out var length))
-        {
-            volume.SetDeferredTreePayload(payload, offset, length);
-            reader.BaseStream.Position = reader.BaseStream.Length;
-        }
-        else
-        {
-            DeserializeVolumeTile(reader, volume.RootTile);
-        }
+        return new(min, max, tilesPerLevel);
+    }
+
+    private static VoxelMap? DeserializeCompressedDeferredVolume(byte[] payload, long expectedBytes)
+    {
+        var decodedPayload = DecompressFastLz(payload, expectedBytes);
+        using var stream   = new MemoryStream(decodedPayload, 0, decodedPayload.Length, false, true);
+        using var reader   = new BinaryReader(stream);
+        var       volume   = DeserializeVolumeHeader(reader);
+        if (volume == null)
+            return null;
+
+        var treeOffset = checked((int)stream.Position);
+        volume.SetDeferredTreeMaterializer(v => MaterializeDeferredCompressedVolumeTree(v, payload, expectedBytes, treeOffset));
         return volume;
     }
 
@@ -55,6 +78,22 @@ public partial record class Navmesh
         using var stream = new MemoryStream(payload, offset, length, false);
         using var reader = new BinaryReader(stream);
         DeserializeVolumeTile(reader, volume.RootTile);
+    }
+
+    internal static void MaterializeDeferredCompressedVolumeTree(VoxelMap volume, byte[] payload, long expectedBytes, int offset)
+    {
+        var decodedPayload = DecompressFastLz(payload, expectedBytes);
+        using var stream   = new MemoryStream(decodedPayload, offset, decodedPayload.Length - offset, false);
+        using var reader   = new BinaryReader(stream);
+        DeserializeVolumeTile(reader, volume.RootTile);
+    }
+
+    private static (VoxelMap? Value, CacheSegmentTelemetry Telemetry) DecodeDeferredVolumeSegment(CacheSegmentDescriptor descriptor, Stream source)
+    {
+        var timer   = StopWatchTimer.Create();
+        var payload = ReadSegmentPayload(source, descriptor);
+        var volume  = DeserializeCompressedDeferredVolume(payload, descriptor.UncompressedBytes);
+        return (volume, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
     }
 
     private static void DeserializeVolumeTile(BinaryReader reader, VoxelMap.Tile tile)

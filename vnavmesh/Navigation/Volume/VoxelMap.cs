@@ -208,6 +208,7 @@ public class VoxelMap
     private byte[]? _deferredTreePayload;
     private int     _deferredTreeOffset;
     private int     _deferredTreeLength;
+    private Action<VoxelMap>? _deferredTreeMaterializer;
 
     public const ushort VoxelOccupiedBit = 0x8000;
     public const ushort VoxelIdMask      = 0x7fff;
@@ -338,30 +339,49 @@ public class VoxelMap
         }
     }
 
-    internal bool HasDeferredTree => _deferredTreePayload != null;
+    internal bool HasDeferredTree => _deferredTreePayload != null || _deferredTreeMaterializer != null;
 
     internal void SetDeferredTreePayload(byte[] payload, int offset, int length)
     {
         _deferredTreePayload = payload;
         _deferredTreeOffset  = offset;
         _deferredTreeLength  = length;
+        _deferredTreeMaterializer = null;
+    }
+
+    internal void SetDeferredTreeMaterializer(Action<VoxelMap> materializer)
+    {
+        _deferredTreePayload = null;
+        _deferredTreeOffset  = 0;
+        _deferredTreeLength  = 0;
+        _deferredTreeMaterializer = materializer;
     }
 
     internal void EnsureMaterialized()
     {
-        if (_deferredTreePayload == null)
+        if (!HasDeferredTree)
             return;
 
         _materializationGate.Wait();
         try
         {
-            if (_deferredTreePayload == null)
+            if (!HasDeferredTree)
                 return;
 
-            Navmesh.MaterializeDeferredVolumeTree(this, _deferredTreePayload, _deferredTreeOffset, _deferredTreeLength);
-            _deferredTreePayload = null;
-            _deferredTreeOffset  = 0;
-            _deferredTreeLength  = 0;
+            if (_deferredTreePayload is { } payload)
+            {
+                Navmesh.MaterializeDeferredVolumeTree(this, payload, _deferredTreeOffset, _deferredTreeLength);
+                _deferredTreePayload = null;
+                _deferredTreeOffset  = 0;
+                _deferredTreeLength  = 0;
+                return;
+            }
+
+            if (_deferredTreeMaterializer is { } materializer)
+            {
+                materializer(this);
+                _deferredTreeMaterializer = null;
+            }
         }
         finally
         {
