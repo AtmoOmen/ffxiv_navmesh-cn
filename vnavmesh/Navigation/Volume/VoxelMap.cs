@@ -77,7 +77,7 @@ public class VoxelMap
             Contents
         {
             get;
-            init;
+            private set;
         } // high bit unset: empty voxel (TODO: region id in low bits?); high bit set: voxel with solid geometry (VoxelIdMask if leaf, subvoxel index otherwise); order is (y,x,z)
 
         public List<Tile> Subdivision => _subdivision ??= [];
@@ -189,6 +189,20 @@ public class VoxelMap
         }
 
         public Tile GetSubdivision(int index) => _subdivision![index];
+
+        internal void ReleaseRetainedState()
+        {
+            if (_subdivision is { Count: > 0 } children)
+            {
+                foreach (var child in children)
+                    child.ReleaseRetainedState();
+
+                children.Clear();
+            }
+
+            _subdivision = null;
+            Contents     = [];
+        }
     }
 
     public sealed class RootColumnBuildResult
@@ -387,6 +401,15 @@ public class VoxelMap
         {
             _materializationGate.Release();
         }
+    }
+
+    internal void ReleaseRetainedState()
+    {
+        _deferredTreePayload      = null;
+        _deferredTreeOffset       = 0;
+        _deferredTreeLength       = 0;
+        _deferredTreeMaterializer = null;
+        RootTile.ReleaseRetainedState();
     }
 
     public void Build(Voxelizer vox, int tx, int tz)

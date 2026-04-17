@@ -75,10 +75,13 @@ public sealed partial class NavmeshManager
 
     internal void ReplaceMesh(Navmesh mesh)
     {
+        var retiredNavmesh = Navmesh;
+        var retiredQuery   = Query;
         Navmesh = mesh;
         Query   = new(Navmesh, _config);
         Log("Mesh replaced");
         OnNavmeshChanged?.Invoke(Navmesh, Query);
+        ReleaseRetiredState(retiredNavmesh, retiredQuery, "网格替换");
     }
 
     private static bool InCutscene => Service.Condition[ConditionFlag.WatchingCutscene] || Service.Condition[ConditionFlag.OccupiedInCutSceneEvent];
@@ -91,6 +94,8 @@ public sealed partial class NavmeshManager
         var cts = _currentCTS;
         _currentCTS = null;
         cts.Cancel();
+        var retiredNavmesh = Navmesh;
+        var retiredQuery   = Query;
         Log("Queueing state clear");
         ExecuteWhenIdle
         (
@@ -102,6 +107,7 @@ public sealed partial class NavmeshManager
                 OnNavmeshChanged?.Invoke(null, null);
                 Query   = null;
                 Navmesh = null;
+                ReleaseRetiredState(retiredNavmesh, retiredQuery, "场景切换卸载");
             },
             default
         );

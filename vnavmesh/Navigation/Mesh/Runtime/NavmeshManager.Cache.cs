@@ -15,11 +15,13 @@ public sealed partial class NavmeshManager
 
         var writeTask = Task.Run(() => WriteCache(cacheKey, cache, navmesh));
         _cacheWriteTasks[cacheKey] = writeTask;
+        _cacheWriteTasksByNavmesh[navmesh] = writeTask;
         _ = writeTask.ContinueWith
         (
             t =>
             {
                 _cacheWriteTasks.TryRemove(cacheKey, out _);
+                _cacheWriteTasksByNavmesh.TryRemove(navmesh, out _);
                 LogTaskError(t);
             },
             CancellationToken.None,

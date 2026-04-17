@@ -232,6 +232,16 @@ public class VoxelPathfind
         _peakOpenListSize  = 0;
     }
 
+    internal void ReleaseRetainedState()
+    {
+        ResetSearchState();
+        _neighbourScratch.Clear();
+        _neighbourScratch.TrimExcess();
+        _nodes.TrimExcess();
+        _nodeLookup.TrimExcess();
+        _openList.TrimExcess();
+    }
+
     private bool TryBuildDirectPath(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos, out List<(ulong voxel, Vector3 p)> path)
     {
         ++_lineOfSightChecks;

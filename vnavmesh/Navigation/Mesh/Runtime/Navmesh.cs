@@ -332,4 +332,12 @@ public partial record class Navmesh
 
         public override void Write(ReadOnlySpan<byte> buffer) => throw new NotSupportedException();
     }
+
+    internal void ReleaseRetainedState()
+    {
+        Volume?.ReleaseRetainedState();
+        Links.Clear();
+        Links.TrimExcess();
+        Mesh.Release();
+    }
 }

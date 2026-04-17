@@ -234,13 +234,14 @@ public partial class NavmeshQuery
     }
 
     public           DtNavMeshQuery      MeshQuery;
-    public           VoxelPathfind?      VolumeQuery;
     private readonly PathPostprocessor   _postprocessor;
     private readonly Navmesh             _navmesh;
     private readonly IDtQueryFilter      _filter         = new DtQueryDefaultFilter();
     private readonly GroundAreaCostFilter _groundFilter = new();
     private readonly RandomnessFilter    _randomnessFilter;
     private readonly IDtQueryFilter       _reachableFilter;
+    private          VoxelPathfind?      _volumeQuery;
+    private          bool                _released;
 
     private long _groundQueryCount;
     private long _partialGroundQueryCount;
@@ -251,6 +252,7 @@ public partial class NavmeshQuery
     private long _endReplacementCount;
 
     internal IDtQueryFilter GroundFilter => _groundFilter;
+    public   VoxelPathfind? VolumeQuery  => _released ? null : _volumeQuery ??= _navmesh.Volume != null ? new(_navmesh.Volume, _config) : null;
 
     public List<long> LastPath { get; } = [];
 
@@ -259,8 +261,6 @@ public partial class NavmeshQuery
         _navmesh  = navmesh;
         _config   = config;
         MeshQuery = new(navmesh.Mesh /*, s => Service.Log.Debug(s)*/);
-        if (navmesh.Volume != null)
-            VolumeQuery = new(navmesh.Volume, _config);
         _postprocessor    = new(MeshQuery);
         _randomnessFilter = new(_groundFilter);
         _reachableFilter  = _groundFilter;
@@ -441,4 +441,13 @@ public partial class NavmeshQuery
             GeneratedClimbLinksAccepted = _navmesh.GeneratedClimbDownLinkCount,
             GeneratedJumpLinksAccepted  = _navmesh.GeneratedEdgeJumpLinkCount
         };
+
+    internal void ReleaseRetainedState()
+    {
+        LastPath.Clear();
+        LastPath.TrimExcess();
+        _volumeQuery?.ReleaseRetainedState();
+        _volumeQuery = null;
+        _released    = true;
+    }
 }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Numerics;
+using System.Runtime;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
@@ -41,8 +42,9 @@ public sealed partial class NavmeshManager : IDisposable
     public  bool PathfindInProgress        => _numActivePathfinds > 0;
     public  int  NumQueuedPathfindRequests => _numActivePathfinds > 0 ? _numActivePathfinds - 1 : 0;
 
-    private          DirectoryInfo                      _cacheDir;
-    private readonly ConcurrentDictionary<string, Task> _cacheWriteTasks = new();
+    private readonly DirectoryInfo                       _cacheDir;
+    private readonly ConcurrentDictionary<string, Task>  _cacheWriteTasks          = new();
+    private readonly ConcurrentDictionary<Navmesh, Task> _cacheWriteTasksByNavmesh = new(ReferenceEqualityComparer.Instance);
 
     public NavmeshManager(DirectoryInfo cacheDir, Config config)
     {
@@ -253,6 +255,57 @@ public sealed partial class NavmeshManager : IDisposable
     {
         if (task.IsFaulted)
             Service.Log.Error($"[NavmeshManager] Task failed with error: {task.Exception}");
+    }
+
+    private void ReleaseRetiredState(Navmesh? navmesh, NavmeshQuery? query, string reason)
+    {
+        query?.ReleaseRetainedState();
+        if (navmesh == null)
+            return;
+
+        if (_cacheWriteTasksByNavmesh.TryGetValue(navmesh, out var pendingWrite) && !pendingWrite.IsCompleted)
+        {
+            Log($"旧场景资源延后释放，等待缓存写入完成: {reason}");
+            _ = pendingWrite.ContinueWith
+            (
+                _ => FinalizeRetiredNavmeshRelease(navmesh, reason),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default
+            );
+            return;
+        }
+
+        FinalizeRetiredNavmeshRelease(navmesh, reason);
+    }
+
+    private void FinalizeRetiredNavmeshRelease(Navmesh navmesh, string reason)
+    {
+        navmesh.ReleaseRetainedState();
+        Log($"旧场景重资源已释放: {reason}");
+
+        if (navmesh.Volume != null)
+            RequestMemoryCompaction(reason);
+    }
+
+    private void RequestMemoryCompaction(string reason)
+    {
+        _ = Task.Run
+        (
+            () =>
+            {
+                try
+                {
+                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, true, true);
+                    Log($"已请求大对象堆压缩: {reason}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"请求内存压缩失败: {ex}");
+                }
+            }
+        );
     }
 
     public void Prune(IEnumerable<Vector3> points)
