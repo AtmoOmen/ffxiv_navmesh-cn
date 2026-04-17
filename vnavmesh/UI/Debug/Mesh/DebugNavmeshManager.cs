@@ -1,7 +1,9 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Utility;
+using Dalamud.Interface.Utility.Raii;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using vnavmesh.Bootstrap;
-using vnavmesh.Integration.Status;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Query;
@@ -9,7 +11,6 @@ using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
 using vnavmesh.Shared.Utilities;
-using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Debug.Volume;
@@ -18,139 +19,183 @@ namespace vnavmesh.UI.Debug.Mesh;
 
 internal class DebugNavmeshManager : IDisposable
 {
-    private NavmeshManager       _manager;
-    private MovementPlanExecutor _movementExecutor;
-    private AsyncMoveRequest     _asyncMove;
-    private DTRProvider          _dtr;
-    private UITree               _tree = new();
-    private DebugDrawer          _dd;
-    private DebugGameCollision   _coll;
-    private Vector3              _target;
+    private NavmeshManager       manager;
+    private MovementPlanExecutor movementExecutor;
+    private AsyncMoveRequest     asyncMove;
+    private UITree               tree = new();
+    private DebugDrawer          dd;
+    
+    private DebugDetourNavmesh? drawNavmesh;
+    private DebugVoxelMap?      debugVoxelMap;
+    private DebugLinks?         debugLinks;
 
-    private DebugDetourNavmesh? _drawNavmesh;
-    private DebugVoxelMap?      _debugVoxelMap;
-    private DebugLinks?         _debugLinks;
+    private Vector3 target;
 
     public DebugNavmeshManager
-        (DebugDrawer dd, DebugGameCollision coll, NavmeshManager manager, MovementPlanExecutor movementExecutor, AsyncMoveRequest move, DTRProvider dtr)
+    (
+        DebugDrawer          dd,
+        NavmeshManager       manager,
+        MovementPlanExecutor movementExecutor,
+        AsyncMoveRequest     move
+    )
     {
-        _manager                  =  manager;
-        _movementExecutor         =  movementExecutor;
-        _asyncMove                =  move;
-        _dtr                      =  dtr;
-        _dd                       =  dd;
-        _coll                     =  coll;
-        _manager.OnNavmeshChanged += OnNavmeshChanged;
+        this.manager                  =  manager;
+        this.movementExecutor         =  movementExecutor;
+        asyncMove                     =  move;
+        this.dd                       =  dd;
+        this.manager.OnNavmeshChanged += OnNavmeshChanged;
     }
 
     public void Dispose()
     {
-        _manager.OnNavmeshChanged -= OnNavmeshChanged;
-        _drawNavmesh?.Dispose();
-        _debugVoxelMap?.Dispose();
+        manager.OnNavmeshChanged -= OnNavmeshChanged;
+        drawNavmesh?.Dispose();
+        debugVoxelMap?.Dispose();
     }
 
     public void Draw()
     {
-        var progress = _manager.LoadTaskProgress;
-
-        if (progress >= 0) ImGui.ProgressBar(progress, new Vector2(200, 0));
-        else
+        if (ImGui.CollapsingHeader("导航路网", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.SetNextItemWidth(100);
-            if (ImGui.Button("重新加载"))
-                _manager.Reload(true);
-            ImGui.SameLine();
-            if (ImGui.Button("重新构建"))
-                _manager.Reload(false);
-        }
-
-        ImGui.SameLine();
-        ImGui.TextUnformatted(_manager.CurrentKey);
-        ImGui.TextUnformatted($"寻路任务数量：{(_manager.PathfindInProgress ? 1 : 0)} 正在进行，{_manager.NumQueuedPathfindRequests} 已入队");
-
-        if (_manager.Navmesh == null || _manager.Query == null)
-            return;
-
-        var player    = Service.ObjectTable.LocalPlayer;
-        var playerPos = player?.Position ?? default;
-        ImGui.TextUnformatted($"玩家位置：{playerPos}");
-        if (ImGui.Button("设为当前位置"))
-            _target = player?.Position ?? default;
-        ImGui.SameLine();
-        if (ImGui.Button("设为目标位置"))
-            _target = player?.TargetObject?.Position ?? default;
-        ImGui.SameLine();
-        if (ImGui.Button("设为标点位置"))
-            _target = MapUtil.FlagToPoint(_manager.Query) ?? default;
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"当前目标：{_target}");
-
-        if (ImGui.Button("导出位图"))
-            ExportBitmap(_manager.Navmesh, _manager.Query, playerPos);
-
-        ImGui.Checkbox("允许移动",   ref _movementExecutor.MovementAllowed);
-        ImGui.Checkbox("使用射线检测", ref _manager.UseRaycasts);
-        ImGui.Checkbox("使用拉绳算法", ref _manager.UseStringPulling);
-        if (ImGui.Button("使用导航网格寻路至目标"))
-            _asyncMove.MoveTo(_target, false);
-        ImGui.SameLine();
-        if (ImGui.Button("使用体素寻路至目标"))
-            _asyncMove.MoveTo(_target, true);
-
-        using (var nd = _tree.Node("地面寻路统计"))
-        {
-            if (nd.Opened)
+            ImGui.TextUnformatted($"场景键: {manager.CurrentKey}");
+            
+            ImGui.Spacing();
+            
+            var progress = manager.LoadTaskProgress;
+            if (progress >= 0)
             {
-                var diagnostics = _manager.Query.GetGroundDiagnostics();
-                var partialRate = diagnostics.GroundQueries > 0 ? diagnostics.PartialQueries / (double)diagnostics.GroundQueries : 0;
-                _tree.LeafNode($"总查询次数：{diagnostics.GroundQueries}");
-                _tree.LeafNode($"Partial 次数：{diagnostics.PartialQueries}，占比 {partialRate:P1}");
-                _tree.LeafNode($"疑似接缝截断：{diagnostics.SuspectedTileSeamCutoffs}");
-                _tree.LeafNode($"any-angle 选中：{diagnostics.AnyAnglePreferred}");
-                _tree.LeafNode($"普通 A* 回退：{diagnostics.ClassicFallbacks}");
-                _tree.LeafNode($"起点重选：{diagnostics.StartReplacements}");
-                _tree.LeafNode($"终点重选：{diagnostics.EndReplacements}");
-                _tree.LeafNode($"自动向下攀爬链接：{diagnostics.GeneratedClimbLinksAccepted}");
-                _tree.LeafNode($"自动边缘跳跃链接：{diagnostics.GeneratedJumpLinksAccepted}");
+                ImGui.ProgressBar(progress, ImGuiHelpers.ScaledVector2(200, 0));
+                
+                ImGui.SameLine();
+                ImGui.TextUnformatted("构建进度");
+            }
+            else
+            {
+                if (ImGui.Button("重新加载"))
+                    manager.Reload(true);
+                
+                ImGui.SameLine();
+                if (ImGui.Button("重新构建"))
+                    manager.Reload(false);
             }
         }
+        
+        if (manager.Navmesh == null || manager.Query == null)
+            return;
 
-        DrawPosition("玩家", playerPos);
-        DrawPosition("目标", _target);
-        DrawPosition("旗帜", MapUtil.FlagToPoint(_manager.Query)        ?? default);
-        DrawPosition("地面", _manager.Query.FindPointOnFloor(playerPos) ?? default);
-
-        _drawNavmesh ??= new(_manager.Navmesh.Mesh, _manager.Query.MeshQuery, _manager.Query.LastPath, _tree, _dd);
-        _drawNavmesh.Draw();
-
-        if (_manager.Navmesh.Volume != null)
+        if (ImGui.CollapsingHeader("寻路", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            _debugVoxelMap ??= new(_manager.Navmesh.Volume, _manager.Query.VolumeQuery, _tree, _dd);
-            _debugVoxelMap.Draw();
+            ImGui.TextUnformatted($"正在执行: {(manager.PathfindInProgress ? 1 : 0)}\t正在等待: {manager.NumQueuedPathfindRequests}");
+            
+            ImGui.Checkbox("允许移动",     ref movementExecutor.MovementAllowed);
+            ImGui.Checkbox("使用射线检测", ref manager.UseRaycasts);
+            ImGui.Checkbox("使用拉绳算法", ref manager.UseStringPulling);
+            
+            ImGui.NewLine();
+            
+            ImGui.TextUnformatted($"目标位置: {target}");
+            
+            var player    = Service.ObjectTable.LocalPlayer;
+            
+            using (ImRaii.Disabled(player == null))
+            {
+                if (ImGui.Button("当前位置"))
+                    target = player?.Position ?? default;
+            }
+            
+            ImGui.SameLine();
+            using (ImRaii.Disabled(player?.TargetObject == null))
+            {
+                if (ImGui.Button("目标位置"))
+                    target = player?.TargetObject?.Position ?? default;
+            }
+
+            unsafe
+            {
+                ImGui.SameLine();
+                using (ImRaii.Disabled(AgentMap.Instance()->FlagMarkerCount == 0))
+                {
+                    if (ImGui.Button("地图标记位置"))
+                        target = MapUtil.FlagToPoint(manager.Query) ?? default;
+                }
+            }
+            
+            using (ImRaii.Disabled(target == Vector3.Zero))
+            {
+                if (ImGui.Button("地面寻路"))
+                    asyncMove.MoveTo(target, false);
+                
+                ImGui.SameLine();
+                if (ImGui.Button("空间寻路"))
+                    asyncMove.MoveTo(target, true);
+                
+                ImGui.SameLine(0, ImGui.GetStyle().ItemSpacing.X * ImGuiHelpers.GlobalScale);
+                if (ImGui.Button("停止寻路"))
+                    movementExecutor.Stop();
+            }
+            
+            ImGui.NewLine();
+            
+            if (ImGui.Button("导出位图 (玩家中心)"))
+                ExportBitmap(player?.Position ?? default);
+            
+            DrawPosition("玩家", player?.Position ?? default);
+            DrawPosition("目标", target);
+            DrawPosition("标点", MapUtil.FlagToPoint(manager.Query)                          ?? default);
+            DrawPosition("地面", manager.Query.FindPointOnFloor(player?.Position ?? default) ?? default);
         }
 
-        _debugLinks ??= new(_manager.Navmesh, _dd);
-        _debugLinks.Draw();
+        if (ImGui.CollapsingHeader("统计", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            using (var nd = tree.Node("地面寻路"))
+            {
+                if (nd.Opened)
+                {
+                    var diagnostics = manager.Query.GetGroundDiagnostics();
+                    var partialRate = diagnostics.GroundQueries > 0 ? diagnostics.PartialQueries / (double)diagnostics.GroundQueries : 0;
+                    tree.LeafNode($"总查询次数：{diagnostics.GroundQueries}");
+                    tree.LeafNode($"Partial 次数：{diagnostics.PartialQueries}，占比 {partialRate:P1}");
+                    tree.LeafNode($"疑似接缝截断：{diagnostics.SuspectedTileSeamCutoffs}");
+                    tree.LeafNode($"any-angle 选中：{diagnostics.AnyAnglePreferred}");
+                    tree.LeafNode($"普通 A* 回退：{diagnostics.ClassicFallbacks}");
+                    tree.LeafNode($"起点重选：{diagnostics.StartReplacements}");
+                    tree.LeafNode($"终点重选：{diagnostics.EndReplacements}");
+                    tree.LeafNode($"自动向下攀爬链接：{diagnostics.GeneratedClimbLinksAccepted}");
+                    tree.LeafNode($"自动边缘跳跃链接：{diagnostics.GeneratedJumpLinksAccepted}");
+                }
+            }
+
+            drawNavmesh ??= new(manager.Navmesh.Mesh, manager.Query.MeshQuery, manager.Query.LastPath, tree, dd);
+            drawNavmesh.Draw();
+
+            if (manager.Navmesh.Volume != null)
+            {
+                debugVoxelMap ??= new(manager.Navmesh.Volume, manager.Query.VolumeQuery, tree, dd);
+                debugVoxelMap.Draw();
+            }
+
+            debugLinks ??= new(manager.Navmesh, dd);
+            debugLinks.Draw();
+        }
     }
 
     private void DrawPosition(string tag, Vector3 position)
     {
-        _manager.Navmesh!.Mesh.CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
-        _tree.LeafNode($"{tag}位置：{position:f3}，区块 (Tile)：{tileX}x{tileZ}，多边形 (Poly)：{_manager.Query!.FindNearestMeshPoly(position):X}");
-        var voxel = _manager.Query.FindNearestVolumeVoxel(position);
-        if (_tree.LeafNode($"{tag}体素：{voxel:X}###{tag}voxel").SelectedOrHovered && voxel != VoxelMap.InvalidVoxel)
-            _debugVoxelMap?.VisualizeVoxel(voxel);
+        manager.Navmesh!.Mesh.CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
+        tree.LeafNode($"{tag}位置：{position:f3}，区块 (Tile)：{tileX}x{tileZ}，多边形 (Poly)：{manager.Query!.FindNearestMeshPoly(position):X}");
+        var voxel = manager.Query.FindNearestVolumeVoxel(position);
+        if (tree.LeafNode($"{tag}体素：{voxel:X}###{tag}voxel").SelectedOrHovered && voxel != VoxelMap.InvalidVoxel)
+            debugVoxelMap?.VisualizeVoxel(voxel);
     }
 
-    private void ExportBitmap(Navmesh navmesh, NavmeshQuery query, Vector3 startingPos) =>
-        _manager.BuildBitmap(startingPos, "D:\\navmesh.bmp", 0.5f);
+    private void ExportBitmap(Vector3 startingPos) =>
+        manager.BuildBitmap(startingPos, "D:\\navmesh.bmp", 0.5f);
 
     private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query)
     {
-        _drawNavmesh?.Dispose();
-        _drawNavmesh = null;
-        _debugVoxelMap?.Dispose();
-        _debugVoxelMap = null;
+        drawNavmesh?.Dispose();
+        drawNavmesh = null;
+        debugVoxelMap?.Dispose();
+        debugVoxelMap = null;
     }
 }

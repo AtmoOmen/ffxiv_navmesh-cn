@@ -31,7 +31,7 @@ public class MainWindow : Window, IDisposable
         _config              = config;
         _movementExecutor    = movementExecutor;
         _debugGameColl       = new(config, _dd);
-        _debugNavmeshManager = new(_dd, _debugGameColl, manager, movementExecutor, move, dtr);
+        _debugNavmeshManager = new(_dd, manager, movementExecutor, move);
         _debugNavmeshCustom  = new(config, _dd, _debugGameColl, manager, paths.ConfigDirectory.FullName);
         _debugLayout         = new(_dd, _debugGameColl);
     }
@@ -92,10 +92,10 @@ public class MainWindow : Window, IDisposable
                         _debugLayout.Draw();
                 }
 
-                // 临时屏蔽
-                // using (var tab = ImRaii.TabItem("碰撞"))
-                //     if (tab)
-                //         _debugGameColl.Draw();
+                using (var tab = ImRaii.TabItem("碰撞"))
+                    if (tab)
+                        _debugGameColl.Draw();
+                
                 using (var tab = ImRaii.TabItem("管理"))
                 {
                     if (tab)
