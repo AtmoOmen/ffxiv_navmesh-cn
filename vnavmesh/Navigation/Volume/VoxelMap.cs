@@ -66,26 +66,40 @@ public class VoxelMap
 
     public class Tile
     {
-        private Tile[]? _subdivision;
-        private int     _subdivisionCount;
+        private Tile[]?         _subdivision;
+        private int             _subdivisionCount;
+        private ushort[]?       _contents;
+        private byte[]?         _packedStates;
+        private ushort[]?       _subtreePrefixCounts;
+        private TileStorageKind _storageKind;
 
         public VoxelMap Owner     { get; init; }
         public Vector3  BoundsMin { get; init; }
         public Vector3  BoundsMax { get; init; }
         public int      Level     { get; init; }
 
-        public ushort[]
-            Contents
+        public ushort[] Contents
         {
-            get;
-            private set;
+            get => _contents ??= MaterializeContents();
+            private set
+            {
+                _contents             = value;
+                _packedStates         = null;
+                _subtreePrefixCounts  = null;
+                _storageKind          = TileStorageKind.Dense;
+            }
         } // high bit unset: empty voxel (TODO: region id in low bits?); high bit set: voxel with solid geometry (VoxelIdMask if leaf, subvoxel index otherwise); order is (y,x,z)
 
         public int SubdivisionCount => _subdivisionCount;
+        public int CellCount        => LevelDesc.NumCellsTotal;
 
         public ReadOnlySpan<Tile> Subdivisions => _subdivision == null ? [] : _subdivision.AsSpan(0, _subdivisionCount);
 
         public Level LevelDesc => Owner.Levels[Level];
+
+        internal TileStorageKind StorageKind => _storageKind;
+
+        internal ReadOnlySpan<byte> PackedStates => _packedStates == null ? [] : _packedStates.AsSpan();
 
         public Tile(VoxelMap owner, Vector3 boundsMin, Vector3 boundsMax, int level, bool clearContents = true)
         {
@@ -93,10 +107,10 @@ public class VoxelMap
             BoundsMin = boundsMin;
             BoundsMax = boundsMax;
             Level     = level;
-            var cellCount = owner.Levels[level].NumCellsTotal;
-            Contents = clearContents
-                           ? new ushort[cellCount]
-                           : GC.AllocateUninitializedArray<ushort>(cellCount);
+            _storageKind = TileStorageKind.Dense;
+            _contents = clearContents
+                            ? new ushort[owner.Levels[level].NumCellsTotal]
+                            : GC.AllocateUninitializedArray<ushort>(owner.Levels[level].NumCellsTotal);
         }
 
         public (int x, int y, int z) WorldToVoxel(Vector3 v)
@@ -118,6 +132,92 @@ public class VoxelMap
 
         public (Vector3 min, Vector3 max) CalculateSubdivisionBounds((int x, int y, int z) v) => CalculateSubdivisionBounds(v.x, v.y, v.z);
 
+        public ushort GetCell(int index) => _storageKind switch
+        {
+            TileStorageKind.Dense     => _contents![index],
+            TileStorageKind.AllEmpty  => 0,
+            TileStorageKind.SolidLeaf => ushort.MaxValue,
+            TileStorageKind.PackedMixed => GetPackedCellValue(index),
+            _                         => throw new InvalidOperationException($"未知的体素瓦片存储类型: {_storageKind}")
+        };
+
+        public void SetCell(int index, ushort value)
+        {
+            if (_storageKind != TileStorageKind.Dense)
+            {
+                _ = Contents;
+                _storageKind         = TileStorageKind.Dense;
+                _packedStates        = null;
+                _subtreePrefixCounts = null;
+            }
+
+            _contents![index] = value;
+        }
+
+        public bool IsSubdividedCell(int index)
+        {
+            if (_storageKind == TileStorageKind.Dense)
+            {
+                var cell = _contents![index];
+                return (cell & VoxelOccupiedBit) != 0 && (cell & VoxelIdMask) != VoxelIdMask;
+            }
+
+            if (_storageKind != TileStorageKind.PackedMixed)
+                return false;
+
+            return GetPackedCellState(index) == PackedCellState.Subtree;
+        }
+
+        public int GetSubdivisionIndex(int index)
+        {
+            if (_storageKind == TileStorageKind.Dense)
+            {
+                var cell = _contents![index];
+                if ((cell & VoxelOccupiedBit) == 0)
+                    throw new InvalidOperationException("空体素不存在子树索引");
+
+                var childIndex = cell & VoxelIdMask;
+                if (childIndex == VoxelIdMask)
+                    throw new InvalidOperationException("叶子体素不存在子树索引");
+                return childIndex;
+            }
+
+            if (_storageKind != TileStorageKind.PackedMixed)
+                throw new InvalidOperationException("当前瓦片未存储子树索引");
+
+            if (GetPackedCellState(index) != PackedCellState.Subtree)
+                throw new InvalidOperationException("当前单元不是子树节点");
+
+            var byteIndex = index >> 2;
+            return _subtreePrefixCounts![byteIndex] + s_subtreePrefixCountByPackedState[_packedStates![byteIndex] * 4 + (index & 3)];
+        }
+
+        public void SetUniformEmpty()
+        {
+            _storageKind         = TileStorageKind.AllEmpty;
+            _contents            = null;
+            _packedStates        = null;
+            _subtreePrefixCounts = null;
+            ClearSubdivision();
+        }
+
+        public void SetUniformSolidLeaf()
+        {
+            _storageKind         = TileStorageKind.SolidLeaf;
+            _contents            = null;
+            _packedStates        = null;
+            _subtreePrefixCounts = null;
+            ClearSubdivision();
+        }
+
+        public void SetPackedStates(byte[] packedStates)
+        {
+            _storageKind         = TileStorageKind.PackedMixed;
+            _contents            = null;
+            _packedStates        = packedStates;
+            _subtreePrefixCounts = BuildSubtreePrefixCounts(packedStates);
+        }
+
         public (ulong index, bool empty) FindLeafVoxel(Vector3 p, bool checkBounds = true)
         {
             Owner.EnsureMaterialized();
@@ -126,12 +226,15 @@ public class VoxelMap
                 return (InvalidVoxel, false); // out of bounds; consider everything outside to be occupied
 
             var idx  = LevelDesc.VoxelToIndex(v);
-            var data = Contents[idx];
-            if ((data & VoxelOccupiedBit) == 0) return (EncodeIndex(idx), true); // empty at this level
-            data &= VoxelIdMask;
-            if (data == VoxelIdMask) return (EncodeIndex(idx), false); // occupied leaf
+            var data = GetCell(idx);
+            if ((data & VoxelOccupiedBit) == 0)
+                return (EncodeIndex(idx), true); // empty at this level
 
-            var sub = _subdivision![data].FindLeafVoxel(p, false); // guaranteed to be in bounds
+            var childIndex = data & VoxelIdMask;
+            if (childIndex == VoxelIdMask)
+                return (EncodeIndex(idx), false); // occupied leaf
+
+            var sub = GetSubdivision(childIndex).FindLeafVoxel(p, false); // guaranteed to be in bounds
             return (EncodeIndex(idx, sub.index), sub.empty);
         }
 
@@ -147,7 +250,7 @@ public class VoxelMap
             for (var y = vmin.y; y <= vmax.y; ++y)
             {
                 var idx  = ld.VoxelToIndex(x, y, z);
-                var data = Contents[idx];
+                var data = GetCell(idx);
 
                 if ((data & VoxelOccupiedBit) == 0)
                 {
@@ -155,14 +258,15 @@ public class VoxelMap
                     continue;
                 }
 
-                data &= VoxelIdMask;
-
-                if (data == VoxelIdMask) yield return (EncodeIndex(idx), false); // occupied leaf
-                else
+                var childIndex = data & VoxelIdMask;
+                if (childIndex == VoxelIdMask)
                 {
-                    foreach (var sub in _subdivision![data].EnumerateLeafVoxels(bmin, bmax))
-                        yield return (EncodeIndex(idx, sub.index), sub.empty);
+                    yield return (EncodeIndex(idx), false); // occupied leaf
+                    continue;
                 }
+
+                foreach (var sub in GetSubdivision(childIndex).EnumerateLeafVoxels(bmin, bmax))
+                    yield return (EncodeIndex(idx, sub.index), sub.empty);
             }
         }
 
@@ -208,6 +312,49 @@ public class VoxelMap
             return _subdivision![index];
         }
 
+        internal void CompactRetainedState()
+        {
+            if (_subdivisionCount > 0)
+            {
+                for (var i = 0; i < _subdivisionCount; ++i)
+                    _subdivision![i].CompactRetainedState();
+            }
+
+            if (_storageKind != TileStorageKind.Dense || _contents == null)
+            {
+                _contents = null;
+                TrimSubdivisionStorage();
+                return;
+            }
+
+            var dense = _contents;
+            var allEmpty = true;
+            var allSolidLeaf = _subdivisionCount == 0;
+            var packedStates = new byte[PackedStateBytes(dense.Length)];
+            for (var i = 0; i < dense.Length; ++i)
+            {
+                var state = ClassifyPackedCellState(dense[i]);
+                packedStates[i >> 2] |= (byte)((byte)state << ((i & 3) * 2));
+                allEmpty             &= state == PackedCellState.Empty;
+                allSolidLeaf         &= state == PackedCellState.SolidLeaf;
+            }
+
+            if (allEmpty)
+            {
+                SetUniformEmpty();
+            }
+            else if (allSolidLeaf)
+            {
+                SetUniformSolidLeaf();
+            }
+            else
+            {
+                SetPackedStates(packedStates);
+            }
+
+            TrimSubdivisionStorage();
+        }
+
         internal void ReleaseRetainedState()
         {
             if (_subdivisionCount > 0)
@@ -216,10 +363,76 @@ public class VoxelMap
                     _subdivision![i].ReleaseRetainedState();
             }
 
-            _subdivision      = null;
-            _subdivisionCount = 0;
-            Contents          = [];
+            _subdivision         = null;
+            _subdivisionCount    = 0;
+            _contents            = null;
+            _packedStates        = null;
+            _subtreePrefixCounts = null;
+            _storageKind         = TileStorageKind.AllEmpty;
         }
+
+        private ushort[] MaterializeContents()
+        {
+            var contents = new ushort[CellCount];
+            switch (_storageKind)
+            {
+                case TileStorageKind.AllEmpty:
+                    return contents;
+                case TileStorageKind.SolidLeaf:
+                    Array.Fill(contents, ushort.MaxValue);
+                    return contents;
+                case TileStorageKind.PackedMixed:
+                    for (var i = 0; i < contents.Length; ++i)
+                        contents[i] = GetPackedCellValue(i);
+                    return contents;
+                case TileStorageKind.Dense:
+                    return _contents ?? [];
+                default:
+                    throw new InvalidOperationException($"未知的体素瓦片存储类型: {_storageKind}");
+            }
+        }
+
+        private ushort GetPackedCellValue(int index) => GetPackedCellState(index) switch
+        {
+            PackedCellState.Empty     => 0,
+            PackedCellState.SolidLeaf => ushort.MaxValue,
+            PackedCellState.Subtree   => (ushort)(VoxelOccupiedBit | GetSubdivisionIndex(index)),
+            _                         => throw new InvalidOperationException("体素状态无效")
+        };
+
+        private PackedCellState GetPackedCellState(int index)
+            => (PackedCellState)(_packedStates![index >> 2] >> ((index & 3) * 2) & 0x3);
+
+        private void TrimSubdivisionStorage()
+        {
+            if (_subdivisionCount == 0)
+            {
+                _subdivision = null;
+                return;
+            }
+
+            if (_subdivision == null || _subdivision.Length == _subdivisionCount)
+                return;
+
+            var trimmed = GC.AllocateUninitializedArray<Tile>(_subdivisionCount);
+            Array.Copy(_subdivision, trimmed, _subdivisionCount);
+            _subdivision = trimmed;
+        }
+    }
+
+    internal enum TileStorageKind : byte
+    {
+        Dense,
+        AllEmpty,
+        SolidLeaf,
+        PackedMixed
+    }
+
+    private enum PackedCellState : byte
+    {
+        Empty     = 0,
+        SolidLeaf = 1,
+        Subtree   = 2
     }
 
     public sealed class RootColumnBuildResult
@@ -250,6 +463,9 @@ public class VoxelMap
 
     public const ulong InvalidVoxel = ulong.MaxValue;
 
+    private static readonly byte[] s_subtreeCountByPackedState       = BuildSubtreeCountByPackedState();
+    private static readonly byte[] s_subtreePrefixCountByPackedState = BuildSubtreePrefixCountByPackedState();
+
     public static ulong EncodeIndex(ushort tileIndex, ulong subIndex = InvalidVoxel) => (subIndex << IndexLevelShift) + tileIndex;
 
     public static ulong EncodeSubIndex(ulong voxel, ushort tileIndex, int level)
@@ -265,6 +481,66 @@ public class VoxelMap
         var tileIndex = (ushort)(index & IndexLevelMask);
         index >>= IndexLevelShift;
         return tileIndex;
+    }
+
+    private static int PackedStateBytes(int numCells) => numCells + 3 >> 2;
+
+    private static PackedCellState ClassifyPackedCellState(ushort value) => value switch
+    {
+        0               => PackedCellState.Empty,
+        ushort.MaxValue => PackedCellState.SolidLeaf,
+        _               => PackedCellState.Subtree
+    };
+
+    private static ushort[]? BuildSubtreePrefixCounts(byte[] packedStates)
+    {
+        if (packedStates.Length == 0)
+            return null;
+
+        var counts = new ushort[packedStates.Length];
+        ushort running = 0;
+        for (var i = 0; i < packedStates.Length; ++i)
+        {
+            counts[i] = running;
+            running  += s_subtreeCountByPackedState[packedStates[i]];
+        }
+
+        return running == 0 ? null : counts;
+    }
+
+    private static byte[] BuildSubtreeCountByPackedState()
+    {
+        var table = GC.AllocateUninitializedArray<byte>(byte.MaxValue + 1);
+        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
+        {
+            byte count = 0;
+            for (var offset = 0; offset < 4; ++offset)
+            {
+                if ((PackedCellState)(packedState >> offset * 2 & 0x3) == PackedCellState.Subtree)
+                    ++count;
+            }
+
+            table[packedState] = count;
+        }
+
+        return table;
+    }
+
+    private static byte[] BuildSubtreePrefixCountByPackedState()
+    {
+        var table = GC.AllocateUninitializedArray<byte>((byte.MaxValue + 1) * 4);
+        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
+        {
+            byte prefix = 0;
+            for (var offset = 0; offset < 4; ++offset)
+            {
+                table[packedState * 4 + offset] = prefix;
+                if ((PackedCellState)(packedState >> offset * 2 & 0x3) == PackedCellState.Subtree)
+                    ++prefix;
+            }
+        }
+
+        return table;
     }
 
     public VoxelMap(Vector3 boundsMin, Vector3 boundsMax, int[] tilesPerLevel)
@@ -305,7 +581,7 @@ public class VoxelMap
             if (tileIndex == IndexLevelMask)
                 return false; // asking for non-leaf => consider non-empty
 
-            var data = tile.Contents[tileIndex];
+            var data = tile.GetCell(tileIndex);
             if ((data & VoxelOccupiedBit) == 0)
                 return true; // found empty voxel
             data &= VoxelIdMask;
@@ -332,7 +608,7 @@ public class VoxelMap
             var tileIndex = DecodeIndex(ref voxel);
             if (tileIndex == IndexLevelMask) return (tile.BoundsMin + eps3, tile.BoundsMax - eps3);
 
-            var data = tile.Contents[tileIndex];
+            var data = tile.GetCell(tileIndex);
             var id   = data & VoxelIdMask;
 
             if ((data & VoxelOccupiedBit) == 0 || id == VoxelIdMask)
@@ -356,7 +632,7 @@ public class VoxelMap
             if (tileIndex == IndexLevelMask)
                 return Vector3.Clamp(p, tile.BoundsMin + new Vector3(eps), tile.BoundsMax - new Vector3(eps));
 
-            var data = tile.Contents[tileIndex];
+            var data = tile.GetCell(tileIndex);
             var id   = data & VoxelIdMask;
 
             if ((data & VoxelOccupiedBit) == 0 || id == VoxelIdMask)
@@ -427,6 +703,14 @@ public class VoxelMap
         _deferredTreeLength       = 0;
         _deferredTreeMaterializer = null;
         RootTile.ReleaseRetainedState();
+    }
+
+    internal void CompactRetainedState()
+    {
+        if (HasDeferredTree)
+            return;
+
+        RootTile.CompactRetainedState();
     }
 
     public void Build(Voxelizer vox, int tx, int tz)

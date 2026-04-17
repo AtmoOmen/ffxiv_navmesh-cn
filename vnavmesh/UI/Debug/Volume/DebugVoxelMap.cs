@@ -84,8 +84,9 @@ public class DebugVoxelMap : IDisposable
 
     private void InitTile(VoxelMap.Tile tile)
     {
-        foreach (var t in tile.Contents)
+        for (var i = 0; i < tile.CellCount; ++i)
         {
+            var t = tile.GetCell(i);
             if ((t & VoxelMap.VoxelIdMask) == VoxelMap.VoxelIdMask)
                 ++_numLeavesPerLevel[tile.Level];
         }
@@ -103,12 +104,12 @@ public class DebugVoxelMap : IDisposable
         if (!nr.Opened)
             return;
 
-        for (ushort i = 0; i < tile.Contents.Length; i++)
-            if ((tile.Contents[i] & VoxelMap.VoxelOccupiedBit) != 0)
+        for (ushort i = 0; i < tile.CellCount; i++)
+            if ((tile.GetCell(i) & VoxelMap.VoxelOccupiedBit) != 0)
             {
                 var v  = tile.LevelDesc.IndexToVoxel(i);
                 var cn = $"{v.x}x{v.y}x{v.z}";
-                var id = tile.Contents[i] & VoxelMap.VoxelIdMask;
+                var id = tile.GetCell(i) & VoxelMap.VoxelIdMask;
 
                 if (id == VoxelMap.VoxelIdMask)
                 {
@@ -128,10 +129,10 @@ public class DebugVoxelMap : IDisposable
     {
         var start = builder.NumInstances;
 
-        for (ushort i = 0; i < tile.Contents.Length; i++)
-            if ((tile.Contents[i] & VoxelMap.VoxelOccupiedBit) != 0)
+        for (ushort i = 0; i < tile.CellCount; i++)
+            if ((tile.GetCell(i) & VoxelMap.VoxelOccupiedBit) != 0)
             {
-                var id = tile.Contents[i] & VoxelMap.VoxelIdMask;
+                var id = tile.GetCell(i) & VoxelMap.VoxelIdMask;
 
                 if (id == VoxelMap.VoxelIdMask)
                 {

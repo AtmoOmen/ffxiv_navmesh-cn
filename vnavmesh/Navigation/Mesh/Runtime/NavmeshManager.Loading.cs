@@ -143,6 +143,13 @@ public sealed partial class NavmeshManager
 
         customization.CustomizeMesh(builder.Navmesh, layers);
         var runtimeMesh = builder.Navmesh with { CustomizationApplied = true };
+        if (runtimeMesh.Volume != null)
+        {
+            var compactTimer = StopWatchTimer.Create();
+            runtimeMesh.Volume.CompactRetainedState();
+            Log($"飞行体素常驻压缩耗时 {compactTimer.Value().TotalMilliseconds:f1} ms");
+        }
+
         Log($"总构建耗时 {totalTimer.Value().TotalMilliseconds:f1} ms");
         _loadTaskProgress += 0.01f;
         return new(runtimeMesh, cache);
