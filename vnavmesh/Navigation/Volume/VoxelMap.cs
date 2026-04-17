@@ -66,7 +66,8 @@ public class VoxelMap
 
     public class Tile
     {
-        private List<Tile>? _subdivision;
+        private Tile[]? _subdivision;
+        private int     _subdivisionCount;
 
         public VoxelMap Owner     { get; init; }
         public Vector3  BoundsMin { get; init; }
@@ -80,9 +81,9 @@ public class VoxelMap
             private set;
         } // high bit unset: empty voxel (TODO: region id in low bits?); high bit set: voxel with solid geometry (VoxelIdMask if leaf, subvoxel index otherwise); order is (y,x,z)
 
-        public List<Tile> Subdivision => _subdivision ??= [];
+        public int SubdivisionCount => _subdivisionCount;
 
-        public int SubdivisionCount => _subdivision?.Count ?? 0;
+        public ReadOnlySpan<Tile> Subdivisions => _subdivision == null ? [] : _subdivision.AsSpan(0, _subdivisionCount);
 
         public Level LevelDesc => Owner.Levels[Level];
 
@@ -165,43 +166,59 @@ public class VoxelMap
             }
         }
 
-        public void ClearSubdivision() => _subdivision?.Clear();
+        public void ClearSubdivision() => _subdivisionCount = 0;
 
         public void EnsureSubdivisionCapacity(int capacity)
         {
-            if (capacity <= 0)
+            if (capacity <= 0 || capacity <= (_subdivision?.Length ?? 0))
                 return;
 
-            if (_subdivision == null)
-                _subdivision = new(capacity);
-            else if (_subdivision.Capacity < capacity)
-                _subdivision.Capacity = capacity;
+            var newCapacity = _subdivision == null ? Math.Max(capacity, 4) : Math.Max(capacity, _subdivision.Length * 2);
+            var resized     = GC.AllocateUninitializedArray<Tile>(newCapacity);
+            if (_subdivisionCount > 0)
+                Array.Copy(_subdivision!, resized, _subdivisionCount);
+            _subdivision = resized;
         }
 
-        public void AddSubdivision(Tile child) => (_subdivision ??= []).Add(child);
+        public void AddSubdivision(Tile child)
+        {
+            EnsureSubdivisionCapacity(_subdivisionCount + 1);
+            _subdivision![_subdivisionCount++] = child;
+        }
 
         public void AddSubdivisions(IEnumerable<Tile> children)
         {
             if (children is List<Tile> list && list.Count > 0)
-                EnsureSubdivisionCapacity(SubdivisionCount + list.Count);
+            {
+                EnsureSubdivisionCapacity(_subdivisionCount + list.Count);
+                for (var i = 0; i < list.Count; ++i)
+                    _subdivision![_subdivisionCount + i] = list[i];
+                _subdivisionCount += list.Count;
+                return;
+            }
 
-            Subdivision.AddRange(children);
+            foreach (var child in children)
+                AddSubdivision(child);
         }
 
-        public Tile GetSubdivision(int index) => _subdivision![index];
+        public Tile GetSubdivision(int index)
+        {
+            if ((uint)index >= (uint)_subdivisionCount)
+                throw new ArgumentOutOfRangeException(nameof(index), index, $"体积子树索引越界: {index} / {_subdivisionCount}");
+            return _subdivision![index];
+        }
 
         internal void ReleaseRetainedState()
         {
-            if (_subdivision is { Count: > 0 } children)
+            if (_subdivisionCount > 0)
             {
-                foreach (var child in children)
-                    child.ReleaseRetainedState();
-
-                children.Clear();
+                for (var i = 0; i < _subdivisionCount; ++i)
+                    _subdivision![i].ReleaseRetainedState();
             }
 
-            _subdivision = null;
-            Contents     = [];
+            _subdivision      = null;
+            _subdivisionCount = 0;
+            Contents          = [];
         }
     }
 
@@ -427,7 +444,7 @@ public class VoxelMap
         var contents    = GC.AllocateUninitializedArray<ushort>(ny);
         var subdivision = new List<Tile>(64);
         for (var ty = 0; ty < ny; ++ty)
-            contents[ty] = BuildTileContent(vox, RootTile, subdivision, tx, ty, tz, 0, ty * _leafScaleY[0], 0);
+            contents[ty] = BuildTileContent(vox, RootTile, subdivision, null, tx, ty, tz, 0, ty * _leafScaleY[0], 0);
         return new() { Contents = contents, Subdivision = subdivision };
     }
 
@@ -438,7 +455,7 @@ public class VoxelMap
         var contents    = GC.AllocateUninitializedArray<ushort>(ny);
         var subdivision = new List<Tile>(64);
         for (var ty = 0; ty < ny; ++ty)
-            contents[ty] = BuildTileContent(vox, mipScratch, RootTile, subdivision, tx, ty, tz, 0, ty, 0);
+            contents[ty] = BuildTileContent(vox, mipScratch, RootTile, subdivision, null, tx, ty, tz, 0, ty, 0);
         return new() { Contents = contents, Subdivision = subdivision };
     }
 
@@ -456,7 +473,24 @@ public class VoxelMap
         }
     }
 
-    private ushort BuildTileContent(Voxelizer vox, Tile parent, List<Tile> rootSubdivision, int rootX, int rootY, int rootZ, int leafX, int leafY, int leafZ)
+    private static int AppendSubdivision(List<Tile>? list, Tile? tile, Tile child)
+    {
+        if (tile != null)
+        {
+            var localId = tile.SubdivisionCount;
+            tile.AddSubdivision(child);
+            return localId;
+        }
+
+        if (list == null)
+            throw new InvalidOperationException("体积子树写入目标缺失");
+
+        var rootId = list.Count;
+        list.Add(child);
+        return rootId;
+    }
+
+    private ushort BuildTileContent(Voxelizer vox, Tile parent, List<Tile>? rootSubdivision, Tile? tileSubdivision, int rootX, int rootY, int rootZ, int leafX, int leafY, int leafZ)
     {
         var level = parent.Level;
         var (solid, empty) = vox.ClassifyRegion(leafX, leafY, leafZ, _leafScaleX[level], _leafScaleY[level], _leafScaleZ[level]);
@@ -469,8 +503,7 @@ public class VoxelMap
         if (parent.Level + 1 >= Levels.Length)
             throw new InvalidOperationException("体积列构建遇到超出层级的混合体素");
         var tile    = new Tile(this, min, max, parent.Level + 1, false);
-        var localId = rootSubdivision.Count;
-        rootSubdivision.Add(tile);
+        var localId = AppendSubdivision(rootSubdivision, tileSubdivision, tile);
 
         ref var l           = ref Levels[tile.Level];
         var     childScaleX = _leafScaleX[tile.Level];
@@ -484,7 +517,8 @@ public class VoxelMap
             (
                 vox,
                 tile,
-                tile.Subdivision,
+                null,
+                tile,
                 x,
                 y,
                 z,
@@ -496,7 +530,7 @@ public class VoxelMap
         return (ushort)(VoxelOccupiedBit | localId);
     }
 
-    private ushort BuildTileContent(Voxelizer vox, Voxelizer[] mipScratch, Tile parent, List<Tile> rootSubdivision, int rootX, int rootY, int rootZ, int cellX, int cellY, int cellZ)
+    private ushort BuildTileContent(Voxelizer vox, Voxelizer[] mipScratch, Tile parent, List<Tile>? rootSubdivision, Tile? tileSubdivision, int rootX, int rootY, int rootZ, int cellX, int cellY, int cellZ)
     {
         var level          = parent.Level;
         var source         = level == Levels.Length - 1 ? vox : mipScratch[level];
@@ -510,8 +544,7 @@ public class VoxelMap
         if (parent.Level + 1 >= Levels.Length)
             throw new InvalidOperationException("体积列构建遇到超出层级的混合体素");
         var tile    = new Tile(this, min, max, parent.Level + 1, false);
-        var localId = rootSubdivision.Count;
-        rootSubdivision.Add(tile);
+        var localId = AppendSubdivision(rootSubdivision, tileSubdivision, tile);
 
         ref var l           = ref Levels[tile.Level];
         ushort  i           = 0;
@@ -523,7 +556,8 @@ public class VoxelMap
                 vox,
                 mipScratch,
                 tile,
-                tile.Subdivision,
+                null,
+                tile,
                 x,
                 y,
                 z,

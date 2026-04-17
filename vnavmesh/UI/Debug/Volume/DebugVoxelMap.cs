@@ -90,14 +90,14 @@ public class DebugVoxelMap : IDisposable
                 ++_numLeavesPerLevel[tile.Level];
         }
 
-        _numSubdivPerLevel[tile.Level] += tile.Subdivision.Count;
-        foreach (var sub in tile.Subdivision)
+        _numSubdivPerLevel[tile.Level] += tile.SubdivisionCount;
+        foreach (ref readonly var sub in tile.Subdivisions)
             InitTile(sub);
     }
 
     private void DrawTile(VoxelMap.Tile tile, string name)
     {
-        using var nr = _tree.Node($"{name}: {tile.BoundsMin:f3} - {tile.BoundsMax:f3} ({tile.Subdivision.Count} subtiles)");
+        using var nr = _tree.Node($"{name}: {tile.BoundsMin:f3} - {tile.BoundsMax:f3} ({tile.SubdivisionCount} subtiles)");
         if (nr.SelectedOrHovered)
             VisualizeTile(tile);
         if (!nr.Opened)
@@ -119,7 +119,7 @@ public class DebugVoxelMap : IDisposable
                 else
                 {
                     // subdivided
-                    DrawTile(tile.Subdivision[id], $"{cn} -> #{id}");
+                    DrawTile(tile.GetSubdivision(id), $"{cn} -> #{id}");
                 }
             }
     }
@@ -138,7 +138,7 @@ public class DebugVoxelMap : IDisposable
                     var bounds = tile.CalculateSubdivisionBounds(tile.LevelDesc.IndexToVoxel(i));
                     box.Add(bounds.min, bounds.max, new(0.7f));
                 }
-                else InitTileVisualizer(tile.Subdivision[id], builder, box);
+                else InitTileVisualizer(tile.GetSubdivision(id), builder, box);
             }
 
         if (builder.NumInstances > start)
