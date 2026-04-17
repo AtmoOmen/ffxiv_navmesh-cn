@@ -63,9 +63,11 @@ public partial record class Navmesh
             }
         }
 
-        var meshSegment   = meshDescriptor   ?? throw new Exception("缓存缺少 Mesh 段");
-        var volumeSegment = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
+        var meshSegment    = meshDescriptor   ?? throw new Exception("缓存缺少 Mesh 段");
+        var volumeSegment  = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
+        var requiresRewrite = volumeSegment.Codec != CacheCodec.FastLz;
         var meshPayload   = ReadSegmentPayload(reader.BaseStream, meshSegment);
+        var volumePayload = ReadSegmentPayload(reader.BaseStream, volumeSegment);
 
         DtNavMesh?            mesh            = null;
         VoxelMap?             volume          = null;
@@ -74,9 +76,9 @@ public partial record class Navmesh
         Parallel.Invoke
         (
             () => (mesh, meshTelemetry)     = DecodeSegment(meshSegment,   meshPayload,   DeserializeMesh),
-            () => (volume, volumeTelemetry) = DecodeSegment(reader.BaseStream, volumeSegment, DeserializeVolume)
+            () => (volume, volumeTelemetry) = DecodeSegment(volumeSegment, volumePayload, DeserializeVolume)
         );
-        return new(new(customizationVersion, buildSignature, customizationApplied, mesh!, volume), new(meshTelemetry, volumeTelemetry));
+        return new(new(customizationVersion, buildSignature, customizationApplied, mesh!, volume), new(meshTelemetry, volumeTelemetry), requiresRewrite);
     }
 
     public CacheTelemetry Serialize(BinaryWriter writer)
@@ -88,7 +90,7 @@ public partial record class Navmesh
         Parallel.Invoke
         (
             () => meshSegment   = EncodeSegment(CacheSegmentKind.Mesh,   CacheCodec.None, meshWriter => SerializeMesh(meshWriter, Mesh)),
-            () => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.None, volumeWriter => SerializeVolume(volumeWriter, Volume))
+            () => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.FastLz, volumeWriter => SerializeVolume(volumeWriter, Volume))
         );
 
         writer.Write(Magic);
@@ -131,7 +133,8 @@ public partial record class Navmesh
 
     private enum CacheCodec
     {
-        None = 0
+        None   = 0,
+        FastLz = 1
     }
 
     private enum VolumeTileEncoding : byte
@@ -169,7 +172,8 @@ public partial record class Navmesh
     public readonly record struct DeserializeResult
     (
         Navmesh        Navmesh,
-        CacheTelemetry Telemetry
+        CacheTelemetry Telemetry,
+        bool           RequiresRewrite
     );
 
     private const int CacheSegmentDescriptorSize = sizeof(int) * 2 + sizeof(long) * 3;

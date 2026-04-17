@@ -1,4 +1,7 @@
 using System.Buffers;
+using System.Buffers.Binary;
+using System.Numerics;
+using System.Runtime.InteropServices;
 using vnavmesh.Navigation.Volume;
 
 namespace vnavmesh.Navigation.Mesh.Runtime;
@@ -20,7 +23,15 @@ public partial record class Navmesh
 
         var (min, max) = DeserializeBounds(reader);
         var volume = new VoxelMap(min, max, tilesPerLevel);
-        DeserializeVolumeTile(reader, volume.RootTile);
+        if (TryCaptureDeferredVolumeTree(reader.BaseStream, out var payload, out var offset, out var length))
+        {
+            volume.SetDeferredTreePayload(payload, offset, length);
+            reader.BaseStream.Position = reader.BaseStream.Length;
+        }
+        else
+        {
+            DeserializeVolumeTile(reader, volume.RootTile);
+        }
         return volume;
     }
 
@@ -34,8 +45,16 @@ public partial record class Navmesh
         foreach (ref var l in volume.Levels.AsSpan())
             writer.Write(l.NumCellsX);
 
+        volume.EnsureMaterialized();
         SerializeBounds(writer, volume.RootTile.BoundsMin, volume.RootTile.BoundsMax);
         SerializeVolumeTile(writer, volume.RootTile);
+    }
+
+    internal static void MaterializeDeferredVolumeTree(VoxelMap volume, byte[] payload, int offset, int length)
+    {
+        using var stream = new MemoryStream(payload, offset, length, false);
+        using var reader = new BinaryReader(stream);
+        DeserializeVolumeTile(reader, volume.RootTile);
     }
 
     private static void DeserializeVolumeTile(BinaryReader reader, VoxelMap.Tile tile)
@@ -68,22 +87,33 @@ public partial record class Navmesh
             reader.BaseStream.ReadExactly(packedStates);
 
             var subtreeCount = 0;
-            for (var i = 0; i < tile.Contents.Length; ++i)
-                if ((VolumeCellState)(packedStates[i >> 2] >> (i & 3) * 2 & 0x3) == VolumeCellState.Subtree)
-                    ++subtreeCount;
+            var contentsBytes = MemoryMarshal.AsBytes(tile.Contents.AsSpan());
+            for (var i = 0; i < packedStates.Length; ++i)
+            {
+                var packedState = packedStates[i];
+                if (s_invalidPackedState[packedState])
+                    throw new Exception($"未知的体积单元状态字节: 0x{packedState:X2}");
+
+                subtreeCount += s_subtreeCountByPackedState[packedState];
+                BinaryPrimitives.WriteUInt64LittleEndian(contentsBytes.Slice(i * sizeof(ulong), sizeof(ulong)), s_expandedContentsByPackedState[packedState]);
+            }
 
             tile.EnsureSubdivisionCapacity(subtreeCount);
 
-            for (var i = 0; i < tile.Contents.Length; ++i)
+            if (subtreeCount == 0)
+                return;
+
+            var baseIndex = 0;
+            for (var i = 0; i < packedStates.Length; ++i, baseIndex += 4)
             {
-                var state = (VolumeCellState)(packedStates[i >> 2] >> (i & 3) * 2 & 0x3);
-                tile.Contents[i] = state switch
+                var subtreeMask = s_subtreeMaskByPackedState[packedStates[i]];
+                while (subtreeMask != 0)
                 {
-                    VolumeCellState.Empty     => 0,
-                    VolumeCellState.SolidLeaf => ushort.MaxValue,
-                    VolumeCellState.Subtree   => DeserializeVolumeSubtile(reader, tile, i),
-                    _                         => throw new Exception($"未知的体积单元状态: {state}")
-                };
+                    var localOffset = BitOperations.TrailingZeroCount((uint)subtreeMask);
+                    subtreeMask = (byte)(subtreeMask & (subtreeMask - 1));
+                    var flatIndex = baseIndex + localOffset;
+                    tile.Contents[flatIndex] = DeserializeVolumeSubtile(reader, tile, flatIndex);
+                }
             }
         }
         finally
@@ -99,7 +129,7 @@ public partial record class Navmesh
             throw new Exception("体积子树数量超出上限");
 
         var subBounds = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel((ushort)flatIndex));
-        var child     = new VoxelMap.Tile(parent.Owner, subBounds.min, subBounds.max, parent.Level + 1);
+        var child     = new VoxelMap.Tile(parent.Owner, subBounds.min, subBounds.max, parent.Level + 1, false);
         parent.AddSubdivision(child);
         DeserializeVolumeTile(reader, child);
         return (ushort)(VoxelMap.VoxelOccupiedBit | localId);
@@ -156,5 +186,92 @@ public partial record class Navmesh
         _               => VolumeCellState.Subtree
     };
 
+    private static readonly ulong[] s_expandedContentsByPackedState = BuildExpandedContentsByPackedState();
+    private static readonly byte[]  s_subtreeMaskByPackedState      = BuildSubtreeMaskByPackedState();
+    private static readonly byte[]  s_subtreeCountByPackedState     = BuildSubtreeCountByPackedState();
+    private static readonly bool[]  s_invalidPackedState            = BuildInvalidPackedState();
+
     private static int PackedStateBytes(int numCells) => numCells + 3 >> 2;
+
+    private static bool TryCaptureDeferredVolumeTree(Stream stream, out byte[] payload, out int offset, out int length)
+    {
+        if (stream is MemoryStream memoryStream && memoryStream.TryGetBuffer(out var buffer) && buffer.Array != null)
+        {
+            payload = buffer.Array;
+            offset  = buffer.Offset + checked((int)memoryStream.Position);
+            length  = checked((int)(memoryStream.Length - memoryStream.Position));
+            return true;
+        }
+
+        payload = [];
+        offset  = 0;
+        length  = 0;
+        return false;
+    }
+
+    private static ulong[] BuildExpandedContentsByPackedState()
+    {
+        var table = GC.AllocateUninitializedArray<ulong>(byte.MaxValue + 1);
+        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
+        {
+            ulong expanded = 0;
+            for (var offset = 0; offset < 4; ++offset)
+            {
+                var state = (VolumeCellState)(packedState >> offset * 2 & 0x3);
+                var value = state switch
+                {
+                    VolumeCellState.Empty     => (ushort)0,
+                    VolumeCellState.SolidLeaf => ushort.MaxValue,
+                    VolumeCellState.Subtree   => VoxelMap.VoxelOccupiedBit,
+                    _                         => (ushort)0
+                };
+                expanded |= (ulong)value << offset * 16;
+            }
+
+            table[packedState] = expanded;
+        }
+
+        return table;
+    }
+
+    private static byte[] BuildSubtreeMaskByPackedState()
+    {
+        var table = GC.AllocateUninitializedArray<byte>(byte.MaxValue + 1);
+        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
+        {
+            byte mask = 0;
+            for (var offset = 0; offset < 4; ++offset)
+                if ((VolumeCellState)(packedState >> offset * 2 & 0x3) == VolumeCellState.Subtree)
+                    mask |= (byte)(1 << offset);
+            table[packedState] = mask;
+        }
+
+        return table;
+    }
+
+    private static byte[] BuildSubtreeCountByPackedState()
+    {
+        var table = GC.AllocateUninitializedArray<byte>(byte.MaxValue + 1);
+        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
+            table[packedState] = (byte)BitOperations.PopCount(s_subtreeMaskByPackedState[packedState]);
+        return table;
+    }
+
+    private static bool[] BuildInvalidPackedState()
+    {
+        var table = GC.AllocateUninitializedArray<bool>(byte.MaxValue + 1);
+        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
+        {
+            for (var offset = 0; offset < 4; ++offset)
+            {
+                if ((VolumeCellState)(packedState >> offset * 2 & 0x3) == (VolumeCellState)3)
+                {
+                    table[packedState] = true;
+                    break;
+                }
+            }
+        }
+
+        return table;
+    }
 }

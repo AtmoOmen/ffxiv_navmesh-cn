@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using DotRecast.Core.Compression;
 using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Runtime;
@@ -9,20 +10,17 @@ public partial record class Navmesh
 {
     private static EncodedSegment EncodeSegment(CacheSegmentKind kind, CacheCodec codec, Action<BinaryWriter> serialize)
     {
-        var       timer          = StopWatchTimer.Create();
-        using var payloadStream  = new MemoryStream();
-        var       countingStream = CreateSegmentWriteStream(payloadStream, codec, out var disposableStream);
-
-        using (disposableStream)
+        var timer = StopWatchTimer.Create();
+        using var payloadStream = new MemoryStream();
+        using (var segmentWriter = new BinaryWriter(payloadStream))
         {
-            using var segmentWriter = new BinaryWriter(countingStream);
             serialize(segmentWriter);
             segmentWriter.Flush();
-            countingStream.Flush();
         }
 
-        var payload = payloadStream.ToArray();
-        return new(codec, payload, countingStream.BytesProcessed, new(kind, payload.LongLength, countingStream.BytesProcessed, timer.Value()));
+        var rawPayload = payloadStream.ToArray();
+        var payload    = EncodePayload(rawPayload, codec);
+        return new(codec, payload, rawPayload.LongLength, new(kind, payload.LongLength, rawPayload.LongLength, timer.Value()));
     }
 
     private static byte[] ReadSegmentPayload(Stream source, CacheSegmentDescriptor descriptor)
@@ -38,55 +36,51 @@ public partial record class Navmesh
 
     private static (T Value, CacheSegmentTelemetry Telemetry) DecodeSegment<T>(CacheSegmentDescriptor descriptor, byte[] payload, Func<BinaryReader, T> deserialize)
     {
-        var       timer          = StopWatchTimer.Create();
-        using var segmentStream  = new MemoryStream(payload, false);
-        var       countingStream = CreateSegmentReadStream(segmentStream, descriptor.Codec, out var disposableStream);
-        using var _              = disposableStream;
-        using var segmentReader  = new BinaryReader(countingStream);
-        var       value          = deserialize(segmentReader);
-        DrainToEnd(countingStream);
+        var timer          = StopWatchTimer.Create();
+        var decodedPayload = DecodePayload(payload, descriptor.Codec, descriptor.UncompressedBytes);
+        using var segmentStream = new MemoryStream(decodedPayload, 0, decodedPayload.Length, false, true);
+        using var segmentReader = new BinaryReader(segmentStream);
+        var value = deserialize(segmentReader);
         return (value, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
     }
 
-    private static (T Value, CacheSegmentTelemetry Telemetry) DecodeSegment<T>(Stream source, CacheSegmentDescriptor descriptor, Func<BinaryReader, T> deserialize)
+    private static byte[] EncodePayload(byte[] rawPayload, CacheCodec codec) => codec switch
     {
-        var       timer          = StopWatchTimer.Create();
-        var       segmentStream  = new SegmentReadStream(source, descriptor.Offset, descriptor.CompressedBytes);
-        var       countingStream = CreateSegmentReadStream(segmentStream, descriptor.Codec, out var disposableStream);
-        using var _              = disposableStream;
-        using var segmentReader  = new BinaryReader(countingStream);
-        var       value          = deserialize(segmentReader);
-        DrainToEnd(countingStream);
-        return (value, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
+        CacheCodec.None   => rawPayload,
+        CacheCodec.FastLz => CompressFastLz(rawPayload),
+        _                 => throw new Exception($"不支持的缓存编码: {codec}")
+    };
+
+    private static byte[] DecodePayload(byte[] payload, CacheCodec codec, long expectedBytes) => codec switch
+    {
+        CacheCodec.None   => payload,
+        CacheCodec.FastLz => DecompressFastLz(payload, expectedBytes),
+        _                 => throw new Exception($"不支持的缓存编码: {codec}")
+    };
+
+    private static byte[] CompressFastLz(byte[] rawPayload)
+    {
+        if (rawPayload.Length == 0)
+            return [];
+
+        var compressedBuffer = GC.AllocateUninitializedArray<byte>(checked((int)FastLZ.EstimateCompressedSize(rawPayload.Length)));
+        var compressedBytes  = checked((int)FastLZ.CompressLevel(2, rawPayload, 0, rawPayload.Length, compressedBuffer));
+        var compressed       = GC.AllocateUninitializedArray<byte>(compressedBytes);
+        Buffer.BlockCopy(compressedBuffer, 0, compressed, 0, compressedBytes);
+        return compressed;
     }
 
-    private static void DrainToEnd(Stream stream)
+    private static byte[] DecompressFastLz(byte[] payload, long expectedBytes)
     {
-        Span<byte> buffer = stackalloc byte[4096];
+        var outputLength = checked((int)expectedBytes);
+        if (outputLength == 0)
+            return [];
 
-        while (stream.Read(buffer) > 0)
-        {
-        }
-    }
-
-    private static CountingStream CreateSegmentWriteStream(Stream destination, CacheCodec codec, out IDisposable disposableStream)
-    {
-        if (codec != CacheCodec.None)
-            throw new Exception($"不支持的缓存编码: {codec}");
-
-        var counting = new CountingStream(destination, true);
-        disposableStream = counting;
-        return counting;
-    }
-
-    private static CountingStream CreateSegmentReadStream(Stream source, CacheCodec codec, out IDisposable disposableStream)
-    {
-        if (codec != CacheCodec.None)
-            throw new Exception($"不支持的缓存编码: {codec}");
-
-        var counting = new CountingStream(source, true);
-        disposableStream = counting;
-        return counting;
+        var decompressed = GC.AllocateUninitializedArray<byte>(outputLength);
+        var actualBytes  = FastLZ.Decompress(payload, 0, payload.Length, decompressed, 0, outputLength);
+        if (actualBytes != outputLength)
+            throw new Exception($"FastLZ 解压失败: 期望 {outputLength} 字节, 实际 {actualBytes} 字节");
+        return decompressed;
     }
 
     private static CacheSegmentDescriptor ReadSegmentDescriptor(BinaryReader reader) => new

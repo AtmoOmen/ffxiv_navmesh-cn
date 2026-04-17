@@ -1,4 +1,6 @@
 using System.Numerics;
+using System.Threading;
+using vnavmesh.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Navigation.Volume;
 
@@ -117,6 +119,7 @@ public class VoxelMap
 
         public (ulong index, bool empty) FindLeafVoxel(Vector3 p, bool checkBounds = true)
         {
+            Owner.EnsureMaterialized();
             var v = WorldToVoxel(p);
             if (checkBounds && !LevelDesc.InBounds(v))
                 return (InvalidVoxel, false); // out of bounds; consider everything outside to be occupied
@@ -133,6 +136,7 @@ public class VoxelMap
 
         public IEnumerable<(ulong index, bool empty)> EnumerateLeafVoxels(Vector3 bmin, Vector3 bmax)
         {
+            Owner.EnsureMaterialized();
             var ld   = LevelDesc;
             var vmin = ld.ClampMin(WorldToVoxel(bmin));
             var vmax = ld.ClampMax(WorldToVoxel(bmax));
@@ -199,6 +203,11 @@ public class VoxelMap
     private readonly int[] _leafScaleX;
     private readonly int[] _leafScaleY;
     private readonly int[] _leafScaleZ;
+    private readonly SemaphoreSlim _materializationGate = new(1, 1);
+
+    private byte[]? _deferredTreePayload;
+    private int     _deferredTreeOffset;
+    private int     _deferredTreeLength;
 
     public const ushort VoxelOccupiedBit = 0x8000;
     public const ushort VoxelIdMask      = 0x7fff;
@@ -255,6 +264,7 @@ public class VoxelMap
 
     public bool IsEmpty(ulong voxel)
     {
+        EnsureMaterialized();
         var tile = RootTile;
 
         while (true)
@@ -273,10 +283,15 @@ public class VoxelMap
         }
     }
 
-    public (ulong voxel, bool empty) FindLeafVoxel(Vector3 p) => RootTile.FindLeafVoxel(p);
+    public (ulong voxel, bool empty) FindLeafVoxel(Vector3 p)
+    {
+        EnsureMaterialized();
+        return RootTile.FindLeafVoxel(p);
+    }
 
     public (Vector3 min, Vector3 max) VoxelBounds(ulong voxel, float eps)
     {
+        EnsureMaterialized();
         var tile = RootTile;
         var eps3 = new Vector3(eps);
 
@@ -300,6 +315,7 @@ public class VoxelMap
 
     internal Vector3 ClampPointToVoxel(ulong voxel, Vector3 p, float eps = 0.1f)
     {
+        EnsureMaterialized();
         var tile = RootTile;
 
         while (true)
@@ -319,6 +335,37 @@ public class VoxelMap
             }
 
             tile = tile.GetSubdivision(id);
+        }
+    }
+
+    internal bool HasDeferredTree => _deferredTreePayload != null;
+
+    internal void SetDeferredTreePayload(byte[] payload, int offset, int length)
+    {
+        _deferredTreePayload = payload;
+        _deferredTreeOffset  = offset;
+        _deferredTreeLength  = length;
+    }
+
+    internal void EnsureMaterialized()
+    {
+        if (_deferredTreePayload == null)
+            return;
+
+        _materializationGate.Wait();
+        try
+        {
+            if (_deferredTreePayload == null)
+                return;
+
+            Navmesh.MaterializeDeferredVolumeTree(this, _deferredTreePayload, _deferredTreeOffset, _deferredTreeLength);
+            _deferredTreePayload = null;
+            _deferredTreeOffset  = 0;
+            _deferredTreeLength  = 0;
+        }
+        finally
+        {
+            _materializationGate.Release();
         }
     }
 
