@@ -1,3 +1,4 @@
+using System.Reflection;
 using Dalamud.Plugin;
 using Microsoft.Extensions.DependencyInjection;
 using vnavmesh.Bootstrap.Composition;
@@ -10,6 +11,8 @@ public sealed class Plugin : IDalamudPlugin
 
     public Plugin(IDalamudPluginInterface dalamud)
     {
+        MarkCurrentThreadAsMainThread();
+        
         if (!dalamud.ConfigDirectory.Exists)
             dalamud.ConfigDirectory.Create();
 
@@ -25,6 +28,15 @@ public sealed class Plugin : IDalamudPlugin
                               }
                           );
         serviceProvider.GetRequiredService<PluginRuntime>();
+        
+        return;
+
+        void MarkCurrentThreadAsMainThread()
+        {
+            var threadSafetyType = dalamud.GetType().Assembly.GetType("Dalamud.Utility.ThreadSafety", true);
+            var markMainThread   = threadSafetyType?.GetMethod("MarkMainThread", BindingFlags.Static | BindingFlags.NonPublic);
+            markMainThread?.Invoke(null, null);
+        }
     }
 
     public void Dispose() =>
