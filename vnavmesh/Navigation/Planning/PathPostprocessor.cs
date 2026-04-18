@@ -8,12 +8,14 @@ namespace vnavmesh.Navigation.Planning;
 
 internal sealed class PathPostprocessor
 (
-    DtNavMeshQuery meshQuery
+    Func<DtNavMeshQuery> getMeshQuery
 )
 {
     private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
     private const float COLLINEAR_WAYPOINT_TOLERANCE   = 0.01f;
     private const int   MAX_SMOOTH_PATH_POINTS         = 102400;
+
+    private DtNavMeshQuery MeshQuery => getMeshQuery();
 
     public PostprocessedPath Process(PlannerResult result, bool useStringPulling, CancellationToken cancel)
     {
@@ -72,19 +74,19 @@ internal sealed class PathPostprocessor
             return useStringPulling
                        ? [.. groundCorridor.Corners.Select(c => c.Position)]
                        : DeduplicateWaypoints
-                           (segment.Corridor.Select(r => meshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
+                           (segment.Corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
         }
 
         if (useStringPulling)
             return BuildStraightPathWaypoints(segment, [.. segment.Corridor]);
 
-        return DeduplicateWaypoints(segment.Corridor.Select(r => meshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
+        return DeduplicateWaypoints(segment.Corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
     }
 
     private List<Vector3> BuildStraightPathWaypoints(PlannerPathSegment segment, long[] corridor)
     {
         var straightPath = new DtStraightPath[MAX_SMOOTH_PATH_POINTS];
-        var straightStatus = meshQuery.FindStraightPath
+        var straightStatus = MeshQuery.FindStraightPath
         (
             segment.StartPosition.SystemToRecast(),
             segment.EndPosition.SystemToRecast(),
@@ -119,7 +121,7 @@ internal sealed class PathPostprocessor
     private IReadOnlyList<GroundPathCorner> BuildGroundCorners(PlannerPathSegment segment, long[] corridor)
     {
         var straightPath = new DtStraightPath[MAX_SMOOTH_PATH_POINTS];
-        var straightStatus = meshQuery.FindStraightPath
+        var straightStatus = MeshQuery.FindStraightPath
         (
             segment.StartPosition.SystemToRecast(),
             segment.EndPosition.SystemToRecast(),
@@ -184,7 +186,7 @@ internal sealed class PathPostprocessor
     private NavmeshArea ResolveArea(long[] corridor, long polyRef)
     {
         var resolvedRef = polyRef != 0 ? polyRef : corridor[^1];
-        meshQuery.GetAttachedNavMesh().GetTileAndPolyByRefUnsafe(resolvedRef, out _, out var poly);
+        MeshQuery.GetAttachedNavMesh().GetTileAndPolyByRefUnsafe(resolvedRef, out _, out var poly);
         return (NavmeshArea)poly.GetArea();
     }
 

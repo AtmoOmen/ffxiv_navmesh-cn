@@ -5,16 +5,40 @@ namespace vnavmesh.Navigation.Mesh.Runtime;
 
 // full set of data needed for navigation in the zone
 public partial record class Navmesh
-(
-    int       CustomizationVersion,
-    string    BuildSignature,
-    bool      CustomizationApplied,
-    DtNavMesh Mesh,
-    VoxelMap? Volume
-)
 {
     public static readonly uint Magic   = 0x444D564E; // 'NVMD'
     public static readonly uint Version = 35;         // 更新后触发一次全量重构建
+
+    public int       CustomizationVersion { get; init; }
+    public string    BuildSignature       { get; init; }
+    public bool      CustomizationApplied { get; init; }
+    public VoxelMap? Volume               { get; init; }
+
+    private DtNavMesh?            _mesh;
+    private byte[]?               _deferredMeshPayload;
+    private long                  _deferredMeshExpectedBytes;
+    private CacheCodec            _deferredMeshCodec;
+    private Action<DtNavMesh>?    _deferredMeshMutator;
+    private readonly SemaphoreSlim _meshMaterializationGate = new(1, 1);
+
+    public DtNavMesh Mesh
+    {
+        get
+        {
+            EnsureMeshMaterialized();
+            return _mesh ?? throw new InvalidOperationException("地面导航网格尚未就绪");
+        }
+        init => _mesh = value;
+    }
+
+    public Navmesh(int customizationVersion, string buildSignature, bool customizationApplied, DtNavMesh mesh, VoxelMap? volume)
+    {
+        CustomizationVersion = customizationVersion;
+        BuildSignature       = buildSignature;
+        CustomizationApplied = customizationApplied;
+        _mesh                = mesh;
+        Volume               = volume;
+    }
 
     public int GeneratedClimbDownLinkCount { get; set; }
     public int GeneratedEdgeJumpLinkCount  { get; set; }
@@ -66,12 +90,14 @@ public partial record class Navmesh
         var meshSegment     = meshDescriptor   ?? throw new Exception("缓存缺少 Mesh 段");
         var volumeSegment   = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
         var requiresRewrite = volumeSegment.Codec != CacheCodec.FastLz;
-        var source          = reader.BaseStream;
-        var (mesh, meshTelemetry) = DecodeSegment(meshSegment, source, DeserializeMesh);
+        var source = reader.BaseStream;
+        var (meshPayload, meshTelemetry) = DecodeDeferredMeshSegment(meshSegment, source);
         var (volume, volumeTelemetry) = volumeSegment.Codec == CacheCodec.FastLz
                                             ? DecodeDeferredVolumeSegment(volumeSegment, source)
                                             : DecodeSegment(volumeSegment, source, DeserializeVolume);
-        return new(new(customizationVersion, buildSignature, customizationApplied, mesh!, volume), new(meshTelemetry, volumeTelemetry), requiresRewrite);
+        var navmesh = new Navmesh(customizationVersion, buildSignature, customizationApplied, null!, volume);
+        navmesh.SetDeferredMeshPayload(meshPayload, meshSegment.Codec, meshSegment.UncompressedBytes);
+        return new(navmesh, new(meshTelemetry, volumeTelemetry), requiresRewrite);
     }
 
     public CacheTelemetry Serialize(BinaryWriter writer)
@@ -333,11 +359,59 @@ public partial record class Navmesh
         public override void Write(ReadOnlySpan<byte> buffer) => throw new NotSupportedException();
     }
 
+    private void SetDeferredMeshPayload(byte[] payload, CacheCodec codec, long expectedBytes)
+    {
+        _mesh                      = null;
+        _deferredMeshPayload       = payload;
+        _deferredMeshCodec         = codec;
+        _deferredMeshExpectedBytes = expectedBytes;
+    }
+
+    internal void DeferMeshMutation(Action<DtNavMesh> mutator)
+    {
+        _deferredMeshMutator += mutator;
+    }
+
+    internal void EnsureMeshMaterialized()
+    {
+        if (_mesh != null && _deferredMeshMutator == null)
+            return;
+
+        _meshMaterializationGate.Wait();
+
+        try
+        {
+            if (_mesh == null)
+            {
+                if (_deferredMeshPayload == null)
+                    throw new InvalidOperationException("缺少地面导航网格载荷");
+
+                _mesh = DeserializeMeshPayload(_deferredMeshPayload, _deferredMeshCodec, _deferredMeshExpectedBytes);
+                _deferredMeshPayload       = null;
+                _deferredMeshExpectedBytes = 0;
+            }
+
+            if (_deferredMeshMutator is not { } mutator)
+                return;
+
+            mutator(_mesh);
+            _deferredMeshMutator = null;
+        }
+        finally
+        {
+            _meshMaterializationGate.Release();
+        }
+    }
+
     internal void ReleaseRetainedState()
     {
+        _deferredMeshPayload       = null;
+        _deferredMeshExpectedBytes = 0;
+        _deferredMeshMutator       = null;
         Volume?.ReleaseRetainedState();
         Links.Clear();
         Links.TrimExcess();
-        Mesh.Release();
+        _mesh?.Release();
+        _mesh = null;
     }
 }

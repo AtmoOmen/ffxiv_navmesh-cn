@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime;
+using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
@@ -15,6 +16,7 @@ namespace vnavmesh.Navigation.Mesh.Runtime;
 public sealed partial class NavmeshManager : IDisposable
 {
     private readonly Config _config;
+    private static readonly DtQueryDefaultFilter s_pruneFilter = new();
 
     private sealed record BuildNavmeshResult
     (
@@ -309,47 +311,89 @@ public sealed partial class NavmeshManager : IDisposable
 
     public void Prune(IEnumerable<Vector3> points)
     {
-        if (Navmesh == null || Query == null)
-            throw new InvalidOperationException("can't prune, mesh is missing");
+        if (Navmesh == null)
+            throw new InvalidOperationException("无法裁剪，网格缺失");
 
-        var startPolys = points.Select(pt => Query.FindNearestMeshPoly(pt));
-        Log($"seeding from start polys: {string.Join(", ", startPolys.Select(p => p.ToString("X")))}");
-        var reachablePolys = Query.FindReachableMeshPolys([.. startPolys]);
+        PruneMesh(Navmesh.Mesh, points);
+    }
+
+    private static void PruneMesh(DtNavMesh mesh, IEnumerable<Vector3> points)
+    {
+        var query      = new DtNavMeshQuery(mesh);
+        var startPolys = points.Select(pt => FindNearestMeshPoly(query, pt)).ToArray();
+        Log($"裁剪起始多边形: {string.Join(", ", startPolys.Select(p => p.ToString("X")))}");
+        var reachablePolys = FindReachableMeshPolys(query, startPolys);
 
         var pruneCount = 0;
 
-        for (var i = 0; i < Navmesh.Mesh.GetMaxTiles(); i++)
+        for (var i = 0; i < mesh.GetMaxTiles(); i++)
         {
-            var t = Navmesh.Mesh.GetTile(i);
+            var t = mesh.GetTile(i);
             if (t.data?.header == null)
                 continue;
 
-            var prBase = Navmesh.Mesh.GetPolyRefBase(t);
+            var prBase = mesh.GetPolyRefBase(t);
 
             for (var j = 0; j < t.data.header.polyCount; j++)
             {
                 var pref = prBase | (uint)j;
 
-                if (Navmesh.Mesh.GetPolyFlags(pref, out var fl).Failed())
+                if (mesh.GetPolyFlags(pref, out var fl).Failed())
                 {
-                    Log($"failed to fetch flags for {pref:X}");
+                    Log($"读取多边形标记失败: {pref:X}");
                     continue;
                 }
 
                 if (reachablePolys.Contains(pref))
                 {
-                    if (Navmesh.Mesh.SetPolyFlags(pref, fl & ~(int)NavmeshPolyFlags.Unreachable).Failed())
-                        Log($"failed to set flags for {pref:X}");
+                    if (mesh.SetPolyFlags(pref, fl & ~(int)NavmeshPolyFlags.Unreachable).Failed())
+                        Log($"写入多边形标记失败: {pref:X}");
                 }
                 else
                 {
                     pruneCount++;
-                    if (Navmesh.Mesh.SetPolyFlags(pref, fl | (int)NavmeshPolyFlags.Unreachable).Failed())
-                        Log($"failed to set flags for {pref:X}");
+                    if (mesh.SetPolyFlags(pref, fl | (int)NavmeshPolyFlags.Unreachable).Failed())
+                        Log($"写入多边形标记失败: {pref:X}");
                 }
             }
         }
 
-        Log($"pruned {pruneCount} unreachable polygons");
+        Log($"已裁剪不可达多边形 {pruneCount} 个");
+    }
+
+    private static long FindNearestMeshPoly(DtNavMeshQuery query, Vector3 point)
+    {
+        query.FindNearestPoly(point.SystemToRecast(), new(5, 5, 5), s_pruneFilter, out var nearestRef, out _, out _);
+        return nearestRef;
+    }
+
+    private static HashSet<long> FindReachableMeshPolys(DtNavMeshQuery query, params long[] starting)
+    {
+        HashSet<long> result = [];
+
+        List<long> queue = [.. starting];
+        queue.RemoveAll(static polyRef => polyRef == 0);
+
+        var navmesh = query.GetAttachedNavMesh();
+
+        while (queue.Count > 0)
+        {
+            var next = queue[^1];
+            queue.RemoveAt(queue.Count - 1);
+
+            if (!result.Add(next))
+                continue;
+
+            navmesh.GetTileAndPolyByRefUnsafe(next, out var nextTile, out var nextPoly);
+
+            for (var i = nextPoly.firstLink; i != DtDetour.DT_NULL_LINK; i = nextTile.links[i].next)
+            {
+                var neighbourRef = nextTile.links[i].refs;
+                if (neighbourRef != 0)
+                    queue.Add(neighbourRef);
+            }
+        }
+
+        return result;
     }
 }

@@ -232,13 +232,13 @@ public partial class NavmeshQuery
         public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => _filter.PassFilter(refs, tile, poly);
     }
 
-    public           DtNavMeshQuery       MeshQuery;
     private readonly PathPostprocessor    _postprocessor;
     private readonly Navmesh              _navmesh;
     private readonly IDtQueryFilter       _filter       = new DtQueryDefaultFilter();
     private readonly GroundAreaCostFilter _groundFilter = new();
     private readonly RandomnessFilter     _randomnessFilter;
     private readonly IDtQueryFilter       _reachableFilter;
+    private          DtNavMeshQuery?      _meshQuery;
     private          VoxelPathfind?       _volumeQuery;
     private          bool                 _released;
 
@@ -251,6 +251,22 @@ public partial class NavmeshQuery
     private long _endReplacementCount;
 
     internal IDtQueryFilter GroundFilter => _groundFilter;
+    public   DtNavMeshQuery MeshQuery
+    {
+        get
+        {
+            if (_released)
+                throw new ObjectDisposedException(nameof(NavmeshQuery));
+
+            var existing = Volatile.Read(ref _meshQuery);
+            if (existing != null)
+                return existing;
+
+            var created = new DtNavMeshQuery(_navmesh.Mesh);
+            return Interlocked.CompareExchange(ref _meshQuery, created, null) ?? created;
+        }
+    }
+
     public   VoxelPathfind? VolumeQuery  => _released ? null : _volumeQuery ??= _navmesh.Volume != null ? new(_navmesh.Volume, _config) : null;
 
     public List<long> LastPath { get; } = [];
@@ -259,8 +275,7 @@ public partial class NavmeshQuery
     {
         _navmesh          = navmesh;
         _config           = config;
-        MeshQuery         = new(navmesh.Mesh /*, s => Service.Log.Debug(s)*/);
-        _postprocessor    = new(MeshQuery);
+        _postprocessor    = new(() => MeshQuery);
         _randomnessFilter = new(_groundFilter);
         _reachableFilter  = _groundFilter;
     }
@@ -448,6 +463,7 @@ public partial class NavmeshQuery
     {
         LastPath.Clear();
         LastPath.TrimExcess();
+        _meshQuery = null;
         _volumeQuery?.ReleaseRetainedState();
         _volumeQuery = null;
         _released    = true;

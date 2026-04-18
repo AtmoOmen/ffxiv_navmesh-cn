@@ -60,7 +60,10 @@ public sealed partial class NavmeshManager
 
                     var ff = await FloodFill.GetAsync();
                     if (ff.TryLookup(scene.TerritoryID, out var points))
-                        Prune(points);
+                    {
+                        var pruneSeeds = points.ToArray();
+                        Navmesh.DeferMeshMutation(mesh => PruneMesh(mesh, pruneSeeds));
+                    }
 
                     OnNavmeshChanged?.Invoke(Navmesh, Query);
                     if (buildResult.CacheFile != null)
