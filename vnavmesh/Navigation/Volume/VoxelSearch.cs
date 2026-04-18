@@ -124,7 +124,7 @@ public static class VoxelSearch
         t = Math.Min(Math.Min(tx, ty), Math.Min(tz, 1));
         var tAdj = Math.Min(t + eps, 1);
         var proj = fromPos + tAdj * ab;
-        (nextVoxel, nextEmpty) = volume.FindLeafVoxel(proj.Floor());
+        (nextVoxel, nextEmpty) = volume.FindLeafVoxel(proj);
         if (nextVoxel == fromVoxel)
             throw new PathfindLoopException(origFrom, toVoxel, fromPos, fromPos + ab);
     }

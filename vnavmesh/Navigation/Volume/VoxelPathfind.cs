@@ -11,14 +11,24 @@ namespace vnavmesh.Navigation.Volume;
 public class VoxelPathfind
 {
     private const float ScoreEpsilon = 0.00001f;
+    private const int   DefaultMaxSearchSteps = 1_0000_0000;
+    private const int   RaycastSearchStepBudget = 200000;
     private const int   MaxAncestorLookback = 6;
     private const int   ParallelNeighbourThreshold = 4;
+    private const float MaxSearchRaycastDistanceInLeafCells = 96f;
 
     private enum CandidateKind : byte
     {
         Projected,
         GoalAligned,
         CenterBiased
+    }
+
+    internal enum SearchTermination : byte
+    {
+        ReachedGoal,
+        SearchExhausted,
+        StepBudgetReached
     }
 
     private readonly record struct VisibilityKey
@@ -35,7 +45,10 @@ public class VoxelPathfind
         int GeneratedNodes,
         int LineOfSightChecks,
         int LineOfSightHits,
-        int PeakOpenListSize
+        int PeakOpenListSize,
+        SearchTermination Termination,
+        bool SearchRaycastEnabled,
+        int SearchAttempts
     );
 
     private readonly record struct NeighbourEvaluation
@@ -61,33 +74,49 @@ public class VoxelPathfind
     private readonly VoxelMap.Level _l0Desc;
     private readonly VoxelMap.Level _l1Desc;
     private readonly VoxelMap.Level _l2Desc;
+    private readonly float          _maxSearchRaycastDistance;
     private readonly List<ulong>    _neighbourScratch = new(64);
 
-    private readonly List<Node>             _nodes      = new(1024);
-    private readonly Dictionary<ulong, int> _nodeLookup = new(1024);
-    private readonly List<int>              _openList   = new(256);
+    private readonly List<Node>                          _nodes      = new(1024);
+    private readonly Dictionary<ulong, int>              _nodeLookup = new(1024);
+    private readonly List<int>                           _openList   = new(256);
     private readonly ConcurrentDictionary<VisibilityKey, bool> _visibilityCache = new(Environment.ProcessorCount, 4096);
     private int                             _bestNodeIndex;
     private ulong                           _goalVoxel;
     private Vector3                         _goalPos;
-    private bool                            _useRaycast;
+    private bool                            _goalReached;
+    private bool                            _useSearchRaycast;
     private int                             _visitedNodes;
     private int                             _generatedNodes;
     private int                             _lineOfSightChecks;
     private int                             _lineOfSightHits;
     private int                             _peakOpenListSize;
+    private SearchTermination               _lastTermination;
+    private bool                            _lastSearchRaycastEnabled;
+    private int                             _lastSearchAttempts;
 
     public VoxelMap Volume { get; }
 
     public   Span<Node>      NodeSpan      => CollectionsMarshal.AsSpan(_nodes);
-    internal SearchTelemetry LastTelemetry => new(_visitedNodes, _generatedNodes, _lineOfSightChecks, _lineOfSightHits, _peakOpenListSize);
+    internal SearchTelemetry LastTelemetry => new
+    (
+        _visitedNodes,
+        _generatedNodes,
+        _lineOfSightChecks,
+        _lineOfSightHits,
+        _peakOpenListSize,
+        _lastTermination,
+        _lastSearchRaycastEnabled,
+        _lastSearchAttempts
+    );
 
     public VoxelPathfind(VoxelMap volume, Config _)
     {
-        Volume  = volume;
-        _l0Desc = volume.Levels[0];
-        _l1Desc = volume.Levels[1];
-        _l2Desc = volume.Levels[2];
+        Volume                    = volume;
+        _l0Desc                   = volume.Levels[0];
+        _l1Desc                   = volume.Levels[1];
+        _l2Desc                   = volume.Levels[2];
+        _maxSearchRaycastDistance = MathF.Max(_l2Desc.CellSize.X, MathF.Max(_l2Desc.CellSize.Y, _l2Desc.CellSize.Z)) * MaxSearchRaycastDistanceInLeafCells;
     }
 
     public List<(ulong voxel, Vector3 p)> FindPath
@@ -99,8 +128,11 @@ public class VoxelPathfind
             _goalVoxel       = toVoxel;
             _goalPos         = toPos;
             _bestNodeIndex   = 0;
+            _goalReached     = true;
             _visitedNodes    = 1;
             _generatedNodes  = 1;
+            _lastTermination = SearchTermination.ReachedGoal;
+            _lastSearchAttempts = 1;
             _nodes.Add
             (
                 new()
@@ -118,13 +150,23 @@ public class VoxelPathfind
             return [(toVoxel, toPos)];
         }
 
-        _useRaycast = useRaycast;
         if (useRaycast && TryBuildDirectPath(fromVoxel, toVoxel, fromPos, toPos, out var directPath))
             return directPath;
-        Start(fromVoxel, toVoxel, fromPos, toPos);
-        Execute(cancel);
-        var rawPath = BuildPathToVisitedNode(_bestNodeIndex, returnIntermediatePoints);
-        return useRaycast ? SimplifyPath(rawPath, cancel) : rawPath;
+
+        var useSearchRaycast = useRaycast && ShouldUseSearchRaycast(fromPos, toPos);
+        var maxSteps         = useSearchRaycast ? RaycastSearchStepBudget : DefaultMaxSearchSteps;
+        var path             = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, useSearchRaycast, returnIntermediatePoints, cancel, maxSteps, 1);
+
+        if (_lastTermination == SearchTermination.StepBudgetReached && useSearchRaycast)
+        {
+            Service.Log.Debug
+            (
+                $"[算路] 飞行体素搜索触发降级重试：直线距离 = {Vector3.Distance(fromPos, toPos):f3}，首轮访问节点 = {_visitedNodes}，LoS 检查 = {_lineOfSightChecks}"
+            );
+            path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, false, returnIntermediatePoints, cancel, DefaultMaxSearchSteps, 2);
+        }
+
+        return useRaycast ? SimplifyPath(path, cancel) : path;
     }
 
     public void Start(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
@@ -158,16 +200,41 @@ public class VoxelPathfind
         AddToOpen(0);
     }
 
-    public void Execute(CancellationToken cancel, int maxSteps = 1000000)
+    private SearchTermination Execute(CancellationToken cancel, int maxSteps = DefaultMaxSearchSteps)
     {
         for (var i = 0; i < maxSteps; ++i)
         {
             if (!ExecuteStep())
-                return;
+                return _goalReached ? SearchTermination.ReachedGoal : SearchTermination.SearchExhausted;
             if ((i & 0x3ff) == 0)
                 cancel.ThrowIfCancellationRequested();
         }
+
+        return SearchTermination.StepBudgetReached;
     }
+
+    private List<(ulong voxel, Vector3 p)> RunSearchAttempt
+    (
+        ulong             fromVoxel,
+        ulong             toVoxel,
+        Vector3           fromPos,
+        Vector3           toPos,
+        bool              useSearchRaycast,
+        bool              returnIntermediatePoints,
+        CancellationToken cancel,
+        int               maxSteps,
+        int               attempts
+    )
+    {
+        Start(fromVoxel, toVoxel, fromPos, toPos);
+        _useSearchRaycast         = useSearchRaycast;
+        _lastSearchRaycastEnabled = useSearchRaycast;
+        _lastSearchAttempts       = attempts;
+        _lastTermination = Execute(cancel, maxSteps);
+        return BuildPathToVisitedNode(_bestNodeIndex, returnIntermediatePoints);
+    }
+
+    private bool ShouldUseSearchRaycast(Vector3 fromPos, Vector3 toPos) => Vector3.Distance(fromPos, toPos) <= _maxSearchRaycastDistance;
 
     public bool ExecuteStep()
     {
@@ -184,6 +251,7 @@ public class VoxelPathfind
         if (current.Voxel == _goalVoxel)
         {
             _bestNodeIndex = currentIndex;
+            _goalReached   = true;
             return false;
         }
 
@@ -225,11 +293,15 @@ public class VoxelPathfind
         _openList.Clear();
         _visibilityCache.Clear();
         _bestNodeIndex     = 0;
+        _goalReached       = false;
         _visitedNodes      = 0;
         _generatedNodes    = 0;
         _lineOfSightChecks = 0;
         _lineOfSightHits   = 0;
         _peakOpenListSize  = 0;
+        _lastTermination   = SearchTermination.SearchExhausted;
+        _lastSearchRaycastEnabled = false;
+        _lastSearchAttempts = 0;
     }
 
     internal void ReleaseRetainedState()
@@ -255,8 +327,11 @@ public class VoxelPathfind
         _goalVoxel      = toVoxel;
         _goalPos        = toPos;
         _bestNodeIndex  = 0;
+        _goalReached    = true;
         _visitedNodes   = 1;
         _generatedNodes = 1;
+        _lastTermination = SearchTermination.ReachedGoal;
+        _lastSearchAttempts = 1;
         path            = [(toVoxel, toPos)];
         return true;
     }
@@ -271,27 +346,76 @@ public class VoxelPathfind
 
         while (anchorIndex < path.Count - 1)
         {
-            var furthestVisibleIndex = anchorIndex + 1;
-            for (var probeIndex = furthestVisibleIndex + 1; probeIndex < path.Count; ++probeIndex)
-            {
-                if ((probeIndex & 0x3f) == 0)
-                    cancel.ThrowIfCancellationRequested();
-
-                var anchor = path[anchorIndex];
-                var probe  = path[probeIndex];
-                ++_lineOfSightChecks;
-                if (!VoxelSearch.LineOfSight(Volume, anchor.voxel, probe.voxel, anchor.p, probe.p))
-                    break;
-
-                ++_lineOfSightHits;
-                furthestVisibleIndex = probeIndex;
-            }
+            var furthestVisibleIndex = FindFurthestVisibleIndex(path, anchorIndex, cancel);
 
             simplified.Add(path[furthestVisibleIndex]);
             anchorIndex = furthestVisibleIndex;
         }
 
         return simplified;
+    }
+
+    private int FindFurthestVisibleIndex(List<(ulong voxel, Vector3 p)> path, int anchorIndex, CancellationToken cancel)
+    {
+        var pathLastIndex = path.Count - 1;
+        var nextIndex     = anchorIndex + 1;
+        if (nextIndex >= pathLastIndex || !HasLineOfSight(path, anchorIndex, nextIndex, cancel))
+            return nextIndex;
+
+        var furthestVisibleIndex = nextIndex;
+        var step                 = 1;
+
+        while (furthestVisibleIndex < pathLastIndex)
+        {
+            var probeIndex = Math.Min(furthestVisibleIndex + step, pathLastIndex);
+            if (!HasLineOfSight(path, anchorIndex, probeIndex, cancel))
+                return FindVisibleBoundary(path, anchorIndex, furthestVisibleIndex, probeIndex - 1, cancel);
+
+            furthestVisibleIndex = probeIndex;
+            step <<= 1;
+        }
+
+        return furthestVisibleIndex;
+    }
+
+    private int FindVisibleBoundary
+    (
+        List<(ulong voxel, Vector3 p)> path,
+        int                            anchorIndex,
+        int                            visibleIndex,
+        int                            blockedIndex,
+        CancellationToken              cancel
+    )
+    {
+        while (visibleIndex < blockedIndex)
+        {
+            var mid = visibleIndex + (blockedIndex - visibleIndex + 1 >> 1);
+            if (HasLineOfSight(path, anchorIndex, mid, cancel))
+            {
+                visibleIndex = mid;
+            }
+            else
+            {
+                blockedIndex = mid - 1;
+            }
+        }
+
+        return visibleIndex;
+    }
+
+    private bool HasLineOfSight(List<(ulong voxel, Vector3 p)> path, int anchorIndex, int probeIndex, CancellationToken cancel)
+    {
+        if ((probeIndex & 0x3f) == 0)
+            cancel.ThrowIfCancellationRequested();
+
+        var anchor = path[anchorIndex];
+        var probe  = path[probeIndex];
+        ++_lineOfSightChecks;
+        if (!VoxelSearch.LineOfSight(Volume, anchor.voxel, probe.voxel, anchor.p, probe.p))
+            return false;
+
+        ++_lineOfSightHits;
+        return true;
     }
 
     private List<(ulong voxel, Vector3 p)> BuildPathToVisitedNode(int nodeIndex, bool returnIntermediatePoints)
@@ -551,7 +675,7 @@ public class VoxelPathfind
         if (!TryEvaluateCandidate(currentIndex, neighbourVoxel, false, ref bestParentIndex, ref bestPosition, ref bestScore))
             return false;
 
-        if (!_useRaycast)
+        if (!_useSearchRaycast)
             return true;
 
         var nodeSpan      = NodeSpan;

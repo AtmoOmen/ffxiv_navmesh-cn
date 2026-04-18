@@ -60,12 +60,44 @@ public partial class NavmeshQuery
 
         Service.Log.Debug
         (
-            $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，路径点 = {voxelPath.Count}，起点修正 = {(Vector3.DistanceSquared(safeStart, from) > 0.000001f ? "是" : "否")}，安全终点修正 = {(safeDestinationAdjusted ? "是" : "否")}"
+            $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，终止 = {DescribeVolumeSearchTermination(telemetry.Termination)}，搜索射线优化 = {(telemetry.SearchRaycastEnabled ? "是" : "否")}，搜索轮次 = {telemetry.SearchAttempts}，路径点 = {voxelPath.Count}，起点修正 = {(Vector3.DistanceSquared(safeStart, from) > 0.000001f ? "是" : "否")}，安全终点修正 = {(safeDestinationAdjusted ? "是" : "否")}"
         );
 
         List<Vector3> rawWaypoints = new(voxelPath.Count);
         foreach (var step in voxelPath)
             rawWaypoints.Add(step.p);
+
+        if (telemetry.Termination != VoxelPathfind.SearchTermination.ReachedGoal)
+        {
+            var partialDestination = rawWaypoints[^1];
+            Service.Log.Warning
+            (
+                $"飞行体素搜索未抵达终点：终止 = {DescribeVolumeSearchTermination(telemetry.Termination)}，请求空体素终点 = {safeDestination:f3}，当前终点 = {partialDestination:f3}，后续不再强接终点"
+            );
+
+            return new()
+            {
+                Status               = PathfindStatus.Partial,
+                RequestedMode        = MovementMode.Flight,
+                RequestedDestination = to,
+                FinalDestination     = partialDestination,
+                DestinationTolerance = 0,
+                Segments =
+                [
+                    new()
+                    {
+                        MovementMode         = MovementMode.Flight,
+                        SegmentKind          = MovementSegmentKind.FlightTraverse,
+                        AllowVerticalControl = true,
+                        ReachabilitySource   = PathReachabilitySource.Volume,
+                        GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                        StartPosition        = from,
+                        EndPosition          = partialDestination,
+                        Points               = [.. rawWaypoints]
+                    }
+                ]
+            };
+        }
 
         if (!requestedTargetLeaf.empty &&
             TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, useRaycast, cancel, out var hybridResult))
@@ -277,5 +309,13 @@ public partial class NavmeshQuery
             FinalDestination     = destination,
             DestinationTolerance = 0
         };
+
+    private static string DescribeVolumeSearchTermination(VoxelPathfind.SearchTermination termination) => termination switch
+    {
+        VoxelPathfind.SearchTermination.ReachedGoal     => "达到终点",
+        VoxelPathfind.SearchTermination.SearchExhausted => "搜索穷尽",
+        VoxelPathfind.SearchTermination.StepBudgetReached => "步数触顶",
+        _                                               => "未知"
+    };
 
 }
