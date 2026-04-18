@@ -36,7 +36,7 @@ public partial class NavmeshQuery
         var locateDuration = locateTimer.Value();
         Service.Log.Debug($"[算路] 飞行体素 {startVoxel:X} -> {endVoxel:X}");
 
-        if (startVoxel == VoxelMap.InvalidVoxel || endVoxel == VoxelMap.InvalidVoxel)
+        if (startVoxel == VoxelMap.INVALID_VOXEL || endVoxel == VoxelMap.INVALID_VOXEL)
         {
             Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 无法定位空体素");
             return CreateFlightFailure(to);
@@ -204,7 +204,7 @@ public partial class NavmeshQuery
         );
 
         var approachVoxel = FindNearestVolumeVoxel(candidate, FlightGroundApproachMinHorizontal, MathF.Max(1f, verticalDrop * 0.5f));
-        if (approachVoxel == VoxelMap.InvalidVoxel)
+        if (approachVoxel == VoxelMap.INVALID_VOXEL)
             return candidate;
 
         return VoxelSearch.FindClosestVoxelPoint(VolumeQuery!.Volume, approachVoxel, candidate);
@@ -217,14 +217,14 @@ public partial class NavmeshQuery
 
         var volume       = VolumeQuery.Volume;
         var approachLeaf = volume.FindLeafVoxel(approachPoint);
-        if (!approachLeaf.empty || approachLeaf.voxel == VoxelMap.InvalidVoxel)
+        if (!approachLeaf.empty || approachLeaf.voxel == VoxelMap.INVALID_VOXEL)
             return;
 
         while (flightWaypoints.Count >= 2)
         {
             var previousPoint = flightWaypoints[^2];
             var previousLeaf  = volume.FindLeafVoxel(previousPoint);
-            if (!previousLeaf.empty || previousLeaf.voxel == VoxelMap.InvalidVoxel)
+            if (!previousLeaf.empty || previousLeaf.voxel == VoxelMap.INVALID_VOXEL)
                 break;
 
             if (!VoxelSearch.LineOfSight(volume, previousLeaf.voxel, approachLeaf.voxel, previousPoint, approachPoint))

@@ -184,7 +184,7 @@ internal class DebugNavmeshManager : IDisposable
         manager.Navmesh!.Mesh.CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
         tree.LeafNode($"{tag}位置：{position:f3}，区块 (Tile)：{tileX}x{tileZ}，多边形 (Poly)：{manager.Query!.FindNearestMeshPoly(position):X}");
         var voxel = manager.Query.FindNearestVolumeVoxel(position);
-        if (tree.LeafNode($"{tag}体素：{voxel:X}###{tag}voxel").SelectedOrHovered && voxel != VoxelMap.InvalidVoxel)
+        if (tree.LeafNode($"{tag}体素：{voxel:X}###{tag}voxel").SelectedOrHovered && voxel != VoxelMap.INVALID_VOXEL)
             debugVoxelMap?.VisualizeVoxel(voxel);
     }
 

@@ -150,7 +150,7 @@ public partial record class Navmesh
     private static void DeserializeVolumeSubtile(BinaryReader reader, VoxelMap.Tile parent, int flatIndex)
     {
         var localId = parent.SubdivisionCount;
-        if (localId >= VoxelMap.VoxelIdMask)
+        if (localId >= VoxelMap.VOXEL_ID_MASK)
             throw new Exception("体积子树数量超出上限");
 
         var subBounds = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel((ushort)flatIndex));

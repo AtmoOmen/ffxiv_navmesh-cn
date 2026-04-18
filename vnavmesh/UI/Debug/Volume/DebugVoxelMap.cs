@@ -87,7 +87,7 @@ public class DebugVoxelMap : IDisposable
         for (var i = 0; i < tile.CellCount; ++i)
         {
             var t = tile.GetCell(i);
-            if ((t & VoxelMap.VoxelIdMask) == VoxelMap.VoxelIdMask)
+            if ((t & VoxelMap.VOXEL_ID_MASK) == VoxelMap.VOXEL_ID_MASK)
                 ++_numLeavesPerLevel[tile.Level];
         }
 
@@ -105,13 +105,13 @@ public class DebugVoxelMap : IDisposable
             return;
 
         for (ushort i = 0; i < tile.CellCount; i++)
-            if ((tile.GetCell(i) & VoxelMap.VoxelOccupiedBit) != 0)
+            if ((tile.GetCell(i) & VoxelMap.VOXEL_OCCUPIED_BIT) != 0)
             {
                 var v  = tile.LevelDesc.IndexToVoxel(i);
                 var cn = $"{v.x}x{v.y}x{v.z}";
-                var id = tile.GetCell(i) & VoxelMap.VoxelIdMask;
+                var id = tile.GetCell(i) & VoxelMap.VOXEL_ID_MASK;
 
-                if (id == VoxelMap.VoxelIdMask)
+                if (id == VoxelMap.VOXEL_ID_MASK)
                 {
                     // fully solid
                     if (_tree.LeafNode($"{v.x}x{v.y}x{v.z}").SelectedOrHovered)
@@ -130,11 +130,11 @@ public class DebugVoxelMap : IDisposable
         var start = builder.NumInstances;
 
         for (ushort i = 0; i < tile.CellCount; i++)
-            if ((tile.GetCell(i) & VoxelMap.VoxelOccupiedBit) != 0)
+            if ((tile.GetCell(i) & VoxelMap.VOXEL_OCCUPIED_BIT) != 0)
             {
-                var id = tile.GetCell(i) & VoxelMap.VoxelIdMask;
+                var id = tile.GetCell(i) & VoxelMap.VOXEL_ID_MASK;
 
-                if (id == VoxelMap.VoxelIdMask)
+                if (id == VoxelMap.VOXEL_ID_MASK)
                 {
                     var bounds = tile.CalculateSubdivisionBounds(tile.LevelDesc.IndexToVoxel(i));
                     box.Add(bounds.min, bounds.max, new(0.7f));

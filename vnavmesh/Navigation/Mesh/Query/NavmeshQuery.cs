@@ -384,12 +384,12 @@ public partial class NavmeshQuery
     public ulong FindNearestVolumeVoxel(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5)
     {
         if (VolumeQuery == null)
-            return VoxelMap.InvalidVoxel;
+            return VoxelMap.INVALID_VOXEL;
 
         var volume     = VolumeQuery.Volume;
         var halfExtent = new Vector3(halfExtentXZ, halfExtentY, halfExtentXZ);
         var voxel      = VoxelSearch.FindNearestEmptyVoxel(volume, p, halfExtent);
-        if (voxel != VoxelMap.InvalidVoxel)
+        if (voxel != VoxelMap.INVALID_VOXEL)
             return voxel;
 
         var boundsMin = volume.RootTile.BoundsMin + new Vector3(VolumeBoundsClampEpsilon);
@@ -401,7 +401,7 @@ public partial class NavmeshQuery
         {
             voxel = VoxelSearch.FindNearestEmptyVoxel(volume, clamped, halfExtent);
 
-            if (voxel != VoxelMap.InvalidVoxel)
+            if (voxel != VoxelMap.INVALID_VOXEL)
             {
                 Service.Log.Debug($"[算路] 体素定位改用边界贴靠点：原始位置 = {p:f3}，贴靠后 = {clamped:f3}，搜索范围 = {halfExtent:f3}");
                 return voxel;
@@ -414,7 +414,7 @@ public partial class NavmeshQuery
         {
             var expandedHalfExtent = new Vector3(halfExtentXZ * multiplier, halfExtentY * multiplier, halfExtentXZ * multiplier);
             voxel = VoxelSearch.FindNearestEmptyVoxel(volume, usedClamp ? clamped : p, expandedHalfExtent);
-            if (voxel == VoxelMap.InvalidVoxel)
+            if (voxel == VoxelMap.INVALID_VOXEL)
                 continue;
 
             Service.Log.Debug
@@ -424,7 +424,7 @@ public partial class NavmeshQuery
             return voxel;
         }
 
-        return VoxelMap.InvalidVoxel;
+        return VoxelMap.INVALID_VOXEL;
     }
 
     // collect all mesh polygons reachable from specified polygon

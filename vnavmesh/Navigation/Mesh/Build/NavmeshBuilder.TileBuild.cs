@@ -102,10 +102,10 @@ public partial class NavmeshBuilder
         for (var y = 0; y < ny; ++y)
         {
             var contents = column.Contents[y];
-            if ((contents & VoxelMap.VoxelOccupiedBit) == 0)
+            if ((contents & VoxelMap.VOXEL_OCCUPIED_BIT) == 0)
                 continue;
 
-            if ((contents & VoxelMap.VoxelIdMask) != VoxelMap.VoxelIdMask)
+            if ((contents & VoxelMap.VOXEL_ID_MASK) != VoxelMap.VOXEL_ID_MASK)
                 contents += (ushort)shift;
 
             parent.RootTile.Contents[parentIndex + y] = contents;

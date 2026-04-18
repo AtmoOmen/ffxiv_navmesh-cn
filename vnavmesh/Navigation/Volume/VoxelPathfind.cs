@@ -8,17 +8,6 @@ namespace vnavmesh.Navigation.Volume;
 
 public class VoxelPathfind
 {
-    private const float SCORE_EPSILON                                = 0.00001f;
-    private const int   DEFAULT_MAX_SEARCH_STEPS                     = 1_0000_0000;
-    private const int   RAYCAST_SEARCH_STEP_BUDGET                   = 200000;
-    private const int   MAX_ANCESTOR_LOOK_BACK                       = 6;
-    private const int   RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD         = 12;
-    private const float MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS    = 96f;
-    private const float SHORT_RANGE_HEURISTIC_WEIGHT                 = 1.05f;
-    private const float LONG_RANGE_HEURISTIC_WEIGHT                  = 1.45f;
-    private const float LONG_RANGE_HEURISTIC_BLEND_DISTANCE          = 4f;
-    private const float GOAL_VISIBILITY_PROBE_DISTANCE_IN_LEAF_CELLS = 48f;
-
     private readonly VoxelMap.Level l0Desc;
     private readonly VoxelMap.Level l1Desc;
     private readonly VoxelMap.Level l2Desc;
@@ -135,7 +124,7 @@ public class VoxelPathfind
     {
         ResetSearchState();
 
-        if (fromVoxel == VoxelMap.InvalidVoxel || toVoxel == VoxelMap.InvalidVoxel)
+        if (fromVoxel == VoxelMap.INVALID_VOXEL || toVoxel == VoxelMap.INVALID_VOXEL)
         {
             Service.Log.Error($"输入体素非法：{fromVoxel:X} -> {toVoxel:X}");
             return;
@@ -541,8 +530,8 @@ public class VoxelPathfind
         var l1Index      = VoxelMap.DecodeIndex(ref encodedVoxel);
         var l2Index      = VoxelMap.DecodeIndex(ref encodedVoxel);
         var l0Coords     = l0Desc.IndexToVoxel(l0Index);
-        var l1Coords     = l1Index != VoxelMap.IndexLevelMask ? l1Desc.IndexToVoxel(l1Index) : default;
-        var l2Coords     = l2Index != VoxelMap.IndexLevelMask ? l2Desc.IndexToVoxel(l2Index) : default;
+        var l1Coords     = l1Index != VoxelMap.INDEX_LEVEL_MASK ? l1Desc.IndexToVoxel(l1Index) : default;
+        var l2Coords     = l2Index != VoxelMap.INDEX_LEVEL_MASK ? l2Desc.IndexToVoxel(l2Index) : default;
 
         CollectDirection(l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, 0,  -1, 0);
         CollectDirection(l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, 0,  +1, 0);
@@ -567,7 +556,7 @@ public class VoxelPathfind
         int                   dz
     )
     {
-        if (l2Index != VoxelMap.IndexLevelMask)
+        if (l2Index != VoxelMap.INDEX_LEVEL_MASK)
         {
             var l2Neighbour = (l2Coords.x + dx, l2Coords.y + dy, l2Coords.z + dz);
 
@@ -581,7 +570,7 @@ public class VoxelPathfind
             }
         }
 
-        if (l1Index != VoxelMap.IndexLevelMask)
+        if (l1Index != VoxelMap.INDEX_LEVEL_MASK)
         {
             var l1Neighbour = (l1Coords.x + dx, l1Coords.y + dy, l1Coords.z + dz);
 
@@ -591,7 +580,7 @@ public class VoxelPathfind
                 neighbourVoxel = VoxelMap.EncodeIndex(l0Index, neighbourVoxel);
 
                 if (Volume.IsEmpty(neighbourVoxel)) AddNeighbourIfEmpty(neighbourVoxel);
-                else if (l2Index != VoxelMap.IndexLevelMask)
+                else if (l2Index != VoxelMap.INDEX_LEVEL_MASK)
                 {
                     var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
                     var l2Y              = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
@@ -617,7 +606,7 @@ public class VoxelPathfind
             return;
         }
 
-        if (l1Index != VoxelMap.IndexLevelMask)
+        if (l1Index != VoxelMap.INDEX_LEVEL_MASK)
         {
             var l1X              = dx == 0 ? l1Coords.x : dx > 0 ? 0 : l1Desc.NumCellsX - 1;
             var l1Y              = dy == 0 ? l1Coords.y : dy > 0 ? 0 : l1Desc.NumCellsY - 1;
@@ -625,7 +614,7 @@ public class VoxelPathfind
             var l1NeighbourVoxel = VoxelMap.EncodeSubIndex(l0NeighbourVoxel, l1Desc.VoxelToIndex(l1X, l1Y, l1Z), 1);
 
             if (Volume.IsEmpty(l1NeighbourVoxel)) AddNeighbourIfEmpty(l1NeighbourVoxel);
-            else if (l2Index != VoxelMap.IndexLevelMask)
+            else if (l2Index != VoxelMap.INDEX_LEVEL_MASK)
             {
                 var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
                 var l2Y              = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
@@ -1096,4 +1085,19 @@ public class VoxelPathfind
         public bool    Closed;
         public Vector3 Position;
     }
+    
+    #region 常量
+
+    private const float SCORE_EPSILON                                = 0.00001f;
+    private const int   DEFAULT_MAX_SEARCH_STEPS                     = 1_0000_0000;
+    private const int   RAYCAST_SEARCH_STEP_BUDGET                   = 200000;
+    private const int   MAX_ANCESTOR_LOOK_BACK                       = 6;
+    private const int   RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD         = 12;
+    private const float MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS    = 96f;
+    private const float SHORT_RANGE_HEURISTIC_WEIGHT                 = 1.05f;
+    private const float LONG_RANGE_HEURISTIC_WEIGHT                  = 1.45f;
+    private const float LONG_RANGE_HEURISTIC_BLEND_DISTANCE          = 4f;
+    private const float GOAL_VISIBILITY_PROBE_DISTANCE_IN_LEAF_CELLS = 48f;
+
+    #endregion
 }

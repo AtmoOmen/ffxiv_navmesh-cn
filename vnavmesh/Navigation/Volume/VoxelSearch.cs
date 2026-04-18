@@ -4,11 +4,8 @@ namespace vnavmesh.Navigation.Volume;
 
 public static class VoxelSearch
 {
-    public static IEnumerable<(ulong index, bool empty)> EnumerateLeafVoxels(VoxelMap volume, Vector3 center, Vector3 halfExtent)
-        => volume.RootTile.EnumerateLeafVoxels(center - halfExtent, center + halfExtent);
-
-    public static Vector3 FindClosestVoxelPoint(VoxelMap volume, ulong index, Vector3 p, float eps = 0.1f)
-        => volume.ClampPointToVoxel(index, p, eps);
+    public static Vector3 FindClosestVoxelPoint(VoxelMap volume, ulong index, Vector3 p, float eps = 0.1f) =>
+        volume.ClampPointToVoxel(index, p, eps);
 
     public static ulong FindNearestEmptyVoxel(VoxelMap volume, Vector3 center, Vector3 halfExtent)
     {
@@ -18,7 +15,7 @@ public static class VoxelSearch
             return cv.voxel; // fast path: the cell is empty already
 
         var minDist = float.MaxValue;
-        var res     = VoxelMap.InvalidVoxel;
+        var res     = VoxelMap.INVALID_VOXEL;
 
         foreach (var v in volume.RootTile.EnumerateLeafVoxels(center - halfExtent, center + halfExtent))
         {
@@ -44,9 +41,14 @@ public static class VoxelSearch
         return res;
     }
 
-    // enumerate entered voxels along line; starting voxel is not returned, ending voxel is
     public static IEnumerable<(ulong voxel, float t, bool empty)> EnumerateVoxelsInLine
-        (VoxelMap volume, ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
+    (
+        VoxelMap volume,
+        ulong    fromVoxel,
+        ulong    toVoxel,
+        Vector3  fromPos,
+        Vector3  toPos
+    )
     {
         if (fromVoxel == toVoxel || Vector3.DistanceSquared(fromPos, toPos) <= float.Epsilon)
             yield break;
@@ -63,7 +65,14 @@ public static class VoxelSearch
         }
     }
 
-    public static bool LineOfSight(VoxelMap volume, ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
+    public static bool LineOfSight
+    (
+        VoxelMap volume,
+        ulong    fromVoxel,
+        ulong    toVoxel,
+        Vector3  fromPos,
+        Vector3  toPos
+    )
     {
         if (fromVoxel == toVoxel)
             return true;
@@ -100,13 +109,17 @@ public static class VoxelSearch
         out bool  nextEmpty
     )
     {
-        var (vmin, vmax) = volume.VoxelBounds(fromVoxel, 0);
-        var tx = ab.X == 0 ? float.MaxValue : ((ab.X > 0 ? vmax.X : vmin.X) - fromPos.X) / ab.X;
-        var ty = ab.Y == 0 ? float.MaxValue : ((ab.Y > 0 ? vmax.Y : vmin.Y) - fromPos.Y) / ab.Y;
-        var tz = ab.Z == 0 ? float.MaxValue : ((ab.Z > 0 ? vmax.Z : vmin.Z) - fromPos.Z) / ab.Z;
-        t = Math.Min(Math.Min(tx, ty), Math.Min(tz, 1));
-        var tAdj = Math.Min(t + eps, 1);
+        var (vMin, vMax) = volume.VoxelBounds(fromVoxel, 0);
+        
+        var tx = ab.X == 0 ? float.MaxValue : ((ab.X > 0 ? vMax.X : vMin.X) - fromPos.X) / ab.X;
+        var ty = ab.Y == 0 ? float.MaxValue : ((ab.Y > 0 ? vMax.Y : vMin.Y) - fromPos.Y) / ab.Y;
+        var tz = ab.Z == 0 ? float.MaxValue : ((ab.Z > 0 ? vMax.Z : vMin.Z) - fromPos.Z) / ab.Z;
+        
+        t = MathF.Min(MathF.Min(tx, ty), MathF.Min(tz, 1));
+        
+        var tAdj = MathF.Min(t + eps, 1);
         var proj = fromPos + tAdj * ab;
+        
         (nextVoxel, nextEmpty) = volume.FindLeafVoxel(proj);
         if (nextVoxel == fromVoxel)
             throw new PathfindLoopException(origFrom, toVoxel, fromPos, fromPos + ab);

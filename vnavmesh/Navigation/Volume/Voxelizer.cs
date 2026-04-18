@@ -9,10 +9,9 @@ public class Voxelizer
     public int NumX;
     public int NumY;
     public int NumZ;
-    public int NumW => _emptyWords == null ? 1 : 2;
 
-    private readonly ulong[]  _solidWords;
-    private readonly ulong[]? _emptyWords;
+    private readonly ulong[]  solidWords;
+    private readonly ulong[]? emptyWords;
 
     public Voxelizer(int nx, int ny, int nz, bool partial = false)
     {
@@ -25,17 +24,17 @@ public class Voxelizer
 
         var numCells  = nx * ny * nz;
         var wordCount = numCells + 63 >> 6;
-        _solidWords = GC.AllocateUninitializedArray<ulong>(wordCount);
+        solidWords = GC.AllocateUninitializedArray<ulong>(wordCount);
         if (partial)
-            _emptyWords = GC.AllocateUninitializedArray<ulong>(wordCount);
+            emptyWords = GC.AllocateUninitializedArray<ulong>(wordCount);
     }
 
     public int VoxelToIndex(int x, int y, int z) => (z * NumX + x) * NumY + y;
 
     public (bool solid, bool empty) Get(int idx)
     {
-        var solid = GetBit(_solidWords, idx);
-        var empty = _emptyWords != null ? GetBit(_emptyWords, idx) : !solid;
+        var solid = GetBit(solidWords, idx);
+        var empty = emptyWords != null ? GetBit(emptyWords, idx) : !solid;
         return (solid, empty);
     }
 
@@ -45,7 +44,7 @@ public class Voxelizer
     {
         var anySolid = false;
 
-        if (_emptyWords == null)
+        if (emptyWords == null)
         {
             var allSolid = true;
 
@@ -53,7 +52,7 @@ public class Voxelizer
             for (var x = 0; x < sizeX; ++x)
             {
                 var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-                var (segmentAnySolid, segmentAllSolid) =  RangeClassify(_solidWords, startIndex, sizeY);
+                var (segmentAnySolid, segmentAllSolid) =  RangeClassify(solidWords, startIndex, sizeY);
                 anySolid                               |= segmentAnySolid;
                 allSolid                               &= segmentAllSolid;
                 if (anySolid && !allSolid)
@@ -69,7 +68,7 @@ public class Voxelizer
         for (var x = 0; x < sizeX; ++x)
         {
             var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-            var (segmentAnySolid, segmentAnyEmpty) =  RangeClassifyPair(_solidWords, _emptyWords, startIndex, sizeY);
+            var (segmentAnySolid, segmentAnyEmpty) =  RangeClassifyPair(solidWords, emptyWords, startIndex, sizeY);
             anySolid                               |= segmentAnySolid;
             anyEmpty                               |= segmentAnyEmpty;
             if (anySolid && anyEmpty)
@@ -89,44 +88,14 @@ public class Voxelizer
         y0 = Math.Clamp(y0, 0,  NumY - 1);
         y1 = Math.Clamp(y1, y0, NumY - 1);
         var startIndex = VoxelToIndex(x, y0, z);
-        SetRange(_solidWords, startIndex, y1 - y0 + 1);
+        SetRange(solidWords, startIndex, y1 - y0 + 1);
     }
 
     public void Clear()
     {
-        Array.Clear(_solidWords);
-        if (_emptyWords != null)
-            Array.Clear(_emptyWords);
-    }
-
-    public void DownsampleInto(Voxelizer result, int dx, int dy, int dz)
-    {
-        result.Clear();
-
-        var shiftX = BitOperations.Log2((uint)dx);
-        var shiftY = BitOperations.Log2((uint)dy);
-        var shiftZ = BitOperations.Log2((uint)dz);
-        var idx    = 0;
-
-        for (var z = 0; z < NumZ; ++z)
-        for (var x = 0; x < NumX; ++x)
-        for (var y = 0; y < NumY; ++y, ++idx)
-        {
-            var solid    = GetBit(_solidWords, idx);
-            var empty    = _emptyWords != null ? GetBit(_emptyWords, idx) : !solid;
-            var resIndex = result.VoxelToIndex(x >> shiftX, y >> shiftY, z >> shiftZ);
-            if (solid)
-                SetBit(result._solidWords, resIndex);
-            if (empty && result._emptyWords != null)
-                SetBit(result._emptyWords, resIndex);
-        }
-    }
-
-    public Voxelizer Downsample(int dx, int dy, int dz)
-    {
-        var result = new Voxelizer(NumX / dx, NumY / dy, NumZ / dz, true);
-        DownsampleInto(result, dx, dy, dz);
-        return result;
+        Array.Clear(solidWords);
+        if (emptyWords != null)
+            Array.Clear(emptyWords);
     }
 
     private static bool GetBit(ulong[] words, int index)
@@ -134,13 +103,6 @@ public class Voxelizer
         var wordIndex = index >> 6;
         var bitMask   = 1UL   << (index & 63);
         return (words[wordIndex] & bitMask) != 0;
-    }
-
-    private static void SetBit(ulong[] words, int index)
-    {
-        var wordIndex = index >> 6;
-        var bitMask   = 1UL   << (index & 63);
-        words[wordIndex] |= bitMask;
     }
 
     private static void SetRange(ulong[] words, int startIndex, int length)
@@ -163,28 +125,6 @@ public class Voxelizer
             index            += bitCount;
             remaining        -= bitCount;
         }
-    }
-
-    private static bool RangeAnySet(ulong[] words, int startIndex, int length)
-    {
-        var index     = startIndex;
-        var remaining = length;
-
-        while (remaining > 0)
-        {
-            var wordIndex = index >> 6;
-            var bitOffset = index & 63;
-            var bitCount  = Math.Min(64 - bitOffset, remaining);
-            var mask = bitCount == 64
-                           ? ulong.MaxValue
-                           : (1UL << bitCount) - 1 << bitOffset;
-            if ((words[wordIndex] & mask) != 0)
-                return true;
-            index     += bitCount;
-            remaining -= bitCount;
-        }
-
-        return false;
     }
 
     private static (bool anySet, bool allSet) RangeClassify(ulong[] words, int startIndex, int length)
@@ -240,27 +180,5 @@ public class Voxelizer
         }
 
         return (anySet1, anySet2);
-    }
-
-    private static bool RangeAllSet(ulong[] words, int startIndex, int length)
-    {
-        var index     = startIndex;
-        var remaining = length;
-
-        while (remaining > 0)
-        {
-            var wordIndex = index >> 6;
-            var bitOffset = index & 63;
-            var bitCount  = Math.Min(64 - bitOffset, remaining);
-            var mask = bitCount == 64
-                           ? ulong.MaxValue
-                           : (1UL << bitCount) - 1 << bitOffset;
-            if ((words[wordIndex] & mask) != mask)
-                return false;
-            index     += bitCount;
-            remaining -= bitCount;
-        }
-
-        return true;
     }
 }
