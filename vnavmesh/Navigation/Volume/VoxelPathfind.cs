@@ -175,7 +175,7 @@ public class VoxelPathfind
             path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, false, returnIntermediatePoints, cancel, DefaultMaxSearchSteps, 2);
         }
 
-        return useRaycast ? SimplifyPath(path, cancel) : path;
+        return useRaycast ? RefineSimplifiedPath(path, cancel) : path;
     }
 
     public void Start(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
@@ -409,6 +409,54 @@ public class VoxelPathfind
         return simplified;
     }
 
+    private List<(ulong voxel, Vector3 p)> RefineSimplifiedPath(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
+    {
+        if (path.Count <= 2)
+            return path;
+
+        var refined = SimplifyPath(path, cancel);
+        refined = SimplifyPathFromGoal(refined, cancel);
+        RelaxInteriorWaypoints(refined, cancel);
+        return SimplifyPath(refined, cancel);
+    }
+
+    private List<(ulong voxel, Vector3 p)> SimplifyPathFromGoal(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
+    {
+        if (path.Count <= 2)
+            return path;
+
+        List<(ulong voxel, Vector3 p)> reversed = [.. path];
+        reversed.Reverse();
+        reversed = SimplifyPath(reversed, cancel);
+        reversed.Reverse();
+        return reversed;
+    }
+
+    private void RelaxInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
+    {
+        if (path.Count <= 2)
+            return;
+
+        for (var i = 1; i < path.Count - 1; ++i)
+        {
+            if ((i & 0x3f) == 0)
+                cancel.ThrowIfCancellationRequested();
+
+            var previous = path[i - 1];
+            var current  = path[i];
+            var next     = path[i + 1];
+            var relaxed  = ResolveRelaxedWaypoint(previous.p, current, next.p);
+            if (Vector3.DistanceSquared(relaxed, current.p) <= ScoreEpsilon * ScoreEpsilon)
+                continue;
+            if (!HasLineOfSight(previous, current.voxel, relaxed))
+                continue;
+            if (!HasLineOfSight((current.voxel, relaxed), next.voxel, next.p))
+                continue;
+
+            path[i] = (current.voxel, relaxed);
+        }
+    }
+
     private int FindFurthestVisibleIndex(List<(ulong voxel, Vector3 p)> path, int anchorIndex, CancellationToken cancel)
     {
         var pathLastIndex = path.Count - 1;
@@ -457,6 +505,21 @@ public class VoxelPathfind
         return visibleIndex;
     }
 
+    private Vector3 ResolveRelaxedWaypoint(Vector3 previous, (ulong voxel, Vector3 p) current, Vector3 next)
+    {
+        if (current.voxel == _goalVoxel)
+            return _goalPos;
+
+        var segment       = next - previous;
+        var lengthSquared = segment.LengthSquared();
+        if (lengthSquared <= ScoreEpsilon * ScoreEpsilon)
+            return current.p;
+
+        var progress  = Math.Clamp(Vector3.Dot(current.p - previous, segment) / lengthSquared, 0f, 1f);
+        var projected = previous + progress * segment;
+        return Volume.ClampPointToVoxel(current.voxel, projected);
+    }
+
     private bool HasLineOfSight(List<(ulong voxel, Vector3 p)> path, int anchorIndex, int probeIndex, CancellationToken cancel)
     {
         if ((probeIndex & 0x3f) == 0)
@@ -466,6 +529,16 @@ public class VoxelPathfind
         var probe  = path[probeIndex];
         ++_lineOfSightChecks;
         if (!VoxelSearch.LineOfSight(Volume, anchor.voxel, probe.voxel, anchor.p, probe.p))
+            return false;
+
+        ++_lineOfSightHits;
+        return true;
+    }
+
+    private bool HasLineOfSight((ulong voxel, Vector3 p) from, ulong toVoxel, Vector3 toPosition)
+    {
+        ++_lineOfSightChecks;
+        if (!VoxelSearch.LineOfSight(Volume, from.voxel, toVoxel, from.p, toPosition))
             return false;
 
         ++_lineOfSightHits;
