@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Reflection;
+using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
@@ -94,76 +95,87 @@ public class NavmeshCustomization
     protected static void LinkPoints(Navmesh nmesh, Vector3 startPos, Vector3 endPos)
     {
         nmesh.Links.Add(new(startPos, endPos, NavmeshOffMeshKind.Teleport, false, 0));
-        var mesh     = nmesh.Mesh;
-        var refstart = InsertPointPoly(mesh, startPos, true);
-        var refend   = InsertPointPoly(mesh, endPos,   false);
-
-        mesh.GetTileAndPolyByRefUnsafe(refstart, out var startTile, out var startPoly);
-
-        // start point -> end point link
-        var idx  = AllocLink(startTile);
-        var link = startTile.links[idx];
-        link.refs           = refend;
-        link.edge           = 0;
-        link.side           = 0;
-        link.bmin           = link.bmax = 0;
-        link.next           = startPoly.firstLink;
-        startPoly.firstLink = idx;
-    }
-
-    private static long InsertPointPoly(DtNavMesh mesh, Vector3 pos, bool start)
-    {
-        var query = new DtNavMeshQuery(mesh);
-
-        var status = query.FindNearestPoly(pos.SystemToRecast(), new(5, 5, 5), new DtQueryDefaultFilter(), out var startRef, out var startPolyPoint, out _);
-        if (status.Failed() || startRef == 0)
-            throw new ArgumentException($"Unable to find a polygon corresponding with input point {pos}");
-
-        mesh.GetTileAndPolyByRefUnsafe(startRef, out var startTile, out var startPoly);
-        var p = new DtPoly(startTile.data.header.polyCount, 1)
+        var mesh                                              = nmesh.Mesh;
+        var (startRef, startTile, startPoly, projectedStart) = ResolvePointPoly(mesh, startPos);
+        var (endRef, _, _, projectedEnd)                      = ResolvePointPoly(mesh, endPos);
+        var polyIndex                                         = startTile.data.header.polyCount;
+        var vertexIndex                                       = startTile.data.header.vertCount;
+        var offMeshPoly                                       = new DtPoly(polyIndex, mesh.GetMaxVertsPerPoly())
         {
             firstLink = DT_NULL_LINK,
-            vertCount = 1,
+            vertCount = 2,
             flags     = (int)NavmeshPolyFlags.Teleport
         };
-        p.SetArea((int)NavmeshArea.Teleport);
-        p.SetPolyType(DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION);
-        p.verts[0] = startTile.data.header.vertCount;
+        offMeshPoly.SetArea((int)NavmeshArea.Teleport);
+        offMeshPoly.SetPolyType(DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION);
+        offMeshPoly.verts[0] = vertexIndex;
+        offMeshPoly.verts[1] = vertexIndex + 1;
 
         startTile.data.header.polyCount += 1;
-        startTile.data.header.vertCount += 1;
+        startTile.data.header.vertCount += 2;
+        startTile.data.header.offMeshConCount += 1;
         Array.Resize(ref startTile.data.polys, startTile.data.header.polyCount);
         Array.Resize(ref startTile.data.verts, startTile.data.header.vertCount * 3);
+        Array.Resize(ref startTile.data.offMeshCons, startTile.data.header.offMeshConCount);
 
-        // add new poly to mesh
-        startTile.data.polys[^1] = p;
-        startTile.data.verts[^3] = startPolyPoint.X;
-        startTile.data.verts[^2] = startPolyPoint.Y;
-        startTile.data.verts[^1] = startPolyPoint.Z;
+        startTile.data.polys[^1] = offMeshPoly;
+        startTile.data.verts[vertexIndex * 3] = projectedStart.X;
+        startTile.data.verts[vertexIndex * 3 + 1] = projectedStart.Y;
+        startTile.data.verts[vertexIndex * 3 + 2] = projectedStart.Z;
+        startTile.data.verts[(vertexIndex + 1) * 3] = projectedEnd.X;
+        startTile.data.verts[(vertexIndex + 1) * 3 + 1] = projectedEnd.Y;
+        startTile.data.verts[(vertexIndex + 1) * 3 + 2] = projectedEnd.Z;
 
-        var salt     = DecodePolyIdSalt(startRef);
-        var pointRef = EncodePolyId(salt, startTile.index, p.index);
+        var offMeshConnection = new DtOffMeshConnection
+        {
+            poly   = polyIndex,
+            rad    = 0.1f,
+            side   = DtNavMeshBuilder.ClassifyOffMeshPoint(projectedEnd, startTile.data.header.bmin, startTile.data.header.bmax),
+            userId = 0
+        };
+        offMeshConnection.pos[0] = projectedStart;
+        offMeshConnection.pos[1] = projectedEnd;
+        startTile.data.offMeshCons[^1] = offMeshConnection;
 
-        // link point to the polygon it lies inside
+        var offMeshRef = EncodePolyId(DecodePolyIdSalt(startRef), startTile.index, polyIndex);
         var idx  = AllocLink(startTile);
         var link = startTile.links[idx];
-        link.refs   = startRef;
-        link.edge   = 0;
-        link.side   = 0xff;
-        link.bmin   = link.bmax = 0;
-        p.firstLink = idx;
+        link.refs           = startRef;
+        link.edge           = 0;
+        link.side           = 0xff;
+        link.bmin           = link.bmax = 0;
+        link.next           = offMeshPoly.firstLink;
+        offMeshPoly.firstLink = idx;
 
-        // link owning polygon to point
         idx                 = AllocLink(startTile);
         link                = startTile.links[idx];
-        link.refs           = pointRef;
+        link.refs           = offMeshRef;
         link.edge           = 0xff;
         link.side           = 0xff;
         link.bmin           = link.bmax = 0;
         link.next           = startPoly.firstLink;
         startPoly.firstLink = idx;
 
-        return pointRef;
+        idx                 = AllocLink(startTile);
+        link                = startTile.links[idx];
+        link.refs           = endRef;
+        link.edge           = 1;
+        link.side           = (byte)offMeshConnection.side;
+        link.bmin           = link.bmax = 0;
+        link.next           = offMeshPoly.firstLink;
+        offMeshPoly.firstLink = idx;
+    }
+
+    private static (long PolyRef, DtMeshTile Tile, DtPoly Poly, RcVec3f ProjectedPoint) ResolvePointPoly(DtNavMesh mesh, Vector3 pos)
+    {
+        var query = new DtNavMeshQuery(mesh);
+
+        var status = query.FindNearestPoly(pos.SystemToRecast(), new(5, 5, 5), new DtQueryDefaultFilter(), out var polyRef, out var projectedPoint, out _);
+        if (status.Failed() || polyRef == 0)
+            throw new ArgumentException($"无法为传送端点定位地面多边形: {pos:f3}");
+
+        mesh.GetTileAndPolyByRefUnsafe(polyRef, out var tile, out var poly);
+        return (polyRef, tile, poly, projectedPoint);
     }
 
     private static int AllocLink(DtMeshTile tile)

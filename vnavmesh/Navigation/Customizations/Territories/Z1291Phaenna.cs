@@ -8,7 +8,7 @@ namespace vnavmesh.Navigation.Customizations.Territories;
 [CustomizationTerritory(1291)]
 internal class Z1291Phaenna : NavmeshCustomization
 {
-    public override int Version => 5;
+    public override int Version => 6;
 
     public override void CustomizeScene(SceneExtractor scene)
     {

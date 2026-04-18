@@ -8,7 +8,7 @@ namespace vnavmesh.Navigation.Customizations.Territories;
 [CustomizationTerritory(1310)]
 internal class Z1310Oizys : NavmeshCustomization
 {
-    public override int Version => 2;
+    public override int Version => 3;
 
     public override void CustomizeScene(SceneExtractor scene)
     {

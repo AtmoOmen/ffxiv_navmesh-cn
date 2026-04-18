@@ -7,7 +7,7 @@ namespace vnavmesh.Navigation.Customizations.Territories;
 [CustomizationTerritory(132)]
 internal class Z0132NewGridania : NavmeshCustomization
 {
-    public override int Version => 2;
+    public override int Version => 3;
 
     public override void CustomizeScene(SceneExtractor scene)
     {

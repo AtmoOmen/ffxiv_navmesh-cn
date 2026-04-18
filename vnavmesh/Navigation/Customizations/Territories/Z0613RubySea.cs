@@ -5,6 +5,8 @@ namespace vnavmesh.Navigation.Customizations.Territories;
 [CustomizationTerritory(613)]
 internal class Z0613RubySea : NavmeshCustomization
 {
+    public override int Version => 1;
+
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
         // the tunnel into the island containing tamamizu has some floor that is unlandable

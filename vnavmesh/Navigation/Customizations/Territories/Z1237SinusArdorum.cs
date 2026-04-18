@@ -8,7 +8,7 @@ namespace vnavmesh.Navigation.Customizations.Territories;
 [CustomizationTerritory(1237)]
 internal class Z1237SinusArdorum : NavmeshCustomization
 {
-    public override int Version => 5;
+    public override int Version => 6;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
