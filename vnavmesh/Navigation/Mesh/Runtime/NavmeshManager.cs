@@ -233,7 +233,7 @@ public sealed class NavmeshManager : IDisposable
                                                 },
                                                 cancel
                                             );
-                    Log($"鍦烘櫙蹇収鑰楁椂 {snapshotTimer.Value().TotalMilliseconds:f1} ms");
+                    Log($"场景快照耗时 {snapshotTimer.Value().TotalMilliseconds:f1} ms");
 
                     Log($"Kicking off build for '{cacheKey}' (reload={allowLoadFromCache})");
                     var buildResult = await Task.Run(() => BuildNavmesh(scene, cacheKey, allowLoadFromCache, cancel), cancel);
@@ -269,7 +269,7 @@ public sealed class NavmeshManager : IDisposable
         Query   = new(Navmesh, _config);
         Log("Mesh replaced");
         OnNavmeshChanged?.Invoke(Navmesh, Query);
-        ReleaseRetiredState(retiredNavmesh, retiredQuery, "缃戞牸鏇挎崲");
+        ReleaseRetiredState(retiredNavmesh, retiredQuery, "网格替换");
     }
 
     private void ClearState()
@@ -293,7 +293,7 @@ public sealed class NavmeshManager : IDisposable
                 OnNavmeshChanged?.Invoke(null, null);
                 Query   = null;
                 Navmesh = null;
-                ReleaseRetiredState(retiredNavmesh, retiredQuery, "鍦烘櫙鍒囨崲鍗歌浇");
+                ReleaseRetiredState(retiredNavmesh, retiredQuery, "场景切换卸载");
             },
             default
         );
@@ -325,7 +325,7 @@ public sealed class NavmeshManager : IDisposable
                 cancel.ThrowIfCancellationRequested();
             }
         );
-        Log($"鍐锋瀯寤鸿€楁椂 {buildTimer.Value().TotalMilliseconds:f1} ms");
+        Log($"冷构建耗时 {buildTimer.Value().TotalMilliseconds:f1} ms");
 
         customization.CustomizeMesh(builder.Navmesh, layers);
         var runtimeMesh = builder.Navmesh with { CustomizationApplied = true };
@@ -334,10 +334,10 @@ public sealed class NavmeshManager : IDisposable
         {
             var compactTimer = StopWatchTimer.Create();
             runtimeMesh.Volume.CompactRetainedState();
-            Log($"椋炶浣撶礌甯搁┗鍘嬬缉鑰楁椂 {compactTimer.Value().TotalMilliseconds:f1} ms");
+            Log($"飞行体素常驻压缩耗时 {compactTimer.Value().TotalMilliseconds:f1} ms");
         }
 
-        Log($"鎬绘瀯寤鸿€楁椂 {totalTimer.Value().TotalMilliseconds:f1} ms");
+        Log($"总构建耗时 {totalTimer.Value().TotalMilliseconds:f1} ms");
         _loadTaskProgress += 0.01f;
         return new(runtimeMesh, cache);
     }
@@ -366,12 +366,12 @@ public sealed class NavmeshManager : IDisposable
             using var reader      = new BinaryReader(stream);
             var       cacheResult = Navmesh.Deserialize(reader, customization.Version, buildSignature);
             var       mesh        = cacheResult.Navmesh;
-            Log($"缂撳瓨璇诲彇鑰楁椂 {cacheReadTimer.Value().TotalMilliseconds:f1} ms");
-            LogCacheSegment("璇诲彇", cacheResult.Telemetry.Mesh);
-            LogCacheSegment("璇诲彇", cacheResult.Telemetry.Volume);
+            Log($"缓存读取耗时 {cacheReadTimer.Value().TotalMilliseconds:f1} ms");
+            LogCacheSegment("读取", cacheResult.Telemetry.Mesh);
+            LogCacheSegment("读取", cacheResult.Telemetry.Volume);
             if (!mesh.CustomizationApplied)
                 customization.CustomizeMesh(mesh, layers);
-            Log($"缂撳瓨鍛戒腑锛屾€昏€楁椂 {totalTimer.Value().TotalMilliseconds:f1} ms");
+            Log($"缓存命中，总耗时 {totalTimer.Value().TotalMilliseconds:f1} ms");
             result = new(mesh, cacheResult.RequiresRewrite ? cache : null);
             return true;
         }
@@ -418,7 +418,7 @@ public sealed class NavmeshManager : IDisposable
     {
         if (_cacheWriteTasks.TryGetValue(cacheKey, out var existing) && !existing.IsCompleted)
         {
-            Log($"鍚庡彴缂撳瓨鍐欏叆宸插湪杩涜锛岃烦杩囬噸澶嶈皟搴? {cacheKey}");
+            Log($"后台缓存写入已在进行，跳过重复调度: {cacheKey}");
             return;
         }
 
@@ -447,7 +447,7 @@ public sealed class NavmeshManager : IDisposable
         try
         {
             cache.Directory?.Create();
-            Service.Log.Debug($"[vnavmesh] 鍚庡彴鍐欏叆缂撳瓨: {cache.FullName}");
+            Service.Log.Debug($"[vnavmesh] 后台写入缓存: {cache.FullName}");
             var                    serializeTimer = StopWatchTimer.Create();
             Navmesh.CacheTelemetry telemetry;
 
@@ -465,16 +465,16 @@ public sealed class NavmeshManager : IDisposable
             var replaceTimer = StopWatchTimer.Create();
             File.Move(tempPath, cache.FullName, true);
             var replaceDuration = replaceTimer.Value();
-            LogCacheSegment("鍐欏叆", telemetry.Mesh);
-            LogCacheSegment("鍐欏叆", telemetry.Volume);
+            LogCacheSegment("写入", telemetry.Mesh);
+            LogCacheSegment("写入", telemetry.Volume);
             Log
             (
-                $"鍚庡彴缂撳瓨鍐欏叆瀹屾垚 '{cacheKey}'锛屾€昏€楁椂 {timer.Value().TotalMilliseconds:f1} ms锛屽簭鍒楀寲 {serializeDuration.TotalMilliseconds:f1} ms锛屾浛鎹?{replaceDuration.TotalMilliseconds:f1} ms锛屽ぇ灏?{sizeBytes / 1024.0 / 1024.0:f2} MiB"
+                $"后台缓存写入完成 '{cacheKey}'，总耗时 {timer.Value().TotalMilliseconds:f1} ms，序列化 {serializeDuration.TotalMilliseconds:f1} ms，替换 {replaceDuration.TotalMilliseconds:f1} ms，大小 {sizeBytes / 1024.0 / 1024.0:f2} MiB"
             );
         }
         catch (Exception ex)
         {
-            Log($"鍚庡彴缂撳瓨鍐欏叆澶辫触 '{cacheKey}': {ex}");
+            Log($"后台缓存写入失败 '{cacheKey}': {ex}");
         }
         finally
         {

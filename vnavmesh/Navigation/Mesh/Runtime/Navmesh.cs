@@ -170,7 +170,7 @@ public record class Navmesh
     private static byte[] ReadSegmentPayload(Stream source, CacheSegmentDescriptor descriptor)
     {
         if (descriptor.Offset < 0 || descriptor.CompressedBytes < 0 || descriptor.Offset + descriptor.CompressedBytes > source.Length)
-            throw new Exception($"缂撳瓨娈佃秺鐣? {descriptor.Kind} @ {descriptor.Offset} + {descriptor.CompressedBytes}");
+            throw new Exception($"缓存段越界: {descriptor.Kind} @ {descriptor.Offset} + {descriptor.CompressedBytes}");
 
         var payload = GC.AllocateUninitializedArray<byte>(checked((int)descriptor.CompressedBytes));
         source.Position = descriptor.Offset;
@@ -208,21 +208,21 @@ public record class Navmesh
             false,
             true
         ),
-        _ => throw new Exception($"涓嶆敮鎸佺殑缂撳瓨缂栫爜: {descriptor.Codec}")
+        _ => throw new Exception($"不支持的缓存编码: {descriptor.Codec}")
     };
 
     private static byte[] EncodePayload(byte[] rawPayload, CacheCodec codec) => codec switch
     {
         CacheCodec.None   => rawPayload,
         CacheCodec.FastLz => CompressFastLz(rawPayload),
-        _                 => throw new Exception($"涓嶆敮鎸佺殑缂撳瓨缂栫爜: {codec}")
+        _                 => throw new Exception($"不支持的缓存编码: {codec}")
     };
 
     private static byte[] DecodePayload(byte[] payload, CacheCodec codec, long expectedBytes) => codec switch
     {
         CacheCodec.None   => payload,
         CacheCodec.FastLz => DecompressFastLz(payload, expectedBytes),
-        _                 => throw new Exception($"涓嶆敮鎸佺殑缂撳瓨缂栫爜: {codec}")
+        _                 => throw new Exception($"不支持的缓存编码: {codec}")
     };
 
     private static byte[] CompressFastLz(byte[] rawPayload)
@@ -246,7 +246,7 @@ public record class Navmesh
         var decompressed = GC.AllocateUninitializedArray<byte>(outputLength);
         var actualBytes  = FastLZ.Decompress(payload, 0, payload.Length, decompressed, 0, outputLength);
         if (actualBytes != outputLength)
-            throw new Exception($"FastLZ 瑙ｅ帇澶辫触: 鏈熸湜 {outputLength} 瀛楄妭, 瀹為檯 {actualBytes} 瀛楄妭");
+            throw new Exception($"FastLZ 解压失败: 期望 {outputLength} 字节, 实际 {actualBytes} 字节");
         return decompressed;
     }
 
@@ -378,7 +378,7 @@ public record class Navmesh
 
         var numLevels = reader.ReadInt32();
         if (numLevels <= 0)
-            throw new Exception("浣撶Н缂撳瓨灞傜骇鏃犳晥");
+            throw new Exception("体积缓存层级无效");
 
         var tilesPerLevel = new int[numLevels];
         foreach (ref var l in tilesPerLevel.AsSpan())
@@ -456,7 +456,7 @@ public record class Navmesh
             case VolumeTileEncoding.Mixed:
                 break;
             default:
-                throw new Exception($"鏈煡鐨勪綋绉紪鐮佺被鍨? {encoding}");
+                throw new Exception($"未知的体积编码类型: {encoding}");
         }
 
         tile.ClearSubdivision();
@@ -470,7 +470,7 @@ public record class Navmesh
         {
             var packedState = packedStates[i];
             if (s_invalidPackedState[packedState])
-                throw new Exception($"鏈煡鐨勪綋绉崟鍏冪姸鎬佸瓧鑺? 0x{packedState:X2}");
+                throw new Exception($"未知的体积单元状态字节: 0x{packedState:X2}");
 
             subtreeCount += s_subtreeCountByPackedState[packedState];
         }
@@ -500,7 +500,7 @@ public record class Navmesh
     {
         var localId = parent.SubdivisionCount;
         if (localId >= VoxelMap.VOXEL_ID_MASK)
-            throw new Exception("浣撶Н瀛愭爲鏁伴噺瓒呭嚭涓婇檺");
+            throw new Exception("体积子树数量超出上限");
 
         var subBounds = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel((ushort)flatIndex));
         var child     = new VolumeTile(parent.Owner, subBounds.min, subBounds.max, parent.Level + 1, false);
@@ -525,9 +525,9 @@ public record class Navmesh
                 writer.BaseStream.Write(tile.PackedStates);
                 break;
             case VolumeTileStorageKind.Dense:
-                throw new InvalidOperationException("浣撶Н鐡︾墖搴忓垪鍖栧墠鏈畬鎴愬帇缂?");
+                throw new InvalidOperationException("体积瓦片序列化前未完成压缩");
             default:
-                throw new InvalidOperationException($"鏈煡鐨勪綋绉摝鐗囧瓨鍌ㄧ被鍨? {tile.StorageKind}");
+                throw new InvalidOperationException($"未知的体积瓦片存储类型: {tile.StorageKind}");
         }
 
         for (var i = 0; i < tile.CellCount; ++i)
@@ -537,7 +537,7 @@ public record class Navmesh
 
             var localId = tile.GetSubdivisionIndex(i);
             if (localId >= tile.SubdivisionCount)
-                throw new Exception($"浣撶Н瀛愭爲绱㈠紩瓒婄晫: {localId} / {tile.SubdivisionCount}");
+                throw new Exception($"体积子树索引越界: {localId} / {tile.SubdivisionCount}");
             SerializeVolumeTile(writer, tile.GetSubdivision(localId));
         }
     }
