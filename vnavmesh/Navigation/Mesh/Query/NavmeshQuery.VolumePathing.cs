@@ -67,7 +67,7 @@ public partial class NavmeshQuery
         foreach (var step in voxelPath)
             rawWaypoints.Add(step.p);
 
-        if (telemetry.Termination != VoxelPathfind.SearchTermination.ReachedGoal)
+        if (telemetry.Termination != VolumeSearchTermination.ReachedGoal)
         {
             var partialDestination = rawWaypoints[^1];
             Service.Log.Warning
@@ -314,11 +314,11 @@ public partial class NavmeshQuery
             DestinationTolerance = 0
         };
 
-    private static string DescribeVolumeSearchTermination(VoxelPathfind.SearchTermination termination) => termination switch
+    private static string DescribeVolumeSearchTermination(VolumeSearchTermination termination) => termination switch
     {
-        VoxelPathfind.SearchTermination.ReachedGoal       => "达到终点",
-        VoxelPathfind.SearchTermination.SearchExhausted   => "搜索穷尽",
-        VoxelPathfind.SearchTermination.StepBudgetReached => "步数触顶",
+        VolumeSearchTermination.ReachedGoal       => "达到终点",
+        VolumeSearchTermination.SearchExhausted   => "搜索穷尽",
+        VolumeSearchTermination.StepBudgetReached => "步数触顶",
         _                                                 => "未知"
     };
 }

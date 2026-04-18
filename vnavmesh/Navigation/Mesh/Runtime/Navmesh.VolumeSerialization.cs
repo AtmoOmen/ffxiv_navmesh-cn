@@ -92,7 +92,7 @@ public partial record class Navmesh
         return (volume, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
     }
 
-    private static void DeserializeVolumeTile(BinaryReader reader, VoxelMap.Tile tile)
+    private static void DeserializeVolumeTile(BinaryReader reader, VolumeTile tile)
     {
         var encoding = (VolumeTileEncoding)reader.ReadByte();
 
@@ -147,35 +147,35 @@ public partial record class Navmesh
         }
     }
 
-    private static void DeserializeVolumeSubtile(BinaryReader reader, VoxelMap.Tile parent, int flatIndex)
+    private static void DeserializeVolumeSubtile(BinaryReader reader, VolumeTile parent, int flatIndex)
     {
         var localId = parent.SubdivisionCount;
         if (localId >= VoxelMap.VOXEL_ID_MASK)
             throw new Exception("体积子树数量超出上限");
 
         var subBounds = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel((ushort)flatIndex));
-        var child     = new VoxelMap.Tile(parent.Owner, subBounds.min, subBounds.max, parent.Level + 1, false);
+        var child     = new VolumeTile(parent.Owner, subBounds.min, subBounds.max, parent.Level + 1, false);
         parent.AddSubdivision(child);
         DeserializeVolumeTile(reader, child);
     }
 
-    private static void SerializeVolumeTile(BinaryWriter writer, VoxelMap.Tile tile)
+    private static void SerializeVolumeTile(BinaryWriter writer, VolumeTile tile)
     {
         tile.CompactRetainedState();
 
         switch (tile.StorageKind)
         {
-            case VoxelMap.TileStorageKind.AllEmpty:
+            case VolumeTileStorageKind.AllEmpty:
                 writer.Write((byte)VolumeTileEncoding.Empty);
                 return;
-            case VoxelMap.TileStorageKind.SolidLeaf:
+            case VolumeTileStorageKind.SolidLeaf:
                 writer.Write((byte)VolumeTileEncoding.SolidLeaf);
                 return;
-            case VoxelMap.TileStorageKind.PackedMixed:
+            case VolumeTileStorageKind.PackedMixed:
                 writer.Write((byte)VolumeTileEncoding.Mixed);
                 writer.BaseStream.Write(tile.PackedStates);
                 break;
-            case VoxelMap.TileStorageKind.Dense:
+            case VolumeTileStorageKind.Dense:
                 throw new InvalidOperationException("体积瓦片序列化前未完成压缩");
             default:
                 throw new InvalidOperationException($"未知的体积瓦片存储类型: {tile.StorageKind}");

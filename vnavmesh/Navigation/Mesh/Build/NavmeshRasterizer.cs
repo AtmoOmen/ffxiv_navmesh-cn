@@ -465,9 +465,9 @@ public class NavmeshRasterizer
             if (_voxSourceX <= 0 || _voxSourceY <= 0 || _voxSourceZ <= 0)
                 throw new Exception($"Invalid volume source size: {_voxSourceX}x{_voxSourceY}x{_voxSourceZ}");
 
-            _voxShiftX = TryGetExactPow2RatioShift(_voxSourceX, voxelizer.NumX);
-            _voxShiftY = TryGetExactPow2RatioShift(_voxSourceY, voxelizer.NumY);
-            _voxShiftZ = TryGetExactPow2RatioShift(_voxSourceZ, voxelizer.NumZ);
+            _voxShiftX = TryGetExactPow2RatioShift(_voxSourceX, voxelizer.SizeX);
+            _voxShiftY = TryGetExactPow2RatioShift(_voxSourceY, voxelizer.SizeY);
+            _voxShiftZ = TryGetExactPow2RatioShift(_voxSourceZ, voxelizer.SizeZ);
         }
     }
 
@@ -1292,10 +1292,10 @@ public class NavmeshRasterizer
         yMin = Math.Clamp(yMin, 0,    _voxSourceY - 1);
         y1   = Math.Clamp(y1,   yMin, _voxSourceY - 1);
 
-        var volumeX  = MapVoxelIndex(x,    _voxSourceX, _voxelizer.NumX, _voxShiftX);
-        var volumeZ  = MapVoxelIndex(z,    _voxSourceZ, _voxelizer.NumZ, _voxShiftZ);
-        var volumeY0 = MapVoxelIndex(yMin, _voxSourceY, _voxelizer.NumY, _voxShiftY);
-        var volumeY1 = MapVoxelSpanMaxInclusive(y1, _voxSourceY, _voxelizer.NumY, _voxShiftY);
+        var volumeX  = MapVoxelIndex(x,    _voxSourceX, _voxelizer.SizeX, _voxShiftX);
+        var volumeZ  = MapVoxelIndex(z,    _voxSourceZ, _voxelizer.SizeZ, _voxShiftZ);
+        var volumeY0 = MapVoxelIndex(yMin, _voxSourceY, _voxelizer.SizeY, _voxShiftY);
+        var volumeY1 = MapVoxelSpanMaxInclusive(y1, _voxSourceY, _voxelizer.SizeY, _voxShiftY);
 
         // block pixels beneath the span for a distance roughly equal to agent height, otherwise volume pathfind will try to move the player through doorframes etc
         _voxelizer.AddSpan(volumeX, volumeZ, volumeY0, volumeY1);

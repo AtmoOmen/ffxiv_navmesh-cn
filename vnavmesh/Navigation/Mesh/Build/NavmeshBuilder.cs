@@ -131,7 +131,7 @@ public partial class NavmeshBuilder
         public required int                             GeneratedClimbLinks { get; init; }
         public required int                             GeneratedJumpLinks  { get; init; }
         public          DtMeshData?                     MeshData;
-        public          VoxelMap.RootColumnBuildResult? VolumeColumn;
+        public          VolumeRootColumnBuildResult? VolumeColumn;
         public          RcBuilderResult?                DebugResult;
     }
 

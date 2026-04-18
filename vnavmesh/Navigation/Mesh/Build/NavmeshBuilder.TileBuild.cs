@@ -93,7 +93,7 @@ public partial class NavmeshBuilder
         return debugResults;
     }
 
-    private static void MergeTileColumn(VoxelMap parent, int x, int z, VoxelMap.RootColumnBuildResult column)
+    private static void MergeTileColumn(VoxelMap parent, int x, int z, VolumeRootColumnBuildResult column)
     {
         var shift       = parent.RootTile.SubdivisionCount;
         var ny          = parent.Levels[0].NumCellsY;
@@ -439,7 +439,7 @@ public partial class NavmeshBuilder
             ReportProgress(linkBudget);
         }
 
-        VoxelMap.RootColumnBuildResult? volumeColumn = null;
+        VolumeRootColumnBuildResult? volumeColumn = null;
 
         if (Navmesh.Volume != null && vox != null)
         {

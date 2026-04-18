@@ -2,13 +2,11 @@ using System.Numerics;
 
 namespace vnavmesh.Navigation.Volume;
 
-// raw 1/2-bit-per-voxel container
-// for downsampled mips, w is 0 for 'has solids', 1 for 'has non-solids'
 public class Voxelizer
 {
-    public int NumX;
-    public int NumY;
-    public int NumZ;
+    public int SizeX { get; }
+    public int SizeY { get; }
+    public int SizeZ { get; }
 
     private readonly ulong[]  solidWords;
     private readonly ulong[]? emptyWords;
@@ -18,9 +16,9 @@ public class Voxelizer
         if (!BitOperations.IsPow2(nx) || !BitOperations.IsPow2(ny) || !BitOperations.IsPow2(nz))
             throw new Exception($"Non-power-of-two size not supported: {nx}x{ny}x{nz}");
 
-        NumX = nx;
-        NumY = ny;
-        NumZ = nz;
+        SizeX = nx;
+        SizeY = ny;
+        SizeZ = nz;
 
         var numCells  = nx * ny * nz;
         var wordCount = numCells + 63 >> 6;
@@ -29,18 +27,18 @@ public class Voxelizer
             emptyWords = GC.AllocateUninitializedArray<ulong>(wordCount);
     }
 
-    public int VoxelToIndex(int x, int y, int z) => (z * NumX + x) * NumY + y;
+    public int VoxelToIndex(int x, int y, int z) => (z * SizeX + x) * SizeY + y;
 
-    public (bool solid, bool empty) Get(int idx)
+    public (bool solid, bool empty) GetCellState(int index)
     {
-        var solid = GetBit(solidWords, idx);
-        var empty = emptyWords != null ? GetBit(emptyWords, idx) : !solid;
+        var solid = GetBit(solidWords, index);
+        var empty = emptyWords != null ? GetBit(emptyWords, index) : !solid;
         return (solid, empty);
     }
 
-    public (bool solid, bool empty) Get(int x, int y, int z) => Get(VoxelToIndex(x, y, z));
+    public (bool solid, bool empty) GetCellState(int x, int y, int z) => GetCellState(VoxelToIndex(x, y, z));
 
-    public (bool solid, bool empty) ClassifyRegion(int x0, int y0, int z0, int sizeX, int sizeY, int sizeZ)
+    public (bool solid, bool empty) ClassifyBox(int x0, int y0, int z0, int sizeX, int sizeY, int sizeZ)
     {
         var anySolid = false;
 
@@ -52,7 +50,7 @@ public class Voxelizer
             for (var x = 0; x < sizeX; ++x)
             {
                 var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-                var (segmentAnySolid, segmentAllSolid) =  RangeClassify(solidWords, startIndex, sizeY);
+                var (segmentAnySolid, segmentAllSolid) =  ClassifyRange(solidWords, startIndex, sizeY);
                 anySolid                               |= segmentAnySolid;
                 allSolid                               &= segmentAllSolid;
                 if (anySolid && !allSolid)
@@ -68,7 +66,7 @@ public class Voxelizer
         for (var x = 0; x < sizeX; ++x)
         {
             var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-            var (segmentAnySolid, segmentAnyEmpty) =  RangeClassifyPair(solidWords, emptyWords, startIndex, sizeY);
+            var (segmentAnySolid, segmentAnyEmpty) =  ClassifyRangePair(solidWords, emptyWords, startIndex, sizeY);
             anySolid                               |= segmentAnySolid;
             anyEmpty                               |= segmentAnyEmpty;
             if (anySolid && anyEmpty)
@@ -80,13 +78,13 @@ public class Voxelizer
 
     public void AddSpan(int x, int z, int y0, int y1)
     {
-        if ((uint)x >= (uint)NumX || (uint)z >= (uint)NumZ)
+        if ((uint)x >= (uint)SizeX || (uint)z >= (uint)SizeZ)
             return;
-        if (y1 < 0 || y0 >= NumY)
+        if (y1 < 0 || y0 >= SizeY)
             return;
 
-        y0 = Math.Clamp(y0, 0,  NumY - 1);
-        y1 = Math.Clamp(y1, y0, NumY - 1);
+        y0 = Math.Clamp(y0, 0,  SizeY - 1);
+        y1 = Math.Clamp(y1, y0, SizeY - 1);
         var startIndex = VoxelToIndex(x, y0, z);
         SetRange(solidWords, startIndex, y1 - y0 + 1);
     }
@@ -127,7 +125,7 @@ public class Voxelizer
         }
     }
 
-    private static (bool anySet, bool allSet) RangeClassify(ulong[] words, int startIndex, int length)
+    private static (bool anySet, bool allSet) ClassifyRange(ulong[] words, int startIndex, int length)
     {
         var index     = startIndex;
         var remaining = length;
@@ -156,7 +154,7 @@ public class Voxelizer
         return (anySet, allSet);
     }
 
-    private static (bool anySet1, bool anySet2) RangeClassifyPair(ulong[] words1, ulong[] words2, int startIndex, int length)
+    private static (bool anySet1, bool anySet2) ClassifyRangePair(ulong[] words1, ulong[] words2, int startIndex, int length)
     {
         var index     = startIndex;
         var remaining = length;

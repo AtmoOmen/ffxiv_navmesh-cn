@@ -9,13 +9,12 @@ public static class VoxelSearch
 
     public static ulong FindNearestEmptyVoxel(VoxelMap volume, Vector3 center, Vector3 halfExtent)
     {
-        var cv = volume.FindLeafVoxel(center);
-        //Service.Log.Debug($"Searching {cv}");
-        if (cv.empty)
-            return cv.voxel; // fast path: the cell is empty already
+        var centerLeaf = volume.FindLeafVoxel(center);
+        if (centerLeaf.empty)
+            return centerLeaf.voxel;
 
         var minDist = float.MaxValue;
-        var res     = VoxelMap.INVALID_VOXEL;
+        var nearestVoxel = VoxelMap.INVALID_VOXEL;
 
         foreach (var v in volume.RootTile.EnumerateLeafVoxels(center - halfExtent, center + halfExtent))
         {
@@ -26,19 +25,18 @@ public static class VoxelSearch
             var d    = p - center;
             var dist = d.LengthSquared();
             if (d.X != 0 || d.Z != 0)
-                dist += 100; // penalty for moving sideways vs up - TODO reconsider...
+                dist += 100;
             if (d.Y < 0)
-                dist += 400; // penalty for lower voxels to reduce chance of it being underground - TODO reconsider...
-            // Service.Log.Debug($"Considering {v.index:X} @ {p.X}x{p.Y}x{p.Z}: {dist}, min so far {minDist}");
+                dist += 400;
 
             if (dist < minDist)
             {
                 minDist = dist;
-                res     = v.index;
+                nearestVoxel = v.index;
             }
         }
 
-        return res;
+        return nearestVoxel;
     }
 
     public static IEnumerable<(ulong voxel, float t, bool empty)> EnumerateVoxelsInLine
@@ -53,13 +51,11 @@ public static class VoxelSearch
         if (fromVoxel == toVoxel || Vector3.DistanceSquared(fromPos, toPos) <= float.Epsilon)
             yield break;
 
-        var origFrom = fromVoxel;
-        var ab       = toPos - fromPos;
-        var eps      = 0.1f / ab.Length();
+        var line = CreateLineState(fromVoxel, toPos - fromPos);
 
         while (fromVoxel != toVoxel)
         {
-            StepLine(volume, origFrom, toVoxel, fromPos, ab, eps, fromVoxel, out var nextVoxel, out var t, out var nextEmpty);
+            StepToNextVoxel(volume, line.originVoxel, toVoxel, fromPos, line.delta, line.epsilon, fromVoxel, out var nextVoxel, out var t, out var nextEmpty);
             yield return (nextVoxel, t, nextEmpty);
             fromVoxel = nextVoxel;
         }
@@ -79,13 +75,11 @@ public static class VoxelSearch
         if (Vector3.DistanceSquared(fromPos, toPos) <= float.Epsilon)
             return false;
 
-        var origFrom = fromVoxel;
-        var ab       = toPos - fromPos;
-        var eps      = 0.1f / ab.Length();
+        var line = CreateLineState(fromVoxel, toPos - fromPos);
 
         while (fromVoxel != toVoxel)
         {
-            StepLine(volume, origFrom, toVoxel, fromPos, ab, eps, fromVoxel, out var nextVoxel, out _, out var nextEmpty);
+            StepToNextVoxel(volume, line.originVoxel, toVoxel, fromPos, line.delta, line.epsilon, fromVoxel, out var nextVoxel, out _, out var nextEmpty);
             if (!nextEmpty)
                 return false;
 
@@ -95,7 +89,10 @@ public static class VoxelSearch
         return true;
     }
 
-    private static void StepLine
+    private static (ulong originVoxel, Vector3 delta, float epsilon) CreateLineState(ulong fromVoxel, Vector3 delta)
+        => (fromVoxel, delta, 0.1f / delta.Length());
+
+    private static void StepToNextVoxel
     (
         VoxelMap  volume,
         ulong     origFrom,

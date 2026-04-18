@@ -15,7 +15,7 @@ public class DebugVoxelMap : IDisposable
     private UITree                                                  _tree;
     private DebugDrawer                                             _dd;
     private EffectMesh.Data?                                        _visu;
-    private Dictionary<VoxelMap.Tile, (int firstBox, int numBoxes)> _visuBoxes = new();
+    private Dictionary<VolumeTile, (int firstBox, int numBoxes)> _visuBoxes = new();
     private int[]                                                   _numSubdivPerLevel;
     private int[]                                                   _numLeavesPerLevel;
 
@@ -82,7 +82,7 @@ public class DebugVoxelMap : IDisposable
 
     public void VisualizeVoxel(ulong voxel) => VisualizeCell(_vm.VoxelBounds(voxel, 0));
 
-    private void InitTile(VoxelMap.Tile tile)
+    private void InitTile(VolumeTile tile)
     {
         for (var i = 0; i < tile.CellCount; ++i)
         {
@@ -96,7 +96,7 @@ public class DebugVoxelMap : IDisposable
             InitTile(sub);
     }
 
-    private void DrawTile(VoxelMap.Tile tile, string name)
+    private void DrawTile(VolumeTile tile, string name)
     {
         using var nr = _tree.Node($"{name}: {tile.BoundsMin:f3} - {tile.BoundsMax:f3} ({tile.SubdivisionCount} subtiles)");
         if (nr.SelectedOrHovered)
@@ -125,7 +125,7 @@ public class DebugVoxelMap : IDisposable
             }
     }
 
-    private void InitTileVisualizer(VoxelMap.Tile tile, EffectMesh.Data.Builder builder, AnalyticMeshBox box)
+    private void InitTileVisualizer(VolumeTile tile, EffectMesh.Data.Builder builder, AnalyticMeshBox box)
     {
         var start = builder.NumInstances;
 
@@ -162,7 +162,7 @@ public class DebugVoxelMap : IDisposable
         return _visu;
     }
 
-    private void VisualizeTile(VoxelMap.Tile tile)
+    private void VisualizeTile(VolumeTile tile)
     {
         if (_dd.EffectMesh == null)
             return;
