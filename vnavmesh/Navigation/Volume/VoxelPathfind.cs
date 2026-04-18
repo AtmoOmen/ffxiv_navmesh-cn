@@ -14,8 +14,12 @@ public class VoxelPathfind
     private const int   DefaultMaxSearchSteps = 1_0000_0000;
     private const int   RaycastSearchStepBudget = 200000;
     private const int   MaxAncestorLookback = 6;
-    private const int   ParallelNeighbourThreshold = 4;
+    private const int   RaycastParallelNeighbourThreshold = 12;
     private const float MaxSearchRaycastDistanceInLeafCells = 96f;
+    private const float ShortRangeHeuristicWeight = 1.05f;
+    private const float LongRangeHeuristicWeight = 1.45f;
+    private const float LongRangeHeuristicBlendDistance = 4f;
+    private const float GoalVisibilityProbeDistanceInLeafCells = 48f;
 
     private enum CandidateKind : byte
     {
@@ -48,7 +52,8 @@ public class VoxelPathfind
         int PeakOpenListSize,
         SearchTermination Termination,
         bool SearchRaycastEnabled,
-        int SearchAttempts
+        int SearchAttempts,
+        float HeuristicWeight
     );
 
     private readonly record struct NeighbourEvaluation
@@ -75,6 +80,7 @@ public class VoxelPathfind
     private readonly VoxelMap.Level _l1Desc;
     private readonly VoxelMap.Level _l2Desc;
     private readonly float          _maxSearchRaycastDistance;
+    private readonly float          _goalVisibilityProbeDistance;
     private readonly List<ulong>    _neighbourScratch = new(64);
 
     private readonly List<Node>                          _nodes      = new(1024);
@@ -86,6 +92,7 @@ public class VoxelPathfind
     private Vector3                         _goalPos;
     private bool                            _goalReached;
     private bool                            _useSearchRaycast;
+    private float                           _heuristicWeight;
     private int                             _visitedNodes;
     private int                             _generatedNodes;
     private int                             _lineOfSightChecks;
@@ -107,7 +114,8 @@ public class VoxelPathfind
         _peakOpenListSize,
         _lastTermination,
         _lastSearchRaycastEnabled,
-        _lastSearchAttempts
+        _lastSearchAttempts,
+        _heuristicWeight
     );
 
     public VoxelPathfind(VoxelMap volume, Config _)
@@ -117,6 +125,7 @@ public class VoxelPathfind
         _l1Desc                   = volume.Levels[1];
         _l2Desc                   = volume.Levels[2];
         _maxSearchRaycastDistance = MathF.Max(_l2Desc.CellSize.X, MathF.Max(_l2Desc.CellSize.Y, _l2Desc.CellSize.Z)) * MaxSearchRaycastDistanceInLeafCells;
+        _goalVisibilityProbeDistance = MathF.Max(_l2Desc.CellSize.X, MathF.Max(_l2Desc.CellSize.Y, _l2Desc.CellSize.Z)) * GoalVisibilityProbeDistanceInLeafCells;
     }
 
     public List<(ulong voxel, Vector3 p)> FindPath
@@ -228,6 +237,7 @@ public class VoxelPathfind
     {
         Start(fromVoxel, toVoxel, fromPos, toPos);
         _useSearchRaycast         = useSearchRaycast;
+        _heuristicWeight          = ResolveHeuristicWeight(fromPos, toPos, useSearchRaycast);
         _lastSearchRaycastEnabled = useSearchRaycast;
         _lastSearchAttempts       = attempts;
         _lastTermination = Execute(cancel, maxSteps);
@@ -235,6 +245,46 @@ public class VoxelPathfind
     }
 
     private bool ShouldUseSearchRaycast(Vector3 fromPos, Vector3 toPos) => Vector3.Distance(fromPos, toPos) <= _maxSearchRaycastDistance;
+
+    private float ResolveHeuristicWeight(Vector3 fromPos, Vector3 toPos, bool useSearchRaycast)
+    {
+        if (useSearchRaycast)
+            return ShortRangeHeuristicWeight;
+
+        var distance = Vector3.Distance(fromPos, toPos);
+        var blend    = Math.Clamp(distance / (_maxSearchRaycastDistance * LongRangeHeuristicBlendDistance), 0f, 1f);
+        return ShortRangeHeuristicWeight + (LongRangeHeuristicWeight - ShortRangeHeuristicWeight) * blend;
+    }
+
+    private bool TryConnectGoal(int currentIndex)
+    {
+        var nodeSpan = NodeSpan;
+        ref var current = ref nodeSpan[currentIndex];
+        if (current.HScore > _goalVisibilityProbeDistance)
+            return false;
+        if (!TryLineOfSight(currentIndex, _goalVoxel, _goalPos, CandidateKind.GoalAligned))
+            return false;
+
+        var goalScore = current.GScore + CalculateEdgeCost(current.Position, _goalPos);
+        var goalIndex = GetOrCreateNode(_goalVoxel, currentIndex);
+        nodeSpan = NodeSpan;
+        ref var goal = ref nodeSpan[goalIndex];
+        if (goal.Closed || goalScore + ScoreEpsilon >= goal.GScore)
+            return false;
+
+        goal.GScore      = goalScore;
+        goal.HScore      = 0;
+        goal.ParentIndex = currentIndex;
+        goal.Position    = _goalPos;
+        unchecked
+        {
+            ++goal.Revision;
+        }
+
+        _bestNodeIndex = goalIndex;
+        _goalReached   = true;
+        return true;
+    }
 
     public bool ExecuteStep()
     {
@@ -254,6 +304,9 @@ public class VoxelPathfind
             _goalReached   = true;
             return false;
         }
+
+        if (TryConnectGoal(currentIndex))
+            return false;
 
         var neighbours = CollectNeighbours(current.Voxel);
         if (ShouldParallelizeNeighbourEvaluation(neighbours.Count))
@@ -299,6 +352,7 @@ public class VoxelPathfind
         _lineOfSightChecks = 0;
         _lineOfSightHits   = 0;
         _peakOpenListSize  = 0;
+        _heuristicWeight   = 1;
         _lastTermination   = SearchTermination.SearchExhausted;
         _lastSearchRaycastEnabled = false;
         _lastSearchAttempts = 0;
@@ -814,8 +868,8 @@ public class VoxelPathfind
         if (currentBestScore + ScoreEpsilon < candidateScore)
             return false;
 
-        var candidateF = candidateScore + HeuristicDistance(candidatePosition);
-        var currentF   = currentBestScore + HeuristicDistance(currentBestPosition);
+        var candidateF = TotalScore(candidateScore, HeuristicDistance(candidatePosition));
+        var currentF   = TotalScore(currentBestScore, HeuristicDistance(currentBestPosition));
         if (candidateF + ScoreEpsilon < currentF)
             return true;
         if (currentF + ScoreEpsilon < candidateF)
@@ -852,8 +906,10 @@ public class VoxelPathfind
 
     private float HeuristicDistance(Vector3 position) => Vector3.Distance(position, _goalPos);
 
-    private static bool ShouldParallelizeNeighbourEvaluation(int count) =>
-        count >= ParallelNeighbourThreshold && Environment.ProcessorCount > 1;
+    private float TotalScore(float gScore, float hScore) => gScore + hScore * _heuristicWeight;
+
+    private bool ShouldParallelizeNeighbourEvaluation(int count) =>
+        _useSearchRaycast && count >= RaycastParallelNeighbourThreshold && Environment.ProcessorCount > 1;
 
     private void UpdateBestNode(int nodeIndex)
     {
@@ -965,10 +1021,10 @@ public class VoxelPathfind
         nodeSpan[nodeIndex].OpenHeapIndex = heapIndex;
     }
 
-    private static bool HeapLess(ref Node left, ref Node right)
+    private bool HeapLess(ref Node left, ref Node right)
     {
-        var leftF  = left.GScore  + left.HScore;
-        var rightF = right.GScore + right.HScore;
+        var leftF  = TotalScore(left.GScore, left.HScore);
+        var rightF = TotalScore(right.GScore, right.HScore);
         if (leftF + ScoreEpsilon < rightF)
             return true;
         if (rightF + ScoreEpsilon < leftF)
