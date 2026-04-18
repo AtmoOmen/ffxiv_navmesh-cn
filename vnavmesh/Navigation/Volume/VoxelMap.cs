@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Threading;
 using vnavmesh.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Navigation.Volume;
@@ -66,12 +65,10 @@ public class VoxelMap
 
     public class Tile
     {
-        private Tile[]?         _subdivision;
-        private int             _subdivisionCount;
-        private ushort[]?       _contents;
-        private byte[]?         _packedStates;
-        private ushort[]?       _subtreePrefixCounts;
-        private TileStorageKind _storageKind;
+        private Tile[]?   _subdivision;
+        private ushort[]? _contents;
+        private byte[]?   _packedStates;
+        private ushort[]? _subtreePrefixCounts;
 
         public VoxelMap Owner     { get; init; }
         public Vector3  BoundsMin { get; init; }
@@ -83,31 +80,32 @@ public class VoxelMap
             get => _contents ??= MaterializeContents();
             private set
             {
-                _contents             = value;
-                _packedStates         = null;
-                _subtreePrefixCounts  = null;
-                _storageKind          = TileStorageKind.Dense;
+                _contents            = value;
+                _packedStates        = null;
+                _subtreePrefixCounts = null;
+                StorageKind          = TileStorageKind.Dense;
             }
         } // high bit unset: empty voxel (TODO: region id in low bits?); high bit set: voxel with solid geometry (VoxelIdMask if leaf, subvoxel index otherwise); order is (y,x,z)
 
-        public int SubdivisionCount => _subdivisionCount;
-        public int CellCount        => LevelDesc.NumCellsTotal;
+        public int SubdivisionCount { get; private set; }
 
-        public ReadOnlySpan<Tile> Subdivisions => _subdivision == null ? [] : _subdivision.AsSpan(0, _subdivisionCount);
+        public int CellCount => LevelDesc.NumCellsTotal;
+
+        public ReadOnlySpan<Tile> Subdivisions => _subdivision == null ? [] : _subdivision.AsSpan(0, SubdivisionCount);
 
         public Level LevelDesc => Owner.Levels[Level];
 
-        internal TileStorageKind StorageKind => _storageKind;
+        internal TileStorageKind StorageKind { get; private set; }
 
         internal ReadOnlySpan<byte> PackedStates => _packedStates == null ? [] : _packedStates.AsSpan();
 
         public Tile(VoxelMap owner, Vector3 boundsMin, Vector3 boundsMax, int level, bool clearContents = true)
         {
-            Owner     = owner;
-            BoundsMin = boundsMin;
-            BoundsMax = boundsMax;
-            Level     = level;
-            _storageKind = TileStorageKind.Dense;
+            Owner       = owner;
+            BoundsMin   = boundsMin;
+            BoundsMax   = boundsMax;
+            Level       = level;
+            StorageKind = TileStorageKind.Dense;
             _contents = clearContents
                             ? new ushort[owner.Levels[level].NumCellsTotal]
                             : GC.AllocateUninitializedArray<ushort>(owner.Levels[level].NumCellsTotal);
@@ -132,21 +130,21 @@ public class VoxelMap
 
         public (Vector3 min, Vector3 max) CalculateSubdivisionBounds((int x, int y, int z) v) => CalculateSubdivisionBounds(v.x, v.y, v.z);
 
-        public ushort GetCell(int index) => _storageKind switch
+        public ushort GetCell(int index) => StorageKind switch
         {
-            TileStorageKind.Dense     => _contents![index],
-            TileStorageKind.AllEmpty  => 0,
-            TileStorageKind.SolidLeaf => ushort.MaxValue,
+            TileStorageKind.Dense       => _contents![index],
+            TileStorageKind.AllEmpty    => 0,
+            TileStorageKind.SolidLeaf   => ushort.MaxValue,
             TileStorageKind.PackedMixed => GetPackedCellValue(index),
-            _                         => throw new InvalidOperationException($"未知的体素瓦片存储类型: {_storageKind}")
+            _                           => throw new InvalidOperationException($"未知的体素瓦片存储类型: {StorageKind}")
         };
 
         public void SetCell(int index, ushort value)
         {
-            if (_storageKind != TileStorageKind.Dense)
+            if (StorageKind != TileStorageKind.Dense)
             {
-                _ = Contents;
-                _storageKind         = TileStorageKind.Dense;
+                _                    = Contents;
+                StorageKind          = TileStorageKind.Dense;
                 _packedStates        = null;
                 _subtreePrefixCounts = null;
             }
@@ -156,13 +154,13 @@ public class VoxelMap
 
         public bool IsSubdividedCell(int index)
         {
-            if (_storageKind == TileStorageKind.Dense)
+            if (StorageKind == TileStorageKind.Dense)
             {
                 var cell = _contents![index];
                 return (cell & VoxelOccupiedBit) != 0 && (cell & VoxelIdMask) != VoxelIdMask;
             }
 
-            if (_storageKind != TileStorageKind.PackedMixed)
+            if (StorageKind != TileStorageKind.PackedMixed)
                 return false;
 
             return GetPackedCellState(index) == PackedCellState.Subtree;
@@ -170,7 +168,7 @@ public class VoxelMap
 
         public int GetSubdivisionIndex(int index)
         {
-            if (_storageKind == TileStorageKind.Dense)
+            if (StorageKind == TileStorageKind.Dense)
             {
                 var cell = _contents![index];
                 if ((cell & VoxelOccupiedBit) == 0)
@@ -182,7 +180,7 @@ public class VoxelMap
                 return childIndex;
             }
 
-            if (_storageKind != TileStorageKind.PackedMixed)
+            if (StorageKind != TileStorageKind.PackedMixed)
                 throw new InvalidOperationException("当前瓦片未存储子树索引");
 
             if (GetPackedCellState(index) != PackedCellState.Subtree)
@@ -194,7 +192,7 @@ public class VoxelMap
 
         public void SetUniformEmpty()
         {
-            _storageKind         = TileStorageKind.AllEmpty;
+            StorageKind          = TileStorageKind.AllEmpty;
             _contents            = null;
             _packedStates        = null;
             _subtreePrefixCounts = null;
@@ -203,7 +201,7 @@ public class VoxelMap
 
         public void SetUniformSolidLeaf()
         {
-            _storageKind         = TileStorageKind.SolidLeaf;
+            StorageKind          = TileStorageKind.SolidLeaf;
             _contents            = null;
             _packedStates        = null;
             _subtreePrefixCounts = null;
@@ -212,7 +210,7 @@ public class VoxelMap
 
         public void SetPackedStates(byte[] packedStates)
         {
-            _storageKind         = TileStorageKind.PackedMixed;
+            StorageKind          = TileStorageKind.PackedMixed;
             _contents            = null;
             _packedStates        = packedStates;
             _subtreePrefixCounts = BuildSubtreePrefixCounts(packedStates);
@@ -259,6 +257,7 @@ public class VoxelMap
                 }
 
                 var childIndex = data & VoxelIdMask;
+
                 if (childIndex == VoxelIdMask)
                 {
                     yield return (EncodeIndex(idx), false); // occupied leaf
@@ -270,7 +269,7 @@ public class VoxelMap
             }
         }
 
-        public void ClearSubdivision() => _subdivisionCount = 0;
+        public void ClearSubdivision() => SubdivisionCount = 0;
 
         public void EnsureSubdivisionCapacity(int capacity)
         {
@@ -279,25 +278,25 @@ public class VoxelMap
 
             var newCapacity = _subdivision == null ? Math.Max(capacity, 4) : Math.Max(capacity, _subdivision.Length * 2);
             var resized     = GC.AllocateUninitializedArray<Tile>(newCapacity);
-            if (_subdivisionCount > 0)
-                Array.Copy(_subdivision!, resized, _subdivisionCount);
+            if (SubdivisionCount > 0)
+                Array.Copy(_subdivision!, resized, SubdivisionCount);
             _subdivision = resized;
         }
 
         public void AddSubdivision(Tile child)
         {
-            EnsureSubdivisionCapacity(_subdivisionCount + 1);
-            _subdivision![_subdivisionCount++] = child;
+            EnsureSubdivisionCapacity(SubdivisionCount + 1);
+            _subdivision![SubdivisionCount++] = child;
         }
 
         public void AddSubdivisions(IEnumerable<Tile> children)
         {
             if (children is List<Tile> list && list.Count > 0)
             {
-                EnsureSubdivisionCapacity(_subdivisionCount + list.Count);
+                EnsureSubdivisionCapacity(SubdivisionCount + list.Count);
                 for (var i = 0; i < list.Count; ++i)
-                    _subdivision![_subdivisionCount + i] = list[i];
-                _subdivisionCount += list.Count;
+                    _subdivision![SubdivisionCount + i] = list[i];
+                SubdivisionCount += list.Count;
                 return;
             }
 
@@ -307,74 +306,67 @@ public class VoxelMap
 
         public Tile GetSubdivision(int index)
         {
-            if ((uint)index >= (uint)_subdivisionCount)
-                throw new ArgumentOutOfRangeException(nameof(index), index, $"体积子树索引越界: {index} / {_subdivisionCount}");
+            if ((uint)index >= (uint)SubdivisionCount)
+                throw new ArgumentOutOfRangeException(nameof(index), index, $"体积子树索引越界: {index} / {SubdivisionCount}");
             return _subdivision![index];
         }
 
         internal void CompactRetainedState()
         {
-            if (_subdivisionCount > 0)
+            if (SubdivisionCount > 0)
             {
-                for (var i = 0; i < _subdivisionCount; ++i)
+                for (var i = 0; i < SubdivisionCount; ++i)
                     _subdivision![i].CompactRetainedState();
             }
 
-            if (_storageKind != TileStorageKind.Dense || _contents == null)
+            if (StorageKind != TileStorageKind.Dense || _contents == null)
             {
                 _contents = null;
                 TrimSubdivisionStorage();
                 return;
             }
 
-            var dense = _contents;
-            var allEmpty = true;
-            var allSolidLeaf = _subdivisionCount == 0;
+            var dense        = _contents;
+            var allEmpty     = true;
+            var allSolidLeaf = SubdivisionCount == 0;
             var packedStates = new byte[PackedStateBytes(dense.Length)];
+
             for (var i = 0; i < dense.Length; ++i)
             {
                 var state = ClassifyPackedCellState(dense[i]);
-                packedStates[i >> 2] |= (byte)((byte)state << ((i & 3) * 2));
+                packedStates[i >> 2] |= (byte)((byte)state << (i & 3) * 2);
                 allEmpty             &= state == PackedCellState.Empty;
                 allSolidLeaf         &= state == PackedCellState.SolidLeaf;
             }
 
-            if (allEmpty)
-            {
-                SetUniformEmpty();
-            }
-            else if (allSolidLeaf)
-            {
-                SetUniformSolidLeaf();
-            }
-            else
-            {
-                SetPackedStates(packedStates);
-            }
+            if (allEmpty) SetUniformEmpty();
+            else if (allSolidLeaf) SetUniformSolidLeaf();
+            else SetPackedStates(packedStates);
 
             TrimSubdivisionStorage();
         }
 
         internal void ReleaseRetainedState()
         {
-            if (_subdivisionCount > 0)
+            if (SubdivisionCount > 0)
             {
-                for (var i = 0; i < _subdivisionCount; ++i)
+                for (var i = 0; i < SubdivisionCount; ++i)
                     _subdivision![i].ReleaseRetainedState();
             }
 
             _subdivision         = null;
-            _subdivisionCount    = 0;
+            SubdivisionCount     = 0;
             _contents            = null;
             _packedStates        = null;
             _subtreePrefixCounts = null;
-            _storageKind         = TileStorageKind.AllEmpty;
+            StorageKind          = TileStorageKind.AllEmpty;
         }
 
         private ushort[] MaterializeContents()
         {
             var contents = new ushort[CellCount];
-            switch (_storageKind)
+
+            switch (StorageKind)
             {
                 case TileStorageKind.AllEmpty:
                     return contents;
@@ -388,7 +380,7 @@ public class VoxelMap
                 case TileStorageKind.Dense:
                     return _contents ?? [];
                 default:
-                    throw new InvalidOperationException($"未知的体素瓦片存储类型: {_storageKind}");
+                    throw new InvalidOperationException($"未知的体素瓦片存储类型: {StorageKind}");
             }
         }
 
@@ -401,21 +393,21 @@ public class VoxelMap
         };
 
         private PackedCellState GetPackedCellState(int index)
-            => (PackedCellState)(_packedStates![index >> 2] >> ((index & 3) * 2) & 0x3);
+            => (PackedCellState)(_packedStates![index >> 2] >> (index & 3) * 2 & 0x3);
 
         private void TrimSubdivisionStorage()
         {
-            if (_subdivisionCount == 0)
+            if (SubdivisionCount == 0)
             {
                 _subdivision = null;
                 return;
             }
 
-            if (_subdivision == null || _subdivision.Length == _subdivisionCount)
+            if (_subdivision == null || _subdivision.Length == SubdivisionCount)
                 return;
 
-            var trimmed = GC.AllocateUninitializedArray<Tile>(_subdivisionCount);
-            Array.Copy(_subdivision, trimmed, _subdivisionCount);
+            var trimmed = GC.AllocateUninitializedArray<Tile>(SubdivisionCount);
+            Array.Copy(_subdivision, trimmed, SubdivisionCount);
             _subdivision = trimmed;
         }
     }
@@ -444,14 +436,14 @@ public class VoxelMap
     public Level[] Levels   { get; init; }
     public Tile    RootTile { get; init; }
 
-    private readonly int[] _leafScaleX;
-    private readonly int[] _leafScaleY;
-    private readonly int[] _leafScaleZ;
+    private readonly int[]         _leafScaleX;
+    private readonly int[]         _leafScaleY;
+    private readonly int[]         _leafScaleZ;
     private readonly SemaphoreSlim _materializationGate = new(1, 1);
 
-    private byte[]? _deferredTreePayload;
-    private int     _deferredTreeOffset;
-    private int     _deferredTreeLength;
+    private byte[]?           _deferredTreePayload;
+    private int               _deferredTreeOffset;
+    private int               _deferredTreeLength;
     private Action<VoxelMap>? _deferredTreeMaterializer;
 
     public const ushort VoxelOccupiedBit = 0x8000;
@@ -497,12 +489,13 @@ public class VoxelMap
         if (packedStates.Length == 0)
             return null;
 
-        var counts = new ushort[packedStates.Length];
+        var    counts  = new ushort[packedStates.Length];
         ushort running = 0;
+
         for (var i = 0; i < packedStates.Length; ++i)
         {
-            counts[i] = running;
-            running  += s_subtreeCountByPackedState[packedStates[i]];
+            counts[i] =  running;
+            running   += s_subtreeCountByPackedState[packedStates[i]];
         }
 
         return running == 0 ? null : counts;
@@ -511,14 +504,13 @@ public class VoxelMap
     private static byte[] BuildSubtreeCountByPackedState()
     {
         var table = GC.AllocateUninitializedArray<byte>(byte.MaxValue + 1);
+
         for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
         {
             byte count = 0;
             for (var offset = 0; offset < 4; ++offset)
-            {
                 if ((PackedCellState)(packedState >> offset * 2 & 0x3) == PackedCellState.Subtree)
                     ++count;
-            }
 
             table[packedState] = count;
         }
@@ -529,9 +521,11 @@ public class VoxelMap
     private static byte[] BuildSubtreePrefixCountByPackedState()
     {
         var table = GC.AllocateUninitializedArray<byte>((byte.MaxValue + 1) * 4);
+
         for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
         {
             byte prefix = 0;
+
             for (var offset = 0; offset < 4; ++offset)
             {
                 table[packedState * 4 + offset] = prefix;
@@ -650,17 +644,17 @@ public class VoxelMap
 
     internal void SetDeferredTreePayload(byte[] payload, int offset, int length)
     {
-        _deferredTreePayload = payload;
-        _deferredTreeOffset  = offset;
-        _deferredTreeLength  = length;
+        _deferredTreePayload      = payload;
+        _deferredTreeOffset       = offset;
+        _deferredTreeLength       = length;
         _deferredTreeMaterializer = null;
     }
 
     internal void SetDeferredTreeMaterializer(Action<VoxelMap> materializer)
     {
-        _deferredTreePayload = null;
-        _deferredTreeOffset  = 0;
-        _deferredTreeLength  = 0;
+        _deferredTreePayload      = null;
+        _deferredTreeOffset       = 0;
+        _deferredTreeLength       = 0;
         _deferredTreeMaterializer = materializer;
     }
 
@@ -670,6 +664,7 @@ public class VoxelMap
             return;
 
         _materializationGate.Wait();
+
         try
         {
             if (!HasDeferredTree)
@@ -749,6 +744,7 @@ public class VoxelMap
             throw new ArgumentException("体积分层缓存长度与体积层级不匹配", nameof(mipScratch));
 
         var current = leaf;
+
         for (var level = Levels.Length - 2; level >= 0; --level)
         {
             ref readonly var nextLevel = ref Levels[level + 1];
@@ -774,7 +770,8 @@ public class VoxelMap
         return rootId;
     }
 
-    private ushort BuildTileContent(Voxelizer vox, Tile parent, List<Tile>? rootSubdivision, Tile? tileSubdivision, int rootX, int rootY, int rootZ, int leafX, int leafY, int leafZ)
+    private ushort BuildTileContent
+        (Voxelizer vox, Tile parent, List<Tile>? rootSubdivision, Tile? tileSubdivision, int rootX, int rootY, int rootZ, int leafX, int leafY, int leafZ)
     {
         var level = parent.Level;
         var (solid, empty) = vox.ClassifyRegion(leafX, leafY, leafZ, _leafScaleX[level], _leafScaleY[level], _leafScaleZ[level]);
@@ -814,10 +811,23 @@ public class VoxelMap
         return (ushort)(VoxelOccupiedBit | localId);
     }
 
-    private ushort BuildTileContent(Voxelizer vox, Voxelizer[] mipScratch, Tile parent, List<Tile>? rootSubdivision, Tile? tileSubdivision, int rootX, int rootY, int rootZ, int cellX, int cellY, int cellZ)
+    private ushort BuildTileContent
+    (
+        Voxelizer   vox,
+        Voxelizer[] mipScratch,
+        Tile        parent,
+        List<Tile>? rootSubdivision,
+        Tile?       tileSubdivision,
+        int         rootX,
+        int         rootY,
+        int         rootZ,
+        int         cellX,
+        int         cellY,
+        int         cellZ
+    )
     {
-        var level          = parent.Level;
-        var source         = level == Levels.Length - 1 ? vox : mipScratch[level];
+        var level  = parent.Level;
+        var source = level == Levels.Length - 1 ? vox : mipScratch[level];
         var (solid, empty) = source.Get(cellX, cellY, cellZ);
         if (!solid) return 0;
 
@@ -830,8 +840,8 @@ public class VoxelMap
         var tile    = new Tile(this, min, max, parent.Level + 1, false);
         var localId = AppendSubdivision(rootSubdivision, tileSubdivision, tile);
 
-        ref var l           = ref Levels[tile.Level];
-        ushort  i           = 0;
+        ref var l = ref Levels[tile.Level];
+        ushort  i = 0;
         for (var z = 0; z < l.NumCellsZ; ++z)
         for (var x = 0; x < l.NumCellsX; ++x)
         for (var y = 0; y < l.NumCellsY; ++y, ++i)

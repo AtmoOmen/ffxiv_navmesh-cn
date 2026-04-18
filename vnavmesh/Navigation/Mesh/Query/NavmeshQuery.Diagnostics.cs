@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Threading;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Bootstrap;
@@ -32,8 +31,10 @@ public partial class NavmeshQuery
             $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，粗路径段 = {result.Segments.Count}";
 
         if (result.Status == PathfindStatus.Partial)
+        {
             message +=
                 $"，起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}";
+        }
 
         switch (result.Status)
         {
@@ -159,16 +160,18 @@ public partial class NavmeshQuery
         out long          repairedLastPoly
     )
     {
-        repairedResult = default!;
+        repairedResult   = default!;
         repairedLastPoly = partialCandidate.LastPoly;
 
         if (TryRepairGroundGapByRaycast(partialCandidate, requestedTarget, requestedEndPos, filter, range, out repairedResult, out repairedLastPoly))
             return true;
 
-        if (TryRepairGroundGapByMoveAlongSurface(partialCandidate, requestedTarget, endRef, requestedEndPos, filter, opt, range, out repairedResult, out repairedLastPoly))
+        if (TryRepairGroundGapByMoveAlongSurface
+                (partialCandidate, requestedTarget, endRef, requestedEndPos, filter, opt, range, out repairedResult, out repairedLastPoly))
             return true;
 
-        return TryRepairGroundGapByNearbyContinuation(partialCandidate, requestedTarget, endRef, requestedEndPos, filter, opt, range, cancel, out repairedResult, out repairedLastPoly);
+        return TryRepairGroundGapByNearbyContinuation
+            (partialCandidate, requestedTarget, endRef, requestedEndPos, filter, opt, range, cancel, out repairedResult, out repairedLastPoly);
     }
 
     private bool TryRepairGroundGapByRaycast
@@ -202,7 +205,7 @@ public partial class NavmeshQuery
             return false;
 
         repairedLastPoly = visitedCount > 0 ? visited[visitedCount - 1] : partialCandidate.LastPoly;
-        repairedResult   = BuildGroundPlannerResult
+        repairedResult = BuildGroundPlannerResult
         (
             requestedTarget,
             range,
@@ -256,7 +259,7 @@ public partial class NavmeshQuery
         if (Vector3.Distance(movedPoint, requestedTarget) <= MathF.Max(range, 0.15f))
         {
             repairedLastPoly = movedPoly;
-            repairedResult   = BuildGroundPlannerResult
+            repairedResult = BuildGroundPlannerResult
             (
                 requestedTarget,
                 range,
@@ -277,7 +280,16 @@ public partial class NavmeshQuery
 
         var resumeCandidate = BuildMeshPathCandidate
         (
-            new(movedPoly, bridgePoint, Vector3.DistanceSquared(bridgePoint, partialCandidate.FinalDestination), bridgePoint.Y - partialCandidate.FinalDestination.Y, false, isPointOverPoly, CountStartSupportProbeHits(partialCandidate.FinalDestination, movedPoly)),
+            new
+            (
+                movedPoly,
+                bridgePoint,
+                Vector3.DistanceSquared(bridgePoint, partialCandidate.FinalDestination),
+                bridgePoint.Y - partialCandidate.FinalDestination.Y,
+                false,
+                isPointOverPoly,
+                CountStartSupportProbeHits(partialCandidate.FinalDestination, movedPoly)
+            ),
             corridor,
             resumeStatus,
             requestedEndPos,
@@ -348,7 +360,16 @@ public partial class NavmeshQuery
 
             var resumeCandidate = BuildMeshPathCandidate
             (
-                new(poly, bridgePoint, bridgeHorizontalDistance * bridgeHorizontalDistance, bridgePoint.Y - partialEnd.Y, false, isPointOverPoly, CountStartSupportProbeHits(partialEnd, poly)),
+                new
+                (
+                    poly,
+                    bridgePoint,
+                    bridgeHorizontalDistance * bridgeHorizontalDistance,
+                    bridgePoint.Y - partialEnd.Y,
+                    false,
+                    isPointOverPoly,
+                    CountStartSupportProbeHits(partialEnd, poly)
+                ),
                 corridor,
                 status,
                 requestedEndPos,
@@ -386,7 +407,9 @@ public partial class NavmeshQuery
         segments.Add(BuildGroundMeshCorridorSegment(bestResumeCandidate.Value));
 
         Service.Log.Warning
-            ($"[算路] 已触发短距补桥：partial 终点 = {partialCandidate.FinalDestination:f3}，桥接点 = {bridgePointToAdd:f3}，桥接后结果 = {bestResumeCandidate.Value.ResultStatus}，段数 = {segments.Count}，结果来源 = 短距补桥 + 续算，最后可达 = {repairedLastPoly:X}");
+        (
+            $"[算路] 已触发短距补桥：partial 终点 = {partialCandidate.FinalDestination:f3}，桥接点 = {bridgePointToAdd:f3}，桥接后结果 = {bestResumeCandidate.Value.ResultStatus}，段数 = {segments.Count}，结果来源 = 短距补桥 + 续算，最后可达 = {repairedLastPoly:X}"
+        );
         repairedResult = BuildGroundPlannerResult
         (
             requestedTarget,

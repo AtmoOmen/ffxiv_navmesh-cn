@@ -1,5 +1,4 @@
 using System.Numerics;
-using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Volume;
 

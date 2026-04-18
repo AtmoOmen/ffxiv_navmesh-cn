@@ -53,9 +53,9 @@ public class Voxelizer
             for (var x = 0; x < sizeX; ++x)
             {
                 var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-                var (segmentAnySolid, segmentAllSolid) = RangeClassify(_solidWords, startIndex, sizeY);
-                anySolid |= segmentAnySolid;
-                allSolid &= segmentAllSolid;
+                var (segmentAnySolid, segmentAllSolid) =  RangeClassify(_solidWords, startIndex, sizeY);
+                anySolid                               |= segmentAnySolid;
+                allSolid                               &= segmentAllSolid;
                 if (anySolid && !allSolid)
                     return (true, true);
             }
@@ -69,9 +69,9 @@ public class Voxelizer
         for (var x = 0; x < sizeX; ++x)
         {
             var startIndex = VoxelToIndex(x0 + x, y0, z0 + z);
-            var (segmentAnySolid, segmentAnyEmpty) = RangeClassifyPair(_solidWords, _emptyWords, startIndex, sizeY);
-            anySolid |= segmentAnySolid;
-            anyEmpty |= segmentAnyEmpty;
+            var (segmentAnySolid, segmentAnyEmpty) =  RangeClassifyPair(_solidWords, _emptyWords, startIndex, sizeY);
+            anySolid                               |= segmentAnySolid;
+            anyEmpty                               |= segmentAnyEmpty;
             if (anySolid && anyEmpty)
                 return (true, true);
         }
@@ -86,7 +86,7 @@ public class Voxelizer
         if (y1 < 0 || y0 >= NumY)
             return;
 
-        y0 = Math.Clamp(y0, 0, NumY - 1);
+        y0 = Math.Clamp(y0, 0,  NumY - 1);
         y1 = Math.Clamp(y1, y0, NumY - 1);
         var startIndex = VoxelToIndex(x, y0, z);
         SetRange(_solidWords, startIndex, y1 - y0 + 1);

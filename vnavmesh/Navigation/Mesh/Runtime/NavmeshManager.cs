@@ -291,8 +291,7 @@ public sealed partial class NavmeshManager : IDisposable
     private void RequestMemoryCompaction(string reason)
     {
         _ = Task.Run
-        (
-            () =>
+        (() =>
             {
                 try
                 {

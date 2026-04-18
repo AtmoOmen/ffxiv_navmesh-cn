@@ -17,10 +17,8 @@ public partial record class Navmesh
             volume.SetDeferredTreePayload(payload, offset, length);
             reader.BaseStream.Position = reader.BaseStream.Length;
         }
-        else
-        {
-            DeserializeVolumeTile(reader, volume.RootTile);
-        }
+        else DeserializeVolumeTile(reader, volume.RootTile);
+
         return volume;
     }
 
@@ -43,10 +41,10 @@ public partial record class Navmesh
 
     private static VoxelMap? DeserializeCompressedDeferredVolume(byte[] payload, long expectedBytes)
     {
-        var decodedPayload = DecompressFastLz(payload, expectedBytes);
-        using var stream   = new MemoryStream(decodedPayload, 0, decodedPayload.Length, false, true);
-        using var reader   = new BinaryReader(stream);
-        var       volume   = DeserializeVolumeHeader(reader);
+        var       decodedPayload = DecompressFastLz(payload, expectedBytes);
+        using var stream         = new MemoryStream(decodedPayload, 0, decodedPayload.Length, false, true);
+        using var reader         = new BinaryReader(stream);
+        var       volume         = DeserializeVolumeHeader(reader);
         if (volume == null)
             return null;
 
@@ -80,9 +78,9 @@ public partial record class Navmesh
 
     internal static void MaterializeDeferredCompressedVolumeTree(VoxelMap volume, byte[] payload, long expectedBytes, int offset)
     {
-        var decodedPayload = DecompressFastLz(payload, expectedBytes);
-        using var stream   = new MemoryStream(decodedPayload, offset, decodedPayload.Length - offset, false);
-        using var reader   = new BinaryReader(stream);
+        var       decodedPayload = DecompressFastLz(payload, expectedBytes);
+        using var stream         = new MemoryStream(decodedPayload, offset, decodedPayload.Length - offset, false);
+        using var reader         = new BinaryReader(stream);
         DeserializeVolumeTile(reader, volume.RootTile);
     }
 
@@ -118,6 +116,7 @@ public partial record class Navmesh
         reader.BaseStream.ReadExactly(packedStates);
 
         var subtreeCount = 0;
+
         for (var i = 0; i < packedStates.Length; ++i)
         {
             var packedState = packedStates[i];
@@ -134,13 +133,15 @@ public partial record class Navmesh
             return;
 
         var baseIndex = 0;
+
         for (var i = 0; i < packedStates.Length; ++i, baseIndex += 4)
         {
             var subtreeMask = s_subtreeMaskByPackedState[packedStates[i]];
+
             while (subtreeMask != 0)
             {
                 var localOffset = BitOperations.TrailingZeroCount((uint)subtreeMask);
-                subtreeMask = (byte)(subtreeMask & (subtreeMask - 1));
+                subtreeMask = (byte)(subtreeMask & subtreeMask - 1);
                 DeserializeVolumeSubtile(reader, tile, baseIndex + localOffset);
             }
         }
@@ -161,6 +162,7 @@ public partial record class Navmesh
     private static void SerializeVolumeTile(BinaryWriter writer, VoxelMap.Tile tile)
     {
         tile.CompactRetainedState();
+
         switch (tile.StorageKind)
         {
             case VoxelMap.TileStorageKind.AllEmpty:
@@ -191,9 +193,9 @@ public partial record class Navmesh
         }
     }
 
-    private static readonly byte[]  s_subtreeMaskByPackedState      = BuildSubtreeMaskByPackedState();
-    private static readonly byte[]  s_subtreeCountByPackedState     = BuildSubtreeCountByPackedState();
-    private static readonly bool[]  s_invalidPackedState            = BuildInvalidPackedState();
+    private static readonly byte[] s_subtreeMaskByPackedState  = BuildSubtreeMaskByPackedState();
+    private static readonly byte[] s_subtreeCountByPackedState = BuildSubtreeCountByPackedState();
+    private static readonly bool[] s_invalidPackedState        = BuildInvalidPackedState();
 
     private static int PackedStateBytes(int numCells) => numCells + 3 >> 2;
 
@@ -216,12 +218,13 @@ public partial record class Navmesh
     private static byte[] BuildSubtreeMaskByPackedState()
     {
         var table = GC.AllocateUninitializedArray<byte>(byte.MaxValue + 1);
+
         for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
         {
             byte mask = 0;
             for (var offset = 0; offset < 4; ++offset)
                 if ((VolumeCellState)(packedState >> offset * 2 & 0x3) == VolumeCellState.Subtree)
-                    mask |= (byte)(1 << offset);
+                    mask |= (byte)(1              << offset);
             table[packedState] = mask;
         }
 
@@ -239,17 +242,14 @@ public partial record class Navmesh
     private static bool[] BuildInvalidPackedState()
     {
         var table = GC.AllocateUninitializedArray<bool>(byte.MaxValue + 1);
+
         for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
-        {
-            for (var offset = 0; offset < 4; ++offset)
+        for (var offset = 0; offset < 4; ++offset)
+            if ((VolumeCellState)(packedState >> offset * 2 & 0x3) == (VolumeCellState)3)
             {
-                if ((VolumeCellState)(packedState >> offset * 2 & 0x3) == (VolumeCellState)3)
-                {
-                    table[packedState] = true;
-                    break;
-                }
+                table[packedState] = true;
+                break;
             }
-        }
 
         return table;
     }

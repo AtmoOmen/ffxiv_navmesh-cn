@@ -1,5 +1,4 @@
 using System.Numerics;
-using System.Threading;
 using DotRecast.Core;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
@@ -12,7 +11,7 @@ using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Query;
 
-using static DotRecast.Detour.DtDetour;
+using static DtDetour;
 
 public partial class NavmeshQuery
 {
@@ -92,9 +91,9 @@ public partial class NavmeshQuery
         int               AreaCrossingCount
     )
     {
-        public long    StartRef   => StartCandidate.PolyRef;
-        public Vector3 StartPoint => StartCandidate.ProjectedPoint;
-        public long    LastPoly   => Corridor.Count > 0 ? Corridor[^1] : 0;
+        public long    StartRef         => StartCandidate.PolyRef;
+        public Vector3 StartPoint       => StartCandidate.ProjectedPoint;
+        public long    LastPoly         => Corridor.Count > 0 ? Corridor[^1] : 0;
         public bool    IsRequestedStart => StartCandidate.IsRequestedStart;
         public bool    IsPointOverPoly  => StartCandidate.IsPointOverPoly;
         public int     SupportProbeHits => StartCandidate.SupportProbeHits;
@@ -110,15 +109,15 @@ public partial class NavmeshQuery
 
     public sealed class GroundPathDiagnosticsSnapshot
     {
-        public required long GroundQueries                 { get; init; }
-        public required long PartialQueries                { get; init; }
-        public required long SuspectedTileSeamCutoffs      { get; init; }
-        public required long AnyAnglePreferred             { get; init; }
-        public required long ClassicFallbacks              { get; init; }
-        public required long StartReplacements             { get; init; }
-        public required long EndReplacements               { get; init; }
-        public required long GeneratedClimbLinksAccepted   { get; init; }
-        public required long GeneratedJumpLinksAccepted    { get; init; }
+        public required long GroundQueries               { get; init; }
+        public required long PartialQueries              { get; init; }
+        public required long SuspectedTileSeamCutoffs    { get; init; }
+        public required long AnyAnglePreferred           { get; init; }
+        public required long ClassicFallbacks            { get; init; }
+        public required long StartReplacements           { get; init; }
+        public required long EndReplacements             { get; init; }
+        public required long GeneratedClimbLinksAccepted { get; init; }
+        public required long GeneratedJumpLinksAccepted  { get; init; }
     }
 
     private readonly record struct MeshEndCandidate
@@ -141,7 +140,7 @@ public partial class NavmeshQuery
     ) : IDtQueryFilter
     {
         public float RandomnessMultiplier = 0;
-        public ulong RandomSeed = 0;
+        public ulong RandomSeed           = 0;
 
         public float GetCost
         (
@@ -233,15 +232,15 @@ public partial class NavmeshQuery
         public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => _filter.PassFilter(refs, tile, poly);
     }
 
-    public           DtNavMeshQuery      MeshQuery;
-    private readonly PathPostprocessor   _postprocessor;
-    private readonly Navmesh             _navmesh;
-    private readonly IDtQueryFilter      _filter         = new DtQueryDefaultFilter();
+    public           DtNavMeshQuery       MeshQuery;
+    private readonly PathPostprocessor    _postprocessor;
+    private readonly Navmesh              _navmesh;
+    private readonly IDtQueryFilter       _filter       = new DtQueryDefaultFilter();
     private readonly GroundAreaCostFilter _groundFilter = new();
-    private readonly RandomnessFilter    _randomnessFilter;
+    private readonly RandomnessFilter     _randomnessFilter;
     private readonly IDtQueryFilter       _reachableFilter;
-    private          VoxelPathfind?      _volumeQuery;
-    private          bool                _released;
+    private          VoxelPathfind?       _volumeQuery;
+    private          bool                 _released;
 
     private long _groundQueryCount;
     private long _partialGroundQueryCount;
@@ -258,9 +257,9 @@ public partial class NavmeshQuery
 
     public NavmeshQuery(Navmesh navmesh, Config config)
     {
-        _navmesh  = navmesh;
-        _config   = config;
-        MeshQuery = new(navmesh.Mesh /*, s => Service.Log.Debug(s)*/);
+        _navmesh          = navmesh;
+        _config           = config;
+        MeshQuery         = new(navmesh.Mesh /*, s => Service.Log.Debug(s)*/);
         _postprocessor    = new(MeshQuery);
         _randomnessFilter = new(_groundFilter);
         _reachableFilter  = _groundFilter;
@@ -330,7 +329,8 @@ public partial class NavmeshQuery
         if (startRef == 0)
             return null;
 
-        var status = MeshQuery.FindRandomPointWithinCircle(startRef, center.SystemToRecast(), maxRadius, filter, new RcRand(Random.Shared.NextInt64()), out _, out var point);
+        var status = MeshQuery.FindRandomPointWithinCircle
+            (startRef, center.SystemToRecast(), maxRadius, filter, new RcRand(Random.Shared.NextInt64()), out _, out var point);
         return status.Succeeded() ? point.RecastToSystem() : null;
     }
 
@@ -374,6 +374,7 @@ public partial class NavmeshQuery
         if (usedClamp)
         {
             voxel = VoxelSearch.FindNearestEmptyVoxel(volume, clamped, halfExtent);
+
             if (voxel != VoxelMap.InvalidVoxel)
             {
                 Service.Log.Debug($"[算路] 体素定位改用边界贴靠点：原始位置 = {p:f3}，贴靠后 = {clamped:f3}，搜索范围 = {halfExtent:f3}");
@@ -382,6 +383,7 @@ public partial class NavmeshQuery
         }
 
         ReadOnlySpan<float> fallbackMultipliers = [2f, 4f, 8f, 16f];
+
         foreach (var multiplier in fallbackMultipliers)
         {
             var expandedHalfExtent = new Vector3(halfExtentXZ * multiplier, halfExtentY * multiplier, halfExtentXZ * multiplier);

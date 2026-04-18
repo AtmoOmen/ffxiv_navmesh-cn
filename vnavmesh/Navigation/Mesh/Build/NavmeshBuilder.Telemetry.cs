@@ -32,15 +32,13 @@ public partial class NavmeshBuilder
         long                           preparedTerrainBytes
     )
     {
-        List<BuildPhaseSummary> phases    = [];
-        var                     tileCount = builtTiles.Count;
+        List<BuildPhaseSummary> phases               = [];
+        var                     tileCount            = builtTiles.Count;
         long                    aggregatedPhaseTicks = 0;
 
         for (var phaseIndex = 0; phaseIndex < (int)BuildPhase.Count; ++phaseIndex)
-        {
             foreach (var tile in builtTiles)
                 aggregatedPhaseTicks += tile.PhaseTicks[phaseIndex];
-        }
 
         for (var phaseIndex = 0; phaseIndex < (int)BuildPhase.Count; ++phaseIndex)
         {
@@ -69,12 +67,12 @@ public partial class NavmeshBuilder
             (
                 new()
                 {
-                    Name         = PhaseNames[phaseIndex],
-                    TotalTicks   = totalTicks,
-                    AverageTicks = totalTicks / Math.Max(tileCount, 1),
-                    MaxTicks     = maxTicks,
-                    SlowestTileX = slowestTileX,
-                    SlowestTileZ = slowestTileZ,
+                    Name              = PhaseNames[phaseIndex],
+                    TotalTicks        = totalTicks,
+                    AverageTicks      = totalTicks / Math.Max(tileCount, 1),
+                    MaxTicks          = maxTicks,
+                    SlowestTileX      = slowestTileX,
+                    SlowestTileZ      = slowestTileZ,
                     ShareOfPhaseTicks = aggregatedPhaseTicks > 0 ? totalTicks / (double)aggregatedPhaseTicks : 0
                 }
             );

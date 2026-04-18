@@ -17,7 +17,8 @@ public static unsafe class LayoutUtil
     private static readonly GetEnabledRequirementIndexDelegate GetEnabledRequirementIndex = null!;
 
     static LayoutUtil() =>
-        GetEnabledRequirementIndex = Marshal.GetDelegateForFunctionPointer<GetEnabledRequirementIndexDelegate>(Service.SigScanner.ScanText("E8 ?? ?? ?? ?? 0F B6 53 6C"));
+        GetEnabledRequirementIndex = Marshal.GetDelegateForFunctionPointer<GetEnabledRequirementIndexDelegate>
+            (Service.SigScanner.ScanText("E8 ?? ?? ?? ?? 0F B6 53 6C"));
 
     public static uint[] GetZoneSharedGroupsEnabled(uint territoryType)
     {

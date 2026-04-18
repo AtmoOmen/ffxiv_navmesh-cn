@@ -10,8 +10,9 @@ public partial record class Navmesh
 {
     private static EncodedSegment EncodeSegment(CacheSegmentKind kind, CacheCodec codec, Action<BinaryWriter> serialize)
     {
-        var timer = StopWatchTimer.Create();
+        var       timer         = StopWatchTimer.Create();
         using var payloadStream = new MemoryStream();
+
         using (var segmentWriter = new BinaryWriter(payloadStream))
         {
             serialize(segmentWriter);
@@ -36,28 +37,35 @@ public partial record class Navmesh
 
     private static (T Value, CacheSegmentTelemetry Telemetry) DecodeSegment<T>(CacheSegmentDescriptor descriptor, byte[] payload, Func<BinaryReader, T> deserialize)
     {
-        var timer          = StopWatchTimer.Create();
-        var decodedPayload = DecodePayload(payload, descriptor.Codec, descriptor.UncompressedBytes);
-        using var segmentStream = new MemoryStream(decodedPayload, 0, decodedPayload.Length, false, true);
-        using var segmentReader = new BinaryReader(segmentStream);
-        var value = deserialize(segmentReader);
+        var       timer          = StopWatchTimer.Create();
+        var       decodedPayload = DecodePayload(payload, descriptor.Codec, descriptor.UncompressedBytes);
+        using var segmentStream  = new MemoryStream(decodedPayload, 0, decodedPayload.Length, false, true);
+        using var segmentReader  = new BinaryReader(segmentStream);
+        var       value          = deserialize(segmentReader);
         return (value, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
     }
 
     private static (T Value, CacheSegmentTelemetry Telemetry) DecodeSegment<T>(CacheSegmentDescriptor descriptor, Stream source, Func<BinaryReader, T> deserialize)
     {
-        var timer = StopWatchTimer.Create();
+        var       timer         = StopWatchTimer.Create();
         using var segmentStream = OpenDecodedSegmentStream(source, descriptor);
         using var segmentReader = new BinaryReader(segmentStream);
-        var value = deserialize(segmentReader);
+        var       value         = deserialize(segmentReader);
         return (value, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
     }
 
     private static Stream OpenDecodedSegmentStream(Stream source, CacheSegmentDescriptor descriptor) => descriptor.Codec switch
     {
-        CacheCodec.None   => new SegmentReadStream(source, descriptor.Offset, descriptor.CompressedBytes),
-        CacheCodec.FastLz => new MemoryStream(DecodePayload(ReadSegmentPayload(source, descriptor), descriptor.Codec, descriptor.UncompressedBytes), 0, checked((int)descriptor.UncompressedBytes), false, true),
-        _                 => throw new Exception($"不支持的缓存编码: {descriptor.Codec}")
+        CacheCodec.None => new SegmentReadStream(source, descriptor.Offset, descriptor.CompressedBytes),
+        CacheCodec.FastLz => new MemoryStream
+        (
+            DecodePayload(ReadSegmentPayload(source, descriptor), descriptor.Codec, descriptor.UncompressedBytes),
+            0,
+            checked((int)descriptor.UncompressedBytes),
+            false,
+            true
+        ),
+        _ => throw new Exception($"不支持的缓存编码: {descriptor.Codec}")
     };
 
     private static byte[] EncodePayload(byte[] rawPayload, CacheCodec codec) => codec switch

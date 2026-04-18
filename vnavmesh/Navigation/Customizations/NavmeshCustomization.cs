@@ -13,8 +13,7 @@ using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Customizations;
 
-using static DotRecast.Detour.DtDetour;
-using static DotRecast.Recast.RcRecast;
+using static DtDetour;
 
 public sealed class NavmeshBuildProfile
 {
@@ -104,12 +103,12 @@ public class NavmeshCustomization
         // start point -> end point link
         var idx  = AllocLink(startTile);
         var link = startTile.links[idx];
-        link.refs                            = refend;
-        link.edge                            = 0;
-        link.side                            = 0;
-        link.bmin                            = link.bmax = 0;
-        link.next                            = startPoly.firstLink;
-        startPoly.firstLink                  = idx;
+        link.refs           = refend;
+        link.edge           = 0;
+        link.side           = 0;
+        link.bmin           = link.bmax = 0;
+        link.next           = startPoly.firstLink;
+        startPoly.firstLink = idx;
     }
 
     private static long InsertPointPoly(DtNavMesh mesh, Vector3 pos, bool start)
@@ -148,21 +147,21 @@ public class NavmeshCustomization
         // link point to the polygon it lies inside
         var idx  = AllocLink(startTile);
         var link = startTile.links[idx];
-        link.refs                    = startRef;
-        link.edge                    = 0;
-        link.side                    = 0xff;
-        link.bmin                    = link.bmax = 0;
-        p.firstLink                  = idx;
+        link.refs   = startRef;
+        link.edge   = 0;
+        link.side   = 0xff;
+        link.bmin   = link.bmax = 0;
+        p.firstLink = idx;
 
         // link owning polygon to point
-        idx                                  = AllocLink(startTile);
-        link                                 = startTile.links[idx];
-        link.refs                            = pointRef;
-        link.edge                            = 0xff;
-        link.side                            = 0xff;
-        link.bmin                            = link.bmax = 0;
-        link.next                            = startPoly.firstLink;
-        startPoly.firstLink                  = idx;
+        idx                 = AllocLink(startTile);
+        link                = startTile.links[idx];
+        link.refs           = pointRef;
+        link.edge           = 0xff;
+        link.side           = 0xff;
+        link.bmin           = link.bmax = 0;
+        link.next           = startPoly.firstLink;
+        startPoly.firstLink = idx;
 
         return pointRef;
     }
@@ -279,25 +278,26 @@ public static class CreateParamsExtensions
     public static void AddOffMeshConnection
     (
         this DtNavMeshCreateParams config,
-        Vector3                   ptA,
-        Vector3                   ptB,
-        float                     radius = 0.5f,
-        bool                      bidirectional = false,
-        int                       userID = 0
+        Vector3                    ptA,
+        Vector3                    ptB,
+        float                      radius        = 0.5f,
+        bool                       bidirectional = false,
+        int                        userID        = 0
     ) =>
-        config.AddOffMeshConnection(ptA, ptB, radius, bidirectional, userID, NavmeshArea.ManualOffMesh, NavmeshPolyFlags.ManualOffMesh, NavmeshOffMeshKind.ManualOffMesh);
+        config.AddOffMeshConnection
+            (ptA, ptB, radius, bidirectional, userID, NavmeshArea.ManualOffMesh, NavmeshPolyFlags.ManualOffMesh, NavmeshOffMeshKind.ManualOffMesh);
 
     public static void AddOffMeshConnection
     (
         this DtNavMeshCreateParams config,
-        Vector3                   ptA,
-        Vector3                   ptB,
-        float                     radius,
-        bool                      bidirectional,
-        int                       userID,
-        NavmeshArea               area,
-        NavmeshPolyFlags          flags,
-        NavmeshOffMeshKind        kind
+        Vector3                    ptA,
+        Vector3                    ptB,
+        float                      radius,
+        bool                       bidirectional,
+        int                        userID,
+        NavmeshArea                area,
+        NavmeshPolyFlags           flags,
+        NavmeshOffMeshKind         kind
     )
     {
         bool insideTile(Vector3 p)

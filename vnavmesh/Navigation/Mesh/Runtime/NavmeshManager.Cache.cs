@@ -14,7 +14,7 @@ public sealed partial class NavmeshManager
         }
 
         var writeTask = Task.Run(() => WriteCache(cacheKey, cache, navmesh));
-        _cacheWriteTasks[cacheKey] = writeTask;
+        _cacheWriteTasks[cacheKey]         = writeTask;
         _cacheWriteTasksByNavmesh[navmesh] = writeTask;
         _ = writeTask.ContinueWith
         (

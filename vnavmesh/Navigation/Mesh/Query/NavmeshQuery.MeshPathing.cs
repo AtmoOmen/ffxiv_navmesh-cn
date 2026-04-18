@@ -1,6 +1,4 @@
 using System.Numerics;
-using System.Threading;
-using System.Threading.Tasks;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Bootstrap;
@@ -45,6 +43,7 @@ public partial class NavmeshQuery
             cancel
         );
         MeshPathCandidate? classicCandidate = null;
+
         if (useRaycast || ShouldRunClassicFallback(anyAngleCandidate, to, range))
         {
             Interlocked.Increment(ref _classicFallbackCount);
@@ -121,6 +120,7 @@ public partial class NavmeshQuery
         var                requestedFailed     = false;
 
         var evaluations = EvaluateStartPathCandidates(candidateBatch, to, endRef, requestedEndPos, filter, opt, queryMode, range, cancel);
+
         foreach (var evaluation in evaluations)
         {
             if (!string.IsNullOrEmpty(evaluation.Log))
@@ -222,6 +222,7 @@ public partial class NavmeshQuery
         }
 
         var pathCandidate = BuildMeshPathCandidate(query, candidate, corridor, status, requestedEndPos, requestedTarget, endRef, queryMode, range);
+
         if (pathCandidate.ResultStatus == PathfindStatus.Failed)
         {
             return new
@@ -321,7 +322,7 @@ public partial class NavmeshQuery
     private int CountStartSupportProbeHits(Vector3 from, long poly)
     {
         var matchDistanceSq = StartSupportMatchDistance * StartSupportMatchDistance;
-        var step            = MathF.Tau / StartSupportProbeCount;
+        var step            = MathF.Tau                 / StartSupportProbeCount;
         var hits            = 0;
 
         for (var i = 0; i < StartSupportProbeCount; i++)
@@ -354,21 +355,30 @@ public partial class NavmeshQuery
     );
 
     private MeshPathCandidate BuildMeshPathCandidate
-        (MeshPolyCandidate startCandidate, List<long> corridor, DtStatus status, RcVec3f requestedEndPos, Vector3 requestedTarget, long endRef, GroundQueryMode queryMode, float range)
+    (
+        MeshPolyCandidate startCandidate,
+        List<long>        corridor,
+        DtStatus          status,
+        RcVec3f           requestedEndPos,
+        Vector3           requestedTarget,
+        long              endRef,
+        GroundQueryMode   queryMode,
+        float             range
+    )
         => BuildMeshPathCandidate(MeshQuery, startCandidate, corridor, status, requestedEndPos, requestedTarget, endRef, queryMode, range);
 
     private static MeshPathCandidate BuildMeshPathCandidate
-        (
-            DtNavMeshQuery  query,
-            MeshPolyCandidate startCandidate,
-            List<long>      corridor,
-            DtStatus        status,
-            RcVec3f         requestedEndPos,
-            Vector3         requestedTarget,
-            long            endRef,
-            GroundQueryMode queryMode,
-            float           range
-        )
+    (
+        DtNavMeshQuery    query,
+        MeshPolyCandidate startCandidate,
+        List<long>        corridor,
+        DtStatus          status,
+        RcVec3f           requestedEndPos,
+        Vector3           requestedTarget,
+        long              endRef,
+        GroundQueryMode   queryMode,
+        float             range
+    )
     {
         var     lastPoly     = corridor[^1];
         var     resultStatus = PathfindStatus.Complete;
@@ -387,7 +397,19 @@ public partial class NavmeshQuery
 
         var pathLength = EstimatePathLength(query, startCandidate.ProjectedPoint.SystemToRecast(), finalDestination.SystemToRecast(), corridor);
         CountPathSemantics(query.GetAttachedNavMesh(), corridor, out var weightedLinkPenalty, out var offMeshTransitionCount, out var areaCrossingCount);
-        return new(startCandidate, status, resultStatus, finalDestination, corridor, queryMode, pathLength, weightedLinkPenalty, offMeshTransitionCount, areaCrossingCount);
+        return new
+        (
+            startCandidate,
+            status,
+            resultStatus,
+            finalDestination,
+            corridor,
+            queryMode,
+            pathLength,
+            weightedLinkPenalty,
+            offMeshTransitionCount,
+            areaCrossingCount
+        );
     }
 
     private static float EstimatePathLength(DtNavMeshQuery query, RcVec3f startPos, RcVec3f endPos, IReadOnlyList<long> corridor)
@@ -396,23 +418,26 @@ public partial class NavmeshQuery
             return float.MaxValue;
 
         var straightPath = new DtStraightPath[256];
-        var status = query.FindStraightPath(startPos, endPos, [.. corridor], corridor.Count, straightPath, out var count, straightPath.Length, 0);
+        var status       = query.FindStraightPath(startPos, endPos, [.. corridor], corridor.Count, straightPath, out var count, straightPath.Length, 0);
+
         if (status.Succeeded() && count > 0)
         {
-            var total = 0f;
+            var total    = 0f;
             var previous = startPos;
+
             for (var i = 0; i < count; i++)
             {
-                total += RcVec3f.Distance(previous, straightPath[i].pos);
-                previous = straightPath[i].pos;
+                total    += RcVec3f.Distance(previous, straightPath[i].pos);
+                previous =  straightPath[i].pos;
             }
 
             return total;
         }
 
-        var navmesh = query.GetAttachedNavMesh();
-        var fallback = RcVec3f.Distance(startPos, endPos);
+        var      navmesh        = query.GetAttachedNavMesh();
+        var      fallback       = RcVec3f.Distance(startPos, endPos);
         RcVec3f? previousCenter = null;
+
         foreach (var polyRef in corridor)
         {
             var center = navmesh.GetPolyCenter(polyRef);
@@ -426,16 +451,16 @@ public partial class NavmeshQuery
 
     private static void CountPathSemantics
     (
-        DtNavMesh   navmesh,
+        DtNavMesh           navmesh,
         IReadOnlyList<long> corridor,
-        out int     weightedLinkPenalty,
-        out int     offMeshTransitionCount,
-        out int     areaCrossingCount
+        out int             weightedLinkPenalty,
+        out int             offMeshTransitionCount,
+        out int             areaCrossingCount
     )
     {
-        weightedLinkPenalty = 0;
+        weightedLinkPenalty    = 0;
         offMeshTransitionCount = 0;
-        areaCrossingCount = 0;
+        areaCrossingCount      = 0;
         NavmeshArea? previousArea = null;
 
         foreach (var polyRef in corridor)
@@ -482,7 +507,7 @@ public partial class NavmeshQuery
     )
     {
         var buffer = new long[MaxPathPolys];
-        corridor   = [];
+        corridor = [];
 
         if (opt.options != 0)
         {
@@ -499,7 +524,7 @@ public partial class NavmeshQuery
             if (status.Failed())
                 return status;
 
-            status = query.FinalizeSlicedFindPath(buffer, out var count, buffer.Length);
+            status   = query.FinalizeSlicedFindPath(buffer, out var count, buffer.Length);
             corridor = [.. buffer.AsSpan(0, count).ToArray()];
             return status;
         }
@@ -540,17 +565,17 @@ public partial class NavmeshQuery
 
     private List<MeshEndCandidate> CollectEndPolyCandidates(Vector3 requestedTarget, long requestedEndRef)
     {
-        Dictionary<long, int> candidateIndices = [];
-        List<MeshEndCandidate> candidates = [];
+        Dictionary<long, int>  candidateIndices = [];
+        List<MeshEndCandidate> candidates       = [];
 
-        foreach (var poly in FindIntersectingMeshPolys(requestedTarget, new(EndPolyCandidateHalfExtentXZ, EndPolyCandidateHalfExtentY, EndPolyCandidateHalfExtentXZ)))
+        foreach (var poly in FindIntersectingMeshPolys
+                     (requestedTarget, new(EndPolyCandidateHalfExtentXZ, EndPolyCandidateHalfExtentY, EndPolyCandidateHalfExtentXZ)))
             TryAddCandidate(poly, false);
 
         TryAddCandidate(requestedEndRef, true);
 
         candidates.Sort
-        (
-            static (a, b) =>
+        (static (a, b) =>
             {
                 if (a.IsPointOverPoly != b.IsPointOverPoly)
                     return b.IsPointOverPoly.CompareTo(a.IsPointOverPoly);
@@ -635,7 +660,7 @@ public partial class NavmeshQuery
         if (rankCandidate != rankCurrent)
             return rankCandidate < rankCurrent;
 
-        var candidateRequestedOver = candidate.IsRequestedStart && candidate.IsPointOverPoly;
+        var candidateRequestedOver = candidate.IsRequestedStart   && candidate.IsPointOverPoly;
         var currentRequestedOver   = currentBest.IsRequestedStart && currentBest.IsPointOverPoly;
         if (candidateRequestedOver != currentRequestedOver)
             return candidateRequestedOver;
@@ -685,7 +710,8 @@ public partial class NavmeshQuery
         return candidate.WeightedLinkPenalty >= 4;
     }
 
-    private static MeshPathCandidate? SelectBestGroundQueryCandidate(MeshPathCandidate? anyAngleCandidate, MeshPathCandidate? classicCandidate, Vector3 requestedTarget)
+    private static MeshPathCandidate? SelectBestGroundQueryCandidate
+        (MeshPathCandidate? anyAngleCandidate, MeshPathCandidate? classicCandidate, Vector3 requestedTarget)
     {
         if (anyAngleCandidate == null)
             return classicCandidate;

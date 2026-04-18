@@ -9,7 +9,7 @@ using vnavmesh.Navigation.Volume;
 
 namespace vnavmesh.Navigation.Mesh.Build;
 
-using static DotRecast.Recast.RcRecast;
+using static RcRecast;
 
 internal sealed class PreparedTerrainGeometry
 {
@@ -38,10 +38,10 @@ internal sealed class PreparedTerrainGeometry
         private const byte FlagProjected = 1 << 2;
         private const byte FlagValid     = 1 << 3;
 
-        public bool RealSolid       => (Flags & FlagRealSolid) != 0;
-        public bool NormalUp        => (Flags & FlagNormalUp)  != 0;
-        public bool Projected       => (Flags & FlagProjected) != 0;
-        public bool Valid           => (Flags & FlagValid)     != 0;
+        public bool RealSolid => (Flags & FlagRealSolid) != 0;
+        public bool NormalUp  => (Flags & FlagNormalUp)  != 0;
+        public bool Projected => (Flags & FlagProjected) != 0;
+        public bool Valid     => (Flags & FlagValid)     != 0;
 
         public static byte BuildFlags(bool realSolid, bool normalUp, bool projected, bool valid)
         {
@@ -58,19 +58,20 @@ internal sealed class PreparedTerrainGeometry
         }
     }
 
-    public required float[] WorldVertexTriples { get; init; }
-    public PrimitiveInfo[]? PrimitiveInfos { get; set; }
-    public int TileMinX { get; set; }
-    public int TileMinZ { get; set; }
-    public int TileCountX { get; set; }
-    public int TileCountZ { get; set; }
-    public int[]? TilePrimitiveOffsets { get; set; }
-    public int[]? TilePrimitiveIndices { get; set; }
-    public bool HasTilePrimitiveBuckets => TilePrimitiveOffsets != null && TilePrimitiveIndices != null;
+    public required float[]          WorldVertexTriples      { get; init; }
+    public          PrimitiveInfo[]? PrimitiveInfos          { get; set; }
+    public          int              TileMinX                { get; set; }
+    public          int              TileMinZ                { get; set; }
+    public          int              TileCountX              { get; set; }
+    public          int              TileCountZ              { get; set; }
+    public          int[]?           TilePrimitiveOffsets    { get; set; }
+    public          int[]?           TilePrimitiveIndices    { get; set; }
+    public          bool             HasTilePrimitiveBuckets => TilePrimitiveOffsets != null && TilePrimitiveIndices != null;
+
     public long MemoryBytes
-        => (long)WorldVertexTriples.Length * sizeof(float) +
-           (long)(PrimitiveInfos?.Length ?? 0) * Unsafe.SizeOf<PrimitiveInfo>() +
-           (long)(TilePrimitiveOffsets?.Length ?? 0) * sizeof(int) +
+        => (long)WorldVertexTriples.Length           * sizeof(float)                  +
+           (long)(PrimitiveInfos?.Length       ?? 0) * Unsafe.SizeOf<PrimitiveInfo>() +
+           (long)(TilePrimitiveOffsets?.Length ?? 0) * sizeof(int)                    +
            (long)(TilePrimitiveIndices?.Length ?? 0) * sizeof(int);
 
     public ReadOnlySpan<int> GetTilePrimitiveIndices(int tileX, int tileZ)
@@ -91,20 +92,25 @@ internal sealed class PreparedTerrainGeometry
 
 internal sealed class RasterJob
 {
-    public required SceneExtractor.MeshType      MeshType           { get; init; }
-    public required SceneExtractor.MeshPart      Part               { get; init; }
-    public required SceneExtractor.MeshInstance  Instance           { get; init; }
-    public required AABB                         WorldBounds        { get; init; }
-    public required int                          PrimitiveCount     { get; init; }
-    public required int                          VertexCount        { get; init; }
-    public required bool                         TerrainLike        { get; init; }
-    public          PreparedTerrainGeometry?     PreparedTerrain    { get; init; }
+    public required SceneExtractor.MeshType     MeshType        { get; init; }
+    public required SceneExtractor.MeshPart     Part            { get; init; }
+    public required SceneExtractor.MeshInstance Instance        { get; init; }
+    public required AABB                        WorldBounds     { get; init; }
+    public required int                         PrimitiveCount  { get; init; }
+    public required int                         VertexCount     { get; init; }
+    public required bool                        TerrainLike     { get; init; }
+    public          PreparedTerrainGeometry?    PreparedTerrain { get; init; }
 }
 
 // utility to rasterize various meshes into a heightfield
 public class NavmeshRasterizer
 {
-    public readonly record struct PartInstance(SceneExtractor.MeshType MeshType, SceneExtractor.MeshPart Part, SceneExtractor.MeshInstance Instance);
+    public readonly record struct PartInstance
+    (
+        SceneExtractor.MeshType     MeshType,
+        SceneExtractor.MeshPart     Part,
+        SceneExtractor.MeshInstance Instance
+    );
 
     public sealed class ScratchBuffers
     {
@@ -118,10 +124,10 @@ public class NavmeshRasterizer
                 public int AreaId;
             }
 
-            private int[]   _cellHeads = [];
-            private Entry[] _entries   = GC.AllocateUninitializedArray<Entry>(1024);
-            private int     _nextFree  = 1;
-            private int     _freeList;
+            private          int[]     _cellHeads = [];
+            private          Entry[]   _entries   = GC.AllocateUninitializedArray<Entry>(1024);
+            private          int       _nextFree  = 1;
+            private          int       _freeList;
             private readonly List<int> _touchedCells = new();
 
             internal void Reset(int cellCount)
@@ -178,12 +184,12 @@ public class NavmeshRasterizer
                     curr = next;
                 }
 
-                var entryIndex = Alloc();
-                ref var entry  = ref _entries[entryIndex];
-                entry.Y0       = y0;
-                entry.Y1       = y1;
-                entry.AreaId   = areaId;
-                entry.Next     = curr;
+                var     entryIndex = Alloc();
+                ref var entry      = ref _entries[entryIndex];
+                entry.Y0     = y0;
+                entry.Y1     = y1;
+                entry.AreaId = areaId;
+                entry.Next   = curr;
                 if (prev == 0)
                     head = entryIndex;
                 else
@@ -222,12 +228,12 @@ public class NavmeshRasterizer
             }
         }
 
-        private Vector3[]        _worldVertices = [];
-        private float[]          _worldVertexTriples = [];
-        private OutFlags[]       _outFlags      = [];
-        private uint[]           _solidSort     = [];
-        private int[]            _solidVoxel    = [];
-        private IntersectionSet? _intersectionSet;
+        private Vector3[]          _worldVertices      = [];
+        private float[]            _worldVertexTriples = [];
+        private OutFlags[]         _outFlags           = [];
+        private uint[]             _solidSort          = [];
+        private int[]              _solidVoxel         = [];
+        private IntersectionSet?   _intersectionSet;
         private TerrainSpanBuffer? _terrainSpanBuffer;
 
         internal Span<Vector3> WorldVertices(int count)
@@ -431,8 +437,8 @@ public class NavmeshRasterizer
         Voxelizer?      voxelizer,
         RcContext       telemetry,
         ScratchBuffers? scratch = null,
-        int             tileX = -1,
-        int             tileZ = -1
+        int             tileX   = -1,
+        int             tileZ   = -1
     )
     {
         _heightfield             = heightfield;
@@ -452,7 +458,7 @@ public class NavmeshRasterizer
 
         if (voxelizer != null)
         {
-            _voxSourceX = heightfield.width  - 2 * heightfield.borderSize;
+            _voxSourceX = heightfield.width - 2 * heightfield.borderSize;
             _voxSourceY = _maxY;
             _voxSourceZ = heightfield.height - 2 * heightfield.borderSize;
 
@@ -617,10 +623,8 @@ public class NavmeshRasterizer
         var parts = mesh.PartSpan;
 
         for (var partIndex = 0; partIndex < parts.Length; ++partIndex)
-        {
             if (RasterizePart(mesh.MeshType, parts[partIndex], instance, out var partMinY))
                 minimalY = Math.Min(minimalY, partMinY);
-        }
 
         return true;
     }
@@ -628,6 +632,7 @@ public class NavmeshRasterizer
     private bool RasterizePreparedTerrainPart(RasterJob job, PreparedTerrainGeometry prepared, out int minimalY)
     {
         minimalY = _maxY;
+
         if (prepared.HasTilePrimitiveBuckets && prepared.PrimitiveInfos != null)
         {
             var primitiveIndices = prepared.GetTilePrimitiveIndices(_tileX, _tileZ);
@@ -638,9 +643,9 @@ public class NavmeshRasterizer
             return true;
         }
 
-        var                  vertexCount   = job.VertexCount;
-        Span<OutFlags>       stackOutFlags = stackalloc OutFlags[256];
-        var                  outFlags      = vertexCount <= 256 ? stackOutFlags[..vertexCount] : _scratch.OutFlags(vertexCount);
+        var            vertexCount   = job.VertexCount;
+        Span<OutFlags> stackOutFlags = stackalloc OutFlags[256];
+        var            outFlags      = vertexCount <= 256 ? stackOutFlags[..vertexCount] : _scratch.OutFlags(vertexCount);
         ComputeOutFlags(prepared.WorldVertexTriples, outFlags);
         RasterizeTerrainLikePart(job.Part.PrimitiveSpan, default, job.Instance, prepared.WorldVertexTriples, outFlags, ref minimalY);
         return true;
@@ -685,21 +690,21 @@ public class NavmeshRasterizer
         ref int                                minimalY
     )
     {
-        Span<float> clipBuffer    = stackalloc float[7 * 3 * 4];
-        var         cellZSize     = _heightfield.cs;
-        var         cellXSize     = _heightfield.cs;
-        var         inverseCellY  = _invCellY;
-        var         heightfieldY  = _heightfield.bmin.Y;
-        var         heightfieldX  = _heightfield.bmin.X;
-        var         heightfieldZ  = _heightfield.bmin.Z;
-        ref var     primitiveRef  = ref MemoryMarshal.GetReference(primitives);
-        var         useBuckets    = !primitiveIndices.IsEmpty;
+        Span<float> clipBuffer     = stackalloc float[7 * 3 * 4];
+        var         cellZSize      = _heightfield.cs;
+        var         cellXSize      = _heightfield.cs;
+        var         inverseCellY   = _invCellY;
+        var         heightfieldY   = _heightfield.bmin.Y;
+        var         heightfieldX   = _heightfield.bmin.X;
+        var         heightfieldZ   = _heightfield.bmin.Z;
+        ref var     primitiveRef   = ref MemoryMarshal.GetReference(primitives);
+        var         useBuckets     = !primitiveIndices.IsEmpty;
         var         primitiveCount = useBuckets ? primitiveIndices.Length : primitives.Length;
 
         for (var primitiveIndex = 0; primitiveIndex < primitiveCount; ++primitiveIndex)
         {
-            var primitiveSourceIndex = useBuckets ? primitiveIndices[primitiveIndex] : primitiveIndex;
-            ref readonly var p       = ref Unsafe.Add(ref primitiveRef, primitiveSourceIndex);
+            var              primitiveSourceIndex = useBuckets ? primitiveIndices[primitiveIndex] : primitiveIndex;
+            ref readonly var p                    = ref Unsafe.Add(ref primitiveRef, primitiveSourceIndex);
             if (!useBuckets && (outFlags[p.V1] & outFlags[p.V2] & outFlags[p.V3]) != OutFlags.None)
                 continue;
 
@@ -715,15 +720,15 @@ public class NavmeshRasterizer
             var v3x     = worldVertices[offset3];
             var v3y     = worldVertices[offset3 + 1];
             var v3z     = worldVertices[offset3 + 2];
-            var v12x    = v2x - v1x;
-            var v12y    = v2y - v1y;
-            var v12z    = v2z - v1z;
-            var v13x    = v3x - v1x;
-            var v13y    = v3y - v1y;
-            var v13z    = v3z - v1z;
-            var crossX  = v12y * v13z - v12z * v13y;
-            var crossY  = v12z * v13x - v12x * v13z;
-            var crossZ  = v12x * v13y - v12y * v13x;
+            var v12x    = v2x             - v1x;
+            var v12y    = v2y             - v1y;
+            var v12z    = v2z             - v1z;
+            var v13x    = v3x             - v1x;
+            var v13y    = v3y             - v1y;
+            var v13z    = v3z             - v1z;
+            var crossX  = v12y   * v13z   - v12z   * v13y;
+            var crossY  = v12z   * v13x   - v12x   * v13z;
+            var crossZ  = v12x   * v13y   - v12y   * v13x;
             var lenSq   = crossX * crossX + crossY * crossY + crossZ * crossZ;
             if (lenSq == 0)
                 continue;
@@ -737,20 +742,20 @@ public class NavmeshRasterizer
                              _voxelizer != null                                      &&
                              flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable) &&
                              !flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
-            var areaId          = unwalkable ? 0 : RC_WALKABLE_AREA;
-            var inverseCrossY   = _iset != null && crossY != 0 ? -1.0f / crossY : 0;
-            var normalUp        = crossY > 0;
-            var minZ            = Math.Min(v1z, Math.Min(v2z, v3z));
-            var maxZ            = Math.Max(v1z, Math.Max(v2z, v3z));
-            var z0              = Math.Clamp((int)((minZ - heightfieldZ) * _invCellXZ), -1, _heightfield.height - 1);
-            var z1              = Math.Clamp((int)((maxZ - heightfieldZ) * _invCellXZ), 0,  _heightfield.height - 1);
-            var sourceOffset    = 0;
-            var rowOffset       = 7 * 3;
-            var tmpOffset       = rowOffset + 7 * 3;
-            var remainOffset    = tmpOffset + 7 * 3;
-            var numInput        = 3;
+            var areaId        = unwalkable ? 0 : RC_WALKABLE_AREA;
+            var inverseCrossY = _iset != null && crossY != 0 ? -1.0f / crossY : 0;
+            var normalUp      = crossY > 0;
+            var minZ          = Math.Min(v1z, Math.Min(v2z, v3z));
+            var maxZ          = Math.Max(v1z, Math.Max(v2z, v3z));
+            var z0            = Math.Clamp((int)((minZ - heightfieldZ) * _invCellXZ), -1, _heightfield.height - 1);
+            var z1            = Math.Clamp((int)((maxZ - heightfieldZ) * _invCellXZ), 0,  _heightfield.height - 1);
+            var sourceOffset  = 0;
+            var rowOffset     = 7 * 3;
+            var tmpOffset     = rowOffset + 7 * 3;
+            var remainOffset  = tmpOffset + 7 * 3;
+            var numInput      = 3;
 
-            CopyVertexTriplet(clipBuffer, sourceOffset, worldVertices, offset1);
+            CopyVertexTriplet(clipBuffer, sourceOffset,     worldVertices, offset1);
             CopyVertexTriplet(clipBuffer, sourceOffset + 3, worldVertices, offset2);
             CopyVertexTriplet(clipBuffer, sourceOffset + 6, worldVertices, offset3);
 
@@ -776,19 +781,20 @@ public class NavmeshRasterizer
 
                 for (var x = x0; x <= x1; ++x)
                 {
-                    DividePoly(clipBuffer, rowOffset, numRemaining, tmpOffset, out var numCell, remainOffset, out numRemaining, heightfieldX + (x + 1) * cellXSize, 0);
+                    DividePoly
+                        (clipBuffer, rowOffset, numRemaining, tmpOffset, out var numCell, remainOffset, out numRemaining, heightfieldX + (x + 1) * cellXSize, 0);
                     (rowOffset, remainOffset) = (remainOffset, rowOffset);
 
                     if (numCell < 3 || x < 0)
                         continue;
 
                     FindAxisBounds(clipBuffer, tmpOffset, numCell, 1, out var minY, out var maxY);
-                    var y0 = (int)MathF.Floor((minY - heightfieldY) * inverseCellY);
+                    var y0 = (int)MathF.Floor((minY   - heightfieldY) * inverseCellY);
                     var y1 = (int)MathF.Ceiling((maxY - heightfieldY) * inverseCellY);
                     if (y1 < 0 || y0 >= _maxY)
                         continue;
 
-                    y0 = Math.Clamp(y0, 0, _maxY - 1);
+                    y0 = Math.Clamp(y0, 0,  _maxY - 1);
                     y1 = Math.Clamp(y1, y0, _maxY - 1);
                     AddSpan(x, z, y0, y1, areaId, realSolid);
 
@@ -796,8 +802,8 @@ public class NavmeshRasterizer
                     {
                         minimalY = Math.Min(minimalY, y0);
                         var cellXMid = heightfieldX + (x + 0.5f) * cellXSize;
-                        var apx      = cellXMid  - v1x;
-                        var apz      = cellZMid  - v1z;
+                        var apx      = cellXMid     - v1x;
+                        var apz      = cellZMid     - v1z;
                         var c        = (apz * v12x - apx * v12z) * inverseCrossY;
                         var b        = (apx * v13z - apz * v13x) * inverseCrossY;
 
@@ -818,11 +824,11 @@ public class NavmeshRasterizer
 
     private void RasterizePreparedTerrainLikePart
     (
-        ReadOnlySpan<SceneExtractor.Primitive>       primitives,
-        ReadOnlySpan<int>                            primitiveIndices,
-        ReadOnlySpan<float>                          worldVertices,
+        ReadOnlySpan<SceneExtractor.Primitive>              primitives,
+        ReadOnlySpan<int>                                   primitiveIndices,
+        ReadOnlySpan<float>                                 worldVertices,
         ReadOnlySpan<PreparedTerrainGeometry.PrimitiveInfo> primitiveInfos,
-        ref int                                      minimalY
+        ref int                                             minimalY
     )
     {
         ref var primitiveRef = ref MemoryMarshal.GetReference(primitives);
@@ -830,8 +836,8 @@ public class NavmeshRasterizer
 
         for (var bucketIndex = 0; bucketIndex < primitiveIndices.Length; ++bucketIndex)
         {
-            var primitiveIndex = primitiveIndices[bucketIndex];
-            ref readonly var info = ref Unsafe.Add(ref infoRef, primitiveIndex);
+            var              primitiveIndex = primitiveIndices[bucketIndex];
+            ref readonly var info           = ref Unsafe.Add(ref infoRef, primitiveIndex);
             if (!info.Valid)
                 continue;
 
@@ -860,9 +866,9 @@ public class NavmeshRasterizer
         var         remainOffset = tmpOffset + 7 * 2;
         var         numInput     = 3;
 
-        CopyVertexPair(clipBuffer, sourceOffset,     info.V1X,                  info.V1Z);
-        CopyVertexPair(clipBuffer, sourceOffset + 2, info.V1X + info.V12X,      info.V1Z + info.V12Z);
-        CopyVertexPair(clipBuffer, sourceOffset + 4, info.V1X + info.V13X,      info.V1Z + info.V13Z);
+        CopyVertexPair(clipBuffer, sourceOffset,     info.V1X,             info.V1Z);
+        CopyVertexPair(clipBuffer, sourceOffset + 2, info.V1X + info.V12X, info.V1Z + info.V12Z);
+        CopyVertexPair(clipBuffer, sourceOffset + 4, info.V1X + info.V13X, info.V1Z + info.V13Z);
 
         for (var z = z0; z <= z1; ++z)
         {
@@ -895,6 +901,7 @@ public class NavmeshRasterizer
                 var vertexOffset = tmpOffset;
                 var minY         = info.PlaneGradX * clipBuffer[vertexOffset] + info.PlaneGradZ * clipBuffer[vertexOffset + 1] + info.PlaneBias;
                 var maxY         = minY;
+
                 for (var i = 1; i < numCell; ++i)
                 {
                     vertexOffset = tmpOffset + i * 2;
@@ -903,12 +910,12 @@ public class NavmeshRasterizer
                     maxY = Math.Max(maxY, y);
                 }
 
-                var y0 = (int)MathF.Floor((minY - heightfieldY) * inverseCellY);
+                var y0 = (int)MathF.Floor((minY   - heightfieldY) * inverseCellY);
                 var y1 = (int)MathF.Ceiling((maxY - heightfieldY) * inverseCellY);
                 if (y1 < 0 || y0 >= _maxY)
                     continue;
 
-                y0 = Math.Clamp(y0, 0, _maxY - 1);
+                y0 = Math.Clamp(y0, 0,  _maxY - 1);
                 y1 = Math.Clamp(y1, y0, _maxY - 1);
                 AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid);
 
@@ -916,8 +923,8 @@ public class NavmeshRasterizer
                 {
                     minimalY = Math.Min(minimalY, y0);
                     var cellXMid = heightfieldX + (x + 0.5f) * cellXSize;
-                    var apx      = cellXMid - info.V1X;
-                    var apz      = cellZMid - info.V1Z;
+                    var apx      = cellXMid     - info.V1X;
+                    var apz      = cellZMid     - info.V1Z;
                     var c        = (apz * info.V12X - apx * info.V12Z) * info.InverseCrossY;
                     var b        = (apx * info.V13Z - apz * info.V13X) * info.InverseCrossY;
 
@@ -993,12 +1000,12 @@ public class NavmeshRasterizer
                     continue;
 
                 FindAxisBounds(clipBuffer, tmpOffset, numCell, 1, out var minY, out var maxY);
-                var y0 = (int)MathF.Floor((minY - heightfieldY) * inverseCellY);
+                var y0 = (int)MathF.Floor((minY   - heightfieldY) * inverseCellY);
                 var y1 = (int)MathF.Ceiling((maxY - heightfieldY) * inverseCellY);
                 if (y1 < 0 || y0 >= _maxY)
                     continue;
 
-                y0 = Math.Clamp(y0, 0, _maxY - 1);
+                y0 = Math.Clamp(y0, 0,  _maxY - 1);
                 y1 = Math.Clamp(y1, y0, _maxY - 1);
                 AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid);
 
@@ -1006,8 +1013,8 @@ public class NavmeshRasterizer
                 {
                     minimalY = Math.Min(minimalY, y0);
                     var cellXMid = heightfieldX + (x + 0.5f) * cellXSize;
-                    var apx      = cellXMid - info.V1X;
-                    var apz      = cellZMid - info.V1Z;
+                    var apx      = cellXMid     - info.V1X;
+                    var apz      = cellZMid     - info.V1Z;
                     var c        = (apz * info.V12X - apx * info.V12Z) * info.InverseCrossY;
                     var b        = (apx * info.V13Z - apz * info.V13X) * info.InverseCrossY;
 
@@ -1160,8 +1167,8 @@ public class NavmeshRasterizer
         ref var cellHead = ref _heightfield.spans[z * _heightfield.width + x];
 
         // find insert position for new span: skip any existing spans that end before new span start
-        var  prevMaxY      = mergeBelow ? y0 - _minSpanGap - 1 : y1; // any spans that have smax >= prevMaxY are merged
-        var  nextMinY      = y1 + _minSpanGap + 1;                   // any spans that have smin <= nextMinY are merged
+        var     prevMaxY = mergeBelow ? y0 - _minSpanGap - 1 : y1; // any spans that have smax >= prevMaxY are merged
+        var     nextMinY = y1 + _minSpanGap + 1;                   // any spans that have smin <= nextMinY are merged
         RcSpan? prevSpan = null;
         var     currSpan = cellHead;
 
@@ -1218,6 +1225,7 @@ public class NavmeshRasterizer
     private void AddTerrainSpan(int x, int z, int y0, int y1, int areaId, bool includeInVolume)
     {
         WriteVolumeSpan(x, z, y0, y1, includeInVolume);
+
         if (_terrainSpans != null)
         {
             var cellIndex = z * _heightfield.width + x;
@@ -1234,6 +1242,7 @@ public class NavmeshRasterizer
             return;
 
         var touchedCells = _terrainSpans.TouchedCells;
+
         for (var i = 0; i < touchedCells.Count; ++i)
         {
             var cellIndex = touchedCells[i];
@@ -1280,11 +1289,11 @@ public class NavmeshRasterizer
         if (y1 < 0 || yMin >= _voxSourceY)
             return;
 
-        yMin = Math.Clamp(yMin, 0, _voxSourceY - 1);
+        yMin = Math.Clamp(yMin, 0,    _voxSourceY - 1);
         y1   = Math.Clamp(y1,   yMin, _voxSourceY - 1);
 
-        var volumeX  = MapVoxelIndex(x, _voxSourceX, _voxelizer.NumX, _voxShiftX);
-        var volumeZ  = MapVoxelIndex(z, _voxSourceZ, _voxelizer.NumZ, _voxShiftZ);
+        var volumeX  = MapVoxelIndex(x,    _voxSourceX, _voxelizer.NumX, _voxShiftX);
+        var volumeZ  = MapVoxelIndex(z,    _voxSourceZ, _voxelizer.NumZ, _voxShiftZ);
         var volumeY0 = MapVoxelIndex(yMin, _voxSourceY, _voxelizer.NumY, _voxShiftY);
         var volumeY1 = MapVoxelSpanMaxInclusive(y1, _voxSourceY, _voxelizer.NumY, _voxShiftY);
 
@@ -1300,6 +1309,7 @@ public class NavmeshRasterizer
             _heightfield.pools = spanPool;
 
             RcSpan? freeList = null;
+
             for (var i = spanPool.items.Length - 1; i >= 0; --i)
             {
                 spanPool.items[i].next = freeList;
@@ -1311,13 +1321,13 @@ public class NavmeshRasterizer
 
         var span = _heightfield.freelist!;
         _heightfield.freelist = span.next;
-        span.next = null;
+        span.next             = null;
         return span;
     }
 
     private void FreeSpan(RcSpan span)
     {
-        span.next = _heightfield.freelist;
+        span.next             = _heightfield.freelist;
         _heightfield.freelist = span;
     }
 
@@ -1525,21 +1535,21 @@ public class NavmeshRasterizer
             if (w.Z <= bminZ) f |= OutFlags.NegZ;
             if (w.Z >= bmaxZ) f |= OutFlags.PosZ;
 
-            var offset         = i * 3;
-            outWorld[offset]   = w.X;
-            outWorld[offset+1] = w.Y;
-            outWorld[offset+2] = w.Z;
-            outFlags[i]        = f;
+            var offset = i * 3;
+            outWorld[offset]     = w.X;
+            outWorld[offset + 1] = w.Y;
+            outWorld[offset + 2] = w.Z;
+            outFlags[i]          = f;
         }
     }
 
     private static void TransformVerticesPacked(SceneExtractor.MeshInstance instance, ReadOnlySpan<Vector3> localVertices, Span<float> outWorld)
     {
-        var wt    = instance.WorldTransform;
-        var axisX = wt.Row0;
-        var axisY = wt.Row1;
-        var axisZ = wt.Row2;
-        var trans = wt.Row3;
+        var     wt     = instance.WorldTransform;
+        var     axisX  = wt.Row0;
+        var     axisY  = wt.Row1;
+        var     axisZ  = wt.Row2;
+        var     trans  = wt.Row3;
         ref var srcRef = ref MemoryMarshal.GetReference(localVertices);
 
         for (var i = 0; i < localVertices.Length; ++i)
@@ -1572,7 +1582,7 @@ public class NavmeshRasterizer
             var y      = worldVertices[offset + 1];
             var z      = worldVertices[offset + 2];
 
-            OutFlags f = 0;
+            OutFlags f        = 0;
             if (x <= bminX) f |= OutFlags.NegX;
             if (x >= bmaxX) f |= OutFlags.PosX;
             if (y <= bminY) f |= OutFlags.NegY;
@@ -1626,14 +1636,14 @@ public class NavmeshRasterizer
     private static void DividePoly
     (
         Span<float> vertices,
-        int inputOffset,
-        int inputCount,
-        int outputOffset1,
-        out int outputCount1,
-        int outputOffset2,
-        out int outputCount2,
-        float axisOffset,
-        int axis
+        int         inputOffset,
+        int         inputCount,
+        int         outputOffset1,
+        out int     outputCount1,
+        int         outputOffset2,
+        out int     outputCount2,
+        float       axisOffset,
+        int         axis
     )
     {
         Span<float> axisDelta = stackalloc float[12];
@@ -1644,17 +1654,19 @@ public class NavmeshRasterizer
         var count2 = 0;
 
         var previousIndex = inputCount - 1;
+
         for (var currentIndex = 0; currentIndex < inputCount; previousIndex = currentIndex, ++currentIndex)
         {
-            var currentDelta = axisDelta[currentIndex];
+            var currentDelta  = axisDelta[currentIndex];
             var previousDelta = axisDelta[previousIndex];
-            var sameSide = (currentDelta >= 0) == (previousDelta >= 0);
+            var sameSide      = currentDelta >= 0 == previousDelta >= 0;
+
             if (!sameSide)
             {
-                var previousVertexOffset = inputOffset + previousIndex * 3;
-                var currentVertexOffset  = inputOffset + currentIndex * 3;
-                var outputVertex1Offset  = outputOffset1 + count1 * 3;
-                var outputVertex2Offset  = outputOffset2 + count2 * 3;
+                var previousVertexOffset = inputOffset   + previousIndex * 3;
+                var currentVertexOffset  = inputOffset   + currentIndex  * 3;
+                var outputVertex1Offset  = outputOffset1 + count1        * 3;
+                var outputVertex2Offset  = outputOffset2 + count2        * 3;
                 var interpolation        = previousDelta / (previousDelta - currentDelta);
 
                 for (var axisIndex = 0; axisIndex < 3; ++axisIndex)
@@ -1682,6 +1694,7 @@ public class NavmeshRasterizer
             else
             {
                 var currentVertexOffset = inputOffset + currentIndex * 3;
+
                 if (currentDelta >= 0)
                 {
                     CopyVertexTriplet(vertices, outputOffset1 + count1 * 3, vertices, currentVertexOffset);
@@ -1702,14 +1715,14 @@ public class NavmeshRasterizer
     private static void DividePoly2D
     (
         Span<float> vertices,
-        int inputOffset,
-        int inputCount,
-        int outputOffset1,
-        out int outputCount1,
-        int outputOffset2,
-        out int outputCount2,
-        float axisOffset,
-        int axis
+        int         inputOffset,
+        int         inputCount,
+        int         outputOffset1,
+        out int     outputCount1,
+        int         outputOffset2,
+        out int     outputCount2,
+        float       axisOffset,
+        int         axis
     )
     {
         Span<float> axisDelta = stackalloc float[12];
@@ -1720,17 +1733,19 @@ public class NavmeshRasterizer
         var count2 = 0;
 
         var previousIndex = inputCount - 1;
+
         for (var currentIndex = 0; currentIndex < inputCount; previousIndex = currentIndex, ++currentIndex)
         {
             var currentDelta  = axisDelta[currentIndex];
             var previousDelta = axisDelta[previousIndex];
-            var sameSide      = (currentDelta >= 0) == (previousDelta >= 0);
+            var sameSide      = currentDelta >= 0 == previousDelta >= 0;
+
             if (!sameSide)
             {
-                var previousVertexOffset = inputOffset + previousIndex * 2;
-                var currentVertexOffset  = inputOffset + currentIndex * 2;
-                var outputVertex1Offset  = outputOffset1 + count1 * 2;
-                var outputVertex2Offset  = outputOffset2 + count2 * 2;
+                var previousVertexOffset = inputOffset   + previousIndex * 2;
+                var currentVertexOffset  = inputOffset   + currentIndex  * 2;
+                var outputVertex1Offset  = outputOffset1 + count1        * 2;
+                var outputVertex2Offset  = outputOffset2 + count2        * 2;
                 var interpolation        = previousDelta / (previousDelta - currentDelta);
 
                 for (var axisIndex = 0; axisIndex < 2; ++axisIndex)
@@ -1758,6 +1773,7 @@ public class NavmeshRasterizer
             else
             {
                 var currentVertexOffset = inputOffset + currentIndex * 2;
+
                 if (currentDelta >= 0)
                 {
                     CopyVertexPair(vertices, outputOffset1 + count1 * 2, vertices[currentVertexOffset], vertices[currentVertexOffset + 1]);

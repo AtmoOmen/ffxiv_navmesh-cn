@@ -129,8 +129,8 @@ public sealed partial class NavmeshManager
 
         cancel.ThrowIfCancellationRequested();
 
-        var buildTimer         = StopWatchTimer.Create();
-        var builder            = new NavmeshBuilder(scene, customization, _config);
+        var buildTimer          = StopWatchTimer.Create();
+        var builder             = new NavmeshBuilder(scene, customization, _config);
         var totalProgressWeight = Math.Max(builder.TotalEstimatedTileWeight, 1);
         builder.Build
         (weight =>
@@ -143,6 +143,7 @@ public sealed partial class NavmeshManager
 
         customization.CustomizeMesh(builder.Navmesh, layers);
         var runtimeMesh = builder.Navmesh with { CustomizationApplied = true };
+
         if (runtimeMesh.Volume != null)
         {
             var compactTimer = StopWatchTimer.Create();
@@ -195,5 +196,4 @@ public sealed partial class NavmeshManager
             return false;
         }
     }
-
 }

@@ -66,7 +66,7 @@ public partial record class Navmesh
         var meshSegment     = meshDescriptor   ?? throw new Exception("缓存缺少 Mesh 段");
         var volumeSegment   = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
         var requiresRewrite = volumeSegment.Codec != CacheCodec.FastLz;
-        var source = reader.BaseStream;
+        var source          = reader.BaseStream;
         var (mesh, meshTelemetry) = DecodeSegment(meshSegment, source, DeserializeMesh);
         var (volume, volumeTelemetry) = volumeSegment.Codec == CacheCodec.FastLz
                                             ? DecodeDeferredVolumeSegment(volumeSegment, source)
@@ -82,7 +82,7 @@ public partial record class Navmesh
         EncodedSegment volumeSegment = default;
         Parallel.Invoke
         (
-            () => meshSegment   = EncodeSegment(CacheSegmentKind.Mesh,   CacheCodec.None, meshWriter => SerializeMesh(meshWriter, Mesh)),
+            () => meshSegment   = EncodeSegment(CacheSegmentKind.Mesh,   CacheCodec.None,   meshWriter => SerializeMesh(meshWriter, Mesh)),
             () => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.FastLz, volumeWriter => SerializeVolume(volumeWriter, Volume))
         );
 

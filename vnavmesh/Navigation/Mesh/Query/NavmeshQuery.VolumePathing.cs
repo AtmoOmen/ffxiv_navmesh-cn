@@ -9,13 +9,13 @@ namespace vnavmesh.Navigation.Mesh.Query;
 
 public partial class NavmeshQuery
 {
-    private const float FlightLandingProbeHalfExtentXZ      = 1f;
-    private const float FlightLandingProbeHalfExtentY       = 2f;
-    private const float FlightLandingMaxRequestHorizontal   = 1f;
-    private const float FlightLandingMaxSafeHorizontal      = 1.5f;
-    private const float FlightLandingMaxSafeVerticalDrop    = 8f;
-    private const float FlightLandingCompletionSlack        = 0.25f;
-    private const float FlightGroundTransitionSlack         = 0.25f;
+    private const float FlightLandingProbeHalfExtentXZ        = 1f;
+    private const float FlightLandingProbeHalfExtentY         = 2f;
+    private const float FlightLandingMaxRequestHorizontal     = 1f;
+    private const float FlightLandingMaxSafeHorizontal        = 1.5f;
+    private const float FlightLandingMaxSafeVerticalDrop      = 8f;
+    private const float FlightLandingCompletionSlack          = 0.25f;
+    private const float FlightGroundTransitionSlack           = 0.25f;
     private const float FlightGroundApproachTriggerHorizontal = 0.5f;
     private const float FlightGroundApproachMinHorizontal     = 1.5f;
     private const float FlightGroundApproachMaxHorizontal     = 4f;
@@ -29,7 +29,7 @@ public partial class NavmeshQuery
             return CreateFlightFailure(to);
         }
 
-        var volume        = VolumeQuery.Volume;
+        var volume         = VolumeQuery.Volume;
         var locateTimer    = StopWatchTimer.Create();
         var startVoxel     = FindNearestVolumeVoxel(from);
         var endVoxel       = FindNearestVolumeVoxel(to);
@@ -42,10 +42,10 @@ public partial class NavmeshQuery
             return CreateFlightFailure(to);
         }
 
-        var requestedStartLeaf  = volume.FindLeafVoxel(from);
+        var requestedStartLeaf = volume.FindLeafVoxel(from);
         var requestedTargetLeaf = volume.FindLeafVoxel(to);
-        var safeStart           = requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ? from : VoxelSearch.FindClosestVoxelPoint(volume, startVoxel, from);
-        var safeDestination     = requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ? to : VoxelSearch.FindClosestVoxelPoint(volume, endVoxel, to);
+        var safeStart = requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ? from : VoxelSearch.FindClosestVoxelPoint(volume, startVoxel, from);
+        var safeDestination = requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ? to : VoxelSearch.FindClosestVoxelPoint(volume, endVoxel, to);
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
         var searchTimer = StopWatchTimer.Create();
         var voxelPath = VolumeQuery.FindPath
@@ -110,7 +110,7 @@ public partial class NavmeshQuery
 
         if (landingPoint is { } resolvedLandingPoint)
         {
-            finalDestination = resolvedLandingPoint;
+            finalDestination    = resolvedLandingPoint;
             destinationAdjusted = Vector3.Distance(resolvedLandingPoint, to) > completionTolerance;
 
             if (rawWaypoints.Count == 0 || Vector3.DistanceSquared(rawWaypoints[^1], resolvedLandingPoint) > 0.000001f)
@@ -150,8 +150,9 @@ public partial class NavmeshQuery
 
     private Vector3? TryResolveFlightLandingPoint(Vector3 requestedTarget, Vector3 safeDestination)
     {
-        var landingPoint = FindPointOnFloor(requestedTarget, FlightLandingProbeHalfExtentXZ)
-            ?? FindNearestPointOnMesh(requestedTarget, FlightLandingProbeHalfExtentXZ, FlightLandingProbeHalfExtentY);
+        var landingPoint = FindPointOnFloor
+                               (requestedTarget, FlightLandingProbeHalfExtentXZ) ??
+                           FindNearestPointOnMesh(requestedTarget, FlightLandingProbeHalfExtentXZ, FlightLandingProbeHalfExtentY);
         if (landingPoint is not { } resolved)
             return null;
 
@@ -172,8 +173,8 @@ public partial class NavmeshQuery
 
     private static float HorizontalDistanceXZ(Vector3 left, Vector3 right)
     {
-        var dx = left.X - right.X;
-        var dz = left.Z - right.Z;
+        var dx = left.X           - right.X;
+        var dz = left.Z           - right.Z;
         return MathF.Sqrt(dx * dx + dz * dz);
     }
 
@@ -197,9 +198,9 @@ public partial class NavmeshQuery
         var approachHorizontal = Math.Clamp(verticalDrop * 0.75f, FlightGroundApproachMinHorizontal, FlightGroundApproachMaxHorizontal);
         var candidate = new Vector3
         (
-            transitionPoint.X - leadDelta.X * approachHorizontal,
+            transitionPoint.X - leadDelta.X  * approachHorizontal,
             transitionPoint.Y + verticalDrop * FlightGroundApproachHeightRatio,
-            transitionPoint.Z - leadDelta.Y * approachHorizontal
+            transitionPoint.Z - leadDelta.Y  * approachHorizontal
         );
 
         var approachVoxel = FindNearestVolumeVoxel(candidate, FlightGroundApproachMinHorizontal, MathF.Max(1f, verticalDrop * 0.5f));
@@ -245,6 +246,7 @@ public partial class NavmeshQuery
     )
     {
         var groundResult = PlanMeshPathDetailed(safeFlightDestination, requestedTarget, useRaycast, 0, cancel);
+
         if (!groundResult.Succeeded || groundResult.Segments.Count == 0)
         {
             result = default!;
@@ -252,14 +254,16 @@ public partial class NavmeshQuery
         }
 
         var transitionPoint = groundResult.Segments[0].StartPosition;
-        var approachPoint   = TryBuildFlightGroundApproachPoint(safeFlightDestination, transitionPoint, groundResult.Segments[0].EndPosition, requestedTarget);
+        var approachPoint = TryBuildFlightGroundApproachPoint(safeFlightDestination, transitionPoint, groundResult.Segments[0].EndPosition, requestedTarget);
         List<Vector3> flightWaypoints = [.. rawFlightWaypoints];
+
         if (approachPoint is { } resolvedApproachPoint)
         {
             TrimFlightWaypointsForGroundTransition(flightWaypoints, resolvedApproachPoint);
             if (flightWaypoints.Count == 0 || Vector3.DistanceSquared(flightWaypoints[^1], resolvedApproachPoint) > 0.000001f)
                 flightWaypoints.Add(resolvedApproachPoint);
         }
+
         if (flightWaypoints.Count == 0 || Vector3.DistanceSquared(flightWaypoints[^1], transitionPoint) > 0.000001f)
             flightWaypoints.Add(transitionPoint);
 
@@ -312,10 +316,9 @@ public partial class NavmeshQuery
 
     private static string DescribeVolumeSearchTermination(VoxelPathfind.SearchTermination termination) => termination switch
     {
-        VoxelPathfind.SearchTermination.ReachedGoal     => "达到终点",
-        VoxelPathfind.SearchTermination.SearchExhausted => "搜索穷尽",
+        VoxelPathfind.SearchTermination.ReachedGoal       => "达到终点",
+        VoxelPathfind.SearchTermination.SearchExhausted   => "搜索穷尽",
         VoxelPathfind.SearchTermination.StepBudgetReached => "步数触顶",
-        _                                               => "未知"
+        _                                                 => "未知"
     };
-
 }

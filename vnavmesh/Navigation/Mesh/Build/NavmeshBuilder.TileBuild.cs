@@ -8,7 +8,6 @@ using DotRecast.Recast;
 using vnavmesh.Bootstrap;
 using vnavmesh.Navigation.Customizations;
 using vnavmesh.Navigation.Mesh.Runtime;
-using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
 using vnavmesh.Shared.Utilities;
 
@@ -120,18 +119,18 @@ public partial class NavmeshBuilder
         var scratch = _threadScratch.Value!;
         scratch.Reset();
         EnsureVolumeScratch(scratch);
-        var totalStart   = Stopwatch.GetTimestamp();
-        var telemetry    = new RcContext();
-        var geometryJobs = _geometryJobs.AsSpan(input.GeometryJobStart, input.GeometryJobCount);
-        var terrainJobs  = _terrainJobs.AsSpan(input.TerrainJobStart, input.TerrainJobCount);
+        var totalStart          = Stopwatch.GetTimestamp();
+        var telemetry           = new RcContext();
+        var geometryJobs        = _geometryJobs.AsSpan(input.GeometryJobStart, input.GeometryJobCount);
+        var terrainJobs         = _terrainJobs.AsSpan(input.TerrainJobStart, input.TerrainJobCount);
         var totalProgressBudget = Math.Max(input.EstimatedSpanWeight, 1);
         var geometryShare       = geometryJobs.IsEmpty ? 0 : 10;
         var terrainShare        = terrainJobs.IsEmpty ? 0 : 50;
         var volumeShare         = Navmesh.Volume != null ? 12 : 0;
         var linkShare           = Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks ? 2 : 0;
         var detourShare         = 1;
-        var recastShare         = 100 - geometryShare - terrainShare - volumeShare - linkShare - detourShare;
-        var activeShareSum      = geometryShare + terrainShare + volumeShare + linkShare + detourShare + recastShare;
+        var recastShare         = 100           - geometryShare - terrainShare - volumeShare - linkShare   - detourShare;
+        var activeShareSum      = geometryShare + terrainShare  + volumeShare  + linkShare   + detourShare + recastShare;
         var geometryBudget      = geometryShare == 0 ? 0 : totalProgressBudget * geometryShare / activeShareSum;
         var terrainBudget       = terrainShare  == 0 ? 0 : totalProgressBudget * terrainShare  / activeShareSum;
         var volumeBudget        = volumeShare   == 0 ? 0 : totalProgressBudget * volumeShare   / activeShareSum;
@@ -219,13 +218,13 @@ public partial class NavmeshBuilder
             z
         );
 
-        var geometryProgress = CreateRasterProgressReporter(geometryJobs, geometryBudget, out var finishGeometryProgress);
-        var terrainProgress  = CreateRasterProgressReporter(terrainJobs, terrainBudget, out var finishTerrainProgress);
-        var recastCompactBudget  = recastBudget * 38 / 100;
-        var recastFilterBudget   = recastBudget * 10 / 100;
+        var geometryProgress     = CreateRasterProgressReporter(geometryJobs, geometryBudget, out var finishGeometryProgress);
+        var terrainProgress      = CreateRasterProgressReporter(terrainJobs,  terrainBudget,  out var finishTerrainProgress);
+        var recastCompactBudget  = recastBudget                                                      * 38 / 100;
+        var recastFilterBudget   = recastBudget                                                      * 10 / 100;
         var recastDistanceBudget = Settings.Partitioning == RcPartition.WATERSHED ? recastBudget * 8 / 100 : 0;
-        var recastRegionBudget   = recastBudget * 24 / 100;
-        var recastContourBudget  = recastBudget * 10 / 100;
+        var recastRegionBudget   = recastBudget                                                      * 24 / 100;
+        var recastContourBudget  = recastBudget                                                      * 10 / 100;
         var recastPolyBudget     = recastBudget - recastCompactBudget - recastFilterBudget - recastDistanceBudget - recastRegionBudget - recastContourBudget;
 
         var phaseStart = Stopwatch.GetTimestamp();
@@ -268,15 +267,17 @@ public partial class NavmeshBuilder
         }
         else if (Settings.Partitioning == RcPartition.MONOTONE) RcRegions.BuildRegionsMonotone(telemetry, chf, regionMinArea, regionMergeArea);
         else RcRegions.BuildLayerRegions(telemetry, chf, regionMinArea);
+
         ReportProgress(recastRegionBudget);
 
         var effectivePolyMaxEdgeLen = Settings.PolyMaxEdgeLen > 0 ? Settings.PolyMaxEdgeLen : Settings.AgentRadius * 8f;
-        var polyMaxEdgeLenVoxels = (int)(effectivePolyMaxEdgeLen / Settings.CellSize);
+        var polyMaxEdgeLenVoxels    = (int)(effectivePolyMaxEdgeLen / Settings.CellSize);
         var cset = RcContours.BuildContours
             (telemetry, chf, Settings.PolyMaxSimplificationError, polyMaxEdgeLenVoxels, RcBuildContoursFlags.RC_CONTOUR_TESS_WALL_EDGES);
         ReportProgress(recastContourBudget);
 
         var pmesh = RcMeshs.BuildPolyMesh(telemetry, cset, Settings.PolyMaxVerts);
+
         for (var i = 0; i < pmesh.npolys; ++i)
         {
             var area = pmesh.areas[i] == 0 ? NavmeshArea.Null : NavmeshArea.Ground;
@@ -284,9 +285,9 @@ public partial class NavmeshBuilder
             pmesh.flags[i] = area == NavmeshArea.Null ? (int)NavmeshPolyFlags.None : (int)NavmeshPolyFlags.Ground;
         }
 
-        var detailSampleDist     = Settings.FastBuild || Settings.DetailSampleDist < 0.9f ? 0 : Settings.CellSize * Settings.DetailSampleDist;
-        var detailSampleMaxError = Settings.CellHeight * Settings.DetailMaxSampleError;
-        RcPolyMeshDetail? dmesh  = null;
+        var               detailSampleDist     = Settings.FastBuild || Settings.DetailSampleDist < 0.9f ? 0 : Settings.CellSize * Settings.DetailSampleDist;
+        var               detailSampleMaxError = Settings.CellHeight * Settings.DetailMaxSampleError;
+        RcPolyMeshDetail? dmesh                = null;
         if (detailSampleDist > 0 && pmesh.npolys > 0)
             dmesh = RcMeshDetails.BuildPolyMeshDetail(telemetry, pmesh, chf, detailSampleDist, detailSampleMaxError);
         ReportProgress(recastPolyBudget);
@@ -319,10 +320,10 @@ public partial class NavmeshBuilder
         };
         _customization.CustomizeSettings(navmeshConfig);
 
-        RcBuilderResult? builderResult   = null;
-        DtJumpLinkBuilder? jumpLinkBuilder = null;
-        var generatedClimbLinks = 0;
-        var generatedJumpLinks  = 0;
+        RcBuilderResult?   builderResult       = null;
+        DtJumpLinkBuilder? jumpLinkBuilder     = null;
+        var                generatedClimbLinks = 0;
+        var                generatedJumpLinks  = 0;
 
         if (captureIntermediates || Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks)
         {
@@ -336,6 +337,7 @@ public partial class NavmeshBuilder
         int addConnections(List<DtJumpLink> links, NavmeshArea area, NavmeshPolyFlags flags, NavmeshOffMeshKind kind)
         {
             var acceptedCount = 0;
+
             foreach (var link in links)
             {
                 RcVec3f prev = default;
@@ -348,9 +350,9 @@ public partial class NavmeshBuilder
                     if (i != 0 && RcVec.Dist2D(prev, p) <= Settings.AgentRadius)
                         continue;
 
-                    var start = p.RecastToSystem();
-                    var end   = q.RecastToSystem();
-                    var delta = end - start;
+                    var start                = p.RecastToSystem();
+                    var end                  = q.RecastToSystem();
+                    var delta                = end               - start;
                     var horizontalDistanceSq = delta.X * delta.X + delta.Z * delta.Z;
                     var verticalDistanceAbs  = MathF.Abs(delta.Y);
                     if (horizontalDistanceSq <= Settings.AgentRadius * Settings.AgentRadius * 4 && verticalDistanceAbs <= Settings.AgentMaxClimb * 1.25f)
@@ -374,7 +376,10 @@ public partial class NavmeshBuilder
             return acceptedCount;
         }
 
-        static int Quantize(float value) => (int)MathF.Round(value * 4f);
+        static int Quantize(float value)
+        {
+            return (int)MathF.Round(value * 4f);
+        }
 
         if ((Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks) && jumpLinkBuilder != null)
         {
@@ -458,24 +463,24 @@ public partial class NavmeshBuilder
         ReportProgress(totalProgressBudget - reportedProgress);
         return new()
         {
-            TileX                 = x,
-            TileZ                 = z,
-            TotalTicks            = totalTicks,
-            PhaseTicks            = phaseTicks,
-            GeometryJobCount      = input.GeometryJobCount,
-            TerrainJobCount       = input.TerrainJobCount,
-            PrimitiveCount        = input.PrimitiveCount,
-            UniqueJobCount        = input.GeometryJobCount + input.TerrainJobCount,
-            EstimatedSpanWeight   = input.EstimatedSpanWeight,
-            PreCompactSpanCount   = preCompactSpanCount,
-            PolyCount             = pmesh.npolys,
-            VertCount             = pmesh.nverts,
-            DetailTriCount        = dmesh?.ntris ?? 0,
-            GeneratedClimbLinks   = generatedClimbLinks,
-            GeneratedJumpLinks    = generatedJumpLinks,
-            MeshData              = navmeshData,
-            VolumeColumn          = volumeColumn,
-            DebugResult           = captureIntermediates ? builderResult : null
+            TileX               = x,
+            TileZ               = z,
+            TotalTicks          = totalTicks,
+            PhaseTicks          = phaseTicks,
+            GeometryJobCount    = input.GeometryJobCount,
+            TerrainJobCount     = input.TerrainJobCount,
+            PrimitiveCount      = input.PrimitiveCount,
+            UniqueJobCount      = input.GeometryJobCount + input.TerrainJobCount,
+            EstimatedSpanWeight = input.EstimatedSpanWeight,
+            PreCompactSpanCount = preCompactSpanCount,
+            PolyCount           = pmesh.npolys,
+            VertCount           = pmesh.nverts,
+            DetailTriCount      = dmesh?.ntris ?? 0,
+            GeneratedClimbLinks = generatedClimbLinks,
+            GeneratedJumpLinks  = generatedJumpLinks,
+            MeshData            = navmeshData,
+            VolumeColumn        = volumeColumn,
+            DebugResult         = captureIntermediates ? builderResult : null
         };
     }
 
@@ -484,17 +489,13 @@ public partial class NavmeshBuilder
 
     private static int CountWalkableSpans(RcHeightfield heightfield)
     {
-        var spanCount  = 0;
-        var cellCount  = heightfield.width * heightfield.height;
+        var spanCount = 0;
+        var cellCount = heightfield.width * heightfield.height;
 
         for (var cellIndex = 0; cellIndex < cellCount; ++cellIndex)
-        {
-            for (var span = heightfield.spans[cellIndex]; span != null; span = span.next)
-            {
-                if (span.area != DotRecast.Recast.RcRecast.RC_NULL_AREA)
-                    ++spanCount;
-            }
-        }
+        for (var span = heightfield.spans[cellIndex]; span != null; span = span.next)
+            if (span.area != RcRecast.RC_NULL_AREA)
+                ++spanCount;
 
         return spanCount;
     }

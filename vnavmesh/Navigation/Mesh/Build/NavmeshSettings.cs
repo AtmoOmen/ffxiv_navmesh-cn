@@ -19,17 +19,17 @@ public class NavmeshSettings
         Interiors              = 1 << 3
     }
 
-    public float       CellSize                   = 0.25f;
-    public float       CellHeight                 = 0.125f;
-    public float       AgentHeight                = 2.0f;
-    public float       AgentRadius                = 0.5f;
-    public float       AgentMaxClimb              = 0.5f;
-    public float       AgentMaxSlopeDeg           = 55f;
-    public Filter      Filtering                  = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
-    public float       RegionMinSize              = 8;
-    public float       RegionMergeSize            = 20;
-    public RcPartition Partitioning               = RcPartition.WATERSHED;
-    public float       PolyMaxEdgeLen             = 0f;
+    public float       CellSize         = 0.25f;
+    public float       CellHeight       = 0.125f;
+    public float       AgentHeight      = 2.0f;
+    public float       AgentRadius      = 0.5f;
+    public float       AgentMaxClimb    = 0.5f;
+    public float       AgentMaxSlopeDeg = 55f;
+    public Filter      Filtering        = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
+    public float       RegionMinSize    = 8;
+    public float       RegionMergeSize  = 20;
+    public RcPartition Partitioning     = RcPartition.WATERSHED;
+    public float       PolyMaxEdgeLen;
     public float       PolyMaxSimplificationError = 1.1f;
     public int         PolyMaxVerts               = 6;
     public float       DetailSampleDist           = 6f;
@@ -47,7 +47,7 @@ public class NavmeshSettings
     public float EdgeJumpMaxDrop     = 500f;
     public float EdgeJumpMinDrop     = 1.5f;
 
-    public float GroundTileSize = 64f;
+    public float GroundTileSize     = 64f;
     public int   GroundTileCountMax = 32;
 
     // first level count follows ground tiles; this array only controls further volume subdivision
@@ -78,7 +78,7 @@ public class NavmeshSettings
         appendInt(nameof(PolyMaxVerts), PolyMaxVerts);
         appendFloat(nameof(DetailSampleDist),     DetailSampleDist);
         appendFloat(nameof(DetailMaxSampleError), DetailMaxSampleError);
-        appendBool(nameof(FastBuild), FastBuild);
+        appendBool(nameof(FastBuild),              FastBuild);
         appendBool(nameof(GenerateEdgeClimbLinks), GenerateEdgeClimbLinks);
         appendBool(nameof(GenerateEdgeJumpLinks),  GenerateEdgeJumpLinks);
         appendFloat(nameof(GroundTolerance),     GroundTolerance);
@@ -340,9 +340,9 @@ public class NavmeshSettings
         ); // TODO: verify that it's actually in voxels
         ImGui.Checkbox("快速构建（关闭细节网格）", ref FastBuild);
         DrawConfigFloat(ref GroundTileSize, 32, 128, 1, "地面区块目标尺寸", "按场景占用范围自动推导地面区块数量时使用的目标世界尺寸");
-        DrawConfigInt(ref GroundTileCountMax, 1, 32, 1, "地面区块数量上限", "自动推导地面区块数量时的单轴上限");
-        DrawConfigInt(ref VolumeTiles[0], 1, 32, 1, "体积 L2 瓦片数量", "体积第二层细分的每轴瓦片数");
-        DrawConfigInt(ref VolumeTiles[1], 1, 32, 1, "体积 L3 体素数量", "体积最底层每轴体素数");
+        DrawConfigInt(ref GroundTileCountMax, 1, 32, 1, "地面区块数量上限",   "自动推导地面区块数量时的单轴上限");
+        DrawConfigInt(ref VolumeTiles[0],     1, 32, 1, "体积 L2 瓦片数量", "体积第二层细分的每轴瓦片数");
+        DrawConfigInt(ref VolumeTiles[1],     1, 32, 1, "体积 L3 体素数量", "体积最底层每轴体素数");
 
         ImGui.Checkbox("生成向下攀爬链接", ref GenerateEdgeClimbLinks);
         ImGui.Checkbox("生成向下跳跃链接", ref GenerateEdgeJumpLinks);

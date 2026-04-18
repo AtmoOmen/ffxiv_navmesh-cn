@@ -12,8 +12,8 @@ internal sealed class PathPostprocessor
 )
 {
     private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
-    private const float COLLINEAR_WAYPOINT_TOLERANCE  = 0.01f;
-    private const int   MAX_SMOOTH_PATH_POINTS        = 102400;
+    private const float COLLINEAR_WAYPOINT_TOLERANCE   = 0.01f;
+    private const int   MAX_SMOOTH_PATH_POINTS         = 102400;
 
     public PostprocessedPath Process(PlannerResult result, bool useStringPulling, CancellationToken cancel)
     {
@@ -21,10 +21,7 @@ internal sealed class PathPostprocessor
 
         List<PostprocessedPathSegment> segments = new(result.Segments.Count);
 
-        foreach (var segment in result.Segments)
-        {
-            segments.Add(BuildSegment(segment, useStringPulling, cancel));
-        }
+        foreach (var segment in result.Segments) segments.Add(BuildSegment(segment, useStringPulling, cancel));
 
         return new()
         {
@@ -42,8 +39,8 @@ internal sealed class PathPostprocessor
         cancel.ThrowIfCancellationRequested();
 
         var groundCorridor = segment.MovementMode == MovementMode.Ground && segment.GeometryKind == PlannerSegmentGeometryKind.MeshCorridor
-            ? BuildGroundCorridor(segment)
-            : segment.GroundCorridor;
+                                 ? BuildGroundCorridor(segment)
+                                 : segment.GroundCorridor;
         var waypoints = segment.GeometryKind switch
         {
             PlannerSegmentGeometryKind.MeshCorridor   => BuildMeshWaypoints(segment, groundCorridor, useStringPulling),
@@ -71,9 +68,12 @@ internal sealed class PathPostprocessor
             return [];
 
         if (groundCorridor != null)
+        {
             return useStringPulling
-                ? [.. groundCorridor.Corners.Select(c => c.Position)]
-                : DeduplicateWaypoints(segment.Corridor.Select(r => meshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
+                       ? [.. groundCorridor.Corners.Select(c => c.Position)]
+                       : DeduplicateWaypoints
+                           (segment.Corridor.Select(r => meshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
+        }
 
         if (useStringPulling)
             return BuildStraightPathWaypoints(segment, [.. segment.Corridor]);
@@ -83,18 +83,18 @@ internal sealed class PathPostprocessor
 
     private List<Vector3> BuildStraightPathWaypoints(PlannerPathSegment segment, long[] corridor)
     {
-        var straightPath   = new DtStraightPath[MAX_SMOOTH_PATH_POINTS];
+        var straightPath = new DtStraightPath[MAX_SMOOTH_PATH_POINTS];
         var straightStatus = meshQuery.FindStraightPath
-            (
-                segment.StartPosition.SystemToRecast(),
-                segment.EndPosition.SystemToRecast(),
-                corridor,
-                corridor.Length,
-                straightPath,
-                out var straightPathCount,
-                straightPath.Length,
-                DtStraightPathOptions.DT_STRAIGHTPATH_AREA_CROSSINGS
-            );
+        (
+            segment.StartPosition.SystemToRecast(),
+            segment.EndPosition.SystemToRecast(),
+            corridor,
+            corridor.Length,
+            straightPath,
+            out var straightPathCount,
+            straightPath.Length,
+            DtStraightPathOptions.DT_STRAIGHTPATH_AREA_CROSSINGS
+        );
         if (straightStatus.Failed())
             throw new InvalidOperationException("地面路径后处理失败：无法生成平滑路径");
 
@@ -158,12 +158,9 @@ internal sealed class PathPostprocessor
 
             var previous = result[^1];
             if (Vector3.DistanceSquared(previous.Position, corner.Position) > DUPLICATE_WAYPOINT_DISTANCE_SQ ||
-                previous.Area != corner.Area ||
-                previous.LinkKind != corner.LinkKind ||
-                previous.StraightPathFlags != corner.StraightPathFlags)
-            {
-                result.Add(corner);
-            }
+                previous.Area                                               != corner.Area                   ||
+                previous.LinkKind                                           != corner.LinkKind               ||
+                previous.StraightPathFlags                                  != corner.StraightPathFlags) result.Add(corner);
         }
 
         return result;
@@ -172,6 +169,7 @@ internal sealed class PathPostprocessor
     private static IReadOnlyList<GroundLinkMarker> BuildGroundLinkMarkers(IReadOnlyList<GroundPathCorner> corners)
     {
         List<GroundLinkMarker> markers = [];
+
         for (var i = 0; i < corners.Count; i++)
         {
             if (corners[i].LinkKind is not { } kind)
@@ -251,7 +249,7 @@ internal sealed class PathPostprocessor
 
     private static float DistanceToLineSegment(Vector3 value, Vector3 start, Vector3 end)
     {
-        var segment = end - start;
+        var segment       = end - start;
         var lengthSquared = segment.LengthSquared();
         if (lengthSquared <= DUPLICATE_WAYPOINT_DISTANCE_SQ)
             return Vector3.Distance(value, start);
