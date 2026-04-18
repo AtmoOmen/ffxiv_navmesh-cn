@@ -1,26 +1,33 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Numerics;
 using System.Runtime;
+using Dalamud.Game.ClientState.Conditions;
 using DotRecast.Detour;
+using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using Lumina.Excel.Sheets;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
+using vnavmesh.Navigation.Customizations;
+using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Planning;
+using vnavmesh.Navigation.Scene;
 using vnavmesh.Shared.Utilities;
 using Action = System.Action;
 
 namespace vnavmesh.Navigation.Mesh.Runtime;
 
 // manager that loads navmesh matching current zone and performs async pathfinding queries
-public sealed partial class NavmeshManager : IDisposable
+public sealed class NavmeshManager : IDisposable
 {
-    private readonly Config _config;
-    private static readonly DtQueryDefaultFilter s_pruneFilter = new();
-    private const float PruneSeedHalfExtentXZ         = 8.0f;
-    private const float PruneSeedHalfExtentY          = 16.0f;
-    private const float PruneSeedMaxHorizontalDistance = 8.0f;
-    private const float PruneSeedMaxVerticalDistance   = 12.0f;
+    private readonly        Config               _config;
+    private static readonly DtQueryDefaultFilter s_pruneFilter                  = new();
+    private const           float                PruneSeedHalfExtentXZ          = 8.0f;
+    private const           float                PruneSeedHalfExtentY           = 16.0f;
+    private const           float                PruneSeedMaxHorizontalDistance = 8.0f;
+    private const           float                PruneSeedMaxVerticalDistance   = 12.0f;
 
     private sealed record BuildNavmeshResult
     (
@@ -184,6 +191,302 @@ public sealed partial class NavmeshManager : IDisposable
         bitmap.Save(filename);
         Service.Log.Debug($"Generated nav bitmap '{filename}' @ {startingPos}: {bitmap.MinBounds}-{bitmap.MaxBounds}");
         return (bitmap.MinBounds, bitmap.MaxBounds);
+    }
+
+    public bool Reload(bool allowLoadFromCache)
+    {
+        ClearState();
+
+        if (CurrentKey.Length > 0)
+        {
+            var cts = _currentCTS = new();
+            ExecuteWhenIdle
+            (
+                async cancel =>
+                {
+                    _loadTaskProgress = 0;
+
+                    using var resetLoadProgress = new OnDispose(() => _loadTaskProgress = -1);
+
+                    var waitStart = DateTime.Now;
+
+                    while (InCutscene)
+                    {
+                        if ((DateTime.Now - waitStart).TotalSeconds >= 5)
+                        {
+                            waitStart = DateTime.Now;
+                            Log("waiting for cutscene");
+                        }
+
+                        await Service.Framework.DelayTicks(1, cancel);
+                    }
+
+                    var snapshotTimer = StopWatchTimer.Create();
+                    var (cacheKey, scene) = await Service.Framework.Run
+                                            (
+                                                () =>
+                                                {
+                                                    var scene = new SceneDefinition();
+                                                    scene.FillFromActiveLayout();
+                                                    var cacheKey = GetCacheKey(scene);
+                                                    return (cacheKey, scene);
+                                                },
+                                                cancel
+                                            );
+                    Log($"鍦烘櫙蹇収鑰楁椂 {snapshotTimer.Value().TotalMilliseconds:f1} ms");
+
+                    Log($"Kicking off build for '{cacheKey}' (reload={allowLoadFromCache})");
+                    var buildResult = await Task.Run(() => BuildNavmesh(scene, cacheKey, allowLoadFromCache, cancel), cancel);
+                    var navmesh     = buildResult.Navmesh;
+                    Log($"Mesh loaded: '{cacheKey}'");
+                    Navmesh = navmesh;
+                    Query   = new(Navmesh, _config);
+
+                    var ff = await FloodFill.GetAsync();
+
+                    if (ff.TryLookup(scene.TerritoryID, out var points))
+                    {
+                        var pruneSeeds = points.ToArray();
+                        Navmesh.DeferMeshMutation(mesh => PruneMesh(mesh, pruneSeeds));
+                    }
+
+                    OnNavmeshChanged?.Invoke(Navmesh, Query);
+                    if (buildResult.CacheFile != null)
+                        QueueCacheWrite(cacheKey, buildResult.CacheFile, navmesh);
+                },
+                cts.Token
+            );
+        }
+
+        return true;
+    }
+
+    internal void ReplaceMesh(Navmesh mesh)
+    {
+        var retiredNavmesh = Navmesh;
+        var retiredQuery   = Query;
+        Navmesh = mesh;
+        Query   = new(Navmesh, _config);
+        Log("Mesh replaced");
+        OnNavmeshChanged?.Invoke(Navmesh, Query);
+        ReleaseRetiredState(retiredNavmesh, retiredQuery, "缃戞牸鏇挎崲");
+    }
+
+    private void ClearState()
+    {
+        if (_currentCTS == null)
+            return;
+
+        var cts = _currentCTS;
+        _currentCTS = null;
+        cts.Cancel();
+        var retiredNavmesh = Navmesh;
+        var retiredQuery   = Query;
+        Log("Queueing state clear");
+        ExecuteWhenIdle
+        (
+            () =>
+            {
+                Log("Clearing state");
+                _numActivePathfinds = 0;
+                cts.Dispose();
+                OnNavmeshChanged?.Invoke(null, null);
+                Query   = null;
+                Navmesh = null;
+                ReleaseRetiredState(retiredNavmesh, retiredQuery, "鍦烘櫙鍒囨崲鍗歌浇");
+            },
+            default
+        );
+    }
+
+    private BuildNavmeshResult BuildNavmesh(SceneDefinition scene, string cacheKey, bool allowLoadFromCache, CancellationToken cancel)
+    {
+        var totalTimer = StopWatchTimer.Create();
+        Log($"Build task started: '{cacheKey}'");
+        var customization = NavmeshCustomizationRegistry.ForTerritory(scene.TerritoryID);
+        Log($"Customization for '{scene.TerritoryID}': {customization.GetType()}");
+
+        var layers         = scene.FestivalLayers.ToList();
+        var buildSignature = NavmeshBuilder.ComputeBuildSignature(scene, customization);
+        var cache          = new FileInfo($"{_cacheDir.FullName}/{cacheKey}.navmesh");
+
+        if (allowLoadFromCache && TryLoadFromCache(cache, customization, buildSignature, layers, totalTimer, out var cachedResult))
+            return cachedResult;
+
+        cancel.ThrowIfCancellationRequested();
+
+        var buildTimer          = StopWatchTimer.Create();
+        var builder             = new NavmeshBuilder(scene, customization, _config);
+        var totalProgressWeight = Math.Max(builder.TotalEstimatedTileWeight, 1);
+        builder.Build
+        (weight =>
+            {
+                _loadTaskProgress += 0.99f * weight / totalProgressWeight;
+                cancel.ThrowIfCancellationRequested();
+            }
+        );
+        Log($"鍐锋瀯寤鸿€楁椂 {buildTimer.Value().TotalMilliseconds:f1} ms");
+
+        customization.CustomizeMesh(builder.Navmesh, layers);
+        var runtimeMesh = builder.Navmesh with { CustomizationApplied = true };
+
+        if (runtimeMesh.Volume != null)
+        {
+            var compactTimer = StopWatchTimer.Create();
+            runtimeMesh.Volume.CompactRetainedState();
+            Log($"椋炶浣撶礌甯搁┗鍘嬬缉鑰楁椂 {compactTimer.Value().TotalMilliseconds:f1} ms");
+        }
+
+        Log($"鎬绘瀯寤鸿€楁椂 {totalTimer.Value().TotalMilliseconds:f1} ms");
+        _loadTaskProgress += 0.01f;
+        return new(runtimeMesh, cache);
+    }
+
+    private bool TryLoadFromCache
+    (
+        FileInfo               cache,
+        NavmeshCustomization   customization,
+        string                 buildSignature,
+        List<uint>             layers,
+        StopWatchTimer         totalTimer,
+        out BuildNavmeshResult result
+    )
+    {
+        if (!cache.Exists)
+        {
+            result = new(default!, null);
+            return false;
+        }
+
+        try
+        {
+            var cacheReadTimer = StopWatchTimer.Create();
+            Log($"Loading cache: {cache.FullName}");
+            using var stream      = new FileStream(cache.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan);
+            using var reader      = new BinaryReader(stream);
+            var       cacheResult = Navmesh.Deserialize(reader, customization.Version, buildSignature);
+            var       mesh        = cacheResult.Navmesh;
+            Log($"缂撳瓨璇诲彇鑰楁椂 {cacheReadTimer.Value().TotalMilliseconds:f1} ms");
+            LogCacheSegment("璇诲彇", cacheResult.Telemetry.Mesh);
+            LogCacheSegment("璇诲彇", cacheResult.Telemetry.Volume);
+            if (!mesh.CustomizationApplied)
+                customization.CustomizeMesh(mesh, layers);
+            Log($"缂撳瓨鍛戒腑锛屾€昏€楁椂 {totalTimer.Value().TotalMilliseconds:f1} ms");
+            result = new(mesh, cacheResult.RequiresRewrite ? cache : null);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to load cache: {ex}");
+            result = new(default!, null);
+            return false;
+        }
+    }
+
+    private unsafe string GetCurrentKey()
+    {
+        var layout = LayoutWorld.Instance()->ActiveLayout;
+        if (layout == null || layout->InitState != 7 || layout->FestivalStatus is > 0 and < 5)
+            return "";
+
+        var filter    = LayoutUtil.FindFilter(layout);
+        var filterKey = filter != null ? filter->Key : 0;
+        var terrRow   = Service.LuminaRow<TerritoryType>(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
+
+        if (terrRow?.TerritoryIntendedUse.RowId == 60)
+        {
+            var fest = layout->ActiveFestivals[0];
+            if (fest.Id == 0 && fest.Phase == 0)
+                return "";
+        }
+
+        var sgs = LayoutUtil.GetZoneSharedGroupsEnabled(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
+        return $"{terrRow?.Bg}//{filterKey:X}//{LayoutUtil.FestivalsString(layout->ActiveFestivals)}//{string.Join('.', sgs)}";
+    }
+
+    internal static unsafe string GetCacheKey(SceneDefinition scene)
+    {
+        var layout    = LayoutWorld.Instance()->ActiveLayout;
+        var filter    = LayoutUtil.FindFilter(layout);
+        var filterKey = filter != null ? filter->Key : 0;
+        var terrId    = filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId;
+        var terrRow   = Service.LuminaRow<TerritoryType>(terrId);
+        return $"{terrRow?.Bg.ToString().Replace('/', '_')}__{filterKey:X}__{FormatHexNumbers(scene.FestivalLayers)}__{FormatHexNumbers(scene.ZoneSGs)}";
+    }
+
+    private void QueueCacheWrite(string cacheKey, FileInfo cache, Navmesh navmesh)
+    {
+        if (_cacheWriteTasks.TryGetValue(cacheKey, out var existing) && !existing.IsCompleted)
+        {
+            Log($"鍚庡彴缂撳瓨鍐欏叆宸插湪杩涜锛岃烦杩囬噸澶嶈皟搴? {cacheKey}");
+            return;
+        }
+
+        var writeTask = Task.Run(() => WriteCache(cacheKey, cache, navmesh));
+        _cacheWriteTasks[cacheKey]         = writeTask;
+        _cacheWriteTasksByNavmesh[navmesh] = writeTask;
+        _ = writeTask.ContinueWith
+        (
+            t =>
+            {
+                _cacheWriteTasks.TryRemove(cacheKey, out _);
+                _cacheWriteTasksByNavmesh.TryRemove(navmesh, out _);
+                LogTaskError(t);
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default
+        );
+    }
+
+    private void WriteCache(string cacheKey, FileInfo cache, Navmesh navmesh)
+    {
+        var timer    = StopWatchTimer.Create();
+        var tempPath = $"{cache.FullName}.{Environment.ProcessId}.{Environment.CurrentManagedThreadId}.tmp";
+
+        try
+        {
+            cache.Directory?.Create();
+            Service.Log.Debug($"[vnavmesh] 鍚庡彴鍐欏叆缂撳瓨: {cache.FullName}");
+            var                    serializeTimer = StopWatchTimer.Create();
+            Navmesh.CacheTelemetry telemetry;
+
+            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 22, FileOptions.SequentialScan))
+            using (var writer = new BinaryWriter(stream))
+            {
+                telemetry = navmesh.Serialize(writer);
+                writer.Flush();
+                stream.Flush();
+            }
+
+            var serializeDuration = serializeTimer.Value();
+            var sizeBytes         = new FileInfo(tempPath).Length;
+
+            var replaceTimer = StopWatchTimer.Create();
+            File.Move(tempPath, cache.FullName, true);
+            var replaceDuration = replaceTimer.Value();
+            LogCacheSegment("鍐欏叆", telemetry.Mesh);
+            LogCacheSegment("鍐欏叆", telemetry.Volume);
+            Log
+            (
+                $"鍚庡彴缂撳瓨鍐欏叆瀹屾垚 '{cacheKey}'锛屾€昏€楁椂 {timer.Value().TotalMilliseconds:f1} ms锛屽簭鍒楀寲 {serializeDuration.TotalMilliseconds:f1} ms锛屾浛鎹?{replaceDuration.TotalMilliseconds:f1} ms锛屽ぇ灏?{sizeBytes / 1024.0 / 1024.0:f2} MiB"
+            );
+        }
+        catch (Exception ex)
+        {
+            Log($"鍚庡彴缂撳瓨鍐欏叆澶辫触 '{cacheKey}': {ex}");
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch
+            {
+            }
+        }
     }
 
     private void ExecuteWhenIdle(Action task, CancellationToken token)
@@ -390,7 +693,7 @@ public sealed partial class NavmeshManager : IDisposable
             var closestPoint = closest.RecastToSystem();
             var dx           = closestPoint.X - point.X;
             var dz           = closestPoint.Z - point.Z;
-            var horizontalSq = dx * dx + dz * dz;
+            var horizontalSq = dx * dx        + dz * dz;
             if (horizontalSq > PruneSeedMaxHorizontalDistance * PruneSeedMaxHorizontalDistance)
                 continue;
 
@@ -403,7 +706,8 @@ public sealed partial class NavmeshManager : IDisposable
         if (result.Count > 0)
             return result;
 
-        query.FindNearestPoly(point.SystemToRecast(), new(PruneSeedHalfExtentXZ, PruneSeedHalfExtentY, PruneSeedHalfExtentXZ), s_pruneFilter, out var nearestRef, out _, out _);
+        query.FindNearestPoly
+            (point.SystemToRecast(), new(PruneSeedHalfExtentXZ, PruneSeedHalfExtentY, PruneSeedHalfExtentXZ), s_pruneFilter, out var nearestRef, out _, out _);
         return nearestRef != 0 ? [nearestRef] : [];
     }
 
@@ -455,4 +759,9 @@ public sealed partial class NavmeshManager : IDisposable
 
         return result;
     }
+
+    private static bool InCutscene => Service.Condition[ConditionFlag.WatchingCutscene] || Service.Condition[ConditionFlag.OccupiedInCutSceneEvent];
+
+    private static string FormatHexNumbers<T>(IEnumerable<T> nums) where T : INumber<T> =>
+        string.Join('.', nums.Select(n => n.ToString("X", CultureInfo.InvariantCulture)));
 }

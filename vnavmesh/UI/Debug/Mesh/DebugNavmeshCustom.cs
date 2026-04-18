@@ -13,6 +13,8 @@ using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
+using vnavmesh.Navigation.Volume.Map;
+using vnavmesh.Navigation.Volume.Pathfinding;
 using vnavmesh.Shared.Models;
 using vnavmesh.Shared.Utilities;
 using vnavmesh.UI.Debug.Collision;

@@ -1,6 +1,8 @@
 using System.Numerics;
 using vnavmesh.Bootstrap;
 using vnavmesh.Navigation.Volume;
+using vnavmesh.Navigation.Volume.Map;
+using vnavmesh.Navigation.Volume.Pathfinding;
 using vnavmesh.Shared.Utilities;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;

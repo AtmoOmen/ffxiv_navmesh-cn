@@ -1,4 +1,4 @@
-namespace vnavmesh.Navigation.Volume;
+namespace vnavmesh.Navigation.Volume.Pathfinding;
 
 internal enum VolumePathCandidateKind : byte
 {

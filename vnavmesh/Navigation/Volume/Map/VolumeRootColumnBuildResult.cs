@@ -1,4 +1,4 @@
-namespace vnavmesh.Navigation.Volume;
+namespace vnavmesh.Navigation.Volume.Map;
 
 public sealed class VolumeRootColumnBuildResult
 {

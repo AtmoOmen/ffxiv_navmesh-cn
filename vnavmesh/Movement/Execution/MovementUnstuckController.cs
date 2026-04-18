@@ -7,6 +7,8 @@ using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Volume;
+using vnavmesh.Navigation.Volume.Map;
+using vnavmesh.Navigation.Volume.Search;
 using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Execution;

@@ -6,6 +6,7 @@ using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
+using vnavmesh.Navigation.Volume.Search;
 
 namespace vnavmesh.Navigation.Mesh.Build;
 

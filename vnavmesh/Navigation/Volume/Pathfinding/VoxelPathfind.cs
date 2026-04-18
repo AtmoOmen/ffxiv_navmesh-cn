@@ -3,8 +3,10 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
+using vnavmesh.Navigation.Volume.Map;
+using vnavmesh.Navigation.Volume.Search;
 
-namespace vnavmesh.Navigation.Volume;
+namespace vnavmesh.Navigation.Volume.Pathfinding;
 
 public class VoxelPathfind
 {
