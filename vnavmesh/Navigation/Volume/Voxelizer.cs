@@ -81,6 +81,13 @@ public class Voxelizer
 
     public void AddSpan(int x, int z, int y0, int y1)
     {
+        if ((uint)x >= (uint)NumX || (uint)z >= (uint)NumZ)
+            return;
+        if (y1 < 0 || y0 >= NumY)
+            return;
+
+        y0 = Math.Clamp(y0, 0, NumY - 1);
+        y1 = Math.Clamp(y1, y0, NumY - 1);
         var startIndex = VoxelToIndex(x, y0, z);
         SetRange(_solidWords, startIndex, y1 - y0 + 1);
     }
@@ -138,6 +145,9 @@ public class Voxelizer
 
     private static void SetRange(ulong[] words, int startIndex, int length)
     {
+        if (length <= 0)
+            return;
+
         var index     = startIndex;
         var remaining = length;
 

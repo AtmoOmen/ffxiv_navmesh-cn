@@ -411,9 +411,12 @@ public class NavmeshRasterizer
     private          int _minSpanGap;
     private          int _walkableClimbThreshold; // if two spans have maximums within this number of voxels, their area is 'merged' (higher is selected)
     private          float _walkableNormalThreshold; // triangle is considered 'walkable' if it's world-space normal's Y coordinate is >= this
-    private          int _voxShiftX;
-    private          int _voxShiftY;
-    private          int _voxShiftZ;
+    private          int _voxSourceX;
+    private          int _voxSourceY;
+    private          int _voxSourceZ;
+    private          int _voxShiftX = -1;
+    private          int _voxShiftY = -1;
+    private          int _voxShiftZ = -1;
     private readonly int _tileX;
     private readonly int _tileZ;
     private readonly ScratchBuffers _scratch;
@@ -449,14 +452,16 @@ public class NavmeshRasterizer
 
         if (voxelizer != null)
         {
-            var dx = (heightfield.width - 2 * heightfield.borderSize)  / voxelizer.NumX;
-            var dy = _maxY                                             / voxelizer.NumY;
-            var dz = (heightfield.height - 2 * heightfield.borderSize) / voxelizer.NumZ;
-            if (!BitOperations.IsPow2(dx) || !BitOperations.IsPow2(dy) || !BitOperations.IsPow2(dz))
-                throw new Exception($"Cell size mismatch: {dx}x{dy}x{dz}");
-            _voxShiftX = BitOperations.Log2((uint)dx);
-            _voxShiftY = BitOperations.Log2((uint)dy);
-            _voxShiftZ = BitOperations.Log2((uint)dz);
+            _voxSourceX = heightfield.width  - 2 * heightfield.borderSize;
+            _voxSourceY = _maxY;
+            _voxSourceZ = heightfield.height - 2 * heightfield.borderSize;
+
+            if (_voxSourceX <= 0 || _voxSourceY <= 0 || _voxSourceZ <= 0)
+                throw new Exception($"Invalid volume source size: {_voxSourceX}x{_voxSourceY}x{_voxSourceZ}");
+
+            _voxShiftX = TryGetExactPow2RatioShift(_voxSourceX, voxelizer.NumX);
+            _voxShiftY = TryGetExactPow2RatioShift(_voxSourceY, voxelizer.NumY);
+            _voxShiftZ = TryGetExactPow2RatioShift(_voxSourceZ, voxelizer.NumZ);
         }
     }
 
@@ -1245,6 +1250,21 @@ public class NavmeshRasterizer
         }
     }
 
+    private static int TryGetExactPow2RatioShift(int sourceCells, int targetCells)
+    {
+        if (sourceCells <= 0 || targetCells <= 0 || sourceCells % targetCells != 0)
+            return -1;
+
+        var ratio = sourceCells / targetCells;
+        return BitOperations.IsPow2((uint)ratio) ? BitOperations.Log2((uint)ratio) : -1;
+    }
+
+    private static int MapVoxelIndex(int sourceIndex, int sourceCells, int targetCells, int exactShift)
+        => exactShift >= 0 ? sourceIndex >> exactShift : (int)((long)sourceIndex * targetCells / sourceCells);
+
+    private static int MapVoxelSpanMaxInclusive(int sourceIndex, int sourceCells, int targetCells, int exactShift)
+        => exactShift >= 0 ? sourceIndex >> exactShift : (int)(((long)(sourceIndex + 1) * targetCells - 1) / sourceCells);
+
     private void WriteVolumeSpan(int x, int z, int y0, int y1, bool includeInVolume)
     {
         if (!includeInVolume || _voxelizer == null)
@@ -1253,17 +1273,23 @@ public class NavmeshRasterizer
         x -= _heightfield.borderSize;
         z -= _heightfield.borderSize;
 
-        if (x < 0 || z < 0)
+        if ((uint)x >= (uint)_voxSourceX || (uint)z >= (uint)_voxSourceZ)
             return;
 
-        x >>= _voxShiftX;
-        z >>= _voxShiftZ;
-
-        if (x >= _voxelizer.NumX || z >= _voxelizer.NumZ)
+        var yMin = y0 - _minSpanGap;
+        if (y1 < 0 || yMin >= _voxSourceY)
             return;
+
+        yMin = Math.Clamp(yMin, 0, _voxSourceY - 1);
+        y1   = Math.Clamp(y1,   yMin, _voxSourceY - 1);
+
+        var volumeX  = MapVoxelIndex(x, _voxSourceX, _voxelizer.NumX, _voxShiftX);
+        var volumeZ  = MapVoxelIndex(z, _voxSourceZ, _voxelizer.NumZ, _voxShiftZ);
+        var volumeY0 = MapVoxelIndex(yMin, _voxSourceY, _voxelizer.NumY, _voxShiftY);
+        var volumeY1 = MapVoxelSpanMaxInclusive(y1, _voxSourceY, _voxelizer.NumY, _voxShiftY);
 
         // block pixels beneath the span for a distance roughly equal to agent height, otherwise volume pathfind will try to move the player through doorframes etc
-        _voxelizer.AddSpan(x, z, y0 - _minSpanGap >> _voxShiftY, y1 >> _voxShiftY);
+        _voxelizer.AddSpan(volumeX, volumeZ, volumeY0, volumeY1);
     }
 
     private RcSpan AllocSpan()
