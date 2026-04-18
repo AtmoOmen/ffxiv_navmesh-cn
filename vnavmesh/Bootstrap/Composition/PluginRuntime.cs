@@ -6,6 +6,7 @@ using vnavmesh.Integration.Windowing;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Bootstrap.Composition;
 
@@ -22,6 +23,7 @@ internal sealed class PluginRuntime : IDisposable
         MovementPlanExecutor movementExecutor,
         AsyncMoveRequest     asyncMoveRequest,
         DTRProvider          dtrProvider,
+        SceneTransitionPathCleaner ____,
         WindowProvider       _,
         CommandProvider      __,
         IPCProvider          ___

@@ -261,6 +261,13 @@ public sealed class NavmeshManager : IDisposable
         return true;
     }
 
+    public void ClearForSceneChange()
+    {
+        Log("Clearing path state for scene change");
+        CurrentKey = "";
+        ClearState();
+    }
+
     internal void ReplaceMesh(Navmesh mesh)
     {
         var retiredNavmesh = Navmesh;

@@ -87,6 +87,19 @@ public class AsyncMoveRequest : IDisposable
     public bool MoveTo(Vector3 dest, bool fly, float range = 0)
         => MoveToInternal(dest, fly, range, PathRequestOrigin.Normal);
 
+    public void Stop()
+    {
+        _recoveryRetry = null;
+        _pendingMoveRequest = null;
+        _executor.Stop();
+
+        if (_pendingTask is { IsCompleted: true })
+        {
+            _pendingTask.Dispose();
+            _pendingTask = null;
+        }
+    }
+
     private bool MoveToInternal(Vector3 dest, bool fly, float range, PathRequestOrigin origin)
     {
         if (_pendingTask != null)

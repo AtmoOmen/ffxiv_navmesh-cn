@@ -1,0 +1,28 @@
+using vnavmesh.Bootstrap;
+using vnavmesh.Movement.Requests;
+using vnavmesh.Navigation.Mesh.Runtime;
+
+namespace vnavmesh.Navigation.Scene;
+
+public sealed class SceneTransitionPathCleaner : IDisposable
+{
+    private readonly NavmeshManager       _navmeshManager;
+    private readonly AsyncMoveRequest     _asyncMoveRequest;
+
+    public SceneTransitionPathCleaner(NavmeshManager navmeshManager, AsyncMoveRequest asyncMoveRequest)
+    {
+        _navmeshManager   = navmeshManager;
+        _asyncMoveRequest = asyncMoveRequest;
+
+        Service.ClientState.TerritoryChanged += OnTerritoryChanged;
+    }
+
+    public void Dispose() =>
+        Service.ClientState.TerritoryChanged -= OnTerritoryChanged;
+
+    private void OnTerritoryChanged(ushort territoryType)
+    {
+        _asyncMoveRequest.Stop();
+        _navmeshManager.ClearForSceneChange();
+    }
+}

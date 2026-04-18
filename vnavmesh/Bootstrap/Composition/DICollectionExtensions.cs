@@ -7,6 +7,7 @@ using vnavmesh.Integration.Windowing;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Windows;
 
 namespace vnavmesh.Bootstrap.Composition;
@@ -21,6 +22,7 @@ public static class DICollectionExtensions
         services.AddSingleton(sp => new NavmeshManager(sp.GetRequiredService<PluginPaths>().MeshCacheDirectory, sp.GetRequiredService<Config>()));
         services.AddSingleton<MovementPlanExecutor>();
         services.AddSingleton<AsyncMoveRequest>();
+        services.AddSingleton<SceneTransitionPathCleaner>();
         services.AddSingleton<DTRProvider>();
         services.AddSingleton<MainWindow>();
         services.AddSingleton<WindowProvider>();
