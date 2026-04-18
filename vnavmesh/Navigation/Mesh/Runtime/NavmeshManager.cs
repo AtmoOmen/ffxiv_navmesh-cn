@@ -17,6 +17,10 @@ public sealed partial class NavmeshManager : IDisposable
 {
     private readonly Config _config;
     private static readonly DtQueryDefaultFilter s_pruneFilter = new();
+    private const float PruneSeedHalfExtentXZ         = 8.0f;
+    private const float PruneSeedHalfExtentY          = 16.0f;
+    private const float PruneSeedMaxHorizontalDistance = 8.0f;
+    private const float PruneSeedMaxVerticalDistance   = 12.0f;
 
     private sealed record BuildNavmeshResult
     (
@@ -320,7 +324,7 @@ public sealed partial class NavmeshManager : IDisposable
     private static void PruneMesh(DtNavMesh mesh, IEnumerable<Vector3> points)
     {
         var query      = new DtNavMeshQuery(mesh);
-        var startPolys = points.Select(pt => FindNearestMeshPoly(query, pt)).ToArray();
+        var startPolys = CollectPruneSeedPolys(query, points).ToArray();
         Log($"裁剪起始多边形: {string.Join(", ", startPolys.Select(p => p.ToString("X")))}");
         var reachablePolys = FindReachableMeshPolys(query, startPolys);
 
@@ -361,10 +365,65 @@ public sealed partial class NavmeshManager : IDisposable
         Log($"已裁剪不可达多边形 {pruneCount} 个");
     }
 
-    private static long FindNearestMeshPoly(DtNavMeshQuery query, Vector3 point)
+    private static IEnumerable<long> CollectPruneSeedPolys(DtNavMeshQuery query, IEnumerable<Vector3> points)
     {
-        query.FindNearestPoly(point.SystemToRecast(), new(5, 5, 5), s_pruneFilter, out var nearestRef, out _, out _);
-        return nearestRef;
+        HashSet<long> result = [];
+
+        foreach (var point in points)
+        {
+            foreach (var poly in FindPruneSeedPolys(query, point))
+                result.Add(poly);
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<long> FindPruneSeedPolys(DtNavMeshQuery query, Vector3 point)
+    {
+        HashSet<long> result = [];
+
+        foreach (var poly in FindIntersectingMeshPolys(query, point, new(PruneSeedHalfExtentXZ, PruneSeedHalfExtentY, PruneSeedHalfExtentXZ)))
+        {
+            if (!query.ClosestPointOnPoly(poly, point.SystemToRecast(), out var closest, out _).Succeeded())
+                continue;
+
+            var closestPoint = closest.RecastToSystem();
+            var dx           = closestPoint.X - point.X;
+            var dz           = closestPoint.Z - point.Z;
+            var horizontalSq = dx * dx + dz * dz;
+            if (horizontalSq > PruneSeedMaxHorizontalDistance * PruneSeedMaxHorizontalDistance)
+                continue;
+
+            if (MathF.Abs(closestPoint.Y - point.Y) > PruneSeedMaxVerticalDistance)
+                continue;
+
+            result.Add(poly);
+        }
+
+        if (result.Count > 0)
+            return result;
+
+        query.FindNearestPoly(point.SystemToRecast(), new(PruneSeedHalfExtentXZ, PruneSeedHalfExtentY, PruneSeedHalfExtentXZ), s_pruneFilter, out var nearestRef, out _, out _);
+        return nearestRef != 0 ? [nearestRef] : [];
+    }
+
+    private static List<long> FindIntersectingMeshPolys(DtNavMeshQuery query, Vector3 point, Vector3 halfExtent)
+    {
+        var capacity = 256;
+
+        while (true)
+        {
+            var refs      = new long[capacity];
+            var collector = new DtCollectPolysQuery(refs, refs.Length);
+            var status    = query.QueryPolygons(point.SystemToRecast(), halfExtent.SystemToRecast(), s_pruneFilter, collector);
+            if (status.Failed())
+                return [];
+
+            if (!collector.Overflowed())
+                return [.. refs.AsSpan(0, collector.NumCollected()).ToArray()];
+
+            capacity *= 2;
+        }
     }
 
     private static HashSet<long> FindReachableMeshPolys(DtNavMeshQuery query, params long[] starting)

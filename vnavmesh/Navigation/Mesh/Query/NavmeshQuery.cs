@@ -25,6 +25,11 @@ public partial class NavmeshQuery
     private const    int    StartSupportProbeCount                  = 8;
     private const    float  StartSupportMatchDistance               = 0.20f;
     private const    int    MaxStartPolyCandidatesToEvaluate        = 8;
+    private const    float  ExpandedStartPolyCandidateHalfExtentXZ  = 8.0f;
+    private const    float  ExpandedStartPolyCandidateHalfExtentY   = 16.0f;
+    private const    float  ExpandedStartPolyCandidateMaxHorizontalDistance = 8.0f;
+    private const    float  ExpandedStartPolyCandidateMaxVerticalDistance   = 12.0f;
+    private const    int    ExpandedMaxStartPolyCandidatesToEvaluate        = 24;
     private const    float  EndPolyCandidateHalfExtentXZ            = 5.0f;
     private const    float  EndPolyCandidateHalfExtentY             = 8.0f;
     private const    float  EndPolyCandidateMaxHorizontalDistance   = 4.0f;
@@ -198,7 +203,12 @@ public partial class NavmeshQuery
 
     public class GroundAreaCostFilter : IDtQueryFilter
     {
-        private readonly DtQueryDefaultFilter _filter = new((int)NavmeshPolyFlags.AllTraversable, (int)NavmeshPolyFlags.Unreachable, CreateAreaCosts());
+        private readonly DtQueryDefaultFilter _filter;
+
+        public GroundAreaCostFilter(bool excludeUnreachable = true)
+        {
+            _filter = new((int)NavmeshPolyFlags.AllTraversable, excludeUnreachable ? (int)NavmeshPolyFlags.Unreachable : 0, CreateAreaCosts());
+        }
 
         private static float[] CreateAreaCosts()
         {
@@ -236,6 +246,7 @@ public partial class NavmeshQuery
     private readonly Navmesh              _navmesh;
     private readonly IDtQueryFilter       _filter       = new DtQueryDefaultFilter();
     private readonly GroundAreaCostFilter _groundFilter = new();
+    private readonly GroundAreaCostFilter _groundFilterIgnoringUnreachable = new(false);
     private readonly RandomnessFilter     _randomnessFilter;
     private readonly IDtQueryFilter       _reachableFilter;
     private          DtNavMeshQuery?      _meshQuery;
