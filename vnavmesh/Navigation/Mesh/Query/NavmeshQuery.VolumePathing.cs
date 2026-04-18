@@ -67,6 +67,10 @@ public partial class NavmeshQuery
         foreach (var step in voxelPath)
             rawWaypoints.Add(step.p);
 
+        if (!requestedTargetLeaf.empty &&
+            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, useRaycast, cancel, out var hybridResult))
+            return hybridResult;
+
         var finalDestination    = safeDestination;
         var destinationAdjusted = safeDestinationAdjusted;
         var landingPoint        = !requestedTargetLeaf.empty ? TryResolveFlightLandingPoint(to, safeDestination) : null;
@@ -86,10 +90,7 @@ public partial class NavmeshQuery
             $"[算路] 飞行终点解析：请求终点 = {to:f3}，空体素终点 = {safeDestination:f3}，落地点 = {(landingPoint is { } lp ? lp.ToString("f3") : "无")}，最终终点 = {finalDestination:f3}，落地吸附 = {(landingPoint != null ? "是" : "否")}"
         );
 
-        if (landingPoint == null &&
-            !requestedTargetLeaf.empty &&
-            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, useRaycast, cancel, out var hybridResult))
-            return hybridResult;
+        var finalDestinationTolerance = landingPoint != null ? completionTolerance : 0;
 
         return new()
         {
@@ -97,7 +98,7 @@ public partial class NavmeshQuery
             RequestedMode        = MovementMode.Flight,
             RequestedDestination = to,
             FinalDestination     = finalDestination,
-            DestinationTolerance = 0,
+            DestinationTolerance = finalDestinationTolerance,
             Segments =
             [
                 new()
@@ -176,6 +177,30 @@ public partial class NavmeshQuery
         return VoxelSearch.FindClosestVoxelPoint(VolumeQuery!.Volume, approachVoxel, candidate);
     }
 
+    private void TrimFlightWaypointsForGroundTransition(List<Vector3> flightWaypoints, Vector3 approachPoint)
+    {
+        if (VolumeQuery == null || flightWaypoints.Count < 2)
+            return;
+
+        var volume       = VolumeQuery.Volume;
+        var approachLeaf = volume.FindLeafVoxel(approachPoint);
+        if (!approachLeaf.empty || approachLeaf.voxel == VoxelMap.InvalidVoxel)
+            return;
+
+        while (flightWaypoints.Count >= 2)
+        {
+            var previousPoint = flightWaypoints[^2];
+            var previousLeaf  = volume.FindLeafVoxel(previousPoint);
+            if (!previousLeaf.empty || previousLeaf.voxel == VoxelMap.InvalidVoxel)
+                break;
+
+            if (!VoxelSearch.LineOfSight(volume, previousLeaf.voxel, approachLeaf.voxel, previousPoint, approachPoint))
+                break;
+
+            flightWaypoints.RemoveAt(flightWaypoints.Count - 1);
+        }
+    }
+
     private bool TryBuildFlightGroundTransitionResult
     (
         Vector3           requestedStart,
@@ -197,9 +222,12 @@ public partial class NavmeshQuery
         var transitionPoint = groundResult.Segments[0].StartPosition;
         var approachPoint   = TryBuildFlightGroundApproachPoint(safeFlightDestination, transitionPoint, groundResult.Segments[0].EndPosition, requestedTarget);
         List<Vector3> flightWaypoints = [.. rawFlightWaypoints];
-        if (approachPoint is { } resolvedApproachPoint &&
-            (flightWaypoints.Count == 0 || Vector3.DistanceSquared(flightWaypoints[^1], resolvedApproachPoint) > 0.000001f))
-            flightWaypoints.Add(resolvedApproachPoint);
+        if (approachPoint is { } resolvedApproachPoint)
+        {
+            TrimFlightWaypointsForGroundTransition(flightWaypoints, resolvedApproachPoint);
+            if (flightWaypoints.Count == 0 || Vector3.DistanceSquared(flightWaypoints[^1], resolvedApproachPoint) > 0.000001f)
+                flightWaypoints.Add(resolvedApproachPoint);
+        }
         if (flightWaypoints.Count == 0 || Vector3.DistanceSquared(flightWaypoints[^1], transitionPoint) > 0.000001f)
             flightWaypoints.Add(transitionPoint);
 
@@ -226,13 +254,15 @@ public partial class NavmeshQuery
             $"[算路] 飞行接地面续算：空体素终点 = {safeFlightDestination:f3}，近地点 = {(approachPoint is { } ap ? ap.ToString("f3") : "无")}，桥接点 = {transitionPoint:f3}，桥接修正 = {(transitionAdjusted ? "是" : "否")}，地面结果 = {groundResult.Status}，地面段数 = {groundResult.Segments.Count}"
         );
 
+        var destinationTolerance = MathF.Max(groundResult.DestinationTolerance, MathF.Max(_config.PathTolerance, FlightLandingCompletionSlack));
+
         result = new()
         {
             Status               = groundResult.Status,
             RequestedMode        = MovementMode.Flight,
             RequestedDestination = requestedTarget,
             FinalDestination     = groundResult.FinalDestination,
-            DestinationTolerance = groundResult.DestinationTolerance,
+            DestinationTolerance = destinationTolerance,
             Segments             = segments
         };
         return true;
