@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
 using vnavmesh.Movement.Planning;
@@ -26,12 +27,12 @@ internal sealed class MovementUnstuckController
     private const float  MAX_RECOVERY_TARGET_DISTANCE = 35f;
     private const int    RANDOM_TARGET_RESOLVE_ATTEMPTS = 12;
 
-    private DateTime _lastMovement    = DateTime.MinValue;
-    private DateTime _unstuckStart    = DateTime.MinValue;
-    private DateTime _lastCheck       = DateTime.MinValue;
-    private DateTime _lastJumpAttempt = DateTime.MinValue;
-    private Vector3  _lastPosition;
-    private Vector3  _recoveryTarget;
+    private DateTime lastMovementTime    = DateTime.MinValue;
+    private DateTime unstuckStartTime    = DateTime.MinValue;
+    private DateTime lastCheckTime       = DateTime.MinValue;
+    private DateTime lastJumpAttemptTime = DateTime.MinValue;
+    private Vector3  lastPosition;
+    private Vector3  recoveryTarget;
 
     public bool IsRunning { get; private set; }
 
@@ -39,12 +40,12 @@ internal sealed class MovementUnstuckController
 
     public void Reset()
     {
-        _lastMovement    = DateTime.MinValue;
-        _unstuckStart    = DateTime.MinValue;
-        _lastCheck       = DateTime.MinValue;
-        _lastJumpAttempt = DateTime.MinValue;
-        _lastPosition    = default;
-        _recoveryTarget  = default;
+        lastMovementTime    = DateTime.MinValue;
+        unstuckStartTime    = DateTime.MinValue;
+        lastCheckTime       = DateTime.MinValue;
+        lastJumpAttemptTime = DateTime.MinValue;
+        lastPosition    = default;
+        recoveryTarget  = default;
         IsRunning        = false;
     }
 
@@ -62,70 +63,70 @@ internal sealed class MovementUnstuckController
         var destination = ResolvePathGoal(context);
         var now         = DateTime.Now;
 
-        if (now.Subtract(_unstuckStart).TotalSeconds < config.UnstuckCooldownSeconds || destination == default)
+        if (now.Subtract(unstuckStartTime).TotalSeconds < config.UnstuckCooldownSeconds || destination == default)
         {
-            _lastCheck = DateTime.MinValue;
+            lastCheckTime = DateTime.MinValue;
             return default;
         }
 
-        var lastCheck = _lastCheck;
-        _lastCheck = now;
+        var lastCheck = lastCheckTime;
+        lastCheckTime = now;
 
         if (now.Subtract(lastCheck).TotalSeconds > CHECK_EXPIRATION)
         {
-            _lastPosition = context.Player.Position;
-            _lastMovement = now;
+            lastPosition = context.Player.Position;
+            lastMovementTime = now;
             return default;
         }
 
-        if (MeasureDistance(_lastPosition, context.Player.Position, IsGroundSegment(context)) >= MIN_MOVEMENT_DISTANCE)
+        if (MeasureDistance(lastPosition, context.Player.Position, IsGroundSegment(context)) >= MIN_MOVEMENT_DISTANCE)
         {
-            _lastPosition = context.Player.Position;
-            _lastMovement = now;
+            lastPosition = context.Player.Position;
+            lastMovementTime = now;
             return default;
         }
 
-        if (now.Subtract(_lastMovement).TotalSeconds <= config.UnstuckDetectionSeconds)
+        if (now.Subtract(lastMovementTime).TotalSeconds <= config.UnstuckDetectionSeconds)
             return default;
 
         Service.Log.Warning
         (
-            $"[自动防卡] 角色疑似卡住：阶段 = {context.Segment.Kind}，位移 = {MeasureDistance(_lastPosition, context.Player.Position, IsGroundSegment(context)):f2} 米，持续时长 = {now.Subtract(_lastMovement).TotalSeconds:f2} 秒"
+            $"[自动防卡] 角色疑似卡住：阶段 = {context.Segment.Kind}，位移 = {MeasureDistance(lastPosition, context.Player.Position, IsGroundSegment(context)):f2} 米，持续时长 = {now.Subtract(lastMovementTime).TotalSeconds:f2} 秒"
         );
 
-        if (now.Subtract(_lastJumpAttempt).TotalSeconds > config.UnstuckCooldownSeconds * 2.0 && CanAttemptJump(context))
+        if (now.Subtract(lastJumpAttemptTime).TotalSeconds > config.UnstuckCooldownSeconds * 2.0 && CanAttemptJump(context))
         {
-            _lastMovement    = now;
-            _lastJumpAttempt = now;
-            _lastPosition    = context.Player.Position;
+            lastMovementTime    = now;
+            lastJumpAttemptTime = now;
+            lastPosition    = context.Player.Position;
             Service.Log.Information("[自动防卡] 优先尝试跳跃脱困");
             return new(BuildRecoveryCommand(context, ResolvePathGoal(context), false, true));
         }
 
-        if (manager.Query is not { } query || !TryResolveRecoveryTarget(query, context.Player.Position, IsFlightSegment(context), out _recoveryTarget))
+        if (manager.Query is not { } query || !TryResolveRecoveryTarget(query, context.Player.Position, IsFlightSegment(context), out recoveryTarget))
         {
             Service.Log.Warning("[自动防卡] 未找到可用的随机脱困目标点，本次跳过位移脱困");
-            _lastMovement = now;
-            _lastPosition = context.Player.Position;
+            lastMovementTime = now;
+            lastPosition = context.Player.Position;
             return default;
         }
 
         IsRunning     = true;
-        _unstuckStart = now;
-        Service.Log.Information($"[自动防卡] 开始随机位移脱困：目标点 = {_recoveryTarget:f3}");
-        return new(BuildRecoveryCommand(context, _recoveryTarget, IsFlightSegment(context), false), true);
+        unstuckStartTime = now;
+        Service.Log.Information($"[自动防卡] 开始随机位移脱困：目标点 = {recoveryTarget:f3}");
+        return new(BuildRecoveryCommand(context, recoveryTarget, IsFlightSegment(context), false), true);
     }
 
     private UnstuckUpdate UpdateRunning(MovementExecutionContext context)
     {
-        if (DateTime.Now.Subtract(_unstuckStart).TotalSeconds > UNSTUCK_DURATION_SECONDS)
+        if (DateTime.Now.Subtract(unstuckStartTime).TotalSeconds > UNSTUCK_DURATION_SECONDS)
         {
             StopRunning();
             Service.Log.Information($"[自动防卡] 随机位移脱困结束，准备从当前位置重新算路：目标 = {context.Plan.RequestedDestination:f3}");
             return new(RequestRepath: true);
         }
 
-        return new(BuildRecoveryCommand(context, _recoveryTarget, IsFlightSegment(context), false), true);
+        return new(BuildRecoveryCommand(context, recoveryTarget, IsFlightSegment(context), false), true);
     }
 
     private static MovementFrameCommand BuildRecoveryCommand(MovementExecutionContext context, Vector3 desired, bool allowVerticalControl, bool requestJump)
@@ -148,15 +149,15 @@ internal sealed class MovementUnstuckController
     private void StopRunning()
     {
         IsRunning     = false;
-        _lastCheck    = DateTime.MinValue;
-        _lastPosition = default;
+        lastCheckTime    = DateTime.MinValue;
+        lastPosition = default;
     }
 
     private void ResetTracking()
     {
-        _lastCheck    = DateTime.MinValue;
-        _lastMovement = DateTime.MinValue;
-        _lastPosition = default;
+        lastCheckTime    = DateTime.MinValue;
+        lastMovementTime = DateTime.MinValue;
+        lastPosition = default;
     }
 
     internal static bool TryResolveRecoveryTarget(NavmeshQuery query, Vector3 origin, bool fly, out Vector3 target)
