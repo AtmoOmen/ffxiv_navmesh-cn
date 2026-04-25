@@ -87,10 +87,8 @@ internal class DebugNavmeshManager : IDisposable
         if (ImGui.CollapsingHeader("寻路", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextUnformatted($"正在执行: {(manager.PathfindInProgress ? 1 : 0)}\t正在等待: {manager.NumQueuedPathfindRequests}");
-            
-            ImGui.Checkbox("允许移动",     ref movementExecutor.MovementAllowed);
-            ImGui.Checkbox("使用射线检测", ref manager.UseRaycasts);
-            ImGui.Checkbox("使用拉绳算法", ref manager.UseStringPulling);
+
+            ImGui.Checkbox("允许移动", ref movementExecutor.MovementAllowed);
             
             ImGui.NewLine();
             

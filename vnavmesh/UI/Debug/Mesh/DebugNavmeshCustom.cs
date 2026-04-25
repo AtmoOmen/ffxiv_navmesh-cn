@@ -43,7 +43,7 @@ internal class DebugNavmeshCustom : IDisposable
         public override bool IsFlyingSupported(SceneDefinition definition) => Flyable;
 
         private static NavmeshCustomization? Existing =>
-            NavmeshCustomizationRegistry.ForTerritory(Service.ClientState.TerritoryType) is { } t && t.Version > 0 ? t : null;
+            NavmeshCustomizationRegistry.GetForTerritory(Service.ClientState.TerritoryType) is { } t && t.Version > 0 ? t : null;
 
         public override void CustomizeScene(SceneExtractor scene)
         {
