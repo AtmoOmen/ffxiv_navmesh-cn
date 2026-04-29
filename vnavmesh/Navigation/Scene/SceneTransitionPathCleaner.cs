@@ -20,7 +20,7 @@ public sealed class SceneTransitionPathCleaner : IDisposable
     public void Dispose() =>
         Service.ClientState.TerritoryChanged -= OnTerritoryChanged;
 
-    private void OnTerritoryChanged(ushort territoryType)
+    private void OnTerritoryChanged(uint territoryType)
     {
         _asyncMoveRequest.Stop();
         _navmeshManager.ClearForSceneChange();
