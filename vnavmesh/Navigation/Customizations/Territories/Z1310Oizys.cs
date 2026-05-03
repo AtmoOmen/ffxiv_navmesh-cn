@@ -69,8 +69,8 @@ internal class Z1310Oizys : NavmeshCustomization
             var (depA, arrA) = getPoints(pointAPos, pointARotation);
             var (depB, arrB) = getPoints(pointBPos, pointBRotation);
 
-            LinkPoints(mesh, depA, arrB);
-            LinkPoints(mesh, depB, arrA);
+            LinkClientPath(mesh, depA, arrB);
+            LinkClientPath(mesh, depB, arrA);
         }
 
         void addSoloLiner(Vector3 pointAPos, Vector3 pointARotation, Vector3 pointBPos, Vector3 pointBRotation)
@@ -80,7 +80,7 @@ internal class Z1310Oizys : NavmeshCustomization
             var ptA  = pointAPos + adjA;
             var ptB  = pointBPos + adjB;
 
-            LinkPoints(mesh, ptA, ptB);
+            LinkClientPath(mesh, ptA, ptB);
         }
 
         var festivalVersion = festivalLayers.LastOrDefault() >> 16;

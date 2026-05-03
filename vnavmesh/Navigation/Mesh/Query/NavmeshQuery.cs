@@ -222,6 +222,7 @@ public class NavmeshQuery
             costs[(int)NavmeshArea.GeneratedEdgeJump]  = 2.6f;
             costs[(int)NavmeshArea.ManualOffMesh]      = 1.35f;
             costs[(int)NavmeshArea.Teleport]           = 1.15f;
+            costs[(int)NavmeshArea.ClientPath]         = 3.0f;
             return costs;
         }
 
@@ -1665,6 +1666,10 @@ public class NavmeshQuery
                     break;
                 case NavmeshArea.Teleport:
                     weightedLinkPenalty += 1;
+                    offMeshTransitionCount++;
+                    break;
+                case NavmeshArea.ClientPath:
+                    weightedLinkPenalty += 3;
                     offMeshTransitionCount++;
                     break;
             }

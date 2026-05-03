@@ -128,6 +128,16 @@ public unsafe partial class DebugGameCollision : IDisposable
         }
     }
 
+    public void DrawPath(Span<PathSegment> pathSegments)
+    {
+        for (var i = 1; i < pathSegments.Length; i++)
+        {
+            var a = pathSegments[i - 1];
+            var b = pathSegments[i];
+            _dd.DrawWorldLine(a.Position, b.Position, 0xFF00FFAA, 2);
+        }
+    }
+
     private void DrawSceneColliders(Scene* s, int index)
     {
         using var n = _tree.Node($"场景 {index}：{s->NumColliders} 个碰撞体，{s->NumLoading} 个正在加载，流式加载={SphereStr(s->StreamingSphere)}###scene_{index}");

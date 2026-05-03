@@ -204,6 +204,26 @@ public unsafe partial class DebugLayout : IDisposable
                     tree.LeafNode($"Misc: active-by-default={instCollGeneric->TriggerBoxLayoutInstance.ActiveByDefault}");
                     //tree.LeafNode($"Unk: {instCollGeneric->ColliderLayoutInstance.u70}");
                     break;
+                case InstanceType.ClientPath:
+                    var instPath = (PathLayoutInstance*)inst;
+                    var def      = instPath->Definition;
+
+                    using (var npn = tree.Node($"路径节点数：{def->Segments.Length}"))
+                    {
+                        if (npn.Opened)
+                        {
+                            for (var i = 0; i < def->Segments.Length; i++)
+                            {
+                                var segment = def->Segments[i];
+                                ImGui.Text($"[{i}] {segment.Position} {segment.UnkWord:X2} {segment.UnkByte:X1}");
+                            }
+                        }
+
+                        if (npn.SelectedOrHovered)
+                            coll.DrawPath(def->Segments);
+                    }
+
+                    break;
             }
         }
 

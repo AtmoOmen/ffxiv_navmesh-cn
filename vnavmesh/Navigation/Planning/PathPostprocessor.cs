@@ -201,6 +201,7 @@ internal sealed class PathPostprocessor
             NavmeshArea.GeneratedEdgeJump  => NavmeshOffMeshKind.GeneratedEdgeJump,
             NavmeshArea.ManualOffMesh      => NavmeshOffMeshKind.ManualOffMesh,
             NavmeshArea.Teleport           => NavmeshOffMeshKind.Teleport,
+            NavmeshArea.ClientPath         => NavmeshOffMeshKind.ClientPath,
             _                              => null
         };
     }

@@ -11,8 +11,9 @@ public enum NavmeshPolyFlags
     GeneratedEdgeJump  = 1 << 2,
     ManualOffMesh      = 1 << 3,
     Teleport           = 1 << 4,
+    ClientPath         = 1 << 5,
     Unreachable        = 1 << 8,
-    AllTraversable     = Ground | GeneratedClimbDown | GeneratedEdgeJump | ManualOffMesh | Teleport
+    AllTraversable     = Ground | GeneratedClimbDown | GeneratedEdgeJump | ManualOffMesh | Teleport | ClientPath
 }
 
 public enum NavmeshArea
@@ -22,7 +23,8 @@ public enum NavmeshArea
     GeneratedClimbDown = 2,
     GeneratedEdgeJump  = 3,
     ManualOffMesh      = 4,
-    Teleport           = 5
+    Teleport           = 5,
+    ClientPath         = 6
 }
 
 public enum NavmeshOffMeshKind
@@ -30,7 +32,8 @@ public enum NavmeshOffMeshKind
     GeneratedClimbDown,
     GeneratedEdgeJump,
     ManualOffMesh,
-    Teleport
+    Teleport,
+    ClientPath
 }
 
 public readonly record struct NavmeshLink

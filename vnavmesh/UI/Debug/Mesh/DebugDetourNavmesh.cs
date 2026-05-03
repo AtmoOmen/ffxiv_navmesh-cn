@@ -33,8 +33,9 @@ public class DebugDetourNavmesh : DebugRecast
     private static Vector4 _colAreaClimb     = new(0.18f, 0.80f, 0.44f, 0.60f);
     private static Vector4 _colAreaJump      = new(0.20f, 0.60f, 0.86f, 0.60f);
     private static Vector4 _colAreaManual    = new(0.95f, 0.61f, 0.07f, 0.60f);
-    private static Vector4 _colAreaTeleport  = new(0.91f, 0.30f, 0.24f, 0.60f);
-    private static Vector4 _colClosedList    = new(1.00f, 0.75f, 1.00f, 0.50f);
+    private static Vector4 _colAreaTeleport   = new(0.91f, 0.30f, 0.24f, 0.60f);
+    private static Vector4 _colAreaClientPath = new(0.65f, 0.36f, 0.95f, 0.60f);
+    private static Vector4 _colClosedList     = new(1.00f, 0.75f, 1.00f, 0.50f);
 
     private enum InstanceID
     {
@@ -45,6 +46,7 @@ public class DebugDetourNavmesh : DebugRecast
         AreaJump,
         AreaManual,
         AreaTeleport,
+        AreaClientPath,
         ClosedList,
         Count
     }
@@ -250,6 +252,7 @@ public class DebugDetourNavmesh : DebugRecast
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaJump));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaManual));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaTeleport));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaClientPath));
             builder.AddInstance(new(Matrix4x3.Identity, _colClosedList));
 
             for (var i = 0; i < tile.data.header.vertCount; ++i)
@@ -303,6 +306,7 @@ public class DebugDetourNavmesh : DebugRecast
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaJump));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaManual));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaTeleport));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaClientPath));
             builder.AddInstance(new(Matrix4x3.Identity, _colClosedList));
 
             for (var i = 0; i < tile.data.header.vertCount; ++i)
@@ -520,6 +524,7 @@ public class DebugDetourNavmesh : DebugRecast
         NavmeshArea.GeneratedEdgeJump  => InstanceID.AreaJump,
         NavmeshArea.ManualOffMesh      => InstanceID.AreaManual,
         NavmeshArea.Teleport           => InstanceID.AreaTeleport,
+        NavmeshArea.ClientPath         => InstanceID.AreaClientPath,
         _                              => InstanceID.AreaGround
     };
 

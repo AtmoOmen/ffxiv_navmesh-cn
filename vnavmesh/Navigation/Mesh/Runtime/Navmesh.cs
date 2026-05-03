@@ -15,7 +15,7 @@ namespace vnavmesh.Navigation.Mesh.Runtime;
 public record class Navmesh
 {
     public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 35;         // 更新后触发一次全量重构建
+    public static readonly uint Version = 36;         // 更新后触发一次全量重构建
 
     public int       CustomizationVersion { get; init; }
     public string    BuildSignature       { get; init; }

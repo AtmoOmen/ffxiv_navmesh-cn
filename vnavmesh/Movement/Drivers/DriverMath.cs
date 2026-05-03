@@ -1,5 +1,8 @@
 using System.Numerics;
+using Dalamud.Game.ClientState.Conditions;
+using vnavmesh.Bootstrap;
 using vnavmesh.Movement.Execution;
+using vnavmesh.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Movement.Drivers;
 
@@ -40,6 +43,17 @@ internal static class DriverMath
 
         while (context.TryGetCurrentTraverseSegment(currentTraverseSegmentIndex, out var segmentStart, out var segmentEnd))
         {
+            if (flatten && ShouldHoldForClientPath(context, currentTraverseSegmentIndex, out var proceed))
+            {
+                if (proceed)
+                {
+                    currentTraverseSegmentIndex++;
+                    continue;
+                }
+
+                break;
+            }
+
             var projectedStart = Project(segmentStart, flatten);
             var projectedEnd   = Project(segmentEnd, flatten);
             var progress       = ComputeProjectionParameter(current, projectedStart, projectedEnd);
@@ -80,4 +94,35 @@ internal static class DriverMath
     private static Vector3 Project(Vector3 value, bool flatten) => flatten
         ? new(value.X, 0, value.Z)
         : value;
+
+    private static bool ShouldHoldForClientPath(MovementExecutionContext context, int waypointIndex, out bool proceed)
+    {
+        proceed = false;
+
+        if (context.Segment.GroundCorridor is not { } corridor)
+            return false;
+
+        foreach (var marker in corridor.LinkMarkers)
+        {
+            if (marker.Kind != NavmeshOffMeshKind.ClientPath)
+                continue;
+
+            if (marker.CornerIndex == waypointIndex)
+            {
+                proceed = IsClientPathActive();
+                return true;
+            }
+
+            if (marker.CornerIndex + 1 == waypointIndex)
+            {
+                proceed = !IsClientPathActive();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsClientPathActive() =>
+        Service.Condition.Any(ConditionFlag.Jumping61, ConditionFlag.Unknown101);
 }

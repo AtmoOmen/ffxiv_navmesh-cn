@@ -94,7 +94,17 @@ public class NavmeshCustomization
 
     protected static void LinkPoints(Navmesh nmesh, Vector3 startPos, Vector3 endPos)
     {
-        nmesh.Links.Add(new(startPos, endPos, NavmeshOffMeshKind.Teleport, false, 0));
+        LinkPoints(nmesh, startPos, endPos, NavmeshArea.Teleport, NavmeshPolyFlags.Teleport, NavmeshOffMeshKind.Teleport);
+    }
+
+    protected static void LinkClientPath(Navmesh nmesh, Vector3 startPos, Vector3 endPos)
+    {
+        LinkPoints(nmesh, startPos, endPos, NavmeshArea.ClientPath, NavmeshPolyFlags.ClientPath, NavmeshOffMeshKind.ClientPath);
+    }
+
+    private static void LinkPoints(Navmesh nmesh, Vector3 startPos, Vector3 endPos, NavmeshArea area, NavmeshPolyFlags flags, NavmeshOffMeshKind kind)
+    {
+        nmesh.Links.Add(new(startPos, endPos, kind, false, 0));
         var mesh = nmesh.Mesh;
         var (startRef, startTile, startPoly, projectedStart) = ResolvePointPoly(mesh, startPos);
         var (endRef, _, _, projectedEnd)                     = ResolvePointPoly(mesh, endPos);
@@ -104,9 +114,9 @@ public class NavmeshCustomization
         {
             firstLink = DT_NULL_LINK,
             vertCount = 2,
-            flags     = (int)NavmeshPolyFlags.Teleport
+            flags     = (int)flags
         };
-        offMeshPoly.SetArea((int)NavmeshArea.Teleport);
+        offMeshPoly.SetArea((int)area);
         offMeshPoly.SetPolyType(DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION);
         offMeshPoly.verts[0] = vertexIndex;
         offMeshPoly.verts[1] = vertexIndex + 1;
