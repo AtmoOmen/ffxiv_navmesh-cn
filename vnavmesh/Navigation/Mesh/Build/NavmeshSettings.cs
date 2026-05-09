@@ -22,7 +22,7 @@ public class NavmeshSettings
     public float       CellSize         = 0.25f;
     public float       CellHeight       = 0.125f;
     public float       AgentHeight      = 2.0f;
-    public float       AgentRadius      = 2f;
+    public float       AgentRadius      = 1;
     public float       AgentMaxClimb    = 0.7f;
     public float       AgentMaxSlopeDeg = 55f;
     public Filter      Filtering        = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
