@@ -766,7 +766,7 @@ public record class Navmesh
         _deferredMeshExpectedBytes = expectedBytes;
     }
 
-    internal void DeferMeshMutation(Action<DtNavMesh> mutator) =>
+    public void DeferMeshMutation(Action<DtNavMesh> mutator) =>
         _deferredMeshMutator += mutator;
 
     internal void EnsureMeshMaterialized()
@@ -800,7 +800,7 @@ public record class Navmesh
         }
     }
 
-    internal void ReleaseRetainedState()
+    public void ReleaseRetainedState()
     {
         _deferredMeshPayload       = null;
         _deferredMeshExpectedBytes = 0;

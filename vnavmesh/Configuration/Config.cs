@@ -23,7 +23,6 @@ public class Config : IPluginConfiguration
     public float UnstuckCooldownSeconds  = 3f;
     public float PathTolerance        = 0.05f;
     public float RandomnessMultiplier = 1f;
-    public int   BuildMaxCores        = 1;
 
     private const float              CONFIG_VALUE_WIDTH    = 260f;
     private const ImGuiTreeNodeFlags DEFAULT_SECTION_FLAGS = ImGuiTreeNodeFlags.DefaultOpen;
@@ -36,7 +35,6 @@ public class Config : IPluginConfiguration
         DrawSection("导航与显示", "控制导航数据加载、可视化以及 DTR 信息栏展示。", DrawNavigationAndDisplaySection);
         DrawSection("移动与镜头", "调整角色跟随行为、镜头联动与寻路细节。",       DrawMovementAndCameraSection);
         DrawSection("卡住处理",  "配置角色疑似卡住时的判定条件与恢复策略。",      DrawStuckHandlingSection);
-        DrawSection("性能与构建", "控制导航网格构建时的资源占用。",           DrawPerformanceSection);
     }
 
     private void DrawNavigationAndDisplaySection()
@@ -79,12 +77,6 @@ public class Config : IPluginConfiguration
 
         DrawSliderFloat("卡住判定时长 (秒)", ref UnstuckDetectionSeconds, 0.5f, 10f, "%.1f", "持续几乎没有实际位移达到该时长后，开始尝试脱困。");
         DrawSliderFloat("脱困冷却期 (秒)", ref UnstuckCooldownSeconds, 0.5f, 10f, "%.1f", "每次随机位移脱困结束后，暂停重新判定卡住的时间。");
-    }
-
-    private void DrawPerformanceSection()
-    {
-        DrawSliderInt("路网构建最大使用核心数", ref BuildMaxCores, -8, Environment.ProcessorCount, "%d", "0 表示使用全部核心，正数表示指定数量，负数表示保留对应数量的核心。");
-        ImGui.TextDisabled($"当前可用逻辑核心数： {Environment.ProcessorCount}");
     }
 
     private static void DrawSection(string title, string description, Action drawContent)

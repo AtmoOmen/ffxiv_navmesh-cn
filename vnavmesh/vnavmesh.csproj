@@ -6,6 +6,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\vnavmesh.Common\vnavmesh.Common.csproj"/>
+        <ProjectReference Include="..\vnavmesh.Worker\vnavmesh.Worker.csproj" ReferenceOutputAssembly="false" Private="false"/>
         <ProjectReference Include="..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj"/>
         <ProjectReference Include="..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj"/>
         <ProjectReference Include="..\DotRecast\src\DotRecast.Detour.Crowd\DotRecast.Detour.Crowd.csproj"/>
@@ -20,5 +22,17 @@
         <PackageReference Include="SharpDX.Mathematics" Version="4.2.0"/>
         <Reference Include="Dalamud.Common" Private="false"/>
     </ItemGroup>
+
+    <Target Name="CopyNavmeshWorker" AfterTargets="Build">
+        <MSBuild Projects="..\vnavmesh.Worker\vnavmesh.Worker.csproj"
+                 Targets="GetTargetPath"
+                 Properties="Configuration=$(Configuration);Platform=$(Platform)">
+            <Output TaskParameter="TargetOutputs" ItemName="NavmeshWorkerTargetPath"/>
+        </MSBuild>
+        <ItemGroup>
+            <NavmeshWorkerFile Include="$([System.IO.Path]::GetDirectoryName('%(NavmeshWorkerTargetPath.Identity)'))\*.*"/>
+        </ItemGroup>
+        <Copy SourceFiles="@(NavmeshWorkerFile)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true"/>
+    </Target>
 
 </Project>

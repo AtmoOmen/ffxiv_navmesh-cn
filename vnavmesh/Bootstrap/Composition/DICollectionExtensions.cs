@@ -16,10 +16,12 @@ public static class DICollectionExtensions
 {
     public static IServiceCollection AddPluginServices(this IServiceCollection services)
     {
-        services.AddSingleton(new PluginPaths(Service.PluginInterface.ConfigDirectory));
+        var pluginFile = new FileInfo(Service.PluginInterface.AssemblyLocation.FullName);
+        var pluginDirectory = pluginFile.Directory ?? throw new InvalidOperationException("无法定位插件目录");
+        services.AddSingleton(new PluginPaths(pluginDirectory, Service.PluginInterface.ConfigDirectory));
         services.AddSingleton(Service.PluginInterface.GetPluginConfig() as Config ?? new());
 
-        services.AddSingleton(sp => new NavmeshManager(sp.GetRequiredService<PluginPaths>().MeshCacheDirectory, sp.GetRequiredService<Config>()));
+        services.AddSingleton(sp => new NavmeshManager(sp.GetRequiredService<PluginPaths>(), sp.GetRequiredService<Config>()));
         services.AddSingleton<MovementPlanExecutor>();
         services.AddSingleton<AsyncMoveRequest>();
         services.AddSingleton<SceneTransitionPathCleaner>();

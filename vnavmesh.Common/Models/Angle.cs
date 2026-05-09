@@ -2,8 +2,6 @@ using System.Numerics;
 
 namespace vnavmesh.Shared.Models;
 
-// wrapper around float, stores angle in radians, provides type-safety and convenience
-// when describing rotation in world, common convention is 0 for 'south'/'down'/(0, -1) and increasing counterclockwise - so +90 is 'east'/'right'/(1, 0)
 public struct Angle
 (
     float radians = 0

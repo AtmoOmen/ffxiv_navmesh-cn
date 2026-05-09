@@ -180,7 +180,7 @@ public class VoxelMap
         }
     }
 
-    internal Vector3 ClampPointToVoxel(ulong voxel, Vector3 p, float eps = 0.1f)
+    public Vector3 ClampPointToVoxel(ulong voxel, Vector3 p, float eps = 0.1f)
     {
         EnsureMaterialized();
         var tile = RootTile;
@@ -256,7 +256,7 @@ public class VoxelMap
         }
     }
 
-    internal void ReleaseRetainedState()
+    public void ReleaseRetainedState()
     {
         deferredTreePayload      = null;
         deferredTreeOffset       = 0;
@@ -265,7 +265,7 @@ public class VoxelMap
         RootTile.ReleaseRetainedState();
     }
 
-    internal void CompactRetainedState()
+    public void CompactRetainedState()
     {
         if (HasDeferredTree)
             return;

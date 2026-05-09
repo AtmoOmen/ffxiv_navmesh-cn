@@ -18,7 +18,7 @@ public static class Extensions
 
         public RcVec3f SystemToRecast() => new(v.X, v.Y, v.Z);
     }
-    
+
     extension(Interlocked)
     {
         public static float Add(ref float location, float value)
@@ -29,7 +29,7 @@ public static class Extensions
                 initial  = location;
                 newValue = initial + value;
             } while (Math.Abs(Interlocked.CompareExchange(ref location, newValue, initial) - initial) > 0.0001f);
-        
+
             return newValue;
         }
     }

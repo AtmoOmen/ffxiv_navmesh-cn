@@ -1,6 +1,5 @@
 namespace vnavmesh.Shared.Utilities;
 
-// very simple stopwatch timer
 public struct StopWatchTimer
 {
     public DateTime Start;
@@ -9,7 +8,7 @@ public struct StopWatchTimer
 
     public TimeSpan Value()
     {
-        var now   = DateTime.Now;
+        var now = DateTime.Now;
         var delta = now - Start;
         Start = now;
         return delta;

@@ -122,6 +122,15 @@
         "dependencies": {
           "DotRecast.Core": "[1.0.0, )"
         }
+      },
+      "vnavmesh.common": {
+        "type": "Project",
+        "dependencies": {
+          "DotRecast.Core": "[1.0.0, )",
+          "DotRecast.Detour": "[1.0.0, )",
+          "DotRecast.Detour.Extras": "[1.0.0, )",
+          "DotRecast.Recast": "[1.0.0, )"
+        }
       }
     }
   }

@@ -1,23 +1,23 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Numerics;
 using DotRecast.Core;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using DotRecast.Detour.Extras.Jumplink;
 using DotRecast.Recast;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Bootstrap;
-using vnavmesh.Configuration;
-using vnavmesh.Navigation.Customizations;
+using vnavmesh.Common.Diagnostics;
+using vnavmesh.Common.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Runtime;
-using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
 using vnavmesh.Navigation.Volume.Map;
 using vnavmesh.Navigation.Volume.Search;
 using vnavmesh.Shared.Models;
 using vnavmesh.Shared.Utilities;
+using AABB = vnavmesh.Common.Numerics.Aabb;
+using Matrix4x3 = vnavmesh.Common.Numerics.Matrix4x3;
+using SceneExtractor = vnavmesh.Common.Navigation.Scene.BuildScene;
 
-namespace vnavmesh.Navigation.Mesh.Build;
+namespace vnavmesh.Common.Navigation.Mesh.Build;
 
 using static DtDetour;
 
@@ -25,7 +25,6 @@ using static DtDetour;
 // individual tiles can be built concurrently
 public class NavmeshBuilder
 {
-    private readonly Config _config;
     private const    float  WorldBoundsMin = -1024f;
     private const    float  WorldBoundsMax = 1024f;
 
@@ -159,7 +158,7 @@ public class NavmeshBuilder
         "Recast: 细节网格"
     ];
 
-    public NavmeshSettings        Settings;
+    public NavmeshBuildSettings   Settings;
     public SceneExtractor         Scene;
     public Vector3                BoundsMin;
     public Vector3                BoundsMax;
@@ -171,7 +170,12 @@ public class NavmeshBuilder
     public BuildTelemetrySummary? LastBuildTelemetry       { get; private set; }
     public long                   TotalEstimatedTileWeight { get; }
 
-    private readonly NavmeshCustomization            _customization;
+    public static string ComputeBuildSignature(SceneExtractor scene, NavmeshBuildSettings settings)
+    {
+        var groundTiles = ResolveGroundTileCount(scene, settings);
+        return $"{settings.BuildSignature()}GroundTiles={groundTiles};";
+    }
+
     private readonly TileBuildInput[]                _tileInputs;
     private readonly int[]                           _tileBuildOrder;
     private readonly RasterJob[]                     _geometryJobs;
@@ -197,36 +201,18 @@ public class NavmeshBuilder
     private int   _voxelizerNumY = 1;
     private int   _voxelizerNumZ = 1;
 
-    public static string ComputeBuildSignature(SceneDefinition scene, NavmeshCustomization customization)
+    public NavmeshBuilder(SceneExtractor scene, NavmeshBuildSettings settings)
     {
-        var settings = customization.GetBuildSettings(scene);
-        var flyable  = customization.IsFlyingSupported(scene);
-        var extract  = new SceneExtractor(scene);
-        customization.CustomizeScene(extract);
-        var groundTiles = ResolveGroundTileCount(extract, settings);
-        return $"{settings.BuildSignature(flyable)}GroundTiles={groundTiles};";
-    }
-
-    public NavmeshBuilder(SceneDefinition scene, NavmeshCustomization customization, Config config)
-    {
-        _config  = config;
-        Settings = customization.GetBuildSettings(scene);
-
-        Flyable        = customization.IsFlyingSupported(scene);
-        BuildSignature = Settings.BuildSignature(Flyable);
-        _customization = customization;
-
-        var extractTimer = StopWatchTimer.Create();
-        Scene = new(scene);
-        customization.CustomizeScene(Scene);
-        var extractDuration = extractTimer.Value();
+        Settings       = settings;
+        Flyable        = settings.Flyable;
+        BuildSignature = Settings.BuildSignature();
+        Scene          = scene;
 
         BoundsMin      = new(WorldBoundsMin);
         BoundsMax      = new(WorldBoundsMax);
         NumTilesX      = NumTilesZ = ResolveGroundTileCount(Scene, Settings);
         BuildSignature = $"{BuildSignature}GroundTiles={NumTilesX};";
-        Service.Log.Debug($"[NavmeshBuilder] 开始构建 {NumTilesX}x{NumTilesZ} 路网，自定义 = {customization.GetType()} v{customization.Version}");
-        Service.Log.Debug($"[NavmeshBuilder] 场景提取耗时 {extractDuration.TotalMilliseconds:f1} ms");
+        NavmeshBuildLog.Debug($"[NavmeshBuilder] 开始构建 {NumTilesX}x{NumTilesZ} 路网，自定义版本 = {settings.CustomizationVersion}");
 
         var navmeshParams = new DtNavMeshParams
         {
@@ -248,7 +234,7 @@ public class NavmeshBuilder
         volumeTiles[0] = NumTilesX;
         Array.Copy(Settings.VolumeTiles, 0, volumeTiles, 1, Settings.VolumeTiles.Length);
         var volume = Flyable ? new VoxelMap(BoundsMin, BoundsMax, volumeTiles) : null;
-        Navmesh = new(customization.Version, BuildSignature, false, navmesh, volume);
+        Navmesh = new(settings.CustomizationVersion, BuildSignature, false, navmesh, volume);
 
         _walkableClimbVoxels     = (int)MathF.Floor(Settings.AgentMaxClimb / Settings.CellHeight);
         _walkableHeightVoxels    = (int)MathF.Ceiling(Settings.AgentHeight / Settings.CellHeight);
@@ -283,7 +269,7 @@ public class NavmeshBuilder
         _totalRasterJobReferences = bucketedInputs.TotalRasterJobReferences;
         _preparedTerrainBytes     = bucketedInputs.PreparedTerrainBytes;
         TotalEstimatedTileWeight  = bucketedInputs.TotalEstimatedTileWeight;
-        Service.Log.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
+        NavmeshBuildLog.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
     }
 
     public void Build(Action<int>? onTileFinished = null)
@@ -298,7 +284,7 @@ public class NavmeshBuilder
         return MergeBuiltTiles(builtTiles, true);
     }
 
-    private static int ResolveGroundTileCount(SceneExtractor scene, NavmeshSettings settings)
+    private static int ResolveGroundTileCount(SceneExtractor scene, NavmeshBuildSettings settings)
     {
         var min   = new Vector3(float.MaxValue);
         var max   = new Vector3(float.MinValue);
@@ -441,19 +427,19 @@ public class NavmeshBuilder
 
     private static void LogBuildTelemetry(BuildTelemetrySummary telemetry)
     {
-        Service.Log.Debug
+        NavmeshBuildLog.Debug
         (
             $"[NavmeshBuilder] 构建线程信息：配置核心数 = {telemetry.ConfiguredBuildMaxCores}，可用核心数 = {telemetry.MaxAvailableCores}，实际线程数 = {telemetry.ThreadCount}"
         );
-        Service.Log.Debug
+        NavmeshBuildLog.Debug
         (
             $"[NavmeshBuilder] Raster job 统计：唯一 job 数 = {telemetry.UniqueRasterJobCount}，覆盖倍率 = {telemetry.JobCoverageMultiplier:f2}，地形预处理缓存 = {telemetry.PreparedTerrainBytes / 1024.0 / 1024.0:f2} MiB"
         );
-        Service.Log.Debug("[NavmeshBuilder] 阶段统计（总计 / 单瓦片均值 / 最慢瓦片）");
+        NavmeshBuildLog.Debug("[NavmeshBuilder] 阶段统计（总计 / 单瓦片均值 / 最慢瓦片）");
 
         foreach (var phase in telemetry.Phases)
         {
-            Service.Log.Debug
+            NavmeshBuildLog.Debug
             (
                 $"[NavmeshBuilder] {phase.Name}: 总计 {TicksToMilliseconds(phase.TotalTicks):f1} ms，占比 {phase.ShareOfPhaseTicks:P1}，均值 {TicksToMilliseconds(phase.AverageTicks):f2} ms，最慢瓦片 {phase.SlowestTileX}x{phase.SlowestTileZ} = {TicksToMilliseconds(phase.MaxTicks):f1} ms"
             );
@@ -461,17 +447,17 @@ public class NavmeshBuilder
 
         var detailPhase = telemetry.Phases.FirstOrDefault(phase => phase.Name == "Recast: 细节网格");
         if (detailPhase != null && detailPhase.ShareOfPhaseTicks >= 0.30)
-            Service.Log.Information("[NavmeshBuilder] 细节网格耗时占比较高，如仅需快速验证，可启用“快速构建（关闭细节网格）”");
+            NavmeshBuildLog.Information("[NavmeshBuilder] 细节网格耗时占比较高，如仅需快速验证，可启用“快速构建（关闭细节网格）”");
 
         if (telemetry.SlowTiles.Count > 0)
         {
             var slowestTiles = string.Join("，", telemetry.SlowTiles.Select(tile => $"{tile.TileX}x{tile.TileZ} = {TicksToMilliseconds(tile.TotalTicks):f1} ms"));
-            Service.Log.Debug($"[NavmeshBuilder] 最慢瓦片 Top {telemetry.SlowTiles.Count}: {slowestTiles}");
+            NavmeshBuildLog.Debug($"[NavmeshBuilder] 最慢瓦片 Top {telemetry.SlowTiles.Count}: {slowestTiles}");
         }
 
         foreach (var tile in telemetry.SlowTiles)
         {
-            Service.Log.Debug
+            NavmeshBuildLog.Debug
             (
                 $"[NavmeshBuilder] 慢瓦片 {tile.TileX}x{tile.TileZ}: 几何 job {tile.GeometryJobCount}，地形 job {tile.TerrainJobCount}，唯一 job {tile.UniqueJobCount}，Primitive {tile.PrimitiveCount}，预估 span 权重 {tile.EstimatedSpanWeight}，紧凑前 span {tile.PreCompactSpanCount}，Poly {tile.PolyCount}，Vert {tile.VertCount}，DetailTri {tile.DetailTriCount}"
             );
@@ -483,7 +469,7 @@ public class NavmeshBuilder
     {
         var tileCount     = NumTilesX * NumTilesZ;
         var maxThreads    = Environment.ProcessorCount;
-        var wantedThreads = 0;
+        var wantedThreads = Settings.BuildMaxCores;
         var threadCount   = Math.Clamp(wantedThreads <= 0 ? maxThreads + wantedThreads : wantedThreads, 1, maxThreads);
         var builtTiles    = new TileBuildResult[tileCount];
         var buildTimer    = StopWatchTimer.Create();
@@ -516,16 +502,16 @@ public class NavmeshBuilder
         (
             builtTiles,
             parallelDuration,
-            wantedThreads,
+            Settings.BuildMaxCores,
             Environment.ProcessorCount,
             threadCount,
             _uniqueRasterJobCount,
             _totalRasterJobReferences,
             _preparedTerrainBytes
         );
-        Service.Log.Debug
+        NavmeshBuildLog.Debug
         (
-            $"[NavmeshBuilder] 并行瓦片构建耗时 {parallelDuration.TotalMilliseconds:f1} ms，配置核心数 = {wantedThreads}，可用核心数 = {Environment.ProcessorCount}，实际线程数 = {threadCount}"
+            $"[NavmeshBuilder] 并行瓦片构建耗时 {parallelDuration.TotalMilliseconds:f1} ms，配置核心数 = {Settings.BuildMaxCores}，可用核心数 = {Environment.ProcessorCount}，实际线程数 = {threadCount}"
         );
         LogBuildTelemetry(LastBuildTelemetry);
         return builtTiles;
@@ -574,7 +560,7 @@ public class NavmeshBuilder
 
         Navmesh.GeneratedClimbDownLinkCount = climbLinks;
         Navmesh.GeneratedEdgeJumpLinkCount  = jumpLinks;
-        Service.Log.Debug($"[NavmeshBuilder] 结果合并耗时 {mergeTimer.Value().TotalMilliseconds:f1} ms");
+        NavmeshBuildLog.Debug($"[NavmeshBuilder] 结果合并耗时 {mergeTimer.Value().TotalMilliseconds:f1} ms");
         return debugResults;
     }
 
@@ -675,7 +661,7 @@ public class NavmeshBuilder
             _walkableNormalThreshold,
             _walkableClimbVoxels,
             _walkableHeightVoxels,
-            Settings.Filtering.HasFlag(NavmeshSettings.Filter.Interiors),
+            Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.Interiors),
             vox,
             telemetry,
             scratch.Rasterizer,
@@ -705,13 +691,13 @@ public class NavmeshBuilder
             finishTerrainProgress();
         }
 
-        if (Settings.Filtering.HasFlag(NavmeshSettings.Filter.LowHangingObstacles))
+        if (Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.LowHangingObstacles))
             RcFilters.FilterLowHangingWalkableObstacles(telemetry, _walkableClimbVoxels, shf);
 
-        if (Settings.Filtering.HasFlag(NavmeshSettings.Filter.LedgeSpans))
+        if (Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.LedgeSpans))
             RcFilters.FilterLedgeSpans(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
 
-        if (Settings.Filtering.HasFlag(NavmeshSettings.Filter.WalkableLowHeightSpans))
+        if (Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.WalkableLowHeightSpans))
             RcFilters.FilterWalkableLowHeightSpans(telemetry, _walkableHeightVoxels, shf);
 
         var preCompactSpanCount = 0;
@@ -788,7 +774,7 @@ public class NavmeshBuilder
             ch               = Settings.CellHeight,
             buildBvTree      = true
         };
-        _customization.CustomizeSettings(navmeshConfig);
+        ApplyOffMeshConnections(navmeshConfig);
 
         RcBuilderResult?   builderResult       = null;
         DtJumpLinkBuilder? jumpLinkBuilder     = null;
@@ -952,6 +938,22 @@ public class NavmeshBuilder
             VolumeColumn        = volumeColumn,
             DebugResult         = captureIntermediates ? builderResult : null
         };
+    }
+
+    private void ApplyOffMeshConnections(DtNavMeshCreateParams config)
+    {
+        foreach (var connection in Settings.OffMeshConnections)
+            config.AddOffMeshConnection
+            (
+                connection.Start,
+                connection.End,
+                connection.Radius,
+                connection.Bidirectional,
+                connection.UserId,
+                (NavmeshArea)connection.Area,
+                (NavmeshPolyFlags)connection.Flags,
+                NavmeshOffMeshKind.ManualOffMesh
+            );
     }
 
     private static long ElapsedTimeSpanTicks(long startTimestamp)
