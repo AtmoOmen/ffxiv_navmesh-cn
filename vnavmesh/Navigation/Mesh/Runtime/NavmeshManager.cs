@@ -341,7 +341,7 @@ public sealed class NavmeshManager : IDisposable
         var totalTimer = StopWatchTimer.Create();
         Log($"构建任务开始。键: {cacheKey}");
         
-        var customization = NavmeshCustomizationRegistry.GetForTerritory(scene.TerritoryID);
+        var customization = NavmeshCustomizationRegistry.GetForScene(scene);
         Log($"自定义数据搜寻获取。区域: {scene.TerritoryID} 类型: {customization.GetType()}");
 
         var layers        = scene.FestivalLayers.ToList();

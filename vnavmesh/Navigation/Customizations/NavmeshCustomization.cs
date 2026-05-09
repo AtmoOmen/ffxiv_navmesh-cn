@@ -15,6 +15,8 @@ using static DtDetour;
 // base class for per-territory navmesh customizations
 public class NavmeshCustomization
 {
+    private static readonly NavmeshSettings DefaultSettings = new();
+
     // every time defaults change, we need to bump global navmesh version - this should be kept at zero
     // every time customization changes, we can bump the local version field, to avoid invalidating whole cache
     // each derived class should set it to non-zero value
@@ -22,12 +24,10 @@ public class NavmeshCustomization
 
     public NavmeshSettings Settings = new();
 
-    public NavmeshSettings GetBuildSettings(SceneDefinition definition)
+    public virtual NavmeshSettings GetBuildSettings(SceneDefinition definition)
     {
-        var settings = Settings.Clone();
-        var profile  = new NavmeshBuildProfile();
-        CustomizeBuildProfile(definition, profile);
-        profile.ApplyTo(settings);
+        var settings = new NavmeshSettings();
+        ApplyBuildSettings(definition, settings);
         return settings;
     }
 
@@ -39,6 +39,8 @@ public class NavmeshCustomization
 
     public virtual void CustomizeBuildProfile(SceneDefinition definition, NavmeshBuildProfile profile) { }
 
+    public virtual void CustomizeBuildSettings(SceneDefinition definition, NavmeshSettings settings) { }
+
     public virtual void CustomizeSettings(DtNavMeshCreateParams config) { }
 
     public virtual void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers) { }
@@ -48,6 +50,78 @@ public class NavmeshCustomization
 
     protected static void LinkClientPath(Navmesh meshData, Vector3 startPos, Vector3 endPos) =>
         LinkPoints(meshData, startPos, endPos, NavmeshArea.ClientPath, NavmeshPolyFlags.ClientPath, NavmeshOffMeshKind.ClientPath);
+
+    protected internal virtual void ApplyBuildSettings(SceneDefinition definition, NavmeshSettings settings)
+    {
+        ApplyLegacySettingsOverrides(settings);
+
+        var profile = new NavmeshBuildProfile();
+        CustomizeBuildProfile(definition, profile);
+        profile.ApplyTo(settings);
+        CustomizeBuildSettings(definition, settings);
+    }
+
+    private void ApplyLegacySettingsOverrides(NavmeshSettings settings)
+    {
+        if (Settings.CellSize != DefaultSettings.CellSize)
+            settings.CellSize = Settings.CellSize;
+        if (Settings.CellHeight != DefaultSettings.CellHeight)
+            settings.CellHeight = Settings.CellHeight;
+        if (Settings.AgentHeight != DefaultSettings.AgentHeight)
+            settings.AgentHeight = Settings.AgentHeight;
+        if (Settings.AgentRadius != DefaultSettings.AgentRadius)
+            settings.AgentRadius = Settings.AgentRadius;
+        if (Settings.AgentMaxClimb != DefaultSettings.AgentMaxClimb)
+            settings.AgentMaxClimb = Settings.AgentMaxClimb;
+        if (Settings.AgentMaxSlopeDeg != DefaultSettings.AgentMaxSlopeDeg)
+            settings.AgentMaxSlopeDeg = Settings.AgentMaxSlopeDeg;
+        if (Settings.Filtering != DefaultSettings.Filtering)
+            settings.Filtering = Settings.Filtering;
+        if (Settings.RegionMinSize != DefaultSettings.RegionMinSize)
+            settings.RegionMinSize = Settings.RegionMinSize;
+        if (Settings.RegionMergeSize != DefaultSettings.RegionMergeSize)
+            settings.RegionMergeSize = Settings.RegionMergeSize;
+        if (Settings.Partitioning != DefaultSettings.Partitioning)
+            settings.Partitioning = Settings.Partitioning;
+        if (Settings.PolyMaxEdgeLen != DefaultSettings.PolyMaxEdgeLen)
+            settings.PolyMaxEdgeLen = Settings.PolyMaxEdgeLen;
+        if (Settings.PolyMaxSimplificationError != DefaultSettings.PolyMaxSimplificationError)
+            settings.PolyMaxSimplificationError = Settings.PolyMaxSimplificationError;
+        if (Settings.PolyMaxVerts != DefaultSettings.PolyMaxVerts)
+            settings.PolyMaxVerts = Settings.PolyMaxVerts;
+        if (Settings.DetailSampleDist != DefaultSettings.DetailSampleDist)
+            settings.DetailSampleDist = Settings.DetailSampleDist;
+        if (Settings.DetailMaxSampleError != DefaultSettings.DetailMaxSampleError)
+            settings.DetailMaxSampleError = Settings.DetailMaxSampleError;
+        if (Settings.FastBuild != DefaultSettings.FastBuild)
+            settings.FastBuild = Settings.FastBuild;
+        if (Settings.GenerateEdgeClimbLinks != DefaultSettings.GenerateEdgeClimbLinks)
+            settings.GenerateEdgeClimbLinks = Settings.GenerateEdgeClimbLinks;
+        if (Settings.GenerateEdgeJumpLinks != DefaultSettings.GenerateEdgeJumpLinks)
+            settings.GenerateEdgeJumpLinks = Settings.GenerateEdgeJumpLinks;
+        if (Settings.GroundTolerance != DefaultSettings.GroundTolerance)
+            settings.GroundTolerance = Settings.GroundTolerance;
+        if (Settings.ClimbDownDistance != DefaultSettings.ClimbDownDistance)
+            settings.ClimbDownDistance = Settings.ClimbDownDistance;
+        if (Settings.ClimbDownMaxHeight != DefaultSettings.ClimbDownMaxHeight)
+            settings.ClimbDownMaxHeight = Settings.ClimbDownMaxHeight;
+        if (Settings.ClimbDownMinHeight != DefaultSettings.ClimbDownMinHeight)
+            settings.ClimbDownMinHeight = Settings.ClimbDownMinHeight;
+        if (Settings.EdgeJumpEndDistance != DefaultSettings.EdgeJumpEndDistance)
+            settings.EdgeJumpEndDistance = Settings.EdgeJumpEndDistance;
+        if (Settings.EdgeJumpHeight != DefaultSettings.EdgeJumpHeight)
+            settings.EdgeJumpHeight = Settings.EdgeJumpHeight;
+        if (Settings.EdgeJumpMaxDrop != DefaultSettings.EdgeJumpMaxDrop)
+            settings.EdgeJumpMaxDrop = Settings.EdgeJumpMaxDrop;
+        if (Settings.EdgeJumpMinDrop != DefaultSettings.EdgeJumpMinDrop)
+            settings.EdgeJumpMinDrop = Settings.EdgeJumpMinDrop;
+        if (Settings.GroundTileSize != DefaultSettings.GroundTileSize)
+            settings.GroundTileSize = Settings.GroundTileSize;
+        if (Settings.GroundTileCountMax != DefaultSettings.GroundTileCountMax)
+            settings.GroundTileCountMax = Settings.GroundTileCountMax;
+        if (!Settings.VolumeTiles.SequenceEqual(DefaultSettings.VolumeTiles))
+            settings.VolumeTiles = (int[])Settings.VolumeTiles.Clone();
+    }
 
     private static void LinkPoints
     (
