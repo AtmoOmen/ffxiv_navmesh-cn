@@ -53,6 +53,14 @@ public class NavmeshCustomization
     protected static void LinkClientPath(Navmesh meshData, Vector3 startPos, Vector3 endPos) =>
         LinkPoints(meshData, startPos, endPos, NavmeshArea.ClientPath, NavmeshPolyFlags.ClientPath, NavmeshOffMeshKind.ClientPath);
 
+    protected static void LinkDrop(Navmesh meshData, Vector3 edgePos, Vector3 landingHint)
+    {
+        var mesh = meshData.Mesh;
+        var (startRef, startTile, startPoly, projectedStart) = ResolvePointPoly(mesh, edgePos);
+        var (_, _, _, projectedEnd)                          = ResolveDropLandingPoly(mesh, edgePos, landingHint);
+        LinkResolvedPoints(meshData, startRef, startTile, startPoly, projectedStart, projectedEnd, NavmeshArea.ManualOffMesh, NavmeshPolyFlags.ManualOffMesh, NavmeshOffMeshKind.ManualOffMesh);
+    }
+
     protected internal virtual void ApplyBuildSettings(SceneDefinition definition, NavmeshSettings settings)
     {
         ApplyLegacySettingsOverrides(settings);
@@ -135,10 +143,28 @@ public class NavmeshCustomization
         NavmeshOffMeshKind kind
     )
     {
-        meshData.Links.Add(new(startPos, endPos, kind, false, 0));
         var mesh = meshData.Mesh;
         var (startRef, startTile, startPoly, projectedStart) = ResolvePointPoly(mesh, startPos);
         var (endRef, _, _, projectedEnd)                     = ResolvePointPoly(mesh, endPos);
+        LinkResolvedPoints(meshData, startRef, startTile, startPoly, projectedStart, projectedEnd, area, flags, kind);
+    }
+
+    private static void LinkResolvedPoints
+    (
+        Navmesh            meshData,
+        long               startRef,
+        DtMeshTile         startTile,
+        DtPoly             startPoly,
+        RcVec3f            projectedStart,
+        RcVec3f            projectedEnd,
+        NavmeshArea        area,
+        NavmeshPolyFlags   flags,
+        NavmeshOffMeshKind kind
+    )
+    {
+        meshData.Links.Add(new(projectedStart.RecastToSystem(), projectedEnd.RecastToSystem(), kind, false, 0));
+
+        var mesh = meshData.Mesh;
         var polyIndex   = startTile.data.header.polyCount;
         var vertexIndex = startTile.data.header.vertCount;
         var offMeshPoly = new DtPoly(polyIndex, mesh.GetMaxVertsPerPoly())
@@ -202,12 +228,63 @@ public class NavmeshCustomization
 
         idx                   = AllocLink(startTile);
         link                  = startTile.links[idx];
-        link.refs             = endRef;
+        link.refs             = offMeshRef;
         link.edge             = 1;
         link.side             = (byte)offMeshConnection.side;
         link.bmin             = link.bmax = 0;
         link.next             = offMeshPoly.firstLink;
         offMeshPoly.firstLink = idx;
+    }
+
+    private static (long PolyRef, DtMeshTile Tile, DtPoly Poly, RcVec3f ProjectedPoint) ResolveDropLandingPoly(DtNavMesh mesh, Vector3 edgePos, Vector3 landingHint)
+    {
+        var query = new DtNavMeshQuery(mesh);
+        var extents = new RcVec3f
+        (
+            5f,
+            MathF.Max(6f, MathF.Abs(edgePos.Y - landingHint.Y) + 6f),
+            5f
+        );
+
+        var bestRef       = 0L;
+        DtMeshTile? bestTile      = null;
+        DtPoly?     bestPoly      = null;
+        var bestProjected = default(RcVec3f);
+        var bestDistance  = float.MaxValue;
+        var bestDrop      = float.MinValue;
+        var baseY         = MathF.Max(edgePos.Y - 0.5f, landingHint.Y + 0.5f);
+
+        for (var i = 0; i < 12; i++)
+        {
+            var probeY = baseY - i * 2f;
+            var probe  = new Vector3(landingHint.X, probeY, landingHint.Z);
+            var status = query.FindNearestPoly(probe.SystemToRecast(), extents, new DtQueryDefaultFilter(), out var polyRef, out var projectedPoint, out _);
+            if (status.Failed() || polyRef == 0)
+                continue;
+
+            var drop = edgePos.Y - projectedPoint.Y;
+            if (drop <= 0.25f)
+                continue;
+
+            var dx = projectedPoint.X - landingHint.X;
+            var dz = projectedPoint.Z - landingHint.Z;
+            var distance = dx * dx + dz * dz;
+            if (distance > bestDistance || (distance == bestDistance && drop <= bestDrop))
+                continue;
+
+            mesh.GetTileAndPolyByRefUnsafe(polyRef, out var tile, out var poly);
+            bestRef       = polyRef;
+            bestTile      = tile;
+            bestPoly      = poly;
+            bestProjected = projectedPoint;
+            bestDistance  = distance;
+            bestDrop      = drop;
+        }
+
+        if (bestRef == 0)
+            throw new ArgumentException($"无法为下落连接定位落点多边形: 边缘 = {edgePos:f3}, 参考落点 = {landingHint:f3}");
+
+        return (bestRef, bestTile!, bestPoly!, bestProjected);
     }
 
     private static (long PolyRef, DtMeshTile Tile, DtPoly Poly, RcVec3f ProjectedPoint) ResolvePointPoly(DtNavMesh mesh, Vector3 pos)

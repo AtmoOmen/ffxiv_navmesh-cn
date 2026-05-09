@@ -6,7 +6,7 @@ using vnavmesh.Navigation.Customizations.Extensions;
 namespace vnavmesh.Navigation.Customizations.Territories.Alexandar;
 
 [CustomizationTerritory(442)]
-internal class A1 : NavmeshCustomization
+internal class Z0442启动之章1 : NavmeshCustomization
 {
     public override int Version => 1;
 
