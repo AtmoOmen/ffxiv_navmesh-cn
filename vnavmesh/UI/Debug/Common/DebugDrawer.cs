@@ -6,6 +6,7 @@ using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using SharpDX;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Models;
 using vnavmesh.Shared.Models;
 using vnavmesh.Shared.Utilities;
 using vnavmesh.UI.Rendering;

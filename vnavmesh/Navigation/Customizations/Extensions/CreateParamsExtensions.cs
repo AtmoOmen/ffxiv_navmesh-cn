@@ -2,9 +2,9 @@
 using System.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Bootstrap;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 
-namespace vnavmesh.Navigation.Customizations;
+namespace vnavmesh.Navigation.Customizations.Extensions;
 
 public static class CreateParamsExtensions
 {

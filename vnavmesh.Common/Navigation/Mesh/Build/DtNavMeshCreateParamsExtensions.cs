@@ -1,7 +1,7 @@
 using System.Numerics;
 using DotRecast.Detour;
 using DotRecast.Core.Numerics;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Common.Navigation.Mesh.Build;
 

@@ -2,9 +2,9 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Navigation.Volume.Map;
+using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Configuration;
-using vnavmesh.Navigation.Volume.Map;
-using vnavmesh.Navigation.Volume.Search;
 
 namespace vnavmesh.Navigation.Volume.Pathfinding;
 

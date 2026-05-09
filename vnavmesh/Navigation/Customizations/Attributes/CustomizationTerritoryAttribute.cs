@@ -1,4 +1,4 @@
-﻿namespace vnavmesh.Navigation.Customizations;
+﻿namespace vnavmesh.Navigation.Customizations.Attributes;
 
 // attribute that defines which territories particular customization applies to
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]

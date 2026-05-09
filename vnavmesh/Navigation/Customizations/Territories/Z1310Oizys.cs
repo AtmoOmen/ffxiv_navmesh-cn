@@ -1,5 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation.Customizations.Attributes;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 

@@ -1,3 +1,5 @@
+using vnavmesh.Navigation.Customizations.Attributes;
+
 namespace vnavmesh.Navigation.Customizations.Territories;
 
 [CustomizationTerritory(519)]

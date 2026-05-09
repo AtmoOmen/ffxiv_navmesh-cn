@@ -5,11 +5,10 @@ using DotRecast.Core;
 using DotRecast.Core.Compression;
 using DotRecast.Detour;
 using DotRecast.Detour.Io;
-using vnavmesh.Navigation.Volume;
-using vnavmesh.Navigation.Volume.Map;
-using vnavmesh.Shared.Utilities;
+using vnavmesh.Common.Navigation.Volume.Map;
+using vnavmesh.Common.Utilities;
 
-namespace vnavmesh.Navigation.Mesh.Runtime;
+namespace vnavmesh.Common.Navigation.Mesh.Runtime;
 
 // full set of data needed for navigation in the zone
 public record class Navmesh

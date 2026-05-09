@@ -1,4 +1,4 @@
-namespace vnavmesh.Navigation.Volume.Map;
+namespace vnavmesh.Common.Navigation.Volume.Map;
 
 internal enum VolumeTileStorageKind : byte
 {

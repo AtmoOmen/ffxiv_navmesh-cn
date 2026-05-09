@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace vnavmesh.Navigation.Mesh.Runtime;
+namespace vnavmesh.Common.Navigation.Mesh.Runtime;
 
 [Flags]
 public enum NavmeshPolyFlags

@@ -1,10 +1,13 @@
+using System;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 using DotRecast.Detour;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Navigation.Customizations;
 
+[NavmeshCustomizationIgnore]
 internal sealed class CompositeNavmeshCustomization
 (
     IReadOnlyList<NavmeshCustomization> customizations

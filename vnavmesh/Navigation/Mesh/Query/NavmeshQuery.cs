@@ -3,14 +3,16 @@ using DotRecast.Core;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
+using vnavmesh.Common.Navigation.Volume.Map;
+using vnavmesh.Common.Navigation.Volume.Search;
+using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Planning;
 using vnavmesh.Navigation.Volume;
-using vnavmesh.Navigation.Volume.Map;
 using vnavmesh.Navigation.Volume.Pathfinding;
-using vnavmesh.Navigation.Volume.Search;
 using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Query;

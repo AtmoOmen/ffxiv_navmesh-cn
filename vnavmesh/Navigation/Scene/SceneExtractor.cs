@@ -4,6 +4,7 @@ using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Models;
 using vnavmesh.Shared.Models;
 using ColliderType = FFXIVClientStructs.FFXIV.Client.LayoutEngine.Layer.ColliderType;
 

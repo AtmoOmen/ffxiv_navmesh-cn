@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace vnavmesh.Shared.Models;
+namespace vnavmesh.Common.Models;
 
 public struct Angle
 (

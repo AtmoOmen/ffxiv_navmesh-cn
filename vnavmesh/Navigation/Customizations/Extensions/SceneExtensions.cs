@@ -2,7 +2,7 @@
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Navigation.Scene;
 
-namespace vnavmesh.Navigation.Customizations;
+namespace vnavmesh.Navigation.Customizations.Extensions;
 
 public static class SceneExtensions
 {

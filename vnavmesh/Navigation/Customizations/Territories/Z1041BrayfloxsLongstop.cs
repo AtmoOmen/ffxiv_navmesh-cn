@@ -1,4 +1,5 @@
 using DotRecast.Recast;
+using vnavmesh.Navigation.Customizations.Attributes;
 
 namespace vnavmesh.Navigation.Customizations.Territories;
 

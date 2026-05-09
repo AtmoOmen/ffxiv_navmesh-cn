@@ -1,8 +1,8 @@
 using System.Numerics;
-using vnavmesh.Navigation.Mesh.Runtime;
-using vnavmesh.Navigation.Volume.Search;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
+using vnavmesh.Common.Navigation.Volume.Search;
 
-namespace vnavmesh.Navigation.Volume.Map;
+namespace vnavmesh.Common.Navigation.Volume.Map;
 
 public class VoxelMap
 {

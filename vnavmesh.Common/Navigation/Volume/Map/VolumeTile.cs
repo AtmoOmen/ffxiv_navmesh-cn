@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace vnavmesh.Navigation.Volume.Map;
+namespace vnavmesh.Common.Navigation.Volume.Map;
 
 public sealed class VolumeTile
 (

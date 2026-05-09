@@ -1,6 +1,7 @@
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Models;
 using vnavmesh.Shared.Models;
 using vnavmesh.Shared.Utilities;
 using vnavmesh.UI.Rendering;

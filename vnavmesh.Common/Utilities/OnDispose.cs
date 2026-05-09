@@ -1,4 +1,4 @@
-namespace vnavmesh.Shared.Utilities;
+namespace vnavmesh.Common.Utilities;
 
 public readonly record struct OnDispose(Action A) : IDisposable
 {

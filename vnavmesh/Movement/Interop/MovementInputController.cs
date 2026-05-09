@@ -5,6 +5,7 @@ using Dalamud.Hooking;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Models;
 using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Interop;

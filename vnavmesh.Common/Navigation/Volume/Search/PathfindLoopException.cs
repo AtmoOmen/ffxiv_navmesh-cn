@@ -1,6 +1,6 @@
 ﻿using System.Numerics;
 
-namespace vnavmesh.Navigation.Volume.Search;
+namespace vnavmesh.Common.Navigation.Volume.Search;
 
 public class PathfindLoopException
 (

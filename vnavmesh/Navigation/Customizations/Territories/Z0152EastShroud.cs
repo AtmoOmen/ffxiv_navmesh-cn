@@ -1,4 +1,6 @@
 using System.Numerics;
+using vnavmesh.Navigation.Customizations.Attributes;
+using vnavmesh.Navigation.Customizations.Extensions;
 using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Navigation.Customizations.Territories;

@@ -1,7 +1,7 @@
 using System.Numerics;
 using DotRecast.Core.Numerics;
 
-namespace vnavmesh.Shared.Utilities;
+namespace vnavmesh.Common.Utilities;
 
 public static class Extensions
 {

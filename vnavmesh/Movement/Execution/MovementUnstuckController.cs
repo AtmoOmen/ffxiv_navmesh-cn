@@ -3,13 +3,14 @@ using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Models;
+using vnavmesh.Common.Navigation.Volume.Map;
+using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Configuration;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Volume;
-using vnavmesh.Navigation.Volume.Map;
-using vnavmesh.Navigation.Volume.Search;
 using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Execution;

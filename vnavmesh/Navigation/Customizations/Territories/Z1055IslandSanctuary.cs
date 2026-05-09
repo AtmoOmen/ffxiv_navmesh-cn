@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using vnavmesh.Navigation.Customizations.Attributes;
 using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Navigation.Customizations.Territories;

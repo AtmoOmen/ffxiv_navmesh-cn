@@ -4,6 +4,8 @@ using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Models;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Configuration;
 using vnavmesh.Movement.Drivers;
 using vnavmesh.Movement.Interop;

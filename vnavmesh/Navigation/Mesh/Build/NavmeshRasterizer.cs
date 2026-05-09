@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 using DotRecast.Core;
 using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
-using vnavmesh.Navigation.Volume.Search;
 
 namespace vnavmesh.Navigation.Mesh.Build;
 

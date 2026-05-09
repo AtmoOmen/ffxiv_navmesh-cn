@@ -1,7 +1,7 @@
 using System.Numerics;
-using vnavmesh.Navigation.Volume.Map;
+using vnavmesh.Common.Navigation.Volume.Map;
 
-namespace vnavmesh.Navigation.Volume.Search;
+namespace vnavmesh.Common.Navigation.Volume.Search;
 
 public static class VoxelSearch
 {
