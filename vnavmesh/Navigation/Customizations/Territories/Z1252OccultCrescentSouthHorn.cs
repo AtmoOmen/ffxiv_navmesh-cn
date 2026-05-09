@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using DotRecast.Detour;
+using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Navigation.Customizations.Territories;
@@ -8,7 +9,7 @@ namespace vnavmesh.Navigation.Customizations.Territories;
 [CustomizationTerritory(1252)]
 internal class Z1252OccultCrescentSouthHorn : NavmeshCustomization
 {
-    public override int Version => 4;
+    public override int Version => 5;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -19,6 +20,12 @@ internal class Z1252OccultCrescentSouthHorn : NavmeshCustomization
             verts[8].X  += 1;
             verts[16].X += 1;
         }
+    }
+
+    public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
+    {
+        // 营地到圆形城塞
+        LinkPoints(mesh, new(819.9f, 75.3f, -552.4f), new(824.7f, 81.3f, -536.5f));
     }
 
     public override void CustomizeSettings(DtNavMeshCreateParams config)
