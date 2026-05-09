@@ -5,10 +5,18 @@ using vnavmesh.Bootstrap.Composition;
 
 namespace vnavmesh.Bootstrap;
 
-public sealed class Plugin : IDalamudPlugin
+public sealed class Plugin : IAsyncDalamudPlugin
 {
     private readonly ServiceProvider serviceProvider;
 
+    public async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        // 也是入口，先构造函数再调用这里
+    }
+
+    public async ValueTask DisposeAsync() =>
+        serviceProvider.Dispose();
+    
     public Plugin(IDalamudPluginInterface dalamud)
     {
         MarkCurrentThreadAsMainThread();
@@ -38,9 +46,6 @@ public sealed class Plugin : IDalamudPlugin
             markMainThread?.Invoke(null, null);
         }
     }
-
-    public void Dispose() =>
-        serviceProvider.Dispose();
 
     public static void DuoLog(Exception ex)
     {
