@@ -19,9 +19,9 @@ public class NavmeshSettings
         Interiors              = 1 << 3
     }
 
-    public float       CellSize         = 0.25f;
-    public float       CellHeight       = 0.125f;
-    public float       AgentHeight      = 2.0f;
+    public float       CellSize         = 0.5f;
+    public float       CellHeight       = 0.25f;
+    public float       AgentHeight      = 3f;
     public float       AgentRadius      = 1;
     public float       AgentMaxClimb    = 0.7f;
     public float       AgentMaxSlopeDeg = 55f;
