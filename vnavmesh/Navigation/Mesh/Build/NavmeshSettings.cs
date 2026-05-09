@@ -63,54 +63,54 @@ public class NavmeshSettings
     public string BuildSignature(bool flyable)
     {
         var sb = new StringBuilder(256);
-        appendFloat(nameof(CellSize),         CellSize);
-        appendFloat(nameof(CellHeight),       CellHeight);
-        appendFloat(nameof(AgentHeight),      AgentHeight);
-        appendFloat(nameof(AgentRadius),      AgentRadius);
-        appendFloat(nameof(AgentMaxClimb),    AgentMaxClimb);
-        appendFloat(nameof(AgentMaxSlopeDeg), AgentMaxSlopeDeg);
-        appendInt(nameof(Filtering), (int)Filtering);
-        appendFloat(nameof(RegionMinSize),   RegionMinSize);
-        appendFloat(nameof(RegionMergeSize), RegionMergeSize);
-        appendInt(nameof(Partitioning), (int)Partitioning);
-        appendFloat(nameof(PolyMaxEdgeLen),             PolyMaxEdgeLen);
-        appendFloat(nameof(PolyMaxSimplificationError), PolyMaxSimplificationError);
-        appendInt(nameof(PolyMaxVerts), PolyMaxVerts);
-        appendFloat(nameof(DetailSampleDist),     DetailSampleDist);
-        appendFloat(nameof(DetailMaxSampleError), DetailMaxSampleError);
-        appendBool(nameof(FastBuild),              FastBuild);
-        appendBool(nameof(GenerateEdgeClimbLinks), GenerateEdgeClimbLinks);
-        appendBool(nameof(GenerateEdgeJumpLinks),  GenerateEdgeJumpLinks);
-        appendFloat(nameof(GroundTolerance),     GroundTolerance);
-        appendFloat(nameof(ClimbDownDistance),   ClimbDownDistance);
-        appendFloat(nameof(ClimbDownMaxHeight),  ClimbDownMaxHeight);
-        appendFloat(nameof(ClimbDownMinHeight),  ClimbDownMinHeight);
-        appendFloat(nameof(EdgeJumpEndDistance), EdgeJumpEndDistance);
-        appendFloat(nameof(EdgeJumpHeight),      EdgeJumpHeight);
-        appendFloat(nameof(EdgeJumpMaxDrop),     EdgeJumpMaxDrop);
-        appendFloat(nameof(EdgeJumpMinDrop),     EdgeJumpMinDrop);
-        appendBool("Flyable", flyable);
-        appendFloat(nameof(GroundTileSize), GroundTileSize);
-        appendInt(nameof(GroundTileCountMax), GroundTileCountMax);
-        appendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
+        AppendFloat(nameof(CellSize),         CellSize);
+        AppendFloat(nameof(CellHeight),       CellHeight);
+        AppendFloat(nameof(AgentHeight),      AgentHeight);
+        AppendFloat(nameof(AgentRadius),      AgentRadius);
+        AppendFloat(nameof(AgentMaxClimb),    AgentMaxClimb);
+        AppendFloat(nameof(AgentMaxSlopeDeg), AgentMaxSlopeDeg);
+        AppendInt(nameof(Filtering), (int)Filtering);
+        AppendFloat(nameof(RegionMinSize),   RegionMinSize);
+        AppendFloat(nameof(RegionMergeSize), RegionMergeSize);
+        AppendInt(nameof(Partitioning), (int)Partitioning);
+        AppendFloat(nameof(PolyMaxEdgeLen),             PolyMaxEdgeLen);
+        AppendFloat(nameof(PolyMaxSimplificationError), PolyMaxSimplificationError);
+        AppendInt(nameof(PolyMaxVerts), PolyMaxVerts);
+        AppendFloat(nameof(DetailSampleDist),     DetailSampleDist);
+        AppendFloat(nameof(DetailMaxSampleError), DetailMaxSampleError);
+        AppendBool(nameof(FastBuild),              FastBuild);
+        AppendBool(nameof(GenerateEdgeClimbLinks), GenerateEdgeClimbLinks);
+        AppendBool(nameof(GenerateEdgeJumpLinks),  GenerateEdgeJumpLinks);
+        AppendFloat(nameof(GroundTolerance),     GroundTolerance);
+        AppendFloat(nameof(ClimbDownDistance),   ClimbDownDistance);
+        AppendFloat(nameof(ClimbDownMaxHeight),  ClimbDownMaxHeight);
+        AppendFloat(nameof(ClimbDownMinHeight),  ClimbDownMinHeight);
+        AppendFloat(nameof(EdgeJumpEndDistance), EdgeJumpEndDistance);
+        AppendFloat(nameof(EdgeJumpHeight),      EdgeJumpHeight);
+        AppendFloat(nameof(EdgeJumpMaxDrop),     EdgeJumpMaxDrop);
+        AppendFloat(nameof(EdgeJumpMinDrop),     EdgeJumpMinDrop);
+        AppendBool("Flyable", flyable);
+        AppendFloat(nameof(GroundTileSize), GroundTileSize);
+        AppendInt(nameof(GroundTileCountMax), GroundTileCountMax);
+        AppendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
         return sb.ToString();
 
-        void appendFloat(string key, float value)
+        void AppendFloat(string key, float value)
         {
             sb.Append(key).Append('=').Append(value.ToString("R", CultureInfo.InvariantCulture)).Append(';');
         }
 
-        void appendInt(string key, int value)
+        void AppendInt(string key, int value)
         {
             sb.Append(key).Append('=').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
         }
 
-        void appendBool(string key, bool value)
+        void AppendBool(string key, bool value)
         {
             sb.Append(key).Append('=').Append(value ? '1' : '0').Append(';');
         }
 
-        void appendText(string key, string value)
+        void AppendText(string key, string value)
         {
             sb.Append(key).Append('=').Append(value).Append(';');
         }
