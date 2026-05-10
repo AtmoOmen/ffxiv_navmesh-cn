@@ -57,8 +57,8 @@ public class NavmeshCustomization
     {
         var mesh = meshData.Mesh;
         var (startRef, startTile, startPoly, projectedStart) = ResolvePointPoly(mesh, edgePos);
-        var (_, _, _, projectedEnd)                          = ResolveDropLandingPoly(mesh, edgePos, landingHint);
-        LinkResolvedPoints(meshData, startRef, startTile, startPoly, projectedStart, projectedEnd, NavmeshArea.ManualOffMesh, NavmeshPolyFlags.ManualOffMesh, NavmeshOffMeshKind.ManualOffMesh);
+        var (endRef, endTile, endPoly, projectedEnd)         = ResolveDropLandingPoly(mesh, edgePos, landingHint);
+        LinkResolvedPoints(meshData, startRef, startTile, startPoly, endRef, endTile, endPoly, projectedStart, projectedEnd, NavmeshArea.ManualOffMesh, NavmeshPolyFlags.ManualOffMesh, NavmeshOffMeshKind.ManualOffMesh);
     }
 
     protected internal virtual void ApplyBuildSettings(SceneDefinition definition, NavmeshSettings settings)
@@ -145,8 +145,8 @@ public class NavmeshCustomization
     {
         var mesh = meshData.Mesh;
         var (startRef, startTile, startPoly, projectedStart) = ResolvePointPoly(mesh, startPos);
-        var (endRef, _, _, projectedEnd)                     = ResolvePointPoly(mesh, endPos);
-        LinkResolvedPoints(meshData, startRef, startTile, startPoly, projectedStart, projectedEnd, area, flags, kind);
+        var (endRef, endTile, endPoly, projectedEnd)         = ResolvePointPoly(mesh, endPos);
+        LinkResolvedPoints(meshData, startRef, startTile, startPoly, endRef, endTile, endPoly, projectedStart, projectedEnd, area, flags, kind);
     }
 
     private static void LinkResolvedPoints
@@ -155,6 +155,9 @@ public class NavmeshCustomization
         long               startRef,
         DtMeshTile         startTile,
         DtPoly             startPoly,
+        long               endRef,
+        DtMeshTile         endTile,
+        DtPoly             endPoly,
         RcVec3f            projectedStart,
         RcVec3f            projectedEnd,
         NavmeshArea        area,
@@ -228,12 +231,22 @@ public class NavmeshCustomization
 
         idx                   = AllocLink(startTile);
         link                  = startTile.links[idx];
-        link.refs             = offMeshRef;
+        link.refs             = endRef;
         link.edge             = 1;
         link.side             = (byte)offMeshConnection.side;
         link.bmin             = link.bmax = 0;
         link.next             = offMeshPoly.firstLink;
         offMeshPoly.firstLink = idx;
+
+        var reverseSide = offMeshConnection.side == 0xff ? (byte)0xff : (byte)DtUtils.OppositeTile(offMeshConnection.side);
+        idx       = AllocLink(endTile);
+        link      = endTile.links[idx];
+        link.refs = offMeshRef;
+        link.edge = 0xff;
+        link.side = reverseSide;
+        link.bmin = link.bmax = 0;
+        link.next = endPoly.firstLink;
+        endPoly.firstLink = idx;
     }
 
     private static (long PolyRef, DtMeshTile Tile, DtPoly Poly, RcVec3f ProjectedPoint) ResolveDropLandingPoly(DtNavMesh mesh, Vector3 edgePos, Vector3 landingHint)
