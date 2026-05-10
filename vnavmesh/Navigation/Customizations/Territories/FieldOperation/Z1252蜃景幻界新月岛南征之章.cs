@@ -10,7 +10,7 @@ using vnavmesh.Navigation.Scene;
 namespace vnavmesh.Navigation.Customizations.Territories;
 
 [CustomizationTerritory(1252)]
-internal class Z1252OccultCrescentSouthHorn : NavmeshCustomization
+internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
 {
     public override int Version => 5;
 
