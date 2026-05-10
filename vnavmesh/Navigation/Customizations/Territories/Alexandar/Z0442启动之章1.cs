@@ -9,6 +9,15 @@ namespace vnavmesh.Navigation.Customizations.Territories.Alexandar;
 internal class Z0442启动之章1 : NavmeshCustomization
 {
     public override int Version => 1;
+    
+    public Z0442启动之章1()
+    {
+        Settings.AgentRadius = 0.3f;
+        Settings.AgentHeight = 1f;
+        Settings.FastBuild   = false;
+        Settings.CellSize    = 0.125f;
+        Settings.CellHeight  = 0.125f;
+    }
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {

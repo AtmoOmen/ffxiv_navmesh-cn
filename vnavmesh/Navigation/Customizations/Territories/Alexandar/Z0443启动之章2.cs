@@ -9,8 +9,7 @@ namespace vnavmesh.Navigation.Customizations.Territories.Alexandar;
 internal class Z0443启动之章2 : NavmeshCustomization
 {
     public override int Version => 1;
-    
-    // 得要能跳下去
+
     public Z0443启动之章2() =>
         Settings.Filtering -= NavmeshFilter.LedgeSpans;
 
