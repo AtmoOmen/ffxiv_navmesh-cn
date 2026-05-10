@@ -2,7 +2,6 @@
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Customizations.Attributes;
 using vnavmesh.Navigation.Customizations.Extensions;
-using vnavmesh.Navigation.Mesh.Build;
 
 namespace vnavmesh.Navigation.Customizations.Territories.Alexandar;
 
@@ -24,10 +23,10 @@ internal class Z0443启动之章2 : NavmeshCustomization
             new(9.0f, 12.1f, 36.5f), 
             new(-3.3f, -18.2f, 37.5f),
             0.5f,
-            true,
+            false,
             0,
-            NavmeshArea.GeneratedEdgeJump,
-            NavmeshPolyFlags.GeneratedEdgeJump,
-            NavmeshOffMeshKind.GeneratedEdgeJump
+            NavmeshArea.GeneratedClimbDown,
+            NavmeshPolyFlags.GeneratedClimbDown,
+            NavmeshOffMeshKind.GeneratedClimbDown
         );
 }
