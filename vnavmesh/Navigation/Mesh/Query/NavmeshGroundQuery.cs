@@ -18,6 +18,9 @@ internal sealed class NavmeshGroundQuery
     private long groundQueryCount;
     private long partialGroundQueryCount;
     private long suspectedTileSeamCutoffCount;
+    private long anyAnglePreferredCount;
+    private long classicFallbackCount;
+    private long startReplacementCount;
     private long endReplacementCount;
 
     internal NavmeshGroundQuery(NavmeshQuery query) =>
@@ -29,9 +32,9 @@ internal sealed class NavmeshGroundQuery
             GroundQueries               = Interlocked.Read(ref groundQueryCount),
             PartialQueries              = Interlocked.Read(ref partialGroundQueryCount),
             SuspectedTileSeamCutoffs    = Interlocked.Read(ref suspectedTileSeamCutoffCount),
-            AnyAnglePreferred           = 0,
-            ClassicFallbacks            = 0,
-            StartReplacements           = 0,
+            AnyAnglePreferred           = Interlocked.Read(ref anyAnglePreferredCount),
+            ClassicFallbacks            = Interlocked.Read(ref classicFallbackCount),
+            StartReplacements           = Interlocked.Read(ref startReplacementCount),
             EndReplacements             = Interlocked.Read(ref endReplacementCount),
             GeneratedClimbLinksAccepted = query.NavmeshData.GeneratedClimbDownLinkCount,
             GeneratedJumpLinksAccepted  = query.NavmeshData.GeneratedEdgeJumpLinkCount
@@ -45,22 +48,19 @@ internal sealed class NavmeshGroundQuery
         Dictionary<long, int>  endCandidateIndices = [];
         List<MeshEndCandidate> endCandidates       = [];
 
-        var meshTileSize = MathF.Max(query.MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, query.MeshQuery.GetAttachedNavMesh().GetParams().tileHeight);
         foreach (var poly in query.FindIntersectingMeshPolys
-                     (to, new Vector3(meshTileSize, MathF.Max(meshTileSize, MathF.Max(query.ConfigData.PathTolerance, float.Epsilon)), meshTileSize)))
+                     (to, new(END_POLY_CANDIDATE_HALF_EXTENT_XZ, END_POLY_CANDIDATE_HALF_EXTENT_Y, END_POLY_CANDIDATE_HALF_EXTENT_XZ)))
             TryAddEndCandidate(poly, false);
 
         TryAddEndCandidate(requestedEndRef, true);
         endCandidates.Sort
-        ((a, b) =>
+        (static (a, b) =>
             {
                 if (a.IsPointOverPoly != b.IsPointOverPoly)
                     return b.IsPointOverPoly.CompareTo(a.IsPointOverPoly);
 
-                var aAbove = a.VerticalDelta > MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
-                var bAbove = b.VerticalDelta > MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
-                if (aAbove != bAbove)
-                    return aAbove.CompareTo(bAbove);
+                if (a.IsAboveTarget != b.IsAboveTarget)
+                    return a.IsAboveTarget.CompareTo(b.IsAboveTarget);
 
                 var cmp = a.VerticalDistanceAbs.CompareTo(b.VerticalDistanceAbs);
                 if (cmp != 0)
@@ -95,18 +95,12 @@ internal sealed class NavmeshGroundQuery
 
             var currentBest = endCandidate.Value;
             var isBetterCandidate =
-                candidate.IsPointOverPoly != currentBest.IsPointOverPoly
-                    ? candidate.IsPointOverPoly
-                    : candidate.VerticalDelta   > MathF.Max(query.ConfigData.PathTolerance, float.Epsilon) !=
-                      currentBest.VerticalDelta > MathF.Max(query.ConfigData.PathTolerance, float.Epsilon)
-                        ? !(candidate.VerticalDelta > MathF.Max(query.ConfigData.PathTolerance, float.Epsilon))
-                        : !NearlyEqual(candidate.VerticalDistanceAbs, currentBest.VerticalDistanceAbs)
-                            ? candidate.VerticalDistanceAbs < currentBest.VerticalDistanceAbs
-                            : !NearlyEqual(candidate.HorizontalDistanceSq, currentBest.HorizontalDistanceSq)
-                                ? candidate.HorizontalDistanceSq < currentBest.HorizontalDistanceSq
-                                : candidate.IsRequestedEnd       != currentBest.IsRequestedEnd
-                                    ? candidate.IsRequestedEnd
-                                    : candidate.PolyRef < currentBest.PolyRef;
+                candidate.IsPointOverPoly != currentBest.IsPointOverPoly                       ? candidate.IsPointOverPoly :
+                candidate.IsAboveTarget   != currentBest.IsAboveTarget                         ? !candidate.IsAboveTarget :
+                !NearlyEqual(candidate.VerticalDistanceAbs,  currentBest.VerticalDistanceAbs)  ? candidate.VerticalDistanceAbs < currentBest.VerticalDistanceAbs :
+                !NearlyEqual(candidate.HorizontalDistanceSq, currentBest.HorizontalDistanceSq) ? candidate.HorizontalDistanceSq < currentBest.HorizontalDistanceSq :
+                candidate.IsRequestedEnd != currentBest.IsRequestedEnd ? candidate.IsRequestedEnd :
+                                                                         candidate.PolyRef < currentBest.PolyRef;
 
             if (isBetterCandidate)
                 endCandidate = candidate;
@@ -126,21 +120,69 @@ internal sealed class NavmeshGroundQuery
 
         var timer           = StopWatchTimer.Create();
         var requestedEndPos = resolvedDestination.SystemToRecast();
-        var selectedAttempt = ExecuteGroundPathAttempt(from, to, requestedStartRef, endRef, requestedEndPos, query.GroundAreaFilter, useRaycast, range, cancel);
+        var prunedAttempt   = ExecuteGroundPathAttempt(from, to, requestedStartRef, endRef, requestedEndPos, query.GroundAreaFilter, useRaycast, range, cancel);
+        var selectedAttempt = prunedAttempt;
 
-        if (selectedAttempt is not var (pathCandidate, plannerResult, startRef, lastPoly, queryStatus))
+        if (prunedAttempt == null || prunedAttempt.Value.Result.Status == PathfindStatus.Partial)
+        {
+            var unprunedAttempt = ExecuteGroundPathAttempt
+            (
+                from,
+                to,
+                requestedStartRef,
+                endRef,
+                requestedEndPos,
+                query.GroundAreaFilterIgnoringUnreachable,
+                useRaycast,
+                range,
+                cancel
+            );
+
+            var shouldUseFallback = false;
+
+            if (unprunedAttempt is { } fallbackAttempt)
+            {
+                shouldUseFallback = selectedAttempt == null;
+
+                if (!shouldUseFallback && selectedAttempt is { } currentAttempt)
+                {
+                    var fallbackRank = GetResultStatusRank(fallbackAttempt.Result.Status);
+                    var currentRank  = GetResultStatusRank(currentAttempt.Result.Status);
+                    shouldUseFallback = fallbackRank       != currentRank
+                                            ? fallbackRank < currentRank
+                                            : IsBetterStartPathCandidate(fallbackAttempt.Candidate, currentAttempt.Candidate, to);
+                }
+            }
+
+            if (unprunedAttempt is { } fallbackAttemptToApply && shouldUseFallback)
+            {
+                var initialAttempt = selectedAttempt is { } currentAttempt
+                                         ? $"{currentAttempt.Candidate.StartRef:X}/{currentAttempt.Candidate.ResultStatus}/requested={(currentAttempt.Candidate.IsRequestedStart ? 1 : 0)}/overPoly={(currentAttempt.Candidate.IsPointOverPoly ? 1 : 0)}/距目标={MathF.Sqrt(currentAttempt.Candidate.DistanceToRequestedTargetSq(to)):f3}/结果={currentAttempt.Result.Status}/最后={currentAttempt.LastPoly:X}"
+                                         : "<none>";
+                var fallbackAttemptText =
+                    $"{fallbackAttemptToApply.Candidate.StartRef:X}/{fallbackAttemptToApply.Candidate.ResultStatus}/requested={(fallbackAttemptToApply.Candidate.IsRequestedStart ? 1 : 0)}/overPoly={(fallbackAttemptToApply.Candidate.IsPointOverPoly ? 1 : 0)}/距目标={MathF.Sqrt(fallbackAttemptToApply.Candidate.DistanceToRequestedTargetSq(to)):f3}/结果={fallbackAttemptToApply.Result.Status}/最后={fallbackAttemptToApply.LastPoly:X}";
+                Service.Log.Warning($"[算路] 已改用忽略裁剪标记的回退结果：首轮 = {initialAttempt}，回退 = {fallbackAttemptText}");
+                selectedAttempt = fallbackAttemptToApply;
+            }
+        }
+
+        if (selectedAttempt is not { } attempt)
             return LogMeshFailure(from, to, requestedStartRef, endRef, 0, range, "无法为起点选择可用的导航多边形");
 
         query.LastPath.Clear();
+        var pathCandidate = attempt.Candidate;
+        var startRef      = attempt.StartRef;
+        if (pathCandidate.QueryMode == GroundQueryMode.AnyAngle)
+            Interlocked.Increment(ref anyAnglePreferredCount);
         query.LastPath.AddRange(pathCandidate.Corridor);
         Service.Log.Debug($"[算路] 地面多边形 {startRef:X} -> {endRef:X}（原始起点候选 = {requestedStartRef:X}，查询模式 = {pathCandidate.QueryMode}）");
         Service.Log.Debug($"[算路] 地面终点解析：原始终点候选 = {requestedEndRef:X}，选中 = {endRef:X}，终点投影 = {resolvedDestination:f3}");
         Service.Log.Debug
-            ($"[算路] 地面路径查询耗时 {timer.Value().TotalSeconds:f3} 秒，状态 = {queryStatus}，路径 = {string.Join(", ", query.LastPath.Select(r => r.ToString("X")))}");
+            ($"[算路] 地面路径查询耗时 {timer.Value().TotalSeconds:f3} 秒，状态 = {attempt.QueryStatus}，路径 = {string.Join(", ", query.LastPath.Select(r => r.ToString("X")))}");
 
         cancel.ThrowIfCancellationRequested();
-        LogMeshResult(plannerResult, from, startRef, endRef, lastPoly, range, timer.Value());
-        return plannerResult;
+        LogMeshResult(attempt.Result, from, startRef, endRef, attempt.LastPoly, range, timer.Value());
+        return attempt.Result;
 
         void TryAddEndCandidate(long poly, bool forceInclude)
         {
@@ -161,28 +203,12 @@ internal sealed class NavmeshGroundQuery
             var dz                   = point.Z - to.Z;
             var horizontalDistanceSq = dx * dx + dz * dz;
             var verticalDistance     = point.Y - to.Y;
-            var toleranceFloor       = MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
-            var horizontalTolerance = MathF.Max
-            (
-                Vector3.Distance(point, to),
-                MathF.Max(query.MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, query.MeshQuery.GetAttachedNavMesh().GetParams().tileHeight) * 0.5f
-            );
-            var verticalTolerance = MathF.Max
-                                    (
-                                        MathF.Max
-                                        (
-                                            query.MeshQuery.GetAttachedNavMesh().GetParams().tileWidth,
-                                            query.MeshQuery.GetAttachedNavMesh().GetParams().tileHeight
-                                        ),
-                                        toleranceFloor
-                                    ) *
-                                    0.5f;
 
             if (!forceInclude)
             {
-                if (horizontalDistanceSq > horizontalTolerance * horizontalTolerance)
+                if (horizontalDistanceSq > END_POLY_CANDIDATE_MAX_HORIZONTAL_DISTANCE * END_POLY_CANDIDATE_MAX_HORIZONTAL_DISTANCE)
                     return;
-                if (MathF.Abs(verticalDistance) > verticalTolerance)
+                if (MathF.Abs(verticalDistance) > END_POLY_CANDIDATE_MAX_VERTICAL_DISTANCE)
                     return;
             }
 
@@ -202,6 +228,408 @@ internal sealed class NavmeshGroundQuery
         closestPoint = default;
         isOverPoly   = false;
         return false;
+    }
+
+    private MeshPathCandidate? ResolveBestStartPathCandidate
+    (
+        Vector3           from,
+        Vector3           to,
+        long              requestedStartRef,
+        long              endRef,
+        RcVec3f           requestedEndPos,
+        IDtQueryFilter    filter,
+        DtFindPathOption  opt,
+        GroundQueryMode   queryMode,
+        float             range,
+        CancellationToken cancel
+    )
+    {
+        var selection = EvaluateBestStartPathCandidate
+        (
+            from,
+            to,
+            requestedStartRef,
+            endRef,
+            requestedEndPos,
+            filter,
+            opt,
+            queryMode,
+            range,
+            cancel,
+            false,
+            true
+        );
+
+        if (selection.Selected == null || selection.Selected.Value.ResultStatus == PathfindStatus.Partial)
+        {
+            var expandedSelection = EvaluateBestStartPathCandidate
+            (
+                from,
+                to,
+                requestedStartRef,
+                endRef,
+                requestedEndPos,
+                filter,
+                opt,
+                queryMode,
+                range,
+                cancel,
+                true,
+                false
+            );
+
+            if (expandedSelection.Selected is { } expandedCandidate &&
+                (selection.Selected == null || IsBetterStartPathCandidate(expandedCandidate, selection.Selected.Value, to)))
+            {
+                var firstAttempt = selection.Selected is { } currentSelection
+                                       ? $"{currentSelection.StartRef:X}/{currentSelection.ResultStatus}/requested={(currentSelection.IsRequestedStart ? 1 : 0)}/overPoly={(currentSelection.IsPointOverPoly ? 1 : 0)}/距目标={MathF.Sqrt(currentSelection.DistanceToRequestedTargetSq(to)):f3}"
+                                       : "<none>";
+                var expandedAttempt =
+                    $"{expandedCandidate.StartRef:X}/{expandedCandidate.ResultStatus}/requested={(expandedCandidate.IsRequestedStart ? 1 : 0)}/overPoly={(expandedCandidate.IsPointOverPoly ? 1 : 0)}/距目标={MathF.Sqrt(expandedCandidate.DistanceToRequestedTargetSq(to)):f3}";
+                Service.Log.Warning
+                (
+                    $"[算路] 起点扩搜改判：查询模式 = {queryMode}，首轮 = {firstAttempt}，扩搜 = {expandedAttempt}，扩搜候选 = {expandedSelection.EvaluatedCandidates}/{expandedSelection.TotalCandidates}"
+                );
+                selection = expandedSelection;
+            }
+        }
+
+        if (selection.Selected is { } selected)
+            LogStartCandidateDecision(selected, to, requestedStartRef, selection.RequestedSuccessful, selection.RequestedFailed, selection.LockedByRequested);
+
+        return selection.Selected;
+    }
+
+    private StartCandidateSelection EvaluateBestStartPathCandidate
+    (
+        Vector3           from,
+        Vector3           requestedTarget,
+        long              requestedStartRef,
+        long              endRef,
+        RcVec3f           requestedEndPos,
+        IDtQueryFilter    filter,
+        DtFindPathOption  opt,
+        GroundQueryMode   queryMode,
+        float             range,
+        CancellationToken cancel,
+        bool              expandedSearch,
+        bool              allowRequestedLock
+    )
+    {
+        var candidates = CollectStartPolyCandidates(from, requestedStartRef, expandedSearch);
+        if (candidates.Count == 0)
+            return new(null, null, false, false, 0, 0);
+
+        var evaluationLimit = expandedSearch ? EXPANDED_MAX_START_POLY_CANDIDATES_TO_EVALUATE : MAX_START_POLY_CANDIDATES_TO_EVALUATE;
+        var candidateBatch  = candidates.Take(evaluationLimit).ToArray();
+
+        MeshPathCandidate? best                = null;
+        MeshPathCandidate? requestedSuccessful = null;
+        MeshPathCandidate? requestedLocked     = null;
+        List<string>       candidateLogs       = [];
+        var                requestedFailed     = false;
+
+        var evaluations = EvaluateStartPathCandidates(candidateBatch, requestedTarget, endRef, requestedEndPos, filter, opt, queryMode, range, cancel);
+
+        foreach (var evaluation in evaluations)
+        {
+            if (!string.IsNullOrEmpty(evaluation.Log))
+                candidateLogs.Add(evaluation.Log);
+
+            if (evaluation.RequestedFailed)
+                requestedFailed = true;
+
+            if (evaluation.PathCandidate is not { } pathCandidate)
+                continue;
+
+            if (pathCandidate.IsRequestedStart)
+                requestedSuccessful = pathCandidate;
+
+            if (allowRequestedLock &&
+                pathCandidate is { IsRequestedStart: true, IsPointOverPoly: true, ResultStatus: PathfindStatus.Complete or PathfindStatus.ReachedWithinRange })
+                requestedLocked = pathCandidate;
+
+            if (best == null || IsBetterStartPathCandidate(pathCandidate, best.Value, requestedTarget))
+                best = pathCandidate;
+        }
+
+        if (candidateLogs.Count > 0)
+            Service.Log.Debug($"[算路] {(expandedSearch ? "起点扩搜候选评估" : "起点候选评估")}：{string.Join(" | ", candidateLogs)}");
+
+        var selected = allowRequestedLock && requestedLocked != null ? requestedLocked : best;
+        return new(selected, requestedSuccessful, requestedFailed, allowRequestedLock && requestedLocked != null, candidates.Count, candidateBatch.Length);
+    }
+
+    private StartCandidateEvaluation[] EvaluateStartPathCandidates
+    (
+        IReadOnlyList<MeshPolyCandidate> candidates,
+        Vector3                          requestedTarget,
+        long                             endRef,
+        RcVec3f                          requestedEndPos,
+        IDtQueryFilter                   filter,
+        DtFindPathOption                 opt,
+        GroundQueryMode                  queryMode,
+        float                            range,
+        CancellationToken                cancel
+    )
+    {
+        var result = new StartCandidateEvaluation[candidates.Count];
+        if (candidates.Count == 0)
+            return result;
+
+        if (candidates.Count > 1 && Environment.ProcessorCount > 1)
+        {
+            Parallel.For
+            (
+                0,
+                candidates.Count,
+                new ParallelOptions { CancellationToken = cancel, MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, candidates.Count) },
+                i => result[i] = EvaluateStartPathCandidate(candidates[i], requestedTarget, endRef, requestedEndPos, filter, opt, queryMode, range)
+            );
+        }
+        else
+        {
+            for (var i = 0; i < candidates.Count; ++i)
+            {
+                cancel.ThrowIfCancellationRequested();
+                result[i] = EvaluateStartPathCandidate(candidates[i], requestedTarget, endRef, requestedEndPos, filter, opt, queryMode, range);
+            }
+        }
+
+        return result;
+    }
+
+    private StartCandidateEvaluation EvaluateStartPathCandidate
+    (
+        MeshPolyCandidate candidate,
+        Vector3           requestedTarget,
+        long              endRef,
+        RcVec3f           requestedEndPos,
+        IDtQueryFilter    filter,
+        DtFindPathOption  opt,
+        GroundQueryMode   queryMode,
+        float             range
+    )
+    {
+        var candidateQuery = new DtNavMeshQuery(query.MeshQuery.GetAttachedNavMesh());
+        var status = FindPath
+        (
+            candidateQuery,
+            candidate.PolyRef,
+            endRef,
+            candidate.ProjectedPoint.SystemToRecast(),
+            requestedEndPos,
+            filter,
+            opt,
+            out var corridor
+        );
+
+        if (status.Failed() || corridor.Count == 0)
+        {
+            return new
+            (
+                null,
+                $"{candidate.PolyRef:X}: 失败 ({status})，requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}",
+                candidate.IsRequestedStart
+            );
+        }
+
+        var pathCandidate = BuildMeshPathCandidate
+        (
+            candidateQuery,
+            candidate,
+            corridor,
+            status,
+            requestedEndPos,
+            requestedTarget,
+            endRef,
+            queryMode,
+            range
+        );
+
+        if (pathCandidate.ResultStatus == PathfindStatus.Failed)
+        {
+            return new
+            (
+                null,
+                $"{candidate.PolyRef:X}: 失败（无法投影最终可达点），requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}",
+                candidate.IsRequestedStart
+            );
+        }
+
+        return new
+        (
+            pathCandidate,
+            $"{candidate.PolyRef:X}: {pathCandidate.ResultStatus}，requested = {(candidate.IsRequestedStart ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，supportHits = {candidate.SupportProbeHits}，路径长 {pathCandidate.PathLength:f3}，距目标 {MathF.Sqrt(pathCandidate.DistanceToRequestedTargetSq(requestedTarget)):f3}，水平偏移 {MathF.Sqrt(candidate.HorizontalDistanceSq):f3}，高差 {candidate.VerticalDelta:f3}",
+            false
+        );
+    }
+
+    private List<MeshPolyCandidate> CollectStartPolyCandidates(Vector3 from, long requestedStartRef, bool expandedSearch)
+    {
+        Dictionary<long, int> candidateIndices = [];
+        List<MeshPolyCandidate> candidates = [];
+        var halfExtentXZ = expandedSearch ? EXPANDED_START_POLY_CANDIDATE_HALF_EXTENT_XZ : START_POLY_CANDIDATE_HALF_EXTENT_XZ;
+        var halfExtentY = expandedSearch ? EXPANDED_START_POLY_CANDIDATE_HALF_EXTENT_Y : START_POLY_CANDIDATE_HALF_EXTENT_Y;
+        var maxHorizontalDistance = expandedSearch ? EXPANDED_START_POLY_CANDIDATE_MAX_HORIZONTAL_DISTANCE : START_POLY_CANDIDATE_MAX_HORIZONTAL_DISTANCE;
+        var maxVerticalDistance = expandedSearch ? EXPANDED_START_POLY_CANDIDATE_MAX_VERTICAL_DISTANCE : START_POLY_CANDIDATE_MAX_VERTICAL_DISTANCE;
+
+        foreach (var poly in query.FindIntersectingMeshPolys(from, new(halfExtentXZ, halfExtentY, halfExtentXZ)))
+            TryAddCandidate(poly, false);
+
+        TryAddCandidate(requestedStartRef, true);
+
+        candidates.Sort
+        (static (a, b) =>
+            {
+                if (a.IsRequestedStart != b.IsRequestedStart)
+                    return b.IsRequestedStart.CompareTo(a.IsRequestedStart);
+
+                if (a.IsPointOverPoly != b.IsPointOverPoly)
+                    return b.IsPointOverPoly.CompareTo(a.IsPointOverPoly);
+
+                var supportCmp = b.SupportProbeHits.CompareTo(a.SupportProbeHits);
+                if (supportCmp != 0)
+                    return supportCmp;
+
+                var bucketA = a.IsTooFarAbove ? 1 : 0;
+                var bucketB = b.IsTooFarAbove ? 1 : 0;
+                var cmp     = bucketA.CompareTo(bucketB);
+                if (cmp != 0)
+                    return cmp;
+
+                cmp = a.VerticalDistanceAbs.CompareTo(b.VerticalDistanceAbs);
+                if (cmp != 0)
+                    return cmp;
+
+                cmp = a.HorizontalDistanceSq.CompareTo(b.HorizontalDistanceSq);
+                if (cmp != 0)
+                    return cmp;
+
+                return a.PolyRef.CompareTo(b.PolyRef);
+            }
+        );
+
+        return candidates;
+
+        void TryAddCandidate(long poly, bool forceInclude)
+        {
+            if (poly == 0)
+                return;
+
+            if (candidateIndices.TryGetValue(poly, out var existingIndex))
+            {
+                if (forceInclude && !candidates[existingIndex].IsRequestedStart)
+                    candidates[existingIndex] = candidates[existingIndex] with { IsRequestedStart = true };
+                return;
+            }
+
+            if (!TryClosestPointOnPolyWithFlags(from, poly, out var point, out var isPointOverPoly))
+                return;
+
+            var dx                   = point.X - from.X;
+            var dz                   = point.Z - from.Z;
+            var horizontalDistanceSq = dx * dx + dz * dz;
+            var verticalDistance     = point.Y - from.Y;
+
+            if (!forceInclude)
+            {
+                if (horizontalDistanceSq > maxHorizontalDistance * maxHorizontalDistance)
+                    return;
+                if (MathF.Abs(verticalDistance) > maxVerticalDistance)
+                    return;
+            }
+
+            var supportHits = CountStartSupportProbeHits(from, poly);
+            var candidate   = new MeshPolyCandidate(poly, point, horizontalDistanceSq, verticalDistance, forceInclude, isPointOverPoly, supportHits);
+            candidateIndices.Add(poly, candidates.Count);
+            candidates.Add(candidate);
+        }
+    }
+
+    private int CountStartSupportProbeHits(Vector3 from, long poly)
+    {
+        var matchDistanceSq = START_SUPPORT_MATCH_DISTANCE * START_SUPPORT_MATCH_DISTANCE;
+        var step            = MathF.Tau                    / START_SUPPORT_PROBE_COUNT;
+        var hits            = 0;
+
+        for (var i = 0; i < START_SUPPORT_PROBE_COUNT; i++)
+        {
+            var angle = step * i;
+            var probe = new Vector3(from.X + MathF.Cos(angle) * START_SUPPORT_PROBE_RADIUS, from.Y, from.Z + MathF.Sin(angle) * START_SUPPORT_PROBE_RADIUS);
+            if (!TryClosestPointOnPolyWithFlags(probe, poly, out var probeClosest, out var probeOverPoly))
+                continue;
+
+            if (probeOverPoly)
+            {
+                hits++;
+                continue;
+            }
+
+            var dx = probeClosest.X - probe.X;
+            var dz = probeClosest.Z - probe.Z;
+            if (dx * dx + dz * dz <= matchDistanceSq)
+                hits++;
+        }
+
+        return hits;
+    }
+
+    private void LogStartCandidateDecision
+    (
+        MeshPathCandidate  selected,
+        Vector3            requestedTarget,
+        long               requestedStartRef,
+        MeshPathCandidate? requestedSuccessful,
+        bool               requestedFailed,
+        bool               lockedByRequested
+    )
+    {
+        Service.Log.Debug
+        (
+            $"[算路] 已选起点多边形 {selected.StartRef:X}，投影点 = {selected.StartPoint:f3}，结果 = {selected.ResultStatus}，requested = {(selected.IsRequestedStart ? 1 : 0)}，overPoly = {(selected.IsPointOverPoly ? 1 : 0)}，supportHits = {selected.SupportProbeHits}"
+        );
+
+        if (selected.StartRef == requestedStartRef)
+            return;
+
+        Interlocked.Increment(ref startReplacementCount);
+
+        var reason = "综合排序更优";
+
+        if (lockedByRequested)
+            reason = "锁定请求起点";
+        else if (requestedFailed)
+            reason = "请求起点不可达";
+        else if (requestedSuccessful is { } requested)
+        {
+            if (selected.ResultStatus != requested.ResultStatus)
+                reason = $"状态更优: {requested.ResultStatus} -> {selected.ResultStatus}";
+            else if (selected.IsPointOverPoly != requested.IsPointOverPoly)
+                reason = selected.IsPointOverPoly ? "命中更贴脚的多边形" : "保持非贴脚候选";
+            else if (!NearlyEqual(selected.StartCandidate.VerticalDistanceAbs, requested.StartCandidate.VerticalDistanceAbs))
+                reason = $"垂直偏差更小: {requested.StartCandidate.VerticalDistanceAbs:f3} -> {selected.StartCandidate.VerticalDistanceAbs:f3}";
+            else if (!NearlyEqual(selected.DistanceToRequestedTargetSq(requestedTarget), requested.DistanceToRequestedTargetSq(requestedTarget)))
+            {
+                reason =
+                    $"距目标更近: {MathF.Sqrt(requested.DistanceToRequestedTargetSq(requestedTarget)):f3} -> {MathF.Sqrt(selected.DistanceToRequestedTargetSq(requestedTarget)):f3}";
+            }
+            else if (!NearlyEqual(selected.PathLength, requested.PathLength))
+                reason = $"路径更短: {requested.PathLength:f3} -> {selected.PathLength:f3}";
+            else if (selected.WeightedLinkPenalty != requested.WeightedLinkPenalty)
+                reason = $"跳链代价更低: {requested.WeightedLinkPenalty} -> {selected.WeightedLinkPenalty}";
+            else if (!NearlyEqual(selected.StartCandidate.HorizontalDistanceSq, requested.StartCandidate.HorizontalDistanceSq))
+                reason = $"水平偏移更小: {MathF.Sqrt(requested.StartCandidate.HorizontalDistanceSq):f3} -> {MathF.Sqrt(selected.StartCandidate.HorizontalDistanceSq):f3}";
+            else if (selected.SupportProbeHits > requested.SupportProbeHits)
+                reason = $"支撑探针命中更多: {requested.SupportProbeHits} -> {selected.SupportProbeHits}";
+            else if (selected.QueryMode != requested.QueryMode)
+                reason = $"查询模式更优: {requested.QueryMode} -> {selected.QueryMode}";
+        }
+
+        Service.Log.Warning
+        (
+            $"[算路] 起点候选改判：原始 = {requestedStartRef:X}，选中 = {selected.StartRef:X}，原因 = {reason}，最终距目标 = {MathF.Sqrt(selected.DistanceToRequestedTargetSq(requestedTarget)):f3}"
+        );
     }
 
     private bool TryRepairGroundGap
@@ -246,7 +674,7 @@ internal sealed class NavmeshGroundQuery
         repairedResult   = null!;
         repairedLastPoly = partialCandidate.LastPoly;
 
-        var visited = new long[Math.Max(query.MeshQuery.GetAttachedNavMesh().GetParams().maxPolys, 1)];
+        Span<long> visited = stackalloc long[MAX_PATH_POLYS];
         var status = query.MeshQuery.Raycast
         (
             partialCandidate.LastPoly,
@@ -306,14 +734,12 @@ internal sealed class NavmeshGroundQuery
         if (status.Failed() || visitedCount == 0)
             return false;
 
-        var movedPoint = moved.RecastToSystem();
-        var movedDelta = movedPoint - partialCandidate.FinalDestination;
-        var movedPoly = visited[visitedCount - 1];
-        var movedDistSq = movedDelta.X * movedDelta.X + movedDelta.Z * movedDelta.Z;
-        var toleranceFloor = MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
-        if (movedDistSq <= toleranceFloor * toleranceFloor ||
-            HorizontalDistanceXZ(partialCandidate.FinalDestination, movedPoint) > HorizontalDistanceXZ(partialCandidate.FinalDestination, requestedTarget) ||
-            MathF.Abs(movedPoint.Y - partialCandidate.FinalDestination.Y) > MathF.Abs(requestedTarget.Y - partialCandidate.FinalDestination.Y) + toleranceFloor)
+        var movedPoint   = moved.RecastToSystem();
+        var movedDelta   = movedPoint - partialCandidate.FinalDestination;
+        var movedPoly    = visited[visitedCount - 1];
+        var movedDistSq  = movedDelta.X * movedDelta.X + movedDelta.Z * movedDelta.Z;
+        var verticalDist = MathF.Abs(movedDelta.Y);
+        if (movedDistSq <= 0.000001f || verticalDist > SHORT_GAP_REPAIR_MAX_VERTICAL_DELTA)
             return false;
 
         if (Vector3.Distance(movedPoint, requestedTarget) <= MathF.Max(range, 0.15f))
@@ -347,7 +773,8 @@ internal sealed class NavmeshGroundQuery
                 Vector3.DistanceSquared(bridgePoint, partialCandidate.FinalDestination),
                 bridgePoint.Y - partialCandidate.FinalDestination.Y,
                 false,
-                isPointOverPoly
+                isPointOverPoly,
+                CountStartSupportProbeHits(partialCandidate.FinalDestination, movedPoly)
             ),
             corridor,
             resumeStatus,
@@ -388,12 +815,10 @@ internal sealed class NavmeshGroundQuery
         repairedLastPoly = partialCandidate.LastPoly;
 
         var partialEnd = partialCandidate.FinalDestination;
-        var toleranceFloor = MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
-        var gapDistance = Vector3.Distance(partialEnd, requestedTarget);
-        var gapVertical = MathF.Abs(requestedTarget.Y - partialEnd.Y);
-        var repairCandidates = query.FindIntersectingMeshPolys(partialEnd, new Vector3(gapDistance, MathF.Max(gapVertical, toleranceFloor), gapDistance));
+        var repairCandidates = query.FindIntersectingMeshPolys
+            (partialEnd, new(SHORT_GAP_REPAIR_SEARCH_HALF_EXTENT_XZ, SHORT_GAP_REPAIR_SEARCH_HALF_EXTENT_Y, SHORT_GAP_REPAIR_SEARCH_HALF_EXTENT_XZ));
         MeshPathCandidate? bestResumeCandidate = null;
-        List<string> candidateLogs = [];
+        List<string>       candidateLogs       = [];
 
         foreach (var poly in repairCandidates)
         {
@@ -408,8 +833,7 @@ internal sealed class NavmeshGroundQuery
             var bridgeDelta              = bridgePoint - partialEnd;
             var bridgeHorizontalDistance = new Vector2(bridgeDelta.X, bridgeDelta.Z).Length();
             var bridgeVerticalDistance   = MathF.Abs(bridgeDelta.Y);
-            if (HorizontalDistanceXZ(partialEnd, bridgePoint) > HorizontalDistanceXZ(partialEnd, requestedTarget) ||
-                MathF.Abs(bridgePoint.Y - partialEnd.Y)       > MathF.Abs(requestedTarget.Y - partialEnd.Y) + toleranceFloor)
+            if (bridgeHorizontalDistance > SHORT_GAP_REPAIR_MAX_BRIDGE_DISTANCE || bridgeVerticalDistance > SHORT_GAP_REPAIR_MAX_VERTICAL_DELTA)
                 continue;
 
             var status = FindPath(query.MeshQuery, poly, endRef, bridgePoint.SystemToRecast(), requestedEndPos, filter, opt, out var corridor);
@@ -429,7 +853,8 @@ internal sealed class NavmeshGroundQuery
                     bridgeHorizontalDistance * bridgeHorizontalDistance,
                     bridgePoint.Y - partialEnd.Y,
                     false,
-                    isPointOverPoly
+                    isPointOverPoly,
+                    CountStartSupportProbeHits(partialEnd, poly)
                 ),
                 corridor,
                 status,
@@ -495,37 +920,65 @@ internal sealed class NavmeshGroundQuery
         CancellationToken cancel
     )
     {
+        var anyAngleOption = new DtFindPathOption
+        (
+            range > 0 ? new GoalRadiusHeuristic(range) : DtDefaultQueryHeuristic.Default,
+            useRaycast ? DtFindPathOptions.DT_FINDPATH_ANY_ANGLE : 0,
+            useRaycast ? 5 : 0
+        );
         var classicOption = new DtFindPathOption
         (
             range > 0 ? new GoalRadiusHeuristic(range) : DtDefaultQueryHeuristic.Default,
             0,
             0
         );
-        var opt = new DtFindPathOption
+        var anyAngleCandidate = ResolveBestStartPathCandidate
         (
-            range > 0 ? new GoalRadiusHeuristic(range) : DtDefaultQueryHeuristic.Default,
-            useRaycast ? DtFindPathOptions.DT_FINDPATH_ANY_ANGLE : 0,
-            useRaycast ? 5 : 0
-        );
-        if (!TryClosestPointOnPolyWithFlags(from, requestedStartRef, out var startPoint, out var isPointOverPoly))
-            return null;
-
-        var status = FindPath(query.MeshQuery, requestedStartRef, endRef, startPoint.SystemToRecast(), requestedEndPos, filter, opt, out var corridor);
-        if (status.Failed() || corridor.Count == 0)
-            return null;
-
-        var pathCandidate = BuildMeshPathCandidate
-        (
-            new(requestedStartRef, startPoint, Vector3.DistanceSquared(startPoint, from), startPoint.Y - from.Y, true, isPointOverPoly),
-            corridor,
-            status,
-            requestedEndPos,
+            from,
             to,
+            requestedStartRef,
             endRef,
-            useRaycast ? GroundQueryMode.AnyAngle : GroundQueryMode.Classic,
-            range
+            requestedEndPos,
+            filter,
+            anyAngleOption,
+            GroundQueryMode.AnyAngle,
+            range,
+            cancel
         );
-        if (pathCandidate.ResultStatus == PathfindStatus.Failed)
+        MeshPathCandidate? classicCandidate = null;
+
+        var fallbackDistanceThreshold = MathF.Max(range, 0.35f);
+
+        if (useRaycast                                                                                                      ||
+            anyAngleCandidate                                       == null                                                 ||
+            anyAngleCandidate.Value.ResultStatus                    != PathfindStatus.Complete                              ||
+            anyAngleCandidate.Value.DistanceToRequestedTargetSq(to) > fallbackDistanceThreshold * fallbackDistanceThreshold ||
+            anyAngleCandidate.Value.WeightedLinkPenalty             >= 4)
+        {
+            Interlocked.Increment(ref classicFallbackCount);
+            classicCandidate = ResolveBestStartPathCandidate
+            (
+                from,
+                to,
+                requestedStartRef,
+                endRef,
+                requestedEndPos,
+                filter,
+                classicOption,
+                GroundQueryMode.Classic,
+                range,
+                cancel
+            );
+        }
+
+        MeshPathCandidate? bestStartCandidate;
+        if (anyAngleCandidate == null)
+            bestStartCandidate = classicCandidate;
+        else if (classicCandidate == null)
+            bestStartCandidate = anyAngleCandidate;
+        else
+            bestStartCandidate = IsBetterStartPathCandidate(anyAngleCandidate.Value, classicCandidate.Value, to) ? anyAngleCandidate : classicCandidate;
+        if (bestStartCandidate is not { } pathCandidate)
             return null;
 
         var lastPoly     = pathCandidate.LastPoly;
@@ -697,7 +1150,7 @@ internal sealed class NavmeshGroundQuery
         out List<long>   corridor
     )
     {
-        var buffer = new long[Math.Max(query.GetAttachedNavMesh().GetParams().maxPolys, 1)];
+        var buffer = new long[MAX_PATH_POLYS];
         corridor = [];
 
         if (opt.options != 0)
@@ -708,7 +1161,7 @@ internal sealed class NavmeshGroundQuery
 
             do
             {
-                status = query.UpdateSlicedFindPath(buffer.Length, out _);
+                status = query.UpdateSlicedFindPath(MAX_PATH_POLYS, out _);
             }
             while (status.InProgress());
 
@@ -915,6 +1368,23 @@ internal sealed class NavmeshGroundQuery
         DtStatus          QueryStatus
     );
 
+    private readonly record struct StartCandidateEvaluation
+    (
+        MeshPathCandidate? PathCandidate,
+        string             Log,
+        bool               RequestedFailed
+    );
+
+    private readonly record struct StartCandidateSelection
+    (
+        MeshPathCandidate? Selected,
+        MeshPathCandidate? RequestedSuccessful,
+        bool               RequestedFailed,
+        bool               LockedByRequested,
+        int                TotalCandidates,
+        int                EvaluatedCandidates
+    );
+
     private readonly record struct TileCoord
     (
         int X,
@@ -945,10 +1415,12 @@ internal sealed class NavmeshGroundQuery
         float   HorizontalDistanceSq,
         float   VerticalDelta,
         bool    IsRequestedStart,
-        bool    IsPointOverPoly
+        bool    IsPointOverPoly,
+        int     SupportProbeHits
     )
     {
         public float VerticalDistanceAbs => MathF.Abs(VerticalDelta);
+        public bool  IsTooFarAbove       => VerticalDelta > START_POLY_CANDIDATE_ABOVE_TOLERANCE;
     }
 
     private readonly record struct MeshPathCandidate
@@ -970,6 +1442,7 @@ internal sealed class NavmeshGroundQuery
         public long    LastPoly         => Corridor.Count > 0 ? Corridor[^1] : 0;
         public bool    IsRequestedStart => StartCandidate.IsRequestedStart;
         public bool    IsPointOverPoly  => StartCandidate.IsPointOverPoly;
+        public int     SupportProbeHits => StartCandidate.SupportProbeHits;
 
         public float DistanceToRequestedTargetSq(Vector3 requestedTarget) => Vector3.DistanceSquared(FinalDestination, requestedTarget);
     }
@@ -998,6 +1471,7 @@ internal sealed class NavmeshGroundQuery
     )
     {
         public float VerticalDistanceAbs => MathF.Abs(VerticalDelta);
+        public bool  IsAboveTarget       => VerticalDelta > END_POLY_CANDIDATE_ABOVE_TOLERANCE;
     }
 
     internal sealed class GoalRadiusHeuristic
@@ -1052,4 +1526,33 @@ internal sealed class NavmeshGroundQuery
 
         public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => _filter.PassFilter(refs, tile, poly);
     }
+
+    #region 常量
+
+    private const float START_POLY_CANDIDATE_HALF_EXTENT_XZ                   = 5.0f;
+    private const float START_POLY_CANDIDATE_HALF_EXTENT_Y                    = 6.0f;
+    private const float START_POLY_CANDIDATE_MAX_HORIZONTAL_DISTANCE          = 4.0f;
+    private const float START_POLY_CANDIDATE_MAX_VERTICAL_DISTANCE            = 3.0f;
+    private const float START_POLY_CANDIDATE_ABOVE_TOLERANCE                  = 0.75f;
+    private const float START_SUPPORT_PROBE_RADIUS                            = 0.35f;
+    private const int   START_SUPPORT_PROBE_COUNT                             = 8;
+    private const float START_SUPPORT_MATCH_DISTANCE                          = 0.20f;
+    private const int   MAX_START_POLY_CANDIDATES_TO_EVALUATE                 = 8;
+    private const float EXPANDED_START_POLY_CANDIDATE_HALF_EXTENT_XZ          = 8.0f;
+    private const float EXPANDED_START_POLY_CANDIDATE_HALF_EXTENT_Y           = 16.0f;
+    private const float EXPANDED_START_POLY_CANDIDATE_MAX_HORIZONTAL_DISTANCE = 8.0f;
+    private const float EXPANDED_START_POLY_CANDIDATE_MAX_VERTICAL_DISTANCE   = 12.0f;
+    private const int   EXPANDED_MAX_START_POLY_CANDIDATES_TO_EVALUATE        = 24;
+    private const float END_POLY_CANDIDATE_HALF_EXTENT_XZ                     = 5.0f;
+    private const float END_POLY_CANDIDATE_HALF_EXTENT_Y                      = 8.0f;
+    private const float END_POLY_CANDIDATE_MAX_HORIZONTAL_DISTANCE            = 4.0f;
+    private const float END_POLY_CANDIDATE_MAX_VERTICAL_DISTANCE              = 8.0f;
+    private const float END_POLY_CANDIDATE_ABOVE_TOLERANCE                    = 0.25f;
+    private const float SHORT_GAP_REPAIR_SEARCH_HALF_EXTENT_XZ                = 4.0f;
+    private const float SHORT_GAP_REPAIR_SEARCH_HALF_EXTENT_Y                 = 2.5f;
+    private const float SHORT_GAP_REPAIR_MAX_BRIDGE_DISTANCE                  = 3.5f;
+    private const float SHORT_GAP_REPAIR_MAX_VERTICAL_DELTA                   = 1.0f;
+    private const int   MAX_PATH_POLYS                                        = 4096;
+
+    #endregion
 }
