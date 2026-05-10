@@ -4,37 +4,28 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
 using DotRecast.Recast;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Navigation.Mesh.Build;
 
 public class NavmeshSettings
 {
-    [Flags]
-    public enum Filter
-    {
-        None                   = 0,
-        LowHangingObstacles    = 1 << 0,
-        LedgeSpans             = 1 << 1,
-        WalkableLowHeightSpans = 1 << 2,
-        Interiors              = 1 << 3
-    }
-
-    public float       CellSize         = 0.5f;
-    public float       CellHeight       = 0.25f;
-    public float       AgentHeight      = 3f;
-    public float       AgentRadius      = 1;
-    public float       AgentMaxClimb    = 0.7f;
-    public float       AgentMaxSlopeDeg = 55f;
-    public Filter      Filtering        = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
-    public float       RegionMinSize    = 8;
-    public float       RegionMergeSize  = 20;
-    public RcPartition Partitioning     = RcPartition.WATERSHED;
-    public float       PolyMaxEdgeLen;
-    public float       PolyMaxSimplificationError = 1.1f;
-    public int         PolyMaxVerts               = 6;
-    public float       DetailSampleDist           = 6f;
-    public float       DetailMaxSampleError       = 1f;
-    public bool        FastBuild                  = true;
+    public float         CellSize         = 0.5f;
+    public float         CellHeight       = 0.25f;
+    public float         AgentHeight      = 3f;
+    public float         AgentRadius      = 1;
+    public float         AgentMaxClimb    = 0.7f;
+    public float         AgentMaxSlopeDeg = 55f;
+    public NavmeshFilter Filtering        = NavmeshFilter.LowHangingObstacles | NavmeshFilter.LedgeSpans | NavmeshFilter.WalkableLowHeightSpans;
+    public float         RegionMinSize    = 8;
+    public float         RegionMergeSize  = 20;
+    public RcPartition   Partitioning     = RcPartition.WATERSHED;
+    public float         PolyMaxEdgeLen;
+    public float         PolyMaxSimplificationError = 1.1f;
+    public int           PolyMaxVerts               = 6;
+    public float         DetailSampleDist           = 6f;
+    public float         DetailMaxSampleError       = 1f;
+    public bool          FastBuild                  = true;
 
     public bool  GenerateEdgeClimbLinks;
     public bool  GenerateEdgeJumpLinks;
@@ -380,7 +371,7 @@ public class NavmeshSettings
         ImGuiComponents.HelpMarker(help);
     }
 
-    private void DrawConfigFilteringCombo(ref Filter value, string label, string help)
+    private void DrawConfigFilteringCombo(ref NavmeshFilter value, string label, string help)
     {
         ImGui.SetNextItemWidth(300);
         using var combo = ImRaii.Combo(label, value.ToString());
@@ -394,7 +385,7 @@ public class NavmeshSettings
         DrawConfigFilteringEnum
         (
             ref value,
-            Filter.LowHangingObstacles,
+            NavmeshFilter.LowHangingObstacles,
             "低垂障碍物",
             """
             如果不可行走跨度的最大值在其下方跨度的 #walkableClimb 范围内 则将其标记为可行走
@@ -407,7 +398,7 @@ public class NavmeshSettings
         DrawConfigFilteringEnum
         (
             ref value,
-            Filter.LedgeSpans,
+            NavmeshFilter.LedgeSpans,
             "边缘跨度",
             """
             将边缘跨度标记为不可行走
@@ -421,7 +412,7 @@ public class NavmeshSettings
         DrawConfigFilteringEnum
         (
             ref value,
-            Filter.WalkableLowHeightSpans,
+            NavmeshFilter.WalkableLowHeightSpans,
             "可行走低高度跨度",
             """
             如果跨度上方的间隙小于指定的 #walkableHeight 则将可行走跨度标记为不可行走
@@ -433,7 +424,7 @@ public class NavmeshSettings
         DrawConfigFilteringEnum
         (
             ref value,
-            Filter.Interiors,
+            NavmeshFilter.Interiors,
             "内部区域",
             """
             将流形几何体内部(或非流形下方)的跨度标记为不可行走
@@ -441,7 +432,7 @@ public class NavmeshSettings
         );
     }
 
-    private void DrawConfigFilteringEnum(ref Filter value, Filter mask, string label, string help)
+    private void DrawConfigFilteringEnum(ref NavmeshFilter value, NavmeshFilter mask, string label, string help)
     {
         var set = value.HasFlag(mask);
         if (ImGui.Checkbox(label, ref set))

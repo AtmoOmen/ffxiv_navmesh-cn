@@ -679,7 +679,7 @@ public class NavmeshBuilder
             _walkableNormalThreshold,
             _walkableClimbVoxels,
             _walkableHeightVoxels,
-            Settings.Filtering.HasFlag(NavmeshSettings.Filter.Interiors),
+            Settings.Filtering.HasFlag(NavmeshFilter.Interiors),
             vox,
             telemetry,
             scratch.Rasterizer,
@@ -709,13 +709,13 @@ public class NavmeshBuilder
             finishTerrainProgress();
         }
 
-        if (Settings.Filtering.HasFlag(NavmeshSettings.Filter.LowHangingObstacles))
+        if (Settings.Filtering.HasFlag(NavmeshFilter.LowHangingObstacles))
             RcFilters.FilterLowHangingWalkableObstacles(telemetry, _walkableClimbVoxels, shf);
 
-        if (Settings.Filtering.HasFlag(NavmeshSettings.Filter.LedgeSpans))
+        if (Settings.Filtering.HasFlag(NavmeshFilter.LedgeSpans))
             RcFilters.FilterLedgeSpans(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
 
-        if (Settings.Filtering.HasFlag(NavmeshSettings.Filter.WalkableLowHeightSpans))
+        if (Settings.Filtering.HasFlag(NavmeshFilter.WalkableLowHeightSpans))
             RcFilters.FilterWalkableLowHeightSpans(telemetry, _walkableHeightVoxels, shf);
 
         var preCompactSpanCount = 0;

@@ -16,7 +16,7 @@ public class Z0815安穆艾兰 : NavmeshCustomization
     {
         // 因为新宫那边的地形太抽象了
         Settings.AgentMaxSlopeDeg =  90f;
-        Settings.Filtering        -= NavmeshSettings.Filter.LedgeSpans;
+        Settings.Filtering        -= NavmeshFilter.LedgeSpans;
     }
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)

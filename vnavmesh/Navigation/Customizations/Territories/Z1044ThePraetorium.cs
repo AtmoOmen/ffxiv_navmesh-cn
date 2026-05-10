@@ -1,3 +1,4 @@
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Customizations.Attributes;
 using vnavmesh.Navigation.Mesh.Build;
 
@@ -11,6 +12,6 @@ internal class Z1044ThePraetorium : NavmeshCustomization
     public Z1044ThePraetorium()
     {
         // allow connection between higher and lower section of broken ramp right after the magitek armor
-        Settings.Filtering -= NavmeshSettings.Filter.LedgeSpans;
+        Settings.Filtering -= NavmeshFilter.LedgeSpans;
     }
 }
