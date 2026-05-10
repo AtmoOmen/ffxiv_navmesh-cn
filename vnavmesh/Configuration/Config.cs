@@ -22,7 +22,6 @@ public class Config : IPluginConfiguration
     public float UnstuckDetectionSeconds = 2f;
     public float UnstuckCooldownSeconds  = 3f;
     public float PathTolerance        = 0.05f;
-    public float RandomnessMultiplier = 1f;
 
     private const float              CONFIG_VALUE_WIDTH    = 260f;
     private const ImGuiTreeNodeFlags DEFAULT_SECTION_FLAGS = ImGuiTreeNodeFlags.DefaultOpen;
@@ -52,7 +51,6 @@ public class Config : IPluginConfiguration
     {
         DrawCheckbox("玩家产生移动输入时取消当前路径", ref CancelMoveOnUserInput, "手动接管角色时立即停止自动移动。");
         DrawSliderFloat("终点容差",   ref PathTolerance,        0.01f, 1f, "%.2f", "角色进入目标点附近该范围后，视为已经到达最终目的地。");
-        DrawSliderFloat("寻路随机性",  ref RandomnessMultiplier, 0f,    1f, "%.2f", "仅作为调试入口保留。正常地面算路默认忽略该值，始终走确定性结果。");
 
         ImGui.Spacing();
         ImGui.TextDisabled("镜头联动");
