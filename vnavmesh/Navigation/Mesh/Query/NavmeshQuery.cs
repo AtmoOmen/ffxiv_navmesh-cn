@@ -20,196 +20,51 @@ public class NavmeshQuery
 {
     private readonly Config config;
 
-    private readonly record struct TileCoord
-    (
-        int X,
-        int Z
-    )
-    {
-        public override string ToString() => $"{X}x{Z}";
-    }
+    private readonly PathPostprocessor    postprocessor;
+    private readonly Navmesh              navmesh;
+    private readonly IDtQueryFilter       filter                          = new DtQueryDefaultFilter();
+    private readonly GroundAreaCostFilter groundFilter                    = new();
+    private readonly GroundAreaCostFilter groundFilterIgnoringUnreachable = new(false);
+    private readonly IDtQueryFilter       reachableFilter;
+    private          DtNavMeshQuery?      meshQuery;
+    private          VoxelPathfind?       volumeQuery;
+    private          bool                 released;
 
-    private readonly record struct SeamDiagnostic
-    (
-        TileCoord StartTile,
-        TileCoord RequestedTile,
-        TileCoord FinalTile,
-        float     DistanceToNearestBoundary,
-        bool      IsNearTileBoundary,
-        bool      IsNearbyTile,
-        bool      IsShortGap
-    )
-    {
-        public bool IsSuspectedTileSeamCutoff => IsNearTileBoundary && IsNearbyTile && IsShortGap;
-    }
-
-    private readonly record struct MeshPolyCandidate
-    (
-        long    PolyRef,
-        Vector3 ProjectedPoint,
-        float   HorizontalDistanceSq,
-        float   VerticalDelta,
-        bool    IsRequestedStart,
-        bool    IsPointOverPoly
-    )
-    {
-        public float VerticalDistanceAbs => MathF.Abs(VerticalDelta);
-    }
-
-    private readonly record struct MeshPathCandidate
-    (
-        MeshPolyCandidate StartCandidate,
-        DtStatus          QueryStatus,
-        PathfindStatus    ResultStatus,
-        Vector3           FinalDestination,
-        List<long>        Corridor,
-        GroundQueryMode   QueryMode,
-        float             PathLength,
-        int               WeightedLinkPenalty,
-        int               OffMeshTransitionCount,
-        int               AreaCrossingCount
-    )
-    {
-        public long    StartRef         => StartCandidate.PolyRef;
-        public Vector3 StartPoint       => StartCandidate.ProjectedPoint;
-        public long    LastPoly         => Corridor.Count > 0 ? Corridor[^1] : 0;
-        public bool    IsRequestedStart => StartCandidate.IsRequestedStart;
-        public bool    IsPointOverPoly  => StartCandidate.IsPointOverPoly;
-
-        public float DistanceToRequestedTargetSq(Vector3 requestedTarget) => Vector3.DistanceSquared(FinalDestination, requestedTarget);
-    }
-
-    private enum GroundQueryMode
-    {
-        AnyAngle,
-        Classic
-    }
-
-    public sealed class GroundPathDiagnosticsSnapshot
-    {
-        public required long GroundQueries               { get; init; }
-        public required long PartialQueries              { get; init; }
-        public required long SuspectedTileSeamCutoffs    { get; init; }
-        public required long AnyAnglePreferred           { get; init; }
-        public required long ClassicFallbacks            { get; init; }
-        public required long StartReplacements           { get; init; }
-        public required long EndReplacements             { get; init; }
-        public required long GeneratedClimbLinksAccepted { get; init; }
-        public required long GeneratedJumpLinksAccepted  { get; init; }
-    }
-
-    private readonly record struct MeshEndCandidate
-    (
-        long    PolyRef,
-        Vector3 ProjectedPoint,
-        float   HorizontalDistanceSq,
-        float   VerticalDelta,
-        bool    IsRequestedEnd,
-        bool    IsPointOverPoly
-    )
-    {
-        public float VerticalDistanceAbs => MathF.Abs(VerticalDelta);
-    }
-
-    public class GoalRadiusHeuristic
-    (
-        float tolerance
-    ) : IDtQueryHeuristic
-    {
-        float IDtQueryHeuristic.GetCost(RcVec3f neighbourPos, RcVec3f endPos)
-        {
-            var dist = RcVec3f.Distance(neighbourPos, endPos) * DtDefaultQueryHeuristic.H_SCALE;
-            return dist < tolerance ? -1 : dist;
-        }
-    }
-
-    public class GroundAreaCostFilter
-    (
-        bool excludeUnreachable = true
-    ) : IDtQueryFilter
-    {
-        private readonly DtQueryDefaultFilter _filter = new
-            ((int)NavmeshPolyFlags.AllTraversable, excludeUnreachable ? (int)NavmeshPolyFlags.Unreachable : 0, CreateAreaCosts());
-
-        private static float[] CreateAreaCosts()
-        {
-            var costs = new float[DT_MAX_AREAS];
-            Array.Fill(costs, 1f);
-            costs[(int)NavmeshArea.Null]               = float.MaxValue;
-            costs[(int)NavmeshArea.Ground]             = 1.0f;
-            costs[(int)NavmeshArea.GeneratedClimbDown] = 1.8f;
-            costs[(int)NavmeshArea.GeneratedEdgeJump]  = 2.6f;
-            costs[(int)NavmeshArea.ManualOffMesh]      = 1.35f;
-            costs[(int)NavmeshArea.Teleport]           = 1.15f;
-            costs[(int)NavmeshArea.ClientPath]         = 3.0f;
-            return costs;
-        }
-
-        public float GetCost
-        (
-            RcVec3f    pa,
-            RcVec3f    pb,
-            long       prevRef,
-            DtMeshTile prevTile,
-            DtPoly     prevPoly,
-            long       curRef,
-            DtMeshTile curTile,
-            DtPoly     curPoly,
-            long       nextRef,
-            DtMeshTile nextTile,
-            DtPoly     nextPoly
-        )
-            => _filter.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
-
-        public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => _filter.PassFilter(refs, tile, poly);
-    }
-
-    private readonly PathPostprocessor    _postprocessor;
-    private readonly Navmesh              _navmesh;
-    private readonly IDtQueryFilter       _filter                          = new DtQueryDefaultFilter();
-    private readonly GroundAreaCostFilter _groundFilter                    = new();
-    private readonly GroundAreaCostFilter _groundFilterIgnoringUnreachable = new(false);
-    private readonly IDtQueryFilter       _reachableFilter;
-    private          DtNavMeshQuery?      _meshQuery;
-    private          VoxelPathfind?       _volumeQuery;
-    private          bool                 _released;
-
-    private long _groundQueryCount;
-    private long _partialGroundQueryCount;
-    private long _suspectedTileSeamCutoffCount;
-    private long _anyAnglePreferredCount;
-    private long _classicFallbackCount;
-    private long _startReplacementCount;
-    private long _endReplacementCount;
-
-    internal IDtQueryFilter GroundFilter => _groundFilter;
+    private long groundQueryCount;
+    private long partialGroundQueryCount;
+    private long suspectedTileSeamCutoffCount;
+    private long anyAnglePreferredCount;
+    private long classicFallbackCount;
+    private long startReplacementCount;
+    private long endReplacementCount;
 
     public DtNavMeshQuery MeshQuery
     {
         get
         {
-            if (_released)
+            if (released)
                 throw new ObjectDisposedException(nameof(NavmeshQuery));
 
-            var existing = Volatile.Read(ref _meshQuery);
+            var existing = Volatile.Read(ref meshQuery);
             if (existing != null)
                 return existing;
 
-            var created = new DtNavMeshQuery(_navmesh.Mesh);
-            return Interlocked.CompareExchange(ref _meshQuery, created, null) ?? created;
+            var created = new DtNavMeshQuery(navmesh.Mesh);
+            return Interlocked.CompareExchange(ref meshQuery, created, null) ?? created;
         }
     }
 
-    public VoxelPathfind? VolumeQuery => _released ? null : _volumeQuery ??= _navmesh.Volume != null ? new(_navmesh.Volume, config) : null;
+    public VoxelPathfind? VolumeQuery => 
+        released ? null : volumeQuery ??= navmesh.Volume != null ? new(navmesh.Volume, config) : null;
 
     public List<long> LastPath { get; } = [];
 
     public NavmeshQuery(Navmesh navmesh, Config config)
     {
-        _navmesh         = navmesh;
-        this.config      = config;
-        _postprocessor   = new(() => MeshQuery);
-        _reachableFilter = _groundFilter;
+        this.navmesh    = navmesh;
+        this.config     = config;
+        postprocessor   = new(() => MeshQuery);
+        reachableFilter = groundFilter;
     }
 
     public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
@@ -219,9 +74,8 @@ public class NavmeshQuery
         => Postprocess(PlanVolumePathDetailed(from, to, useRaycast, cancel), useStringPulling, cancel).Waypoints;
 
     internal PostprocessedPath Postprocess(PlannerResult result, bool useStringPulling, CancellationToken cancel) =>
-        _postprocessor.Process(result, useStringPulling, cancel);
-
-
+        postprocessor.Process(result, useStringPulling, cancel);
+    
     internal (int x, int z) FindMeshTile(Vector3 position)
     {
         MeshQuery.GetAttachedNavMesh().CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
@@ -240,7 +94,7 @@ public class NavmeshQuery
     public long FindNearestMeshPoly(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5, bool allowUnreachable = true)
     {
         MeshQuery.FindNearestPoly
-            (p.SystemToRecast(), new(halfExtentXZ, halfExtentY, halfExtentXZ), allowUnreachable ? _filter : _reachableFilter, out var nearestRef, out _, out _);
+            (p.SystemToRecast(), new(halfExtentXZ, halfExtentY, halfExtentXZ), allowUnreachable ? filter : reachableFilter, out var nearestRef, out _, out _);
         return nearestRef;
     }
 
@@ -252,7 +106,7 @@ public class NavmeshQuery
         {
             var refs  = new long[capacity];
             var query = new DtCollectPolysQuery(refs, refs.Length);
-            MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), allowUnreachable ? _filter : _reachableFilter, query);
+            MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), allowUnreachable ? filter : reachableFilter, query);
             if (!query.Overflowed())
                 return [.. refs.AsSpan(0, query.NumCollected()).ToArray()];
 
@@ -271,7 +125,7 @@ public class NavmeshQuery
         if (maxRadius <= 0)
             return null;
 
-        var filter   = allowUnreachable ? _filter : _reachableFilter;
+        var filter   = allowUnreachable ? this.filter : reachableFilter;
         var startRef = FindNearestMeshPoly(center, 8, 8, allowUnreachable);
         if (startRef == 0)
             return null;
@@ -401,25 +255,25 @@ public class NavmeshQuery
     public GroundPathDiagnosticsSnapshot GetGroundDiagnostics() =>
         new()
         {
-            GroundQueries               = Interlocked.Read(ref _groundQueryCount),
-            PartialQueries              = Interlocked.Read(ref _partialGroundQueryCount),
-            SuspectedTileSeamCutoffs    = Interlocked.Read(ref _suspectedTileSeamCutoffCount),
-            AnyAnglePreferred           = Interlocked.Read(ref _anyAnglePreferredCount),
-            ClassicFallbacks            = Interlocked.Read(ref _classicFallbackCount),
-            StartReplacements           = Interlocked.Read(ref _startReplacementCount),
-            EndReplacements             = Interlocked.Read(ref _endReplacementCount),
-            GeneratedClimbLinksAccepted = _navmesh.GeneratedClimbDownLinkCount,
-            GeneratedJumpLinksAccepted  = _navmesh.GeneratedEdgeJumpLinkCount
+            GroundQueries               = Interlocked.Read(ref groundQueryCount),
+            PartialQueries              = Interlocked.Read(ref partialGroundQueryCount),
+            SuspectedTileSeamCutoffs    = Interlocked.Read(ref suspectedTileSeamCutoffCount),
+            AnyAnglePreferred           = Interlocked.Read(ref anyAnglePreferredCount),
+            ClassicFallbacks            = Interlocked.Read(ref classicFallbackCount),
+            StartReplacements           = Interlocked.Read(ref startReplacementCount),
+            EndReplacements             = Interlocked.Read(ref endReplacementCount),
+            GeneratedClimbLinksAccepted = navmesh.GeneratedClimbDownLinkCount,
+            GeneratedJumpLinksAccepted  = navmesh.GeneratedEdgeJumpLinkCount
         };
 
     internal void ReleaseRetainedState()
     {
         LastPath.Clear();
         LastPath.TrimExcess();
-        _meshQuery = null;
-        _volumeQuery?.ReleaseRetainedState();
-        _volumeQuery = null;
-        _released    = true;
+        meshQuery = null;
+        volumeQuery?.ReleaseRetainedState();
+        volumeQuery = null;
+        released    = true;
     }
 
     private PlannerResult LogMeshFailure(Vector3 from, Vector3 to, long startRef, long endRef, long lastPoly, float range, string reason)
@@ -473,12 +327,12 @@ public class NavmeshQuery
         switch (result.Status)
         {
             case PathfindStatus.Partial:
-                Interlocked.Increment(ref _partialGroundQueryCount);
+                Interlocked.Increment(ref partialGroundQueryCount);
                 Service.Log.Warning(message);
 
                 if (diagnostic.IsSuspectedTileSeamCutoff)
                 {
-                    Interlocked.Increment(ref _suspectedTileSeamCutoffCount);
+                    Interlocked.Increment(ref suspectedTileSeamCutoffCount);
                     Service.Log.Warning
                     (
                         $"[SuspectedTileSeamCutoff] 疑似区块接缝截断：起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}"
@@ -536,7 +390,7 @@ public class NavmeshQuery
         (
             $"[算路] 起点替换：原始候选 = {requestedStartRef:X}，选中 = {selected.StartRef:X}，原因 = {BuildStartReplacementReason(selected, requestedTarget, requestedSuccessful, requestedFailed)}。"
         );
-        Interlocked.Increment(ref _startReplacementCount);
+        Interlocked.Increment(ref startReplacementCount);
     }
 
     private static string BuildStartReplacementReason
@@ -861,7 +715,7 @@ public class NavmeshQuery
 
     internal PlannerResult PlanMeshPathDetailed(Vector3 from, Vector3 to, bool useRaycast, float range, CancellationToken cancel)
     {
-        Interlocked.Increment(ref _groundQueryCount);
+        Interlocked.Increment(ref groundQueryCount);
         var                    requestedStartRef   = FindNearestMeshPoly(from);
         var                    requestedEndRef     = FindNearestMeshPoly(to);
         Dictionary<long, int>  endCandidateIndices = [];
@@ -944,7 +798,7 @@ public class NavmeshQuery
             Service.Log.Debug($"[算路] 终点候选评估：{string.Join(" | ", endCandidateLogs)}");
 
         if (endCandidate is { } selectedEndCandidate && selectedEndCandidate.PolyRef != requestedEndRef)
-            Interlocked.Increment(ref _endReplacementCount);
+            Interlocked.Increment(ref endReplacementCount);
 
         if (endCandidate == null)
             return LogMeshFailure(from, to, requestedStartRef, requestedEndRef, 0, range, "无法为终点选择可用的导航多边形");
@@ -954,7 +808,7 @@ public class NavmeshQuery
 
         var timer           = StopWatchTimer.Create();
         var requestedEndPos = resolvedDestination.SystemToRecast();
-        var prunedAttempt   = ExecuteGroundPathAttempt(from, to, requestedStartRef, endRef, requestedEndPos, _groundFilter, useRaycast, range, cancel);
+        var prunedAttempt   = ExecuteGroundPathAttempt(from, to, requestedStartRef, endRef, requestedEndPos, groundFilter, useRaycast, range, cancel);
         var selectedAttempt = prunedAttempt;
 
         if (prunedAttempt == null || prunedAttempt.Value.Result.Status == PathfindStatus.Partial)
@@ -966,7 +820,7 @@ public class NavmeshQuery
                 requestedStartRef,
                 endRef,
                 requestedEndPos,
-                _groundFilterIgnoringUnreachable,
+                groundFilterIgnoringUnreachable,
                 useRaycast,
                 range,
                 cancel
@@ -1010,7 +864,7 @@ public class NavmeshQuery
         var pathCandidate = attempt.Candidate;
         var startRef      = attempt.StartRef;
         if (pathCandidate.QueryMode == GroundQueryMode.AnyAngle)
-            Interlocked.Increment(ref _anyAnglePreferredCount);
+            Interlocked.Increment(ref anyAnglePreferredCount);
         LastPath.AddRange(pathCandidate.Corridor);
         Service.Log.Debug($"[算路] 地面多边形 {startRef:X} -> {endRef:X}（原始起点候选 = {requestedStartRef:X}，查询模式 = {pathCandidate.QueryMode}）");
         Service.Log.Debug($"[算路] 地面终点解析：原始终点候选 = {requestedEndRef:X}，选中 = {endRef:X}，终点投影 = {resolvedDestination:f3}");
@@ -1114,7 +968,7 @@ public class NavmeshQuery
             anyAngleCandidate.Value.DistanceToRequestedTargetSq(to) > fallbackDistanceThreshold * fallbackDistanceThreshold ||
             anyAngleCandidate.Value.WeightedLinkPenalty             >= 4)
         {
-            Interlocked.Increment(ref _classicFallbackCount);
+            Interlocked.Increment(ref classicFallbackCount);
             classicCandidate = ResolveBestStartPathCandidate
             (
                 from,
@@ -1444,32 +1298,6 @@ public class NavmeshQuery
             candidates.Add(candidate);
         }
     }
-
-    private readonly record struct StartCandidateEvaluation
-    (
-        MeshPathCandidate? PathCandidate,
-        string             Log,
-        bool               RequestedFailed
-    );
-
-    private readonly record struct StartCandidateSelection
-    (
-        MeshPathCandidate? Selected,
-        MeshPathCandidate? RequestedSuccessful,
-        bool               RequestedFailed,
-        bool               LockedByRequested,
-        int                TotalCandidates,
-        int                EvaluatedCandidates
-    );
-
-    private readonly record struct GroundPathAttempt
-    (
-        MeshPathCandidate Candidate,
-        PlannerResult     Result,
-        long              StartRef,
-        long              LastPoly,
-        DtStatus          QueryStatus
-    );
 
     private MeshPathCandidate BuildMeshPathCandidate
     (
@@ -2055,4 +1883,178 @@ public class NavmeshQuery
         VolumeSearchTermination.StepBudgetReached => "步数触顶",
         _                                         => "未知"
     };
+
+    #region 嵌套类
+    
+    private enum GroundQueryMode
+    {
+        AnyAngle,
+        Classic
+    }
+    
+    private readonly record struct StartCandidateEvaluation
+    (
+        MeshPathCandidate? PathCandidate,
+        string             Log,
+        bool               RequestedFailed
+    );
+
+    private readonly record struct StartCandidateSelection
+    (
+        MeshPathCandidate? Selected,
+        MeshPathCandidate? RequestedSuccessful,
+        bool               RequestedFailed,
+        bool               LockedByRequested,
+        int                TotalCandidates,
+        int                EvaluatedCandidates
+    );
+
+    private readonly record struct GroundPathAttempt
+    (
+        MeshPathCandidate Candidate,
+        PlannerResult     Result,
+        long              StartRef,
+        long              LastPoly,
+        DtStatus          QueryStatus
+    );
+
+    private readonly record struct TileCoord
+    (
+        int X,
+        int Z
+    )
+    {
+        public override string ToString() => $"{X}x{Z}";
+    }
+
+    private readonly record struct SeamDiagnostic
+    (
+        TileCoord StartTile,
+        TileCoord RequestedTile,
+        TileCoord FinalTile,
+        float     DistanceToNearestBoundary,
+        bool      IsNearTileBoundary,
+        bool      IsNearbyTile,
+        bool      IsShortGap
+    )
+    {
+        public bool IsSuspectedTileSeamCutoff => IsNearTileBoundary && IsNearbyTile && IsShortGap;
+    }
+
+    private readonly record struct MeshPolyCandidate
+    (
+        long    PolyRef,
+        Vector3 ProjectedPoint,
+        float   HorizontalDistanceSq,
+        float   VerticalDelta,
+        bool    IsRequestedStart,
+        bool    IsPointOverPoly
+    )
+    {
+        public float VerticalDistanceAbs => MathF.Abs(VerticalDelta);
+    }
+
+    private readonly record struct MeshPathCandidate
+    (
+        MeshPolyCandidate StartCandidate,
+        DtStatus          QueryStatus,
+        PathfindStatus    ResultStatus,
+        Vector3           FinalDestination,
+        List<long>        Corridor,
+        GroundQueryMode   QueryMode,
+        float             PathLength,
+        int               WeightedLinkPenalty,
+        int               OffMeshTransitionCount,
+        int               AreaCrossingCount
+    )
+    {
+        public long    StartRef         => StartCandidate.PolyRef;
+        public Vector3 StartPoint       => StartCandidate.ProjectedPoint;
+        public long    LastPoly         => Corridor.Count > 0 ? Corridor[^1] : 0;
+        public bool    IsRequestedStart => StartCandidate.IsRequestedStart;
+        public bool    IsPointOverPoly  => StartCandidate.IsPointOverPoly;
+
+        public float DistanceToRequestedTargetSq(Vector3 requestedTarget) => Vector3.DistanceSquared(FinalDestination, requestedTarget);
+    }
+
+    public sealed class GroundPathDiagnosticsSnapshot
+    {
+        public required long GroundQueries               { get; init; }
+        public required long PartialQueries              { get; init; }
+        public required long SuspectedTileSeamCutoffs    { get; init; }
+        public required long AnyAnglePreferred           { get; init; }
+        public required long ClassicFallbacks            { get; init; }
+        public required long StartReplacements           { get; init; }
+        public required long EndReplacements             { get; init; }
+        public required long GeneratedClimbLinksAccepted { get; init; }
+        public required long GeneratedJumpLinksAccepted  { get; init; }
+    }
+
+    private readonly record struct MeshEndCandidate
+    (
+        long    PolyRef,
+        Vector3 ProjectedPoint,
+        float   HorizontalDistanceSq,
+        float   VerticalDelta,
+        bool    IsRequestedEnd,
+        bool    IsPointOverPoly
+    )
+    {
+        public float VerticalDistanceAbs => MathF.Abs(VerticalDelta);
+    }
+
+    public class GoalRadiusHeuristic
+    (
+        float tolerance
+    ) : IDtQueryHeuristic
+    {
+        float IDtQueryHeuristic.GetCost(RcVec3f neighbourPos, RcVec3f endPos)
+        {
+            var dist = RcVec3f.Distance(neighbourPos, endPos) * DtDefaultQueryHeuristic.H_SCALE;
+            return dist < tolerance ? -1 : dist;
+        }
+    }
+
+    public class GroundAreaCostFilter
+    (
+        bool excludeUnreachable = true
+    ) : IDtQueryFilter
+    {
+        private readonly DtQueryDefaultFilter _filter = new
+            ((int)NavmeshPolyFlags.AllTraversable, excludeUnreachable ? (int)NavmeshPolyFlags.Unreachable : 0, CreateAreaCosts());
+
+        private static float[] CreateAreaCosts()
+        {
+            var costs = new float[DT_MAX_AREAS];
+            Array.Fill(costs, 1f);
+            costs[(int)NavmeshArea.Null]               = float.MaxValue;
+            costs[(int)NavmeshArea.Ground]             = 1.0f;
+            costs[(int)NavmeshArea.GeneratedClimbDown] = 1.8f;
+            costs[(int)NavmeshArea.GeneratedEdgeJump]  = 2.6f;
+            costs[(int)NavmeshArea.ManualOffMesh]      = 1.35f;
+            costs[(int)NavmeshArea.Teleport]           = 1.15f;
+            costs[(int)NavmeshArea.ClientPath]         = 3.0f;
+            return costs;
+        }
+
+        public float GetCost
+        (
+            RcVec3f    pa,
+            RcVec3f    pb,
+            long       prevRef,
+            DtMeshTile prevTile,
+            DtPoly     prevPoly,
+            long       curRef,
+            DtMeshTile curTile,
+            DtPoly     curPoly,
+            long       nextRef,
+            DtMeshTile nextTile,
+            DtPoly     nextPoly
+        )
+            => _filter.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
+
+        public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => _filter.PassFilter(refs, tile, poly);
+    }
+
+    #endregion
 }
