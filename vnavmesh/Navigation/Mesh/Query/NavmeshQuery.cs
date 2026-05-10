@@ -9,11 +9,8 @@ using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Planning;
-using vnavmesh.Navigation.Volume;
 using vnavmesh.Navigation.Volume.Pathfinding;
-using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Query;
 
@@ -145,56 +142,6 @@ public class NavmeshQuery
         public bool  IsAboveTarget       => VerticalDelta > EndPolyCandidateAboveTolerance;
     }
 
-    private sealed class RandomnessFilter
-    (
-        IDtQueryFilter inner
-    ) : IDtQueryFilter
-    {
-        public float RandomnessMultiplier = 0;
-        public ulong RandomSeed           = 0;
-
-        public float GetCost
-        (
-            RcVec3f    pa,
-            RcVec3f    pb,
-            long       prevRef,
-            DtMeshTile prevTile,
-            DtPoly     prevPoly,
-            long       curRef,
-            DtMeshTile curTile,
-            DtPoly     curPoly,
-            long       nextRef,
-            DtMeshTile nextTile,
-            DtPoly     nextPoly
-        )
-        {
-            var cost = inner.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
-            var mult = RandomnessMultiplier;
-            if (mult <= 0 || nextPoly == null)
-                return cost;
-
-            if (curPoly.GetArea() == (int)NavmeshArea.Teleport && nextPoly.GetArea() == (int)NavmeshArea.Teleport)
-                return cost;
-
-            var a     = (ulong)Math.Min(curRef, nextRef);
-            var b     = (ulong)Math.Max(curRef, nextRef);
-            var noise = HashToUnitFloat(RandomSeed, a, b);
-            return cost + noise * mult;
-        }
-
-        public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => inner.PassFilter(refs, tile, poly);
-
-        private static float HashToUnitFloat(ulong seed, ulong a, ulong b)
-        {
-            var x = seed ^ a + 0x9E3779B97F4A7C15UL ^ b * 0xBF58476D1CE4E5B9UL;
-            x += 0x9E3779B97F4A7C15UL;
-            x =  (x ^ x >> 30) * 0xBF58476D1CE4E5B9UL;
-            x =  (x ^ x >> 27) * 0x94D049BB133111EBUL;
-            x ^= x >> 31;
-            return (x >> 40 & 0xFFFFFF) * (1.0f / 16777216.0f);
-        }
-    }
-
     public class GoalRadiusHeuristic
     (
         float tolerance
@@ -207,12 +154,13 @@ public class NavmeshQuery
         }
     }
 
-    public class GroundAreaCostFilter : IDtQueryFilter
+    public class GroundAreaCostFilter
+    (
+        bool excludeUnreachable = true
+    ) : IDtQueryFilter
     {
-        private readonly DtQueryDefaultFilter _filter;
-
-        public GroundAreaCostFilter(bool excludeUnreachable = true) =>
-            _filter = new((int)NavmeshPolyFlags.AllTraversable, excludeUnreachable ? (int)NavmeshPolyFlags.Unreachable : 0, CreateAreaCosts());
+        private readonly DtQueryDefaultFilter _filter = new
+            ((int)NavmeshPolyFlags.AllTraversable, excludeUnreachable ? (int)NavmeshPolyFlags.Unreachable : 0, CreateAreaCosts());
 
         private static float[] CreateAreaCosts()
         {
@@ -252,7 +200,6 @@ public class NavmeshQuery
     private readonly IDtQueryFilter       _filter                          = new DtQueryDefaultFilter();
     private readonly GroundAreaCostFilter _groundFilter                    = new();
     private readonly GroundAreaCostFilter _groundFilterIgnoringUnreachable = new(false);
-    private readonly RandomnessFilter     _randomnessFilter;
     private readonly IDtQueryFilter       _reachableFilter;
     private          DtNavMeshQuery?      _meshQuery;
     private          VoxelPathfind?       _volumeQuery;
@@ -290,11 +237,10 @@ public class NavmeshQuery
 
     public NavmeshQuery(Navmesh navmesh, Config config)
     {
-        _navmesh          = navmesh;
-        _config           = config;
-        _postprocessor    = new(() => MeshQuery);
-        _randomnessFilter = new(_groundFilter);
-        _reachableFilter  = _groundFilter;
+        _navmesh         = navmesh;
+        _config          = config;
+        _postprocessor   = new(() => MeshQuery);
+        _reachableFilter = _groundFilter;
     }
 
     public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
@@ -648,7 +594,7 @@ public class NavmeshQuery
         out long          repairedLastPoly
     )
     {
-        repairedResult   = default!;
+        repairedResult   = null!;
         repairedLastPoly = partialCandidate.LastPoly;
 
         if (TryRepairGroundGapByRaycast(partialCandidate, requestedTarget, requestedEndPos, filter, range, out repairedResult, out repairedLastPoly))
@@ -673,7 +619,7 @@ public class NavmeshQuery
         out long          repairedLastPoly
     )
     {
-        repairedResult   = default!;
+        repairedResult   = null!;
         repairedLastPoly = partialCandidate.LastPoly;
 
         Span<long> visited = stackalloc long[MaxPathPolys];
@@ -718,7 +664,7 @@ public class NavmeshQuery
         out long          repairedLastPoly
     )
     {
-        repairedResult   = default!;
+        repairedResult   = null!;
         repairedLastPoly = partialCandidate.LastPoly;
 
         Span<long> visited = stackalloc long[32];
@@ -813,7 +759,7 @@ public class NavmeshQuery
         out long          repairedLastPoly
     )
     {
-        repairedResult   = default!;
+        repairedResult   = null!;
         repairedLastPoly = partialCandidate.LastPoly;
 
         var partialEnd = partialCandidate.FinalDestination;
@@ -1299,10 +1245,8 @@ public class NavmeshQuery
             if (pathCandidate.IsRequestedStart)
                 requestedSuccessful = pathCandidate;
 
-            if (allowRequestedLock             &&
-                pathCandidate.IsRequestedStart &&
-                pathCandidate.IsPointOverPoly  &&
-                pathCandidate.ResultStatus is PathfindStatus.Complete or PathfindStatus.ReachedWithinRange)
+            if (allowRequestedLock &&
+                pathCandidate is { IsRequestedStart: true, IsPointOverPoly: true, ResultStatus: PathfindStatus.Complete or PathfindStatus.ReachedWithinRange })
                 requestedLocked = pathCandidate;
 
             if (best == null || IsBetterStartPathCandidate(pathCandidate, best.Value, requestedTarget))
@@ -1727,8 +1671,8 @@ public class NavmeshQuery
         if (rankCandidate != rankCurrent)
             return rankCandidate < rankCurrent;
 
-        var candidateRequestedOver = candidate.IsRequestedStart   && candidate.IsPointOverPoly;
-        var currentRequestedOver   = currentBest.IsRequestedStart && currentBest.IsPointOverPoly;
+        var candidateRequestedOver = candidate is { IsRequestedStart: true, IsPointOverPoly: true };
+        var currentRequestedOver   = currentBest is { IsRequestedStart: true, IsPointOverPoly: true };
         if (candidateRequestedOver != currentRequestedOver)
             return candidateRequestedOver;
 
@@ -2046,7 +1990,7 @@ public class NavmeshQuery
 
         if (!groundResult.Succeeded || groundResult.Segments.Count == 0)
         {
-            result = default!;
+            result = null!;
             return false;
         }
 
