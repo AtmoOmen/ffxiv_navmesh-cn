@@ -1,10 +1,10 @@
 using vnavmesh.Navigation.Customizations.Attributes;
 using vnavmesh.Navigation.Scene;
 
-namespace vnavmesh.Navigation.Customizations.Territories;
+namespace vnavmesh.Navigation.Customizations.Territories.Town;
 
 [CustomizationTerritory(130)]
-internal class Z0130UldahStepsofNald : NavmeshCustomization
+internal class Z0130乌尔达哈现世回廊 : NavmeshCustomization
 {
     public override int Version => 1;
 
