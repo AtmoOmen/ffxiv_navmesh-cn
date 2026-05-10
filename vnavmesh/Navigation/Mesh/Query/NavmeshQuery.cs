@@ -212,101 +212,6 @@ public class NavmeshQuery
         _reachableFilter = _groundFilter;
     }
 
-    private float PathToleranceFloor => MathF.Max(config.PathTolerance, float.Epsilon);
-
-    private ref readonly DtNavMeshParams MeshParams => ref MeshQuery.GetAttachedNavMesh().GetParams();
-
-    private float MeshTileSpanXZ => MathF.Max(MathF.Min(MeshParams.tileWidth, MeshParams.tileHeight), PathToleranceFloor);
-
-    private float MeshTileHalfSpanXZ => MeshTileSpanXZ * 0.5f;
-
-    private float MeshTileSearchHeight => MathF.Max(MeshTileSpanXZ, PathToleranceFloor);
-
-    private float StartCandidateVerticalTolerance(bool expandedSearch) =>
-        expandedSearch ? MeshTileSearchHeight * 2f : MathF.Max(MeshTileSearchHeight, MeshTileHalfSpanXZ);
-
-    private float CandidateHorizontalTolerance(float requestedDistance, bool expandedSearch)
-    {
-        var baseTolerance = MathF.Max(MeshTileHalfSpanXZ, requestedDistance);
-        return expandedSearch ? baseTolerance + MeshTileSpanXZ : baseTolerance;
-    }
-
-    private float SeamBoundaryTolerance => MeshTileHalfSpanXZ;
-
-    private float SeamGapTolerance(float requestedRange) => MathF.Max(requestedRange, MeshTileHalfSpanXZ);
-
-    private Vector3 GetVolumeClampPadding(VoxelMap volume)
-    {
-        var leafCellSize = volume.Levels[^1].CellSize;
-        var minCell      = MathF.Min(leafCellSize.X, MathF.Min(leafCellSize.Y, leafCellSize.Z));
-        return new(MathF.Max(minCell * 0.5f, PathToleranceFloor));
-    }
-
-    private float GetVolumeSearchExpansionLimit(VoxelMap volume)
-    {
-        var boundsSize = volume.RootTile.BoundsMax - volume.RootTile.BoundsMin;
-        return MathF.Max(boundsSize.X, MathF.Max(boundsSize.Y, boundsSize.Z));
-    }
-
-    private int EstimatePathCapacity()
-    {
-        var mesh       = MeshQuery.GetAttachedNavMesh();
-        var totalPolys = 0;
-
-        for (var i = 0; i < mesh.GetMaxTiles(); ++i)
-        {
-            var tile = mesh.GetTile(i);
-            if (tile.data?.header == null)
-                continue;
-
-            totalPolys += tile.data.header.polyCount;
-        }
-
-        return Math.Max(totalPolys, 1);
-    }
-
-    private bool IsStartCandidateTooFarAbove(MeshPolyCandidate candidate) => candidate.VerticalDelta > PathToleranceFloor;
-
-    private bool IsEndCandidateAboveTarget(MeshEndCandidate candidate) => candidate.VerticalDelta > PathToleranceFloor;
-
-    private Vector3 GetEndCandidateSearchExtent() => new(MeshTileHalfSpanXZ, MeshTileSearchHeight, MeshTileHalfSpanXZ);
-
-    private Vector3 GetGroundGapSearchExtent(Vector3 partialEnd, Vector3 requestedTarget)
-    {
-        var horizontalGap = HorizontalDistanceXZ(partialEnd, requestedTarget);
-        var verticalGap   = MathF.Abs(requestedTarget.Y - partialEnd.Y);
-        return new(MathF.Max(horizontalGap, PathToleranceFloor), MathF.Max(verticalGap, PathToleranceFloor), MathF.Max(horizontalGap, PathToleranceFloor));
-    }
-
-    private bool IsGroundGapBridgeAllowed(Vector3 partialEnd, Vector3 requestedTarget, Vector3 bridgePoint)
-    {
-        var requestedHorizontalGap = HorizontalDistanceXZ(partialEnd, requestedTarget);
-        var requestedVerticalGap   = MathF.Abs(requestedTarget.Y - partialEnd.Y);
-        var bridgeHorizontalGap    = HorizontalDistanceXZ(partialEnd, bridgePoint);
-        var bridgeVerticalGap      = MathF.Abs(bridgePoint.Y - partialEnd.Y);
-        return bridgeHorizontalGap <= requestedHorizontalGap && bridgeVerticalGap <= requestedVerticalGap + PathToleranceFloor;
-    }
-
-    private Vector3 GetFlightLandingSearchExtent()
-    {
-        if (VolumeQuery == null)
-            return new(PathToleranceFloor);
-
-        var leafCellSize = VolumeQuery.Volume.Levels[^1].CellSize;
-        return new
-        (
-            MathF.Max(leafCellSize.X, leafCellSize.Z),
-            MathF.Max(leafCellSize.Y, PathToleranceFloor),
-            MathF.Max(leafCellSize.X, leafCellSize.Z)
-        );
-    }
-
-    private float GetFlightCompletionTolerance(Vector3 requestedTarget, Vector3 finalDestination) =>
-        MathF.Max(config.PathTolerance, HorizontalDistanceXZ(requestedTarget, finalDestination));
-
-    private float GetFlightGroundTransitionTolerance(Vector3 safeFlightDestination, Vector3 transitionPoint) =>
-        MathF.Max(PathToleranceFloor, MathF.Abs(safeFlightDestination.Y - transitionPoint.Y));
-
     public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
         => Postprocess(PlanMeshPathDetailed(from, to, useRaycast, range, cancel), useStringPulling, cancel).Waypoints;
 
@@ -409,9 +314,11 @@ public class NavmeshQuery
         if (voxel != VoxelMap.INVALID_VOXEL)
             return voxel;
 
-        var padding   = GetVolumeClampPadding(volume);
-        var boundsMin = volume.RootTile.BoundsMin + padding;
-        var boundsMax = volume.RootTile.BoundsMax - padding;
+        var leafCellSize = volume.Levels[^1].CellSize;
+        var clampPadding = new Vector3
+            (MathF.Max(MathF.Min(leafCellSize.X, MathF.Min(leafCellSize.Y, leafCellSize.Z)) * 0.5f, MathF.Max(config.PathTolerance, float.Epsilon)));
+        var boundsMin = volume.RootTile.BoundsMin + clampPadding;
+        var boundsMax = volume.RootTile.BoundsMax - clampPadding;
         var clamped   = Vector3.Clamp(p, boundsMin, boundsMax);
         var usedClamp = Vector3.DistanceSquared(clamped, p) > 0.000001f;
 
@@ -427,10 +334,18 @@ public class NavmeshQuery
             }
         }
 
-        var searchLimit        = GetVolumeSearchExpansionLimit(volume);
+        var searchLimit = MathF.Max
+        (
+            volume.RootTile.BoundsMax.X - volume.RootTile.BoundsMin.X,
+            MathF.Max(volume.RootTile.BoundsMax.Y - volume.RootTile.BoundsMin.Y, volume.RootTile.BoundsMax.Z - volume.RootTile.BoundsMin.Z)
+        );
         var expandedHalfExtent = halfExtent;
         var expansionStep = new Vector3
-            (MathF.Max(halfExtent.X, PathToleranceFloor), MathF.Max(halfExtent.Y, PathToleranceFloor), MathF.Max(halfExtent.Z, PathToleranceFloor));
+        (
+            MathF.Max(halfExtent.X, MathF.Max(config.PathTolerance, float.Epsilon)),
+            MathF.Max(halfExtent.Y, MathF.Max(config.PathTolerance, float.Epsilon)),
+            MathF.Max(halfExtent.Z, MathF.Max(config.PathTolerance, float.Epsilon))
+        );
         var previousSearchRadius = expandedHalfExtent.Length();
 
         while (previousSearchRadius < searchLimit)
@@ -533,15 +448,18 @@ public class NavmeshQuery
             MathF.Min(MathF.Abs(result.FinalDestination.X - tileMin.X), MathF.Abs(tileMax.X - result.FinalDestination.X)),
             MathF.Min(MathF.Abs(result.FinalDestination.Z - tileMin.Z), MathF.Abs(tileMax.Z - result.FinalDestination.Z))
         );
+        var meshParams            = MeshQuery.GetAttachedNavMesh().GetParams();
+        var seamBoundaryTolerance = MathF.Max(MathF.Min(meshParams.tileWidth, meshParams.tileHeight), MathF.Max(config.PathTolerance, float.Epsilon)) * 0.5f;
+        var seamGapTolerance      = MathF.Max(range, seamBoundaryTolerance);
         var diagnostic = new SeamDiagnostic
         (
             startTile,
             requestedTile,
             actualTile,
             distanceToNearestBoundary,
-            distanceToNearestBoundary <= SeamBoundaryTolerance,
+            distanceToNearestBoundary <= seamBoundaryTolerance,
             Math.Abs(requestedTile.X - actualTile.X) <= 1 && Math.Abs(requestedTile.Z - actualTile.Z) <= 1,
-            Vector3.Distance(result.RequestedDestination, result.FinalDestination) <= SeamGapTolerance(range)
+            Vector3.Distance(result.RequestedDestination, result.FinalDestination) <= seamGapTolerance
         );
         var message =
             $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，粗路径段 = {result.Segments.Count}";
@@ -694,7 +612,7 @@ public class NavmeshQuery
         repairedResult   = null!;
         repairedLastPoly = partialCandidate.LastPoly;
 
-        var visited = new long[EstimatePathCapacity()];
+        var visited = new long[Math.Max(MeshQuery.GetAttachedNavMesh().GetParams().maxPolys, 1)];
         var status = MeshQuery.Raycast
         (
             partialCandidate.LastPoly,
@@ -754,11 +672,14 @@ public class NavmeshQuery
         if (status.Failed() || visitedCount == 0)
             return false;
 
-        var movedPoint  = moved.RecastToSystem();
-        var movedDelta  = movedPoint - partialCandidate.FinalDestination;
-        var movedPoly   = visited[visitedCount - 1];
+        var movedPoint = moved.RecastToSystem();
+        var movedDelta = movedPoint - partialCandidate.FinalDestination;
+        var movedPoly = visited[visitedCount - 1];
         var movedDistSq = movedDelta.X * movedDelta.X + movedDelta.Z * movedDelta.Z;
-        if (movedDistSq <= 0.000001f || !IsGroundGapBridgeAllowed(partialCandidate.FinalDestination, requestedTarget, movedPoint))
+        var toleranceFloor = MathF.Max(config.PathTolerance, float.Epsilon);
+        if (movedDistSq <= toleranceFloor * toleranceFloor ||
+            HorizontalDistanceXZ(partialCandidate.FinalDestination, movedPoint) > HorizontalDistanceXZ(partialCandidate.FinalDestination, requestedTarget) ||
+            MathF.Abs(movedPoint.Y - partialCandidate.FinalDestination.Y) > MathF.Abs(requestedTarget.Y - partialCandidate.FinalDestination.Y) + toleranceFloor)
             return false;
 
         if (Vector3.Distance(movedPoint, requestedTarget) <= MathF.Max(range, 0.15f))
@@ -832,10 +753,13 @@ public class NavmeshQuery
         repairedResult   = null!;
         repairedLastPoly = partialCandidate.LastPoly;
 
-        var                partialEnd          = partialCandidate.FinalDestination;
-        var                repairCandidates    = FindIntersectingMeshPolys(partialEnd, GetGroundGapSearchExtent(partialEnd, requestedTarget));
+        var                partialEnd = partialCandidate.FinalDestination;
+        var                toleranceFloor = MathF.Max(config.PathTolerance, float.Epsilon);
+        var                gapDistance = Vector3.Distance(partialEnd, requestedTarget);
+        var                gapVertical = MathF.Abs(requestedTarget.Y - partialEnd.Y);
+        var                repairCandidates = FindIntersectingMeshPolys(partialEnd, new Vector3(gapDistance, MathF.Max(gapVertical, toleranceFloor), gapDistance));
         MeshPathCandidate? bestResumeCandidate = null;
-        List<string>       candidateLogs       = [];
+        List<string>       candidateLogs = [];
 
         foreach (var poly in repairCandidates)
         {
@@ -850,7 +774,8 @@ public class NavmeshQuery
             var bridgeDelta              = bridgePoint - partialEnd;
             var bridgeHorizontalDistance = new Vector2(bridgeDelta.X, bridgeDelta.Z).Length();
             var bridgeVerticalDistance   = MathF.Abs(bridgeDelta.Y);
-            if (!IsGroundGapBridgeAllowed(partialEnd, requestedTarget, bridgePoint))
+            if (HorizontalDistanceXZ(partialEnd, bridgePoint) > HorizontalDistanceXZ(partialEnd, requestedTarget) ||
+                MathF.Abs(bridgePoint.Y - partialEnd.Y)       > MathF.Abs(requestedTarget.Y - partialEnd.Y) + toleranceFloor)
                 continue;
 
             var status = FindPath(MeshQuery, poly, endRef, bridgePoint.SystemToRecast(), requestedEndPos, filter, opt, out var corridor);
@@ -942,7 +867,9 @@ public class NavmeshQuery
         Dictionary<long, int>  endCandidateIndices = [];
         List<MeshEndCandidate> endCandidates       = [];
 
-        foreach (var poly in FindIntersectingMeshPolys(to, GetEndCandidateSearchExtent()))
+        var meshTileSize = MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight);
+        foreach (var poly in FindIntersectingMeshPolys
+                     (to, new Vector3(meshTileSize, MathF.Max(meshTileSize, MathF.Max(config.PathTolerance, float.Epsilon)), meshTileSize)))
             TryAddEndCandidate(poly, false);
 
         TryAddEndCandidate(requestedEndRef, true);
@@ -952,8 +879,8 @@ public class NavmeshQuery
                 if (a.IsPointOverPoly != b.IsPointOverPoly)
                     return b.IsPointOverPoly.CompareTo(a.IsPointOverPoly);
 
-                var aAbove = IsEndCandidateAboveTarget(a);
-                var bAbove = IsEndCandidateAboveTarget(b);
+                var aAbove = a.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon);
+                var bAbove = b.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon);
                 if (aAbove != bAbove)
                     return aAbove.CompareTo(bAbove);
 
@@ -990,12 +917,24 @@ public class NavmeshQuery
 
             var currentBest = endCandidate.Value;
             var isBetterCandidate =
-                candidate.IsPointOverPoly            != currentBest.IsPointOverPoly            ? candidate.IsPointOverPoly :
-                IsEndCandidateAboveTarget(candidate) != IsEndCandidateAboveTarget(currentBest) ? !IsEndCandidateAboveTarget(candidate) :
-                !NearlyEqual(candidate.VerticalDistanceAbs,  currentBest.VerticalDistanceAbs)  ? candidate.VerticalDistanceAbs < currentBest.VerticalDistanceAbs :
-                !NearlyEqual(candidate.HorizontalDistanceSq, currentBest.HorizontalDistanceSq) ? candidate.HorizontalDistanceSq < currentBest.HorizontalDistanceSq :
-                candidate.IsRequestedEnd != currentBest.IsRequestedEnd ? candidate.IsRequestedEnd :
-                                                                         candidate.PolyRef < currentBest.PolyRef;
+                candidate.IsPointOverPoly != currentBest.IsPointOverPoly
+                    ? candidate.IsPointOverPoly
+                    :
+                    candidate.VerticalDelta   > MathF.Max(config.PathTolerance, float.Epsilon) !=
+                    currentBest.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon)
+                        ?
+                        !(candidate.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon))
+                        :
+                        !NearlyEqual(candidate.VerticalDistanceAbs, currentBest.VerticalDistanceAbs)
+                            ? candidate.VerticalDistanceAbs < currentBest.VerticalDistanceAbs
+                            :
+                            !NearlyEqual(candidate.HorizontalDistanceSq, currentBest.HorizontalDistanceSq)
+                                ? candidate.HorizontalDistanceSq < currentBest.HorizontalDistanceSq
+                                :
+                                candidate.IsRequestedEnd != currentBest.IsRequestedEnd
+                                    ? candidate.IsRequestedEnd
+                                    :
+                                    candidate.PolyRef < currentBest.PolyRef;
 
             if (isBetterCandidate)
                 endCandidate = candidate;
@@ -1101,8 +1040,18 @@ public class NavmeshQuery
             var dz                   = point.Z - to.Z;
             var horizontalDistanceSq = dx * dx + dz * dz;
             var verticalDistance     = point.Y - to.Y;
-            var horizontalTolerance  = CandidateHorizontalTolerance(Vector3.Distance(point, to), false);
-            var verticalTolerance    = StartCandidateVerticalTolerance(false);
+            var toleranceFloor       = MathF.Max(config.PathTolerance, float.Epsilon);
+            var horizontalTolerance = MathF.Max
+            (
+                Vector3.Distance(point, to),
+                MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight) * 0.5f
+            );
+            var verticalTolerance = MathF.Max
+                                    (
+                                        MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight),
+                                        toleranceFloor
+                                    ) *
+                                    0.5f;
 
             if (!forceInclude)
             {
@@ -1418,12 +1367,15 @@ public class NavmeshQuery
 
     private List<MeshPolyCandidate> CollectStartPolyCandidates(Vector3 from, long requestedStartRef, bool expandedSearch)
     {
-        Dictionary<long, int>   candidateIndices    = [];
-        List<MeshPolyCandidate> candidates          = [];
-        var                     requestedDistance   = Vector3.Distance(from, FindNearestPointOnMeshPoly(from, requestedStartRef) ?? from);
-        var                     horizontalTolerance = CandidateHorizontalTolerance(requestedDistance, expandedSearch);
-        var                     verticalTolerance   = StartCandidateVerticalTolerance(expandedSearch);
-        var                     searchExtent        = new Vector3(horizontalTolerance, verticalTolerance, horizontalTolerance);
+        Dictionary<long, int> candidateIndices = [];
+        List<MeshPolyCandidate> candidates = [];
+        var requestedDistance = Vector3.Distance(from, FindNearestPointOnMeshPoly(from, requestedStartRef) ?? from);
+        var meshTileSize = MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight);
+        var horizontalTolerance = MathF.Max(requestedDistance, meshTileSize * 0.5f);
+        var verticalTolerance = MathF.Max(meshTileSize, MathF.Max(config.PathTolerance, float.Epsilon));
+        var searchExtent = expandedSearch
+                               ? new Vector3(horizontalTolerance + meshTileSize, verticalTolerance * 2f, horizontalTolerance + meshTileSize)
+                               : new Vector3(horizontalTolerance,                verticalTolerance,      horizontalTolerance);
 
         foreach (var poly in FindIntersectingMeshPolys(from, searchExtent))
             TryAddCandidate(poly, false);
@@ -1439,8 +1391,8 @@ public class NavmeshQuery
                 if (a.IsPointOverPoly != b.IsPointOverPoly)
                     return b.IsPointOverPoly.CompareTo(a.IsPointOverPoly);
 
-                var bucketA = IsStartCandidateTooFarAbove(a) ? 1 : 0;
-                var bucketB = IsStartCandidateTooFarAbove(b) ? 1 : 0;
+                var bucketA = a.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon) ? 1 : 0;
+                var bucketB = b.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon) ? 1 : 0;
                 var cmp     = bucketA.CompareTo(bucketB);
                 if (cmp != 0)
                     return cmp;
@@ -1870,12 +1822,12 @@ public class NavmeshQuery
         var finalDestination    = safeDestination;
         var destinationAdjusted = safeDestinationAdjusted;
         var landingPoint        = !requestedTargetLeaf.empty ? TryResolveFlightLandingPoint(to, safeDestination) : null;
-        var completionTolerance = GetFlightCompletionTolerance(to, safeDestination);
+        var completionTolerance = MathF.Max(config.PathTolerance, HorizontalDistanceXZ(to, safeDestination));
 
         if (landingPoint is { } resolvedLandingPoint)
         {
             finalDestination    = resolvedLandingPoint;
-            completionTolerance = GetFlightCompletionTolerance(to, resolvedLandingPoint);
+            completionTolerance = MathF.Max(config.PathTolerance, HorizontalDistanceXZ(to, resolvedLandingPoint));
             destinationAdjusted = Vector3.Distance(resolvedLandingPoint, to) > completionTolerance;
 
             if (rawWaypoints.Count == 0 || Vector3.DistanceSquared(rawWaypoints[^1], resolvedLandingPoint) > 0.000001f)
@@ -1915,7 +1867,17 @@ public class NavmeshQuery
 
     private Vector3? TryResolveFlightLandingPoint(Vector3 requestedTarget, Vector3 safeDestination)
     {
-        var landingSearchExtent = GetFlightLandingSearchExtent();
+        var toleranceFloor = MathF.Max(config.PathTolerance, float.Epsilon);
+        if (VolumeQuery == null)
+            return null;
+
+        var landingLeafSize = VolumeQuery.Volume.Levels[^1].CellSize;
+        var landingSearchExtent = new Vector3
+        (
+            MathF.Max(landingLeafSize.X, landingLeafSize.Z),
+            MathF.Max(landingLeafSize.Y, toleranceFloor),
+            MathF.Max(landingLeafSize.X, landingLeafSize.Z)
+        );
         var landingPoint = FindPointOnFloor
                                (requestedTarget, landingSearchExtent.X) ??
                            FindNearestPointOnMesh(requestedTarget, landingSearchExtent.X, landingSearchExtent.Y);
@@ -1927,7 +1889,7 @@ public class NavmeshQuery
             return null;
 
         var safeHorizontalDistance = HorizontalDistanceXZ(resolved, safeDestination);
-        if (safeHorizontalDistance > HorizontalDistanceXZ(safeDestination, requestedTarget) + PathToleranceFloor)
+        if (safeHorizontalDistance > HorizontalDistanceXZ(safeDestination, requestedTarget) + toleranceFloor)
             return null;
 
         var verticalDrop = safeDestination.Y - resolved.Y;
@@ -1946,8 +1908,9 @@ public class NavmeshQuery
 
     private Vector3? TryBuildFlightGroundApproachPoint(Vector3 safeFlightDestination, Vector3 transitionPoint, Vector3 groundLeadTarget, Vector3 requestedTarget)
     {
+        var toleranceFloor      = MathF.Max(config.PathTolerance, float.Epsilon);
         var horizontalGap       = HorizontalDistanceXZ(safeFlightDestination, transitionPoint);
-        var transitionTolerance = GetFlightGroundTransitionTolerance(safeFlightDestination, transitionPoint);
+        var transitionTolerance = MathF.Max(toleranceFloor, MathF.Abs(safeFlightDestination.Y - transitionPoint.Y));
         if (horizontalGap > transitionTolerance)
             return null;
 
@@ -1970,7 +1933,7 @@ public class NavmeshQuery
             transitionPoint.Z - leadDelta.Y  * approachHorizontal
         );
 
-        var approachVoxel = FindNearestVolumeVoxel(candidate, transitionTolerance, MathF.Max(PathToleranceFloor, verticalDrop));
+        var approachVoxel = FindNearestVolumeVoxel(candidate, transitionTolerance, MathF.Max(toleranceFloor, verticalDrop));
         if (approachVoxel == VoxelMap.INVALID_VOXEL)
             return candidate;
 
@@ -2012,7 +1975,8 @@ public class NavmeshQuery
         out PlannerResult result
     )
     {
-        var groundResult = PlanMeshPathDetailed(safeFlightDestination, requestedTarget, useRaycast, 0, cancel);
+        var toleranceFloor = MathF.Max(config.PathTolerance, float.Epsilon);
+        var groundResult   = PlanMeshPathDetailed(safeFlightDestination, requestedTarget, useRaycast, 0, cancel);
 
         if (!groundResult.Succeeded || groundResult.Segments.Count == 0)
         {
@@ -2053,13 +2017,14 @@ public class NavmeshQuery
 
         var transitionAdjusted = Vector3.Distance
                                      (safeFlightDestination, transitionPoint) >
-                                 GetFlightGroundTransitionTolerance(safeFlightDestination, transitionPoint);
+                                 MathF.Max(toleranceFloor, MathF.Abs(safeFlightDestination.Y - transitionPoint.Y));
         Service.Log.Debug
         (
             $"[算路] 飞行接地面续算：空体素终点 = {safeFlightDestination:f3}，近地点 = {(approachPoint is { } ap ? ap.ToString("f3") : "无")}，桥接点 = {transitionPoint:f3}，桥接修正 = {(transitionAdjusted ? "是" : "否")}，地面结果 = {groundResult.Status}，地面段数 = {groundResult.Segments.Count}"
         );
 
-        var destinationTolerance = MathF.Max(groundResult.DestinationTolerance, GetFlightCompletionTolerance(requestedTarget, groundResult.FinalDestination));
+        var destinationTolerance = MathF.Max
+            (groundResult.DestinationTolerance, MathF.Max(config.PathTolerance, HorizontalDistanceXZ(requestedTarget, groundResult.FinalDestination)));
 
         result = new()
         {
