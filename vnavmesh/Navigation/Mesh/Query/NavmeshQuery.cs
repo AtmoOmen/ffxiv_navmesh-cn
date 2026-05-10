@@ -18,27 +18,7 @@ using static DtDetour;
 
 public class NavmeshQuery
 {
-    private readonly Config config;
-
-    private readonly PathPostprocessor    postprocessor;
-    private readonly Navmesh              navmesh;
-    private readonly IDtQueryFilter       filter                          = new DtQueryDefaultFilter();
-    private readonly GroundAreaCostFilter groundFilter                    = new();
-    private readonly GroundAreaCostFilter groundFilterIgnoringUnreachable = new(false);
-    private readonly IDtQueryFilter       reachableFilter;
-    private          DtNavMeshQuery?      meshQuery;
-    private          VoxelPathfind?       volumeQuery;
-    private          bool                 released;
-
-    private long groundQueryCount;
-    private long partialGroundQueryCount;
-    private long suspectedTileSeamCutoffCount;
-    private long anyAnglePreferredCount;
-    private long classicFallbackCount;
-    private long startReplacementCount;
-    private long endReplacementCount;
-
-    public DtNavMeshQuery MeshQuery
+    internal DtNavMeshQuery MeshQuery
     {
         get
         {
@@ -54,35 +34,84 @@ public class NavmeshQuery
         }
     }
 
-    public VoxelPathfind? VolumeQuery => 
+    internal VoxelPathfind? VolumeQuery =>
         released ? null : volumeQuery ??= navmesh.Volume != null ? new(navmesh.Volume, config) : null;
 
-    public List<long> LastPath { get; } = [];
+    internal List<long> LastPath { get; } = [];
+    
+    private readonly Config               config;
+    private readonly PathPostprocessor    postprocessor;
+    private readonly Navmesh              navmesh;
+    private readonly IDtQueryFilter       filter                          = new DtQueryDefaultFilter();
+    private readonly GroundAreaCostFilter groundFilter                    = new();
+    private readonly GroundAreaCostFilter groundFilterIgnoringUnreachable = new(false);
+    
+    private DtNavMeshQuery? meshQuery;
+    private VoxelPathfind?  volumeQuery;
+
+    private bool released;
+
+    private long groundQueryCount;
+    private long partialGroundQueryCount;
+    private long suspectedTileSeamCutoffCount;
+    private long anyAnglePreferredCount;
+    private long classicFallbackCount;
+    private long startReplacementCount;
+    private long endReplacementCount;
+
+    #region 生命周期
 
     public NavmeshQuery(Navmesh navmesh, Config config)
     {
         this.navmesh    = navmesh;
         this.config     = config;
         postprocessor   = new(() => MeshQuery);
-        reachableFilter = groundFilter;
     }
 
-    public List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel)
-        => Postprocess(PlanMeshPathDetailed(from, to, useRaycast, range, cancel), useStringPulling, cancel).Waypoints;
+    internal void ReleaseRetainedState()
+    {
+        LastPath.Clear();
+        LastPath.TrimExcess();
+        meshQuery = null;
+        volumeQuery?.ReleaseRetainedState();
+        volumeQuery = null;
+        released    = true;
+    }
 
-    public List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel)
-        => Postprocess(PlanVolumePathDetailed(from, to, useRaycast, cancel), useStringPulling, cancel).Waypoints;
+    #endregion
+
+    #region 对外入口
+
+    internal List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel) =>
+        Postprocess(PlanMeshPathDetailed(from, to, useRaycast, range, cancel), useStringPulling, cancel).Waypoints;
+
+    internal List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel) =>
+        Postprocess(PlanVolumePathDetailed(from, to, useRaycast, cancel), useStringPulling, cancel).Waypoints;
 
     internal PostprocessedPath Postprocess(PlannerResult result, bool useStringPulling, CancellationToken cancel) =>
         postprocessor.Process(result, useStringPulling, cancel);
-    
-    internal (int x, int z) FindMeshTile(Vector3 position)
+
+    internal GroundPathDiagnosticsSnapshot GetGroundDiagnostics() =>
+        new()
+        {
+            GroundQueries               = Interlocked.Read(ref groundQueryCount),
+            PartialQueries              = Interlocked.Read(ref partialGroundQueryCount),
+            SuspectedTileSeamCutoffs    = Interlocked.Read(ref suspectedTileSeamCutoffCount),
+            AnyAnglePreferred           = Interlocked.Read(ref anyAnglePreferredCount),
+            ClassicFallbacks            = Interlocked.Read(ref classicFallbackCount),
+            StartReplacements           = Interlocked.Read(ref startReplacementCount),
+            EndReplacements             = Interlocked.Read(ref endReplacementCount),
+            GeneratedClimbLinksAccepted = navmesh.GeneratedClimbDownLinkCount,
+            GeneratedJumpLinksAccepted  = navmesh.GeneratedEdgeJumpLinkCount
+        };
+
+    internal (int X, int Z) FindMeshTile(Vector3 position)
     {
         MeshQuery.GetAttachedNavMesh().CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
         return (tileX, tileZ);
     }
 
-    internal (Vector3 min, Vector3 max) GetMeshTileBounds(int tileX, int tileZ)
+    internal (Vector3 Min, Vector3 Max) GetMeshTileBounds(int tileX, int tileZ)
     {
         ref readonly var param = ref MeshQuery.GetAttachedNavMesh().GetParams();
         var              min   = new Vector3(param.orig.X + tileX * param.tileWidth, param.orig.Y, param.orig.Z + tileZ * param.tileHeight);
@@ -90,15 +119,21 @@ public class NavmeshQuery
         return (min, max);
     }
 
-    // returns 0 if not found, otherwise polygon ref
-    public long FindNearestMeshPoly(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5, bool allowUnreachable = true)
+    internal long FindNearestMeshPoly(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5, bool allowUnreachable = true)
     {
         MeshQuery.FindNearestPoly
-            (p.SystemToRecast(), new(halfExtentXZ, halfExtentY, halfExtentXZ), allowUnreachable ? filter : reachableFilter, out var nearestRef, out _, out _);
+        (
+            p.SystemToRecast(),
+            new(halfExtentXZ, halfExtentY, halfExtentXZ),
+            allowUnreachable ? filter : groundFilter,
+            out var nearestRef,
+            out _,
+            out _
+        );
         return nearestRef;
     }
 
-    public List<long> FindIntersectingMeshPolys(Vector3 p, Vector3 halfExtent, bool allowUnreachable = true)
+    internal List<long> FindIntersectingMeshPolys(Vector3 p, Vector3 halfExtent, bool allowUnreachable = true)
     {
         var capacity = 256;
 
@@ -106,7 +141,7 @@ public class NavmeshQuery
         {
             var refs  = new long[capacity];
             var query = new DtCollectPolysQuery(refs, refs.Length);
-            MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), allowUnreachable ? filter : reachableFilter, query);
+            MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), allowUnreachable ? filter : groundFilter, query);
             if (!query.Overflowed())
                 return [.. refs.AsSpan(0, query.NumCollected()).ToArray()];
 
@@ -114,18 +149,18 @@ public class NavmeshQuery
         }
     }
 
-    public Vector3? FindNearestPointOnMeshPoly
-        (Vector3 p, long poly) => TryClosestPointOnPolyWithFlags(p, poly, out var closest, out _) ? closest : null;
+    internal Vector3? FindNearestPointOnMeshPoly(Vector3 p, long poly) =>
+        TryClosestPointOnPolyWithFlags(p, poly, out var closest, out _) ? closest : null;
 
-    public Vector3? FindNearestPointOnMesh(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5, bool allowUnreachable = true) => FindNearestPointOnMeshPoly
+    internal Vector3? FindNearestPointOnMesh(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5, bool allowUnreachable = true) => FindNearestPointOnMeshPoly
         (p, FindNearestMeshPoly(p, halfExtentXZ, halfExtentY, allowUnreachable));
 
-    public Vector3? FindRandomPointOnMeshAroundCircle(Vector3 center, float maxRadius, bool allowUnreachable = true)
+    internal Vector3? FindRandomPointOnMeshAroundCircle(Vector3 center, float maxRadius, bool allowUnreachable = true)
     {
         if (maxRadius <= 0)
             return null;
 
-        var filter   = allowUnreachable ? this.filter : reachableFilter;
+        var filter   = allowUnreachable ? this.filter : groundFilter;
         var startRef = FindNearestMeshPoly(center, 8, 8, allowUnreachable);
         if (startRef == 0)
             return null;
@@ -135,28 +170,13 @@ public class NavmeshQuery
         return status.Succeeded() ? point.RecastToSystem() : null;
     }
 
-    private bool TryClosestPointOnPolyWithFlags(Vector3 point, long poly, out Vector3 closestPoint, out bool isOverPoly)
-    {
-        if (MeshQuery.ClosestPointOnPoly(poly, point.SystemToRecast(), out var closest, out isOverPoly).Succeeded())
-        {
-            closestPoint = closest.RecastToSystem();
-            return true;
-        }
-
-        closestPoint = default;
-        isOverPoly   = false;
-        return false;
-    }
-
-    // finds the point on the mesh within specified x/z tolerance and with largest Y that is still smaller than p.Y
-    public Vector3? FindPointOnFloor(Vector3 p, float halfExtentXZ = 5, bool allowUnreachable = true)
+    internal Vector3? FindPointOnFloor(Vector3 p, float halfExtentXZ = 5, bool allowUnreachable = true)
     {
         IEnumerable<long> polys = FindIntersectingMeshPolys(p, new(halfExtentXZ, 2048, halfExtentXZ), allowUnreachable);
         return polys.Select(poly => FindNearestPointOnMeshPoly(p, poly)).Where(pt => pt != null && pt.Value.Y <= p.Y).MaxBy(pt => pt!.Value.Y);
     }
 
-    // returns VoxelMap.InvalidVoxel if not found, otherwise voxel index
-    public ulong FindNearestVolumeVoxel(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5)
+    internal ulong FindNearestVolumeVoxel(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5)
     {
         if (VolumeQuery == null)
             return VoxelMap.INVALID_VOXEL;
@@ -223,8 +243,7 @@ public class NavmeshQuery
         return VoxelMap.INVALID_VOXEL;
     }
 
-    // collect all mesh polygons reachable from specified polygon
-    public HashSet<long> FindReachableMeshPolys(params long[] starting)
+    internal HashSet<long> FindReachableMeshPolys(params long[] starting)
     {
         HashSet<long> result = [];
 
@@ -252,176 +271,348 @@ public class NavmeshQuery
         return result;
     }
 
-    public GroundPathDiagnosticsSnapshot GetGroundDiagnostics() =>
-        new()
-        {
-            GroundQueries               = Interlocked.Read(ref groundQueryCount),
-            PartialQueries              = Interlocked.Read(ref partialGroundQueryCount),
-            SuspectedTileSeamCutoffs    = Interlocked.Read(ref suspectedTileSeamCutoffCount),
-            AnyAnglePreferred           = Interlocked.Read(ref anyAnglePreferredCount),
-            ClassicFallbacks            = Interlocked.Read(ref classicFallbackCount),
-            StartReplacements           = Interlocked.Read(ref startReplacementCount),
-            EndReplacements             = Interlocked.Read(ref endReplacementCount),
-            GeneratedClimbLinksAccepted = navmesh.GeneratedClimbDownLinkCount,
-            GeneratedJumpLinksAccepted  = navmesh.GeneratedEdgeJumpLinkCount
-        };
-
-    internal void ReleaseRetainedState()
+    internal PlannerResult PlanMeshPathDetailed(Vector3 from, Vector3 to, bool useRaycast, float range, CancellationToken cancel)
     {
-        LastPath.Clear();
-        LastPath.TrimExcess();
-        meshQuery = null;
-        volumeQuery?.ReleaseRetainedState();
-        volumeQuery = null;
-        released    = true;
-    }
+        Interlocked.Increment(ref groundQueryCount);
+        var                    requestedStartRef   = FindNearestMeshPoly(from);
+        var                    requestedEndRef     = FindNearestMeshPoly(to);
+        Dictionary<long, int>  endCandidateIndices = [];
+        List<MeshEndCandidate> endCandidates       = [];
 
-    private PlannerResult LogMeshFailure(Vector3 from, Vector3 to, long startRef, long endRef, long lastPoly, float range, string reason)
-    {
-        var lastPolyText = lastPoly != 0 ? lastPoly.ToString("X") : "<none>";
-        Service.Log.Error($"地面算路失败：起点 = {from:f3}，请求终点 = {to:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPolyText}，容差 = {range:f3}，原因 = {reason}");
-        return new()
-        {
-            Status               = PathfindStatus.Failed,
-            RequestedMode        = MovementMode.Ground,
-            RequestedDestination = to,
-            FinalDestination     = to,
-            DestinationTolerance = range
-        };
-    }
+        var meshTileSize = MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight);
+        foreach (var poly in FindIntersectingMeshPolys
+                     (to, new Vector3(meshTileSize, MathF.Max(meshTileSize, MathF.Max(config.PathTolerance, float.Epsilon)), meshTileSize)))
+            TryAddEndCandidate(poly, false);
 
-    private void LogMeshResult(PlannerResult result, Vector3 from, long startRef, long endRef, long lastPoly, float range, TimeSpan duration)
-    {
-        var startTile     = new TileCoord(FindMeshTile(from).x,                        FindMeshTile(from).z);
-        var requestedTile = new TileCoord(FindMeshTile(result.RequestedDestination).x, FindMeshTile(result.RequestedDestination).z);
-        var actualTile    = new TileCoord(FindMeshTile(result.FinalDestination).x,     FindMeshTile(result.FinalDestination).z);
-        var (tileX, tileZ)     = FindMeshTile(result.FinalDestination);
-        var (tileMin, tileMax) = GetMeshTileBounds(tileX, tileZ);
-        var distanceToNearestBoundary = MathF.Min
-        (
-            MathF.Min(MathF.Abs(result.FinalDestination.X - tileMin.X), MathF.Abs(tileMax.X - result.FinalDestination.X)),
-            MathF.Min(MathF.Abs(result.FinalDestination.Z - tileMin.Z), MathF.Abs(tileMax.Z - result.FinalDestination.Z))
+        TryAddEndCandidate(requestedEndRef, true);
+        endCandidates.Sort
+        ((a, b) =>
+            {
+                if (a.IsPointOverPoly != b.IsPointOverPoly)
+                    return b.IsPointOverPoly.CompareTo(a.IsPointOverPoly);
+
+                var aAbove = a.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon);
+                var bAbove = b.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon);
+                if (aAbove != bAbove)
+                    return aAbove.CompareTo(bAbove);
+
+                var cmp = a.VerticalDistanceAbs.CompareTo(b.VerticalDistanceAbs);
+                if (cmp != 0)
+                    return cmp;
+
+                cmp = a.HorizontalDistanceSq.CompareTo(b.HorizontalDistanceSq);
+                if (cmp != 0)
+                    return cmp;
+
+                if (a.IsRequestedEnd != b.IsRequestedEnd)
+                    return b.IsRequestedEnd.CompareTo(a.IsRequestedEnd);
+
+                return a.PolyRef.CompareTo(b.PolyRef);
+            }
         );
-        var meshParams            = MeshQuery.GetAttachedNavMesh().GetParams();
-        var seamBoundaryTolerance = MathF.Max(MathF.Min(meshParams.tileWidth, meshParams.tileHeight), MathF.Max(config.PathTolerance, float.Epsilon)) * 0.5f;
-        var seamGapTolerance      = MathF.Max(range, seamBoundaryTolerance);
-        var diagnostic = new SeamDiagnostic
-        (
-            startTile,
-            requestedTile,
-            actualTile,
-            distanceToNearestBoundary,
-            distanceToNearestBoundary <= seamBoundaryTolerance,
-            Math.Abs(requestedTile.X - actualTile.X) <= 1 && Math.Abs(requestedTile.Z - actualTile.Z) <= 1,
-            Vector3.Distance(result.RequestedDestination, result.FinalDestination) <= seamGapTolerance
-        );
-        var message =
-            $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，粗路径段 = {result.Segments.Count}";
 
-        if (result.Status == PathfindStatus.Partial)
+        MeshEndCandidate? endCandidate     = null;
+        List<string>      endCandidateLogs = [];
+
+        foreach (var candidate in endCandidates)
         {
-            message +=
-                $"，起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}";
+            endCandidateLogs.Add
+            (
+                $"{candidate.PolyRef:X}: requested = {(candidate.IsRequestedEnd ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，水平偏移 {MathF.Sqrt(candidate.HorizontalDistanceSq):f3}，高差 {candidate.VerticalDelta:f3}"
+            );
+
+            if (endCandidate == null)
+            {
+                endCandidate = candidate;
+                continue;
+            }
+
+            var currentBest = endCandidate.Value;
+            var isBetterCandidate =
+                candidate.IsPointOverPoly != currentBest.IsPointOverPoly
+                    ? candidate.IsPointOverPoly
+                    : candidate.VerticalDelta   > MathF.Max(config.PathTolerance, float.Epsilon) !=
+                      currentBest.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon)
+                        ? !(candidate.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon))
+                        : !NearlyEqual(candidate.VerticalDistanceAbs, currentBest.VerticalDistanceAbs)
+                            ? candidate.VerticalDistanceAbs < currentBest.VerticalDistanceAbs
+                            : !NearlyEqual(candidate.HorizontalDistanceSq, currentBest.HorizontalDistanceSq)
+                                ? candidate.HorizontalDistanceSq < currentBest.HorizontalDistanceSq
+                                : candidate.IsRequestedEnd       != currentBest.IsRequestedEnd
+                                    ? candidate.IsRequestedEnd
+                                    : candidate.PolyRef < currentBest.PolyRef;
+
+            if (isBetterCandidate)
+                endCandidate = candidate;
         }
 
-        switch (result.Status)
-        {
-            case PathfindStatus.Partial:
-                Interlocked.Increment(ref partialGroundQueryCount);
-                Service.Log.Warning(message);
+        if (endCandidateLogs.Count > 0)
+            Service.Log.Debug($"[算路] 终点候选评估：{string.Join(" | ", endCandidateLogs)}");
 
-                if (diagnostic.IsSuspectedTileSeamCutoff)
+        if (endCandidate is { } selectedEndCandidate && selectedEndCandidate.PolyRef != requestedEndRef)
+            Interlocked.Increment(ref endReplacementCount);
+
+        if (endCandidate == null)
+            return LogMeshFailure(from, to, requestedStartRef, requestedEndRef, 0, range, "无法为终点选择可用的导航多边形");
+
+        var resolvedDestination = endCandidate.Value.ProjectedPoint;
+        var endRef              = endCandidate.Value.PolyRef;
+
+        var timer           = StopWatchTimer.Create();
+        var requestedEndPos = resolvedDestination.SystemToRecast();
+        var prunedAttempt   = ExecuteGroundPathAttempt(from, to, requestedStartRef, endRef, requestedEndPos, groundFilter, useRaycast, range, cancel);
+        var selectedAttempt = prunedAttempt;
+
+        if (prunedAttempt == null || prunedAttempt.Value.Result.Status == PathfindStatus.Partial)
+        {
+            var unprunedAttempt = ExecuteGroundPathAttempt
+            (
+                from,
+                to,
+                requestedStartRef,
+                endRef,
+                requestedEndPos,
+                groundFilterIgnoringUnreachable,
+                useRaycast,
+                range,
+                cancel
+            );
+
+            var shouldUseFallback = false;
+
+            if (unprunedAttempt is { } fallbackAttempt)
+            {
+                shouldUseFallback = selectedAttempt == null;
+
+                if (!shouldUseFallback && selectedAttempt is { } currentAttempt)
                 {
-                    Interlocked.Increment(ref suspectedTileSeamCutoffCount);
-                    Service.Log.Warning
-                    (
-                        $"[SuspectedTileSeamCutoff] 疑似区块接缝截断：起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}"
-                    );
+                    var fallbackRank = GetResultStatusRank(fallbackAttempt.Result.Status);
+                    var currentRank  = GetResultStatusRank(currentAttempt.Result.Status);
+                    shouldUseFallback = fallbackRank       != currentRank
+                                            ? fallbackRank < currentRank
+                                            : IsBetterStartPathCandidate(fallbackAttempt.Candidate, currentAttempt.Candidate, to);
                 }
+            }
 
-                break;
-            case PathfindStatus.Failed:
-                Service.Log.Error(message);
-                break;
-            default:
-                Service.Log.Debug(message);
-                break;
+            if (unprunedAttempt is { } fallbackAttemptToApply && shouldUseFallback)
+            {
+                var initialAttempt = selectedAttempt is { } currentAttempt
+                                         ? $"{currentAttempt.Candidate.StartRef:X}/{currentAttempt.Candidate.ResultStatus}/requested={(currentAttempt.Candidate.IsRequestedStart ? 1 : 0)}/overPoly={(currentAttempt.Candidate.IsPointOverPoly ? 1 : 0)}/距目标={MathF.Sqrt(currentAttempt.Candidate.DistanceToRequestedTargetSq(to)):f3}/结果={currentAttempt.Result.Status}/最后={currentAttempt.LastPoly:X}"
+                                         : "<none>";
+                var fallbackAttemptText =
+                    $"{fallbackAttemptToApply.Candidate.StartRef:X}/{fallbackAttemptToApply.Candidate.ResultStatus}/requested={(fallbackAttemptToApply.Candidate.IsRequestedStart ? 1 : 0)}/overPoly={(fallbackAttemptToApply.Candidate.IsPointOverPoly ? 1 : 0)}/距目标={MathF.Sqrt(fallbackAttemptToApply.Candidate.DistanceToRequestedTargetSq(to)):f3}/结果={fallbackAttemptToApply.Result.Status}/最后={fallbackAttemptToApply.LastPoly:X}";
+                Service.Log.Warning
+                (
+                    $"[算路] 已改用忽略裁剪标记的回退结果：首轮 = {initialAttempt}，回退 = {fallbackAttemptText}"
+                );
+                selectedAttempt = fallbackAttemptToApply;
+            }
+        }
+
+        if (selectedAttempt is not var (pathCandidate, plannerResult, startRef, lastPoly, queryStatus))
+            return LogMeshFailure(from, to, requestedStartRef, endRef, 0, range, "无法为起点选择可用的导航多边形");
+
+        LastPath.Clear();
+        if (pathCandidate.QueryMode == GroundQueryMode.AnyAngle)
+            Interlocked.Increment(ref anyAnglePreferredCount);
+        LastPath.AddRange(pathCandidate.Corridor);
+        Service.Log.Debug($"[算路] 地面多边形 {startRef:X} -> {endRef:X}（原始起点候选 = {requestedStartRef:X}，查询模式 = {pathCandidate.QueryMode}）");
+        Service.Log.Debug($"[算路] 地面终点解析：原始终点候选 = {requestedEndRef:X}，选中 = {endRef:X}，终点投影 = {resolvedDestination:f3}");
+        Service.Log.Debug
+            ($"[算路] 地面路径查询耗时 {timer.Value().TotalSeconds:f3} 秒，状态 = {queryStatus}，路径 = {string.Join(", ", LastPath.Select(r => r.ToString("X")))}");
+
+        cancel.ThrowIfCancellationRequested();
+        LogMeshResult(plannerResult, from, startRef, endRef, lastPoly, range, timer.Value());
+        return plannerResult;
+
+        void TryAddEndCandidate(long poly, bool forceInclude)
+        {
+            if (poly == 0)
+                return;
+
+            if (endCandidateIndices.TryGetValue(poly, out var existingIndex))
+            {
+                if (forceInclude && !endCandidates[existingIndex].IsRequestedEnd)
+                    endCandidates[existingIndex] = endCandidates[existingIndex] with { IsRequestedEnd = true };
+                return;
+            }
+
+            if (!TryClosestPointOnPolyWithFlags(to, poly, out var point, out var isPointOverPoly))
+                return;
+
+            var dx                   = point.X - to.X;
+            var dz                   = point.Z - to.Z;
+            var horizontalDistanceSq = dx * dx + dz * dz;
+            var verticalDistance     = point.Y - to.Y;
+            var toleranceFloor       = MathF.Max(config.PathTolerance, float.Epsilon);
+            var horizontalTolerance = MathF.Max
+            (
+                Vector3.Distance(point, to),
+                MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight) * 0.5f
+            );
+            var verticalTolerance = MathF.Max
+                                    (
+                                        MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight),
+                                        toleranceFloor
+                                    ) *
+                                    0.5f;
+
+            if (!forceInclude)
+            {
+                if (horizontalDistanceSq > horizontalTolerance * horizontalTolerance)
+                    return;
+                if (MathF.Abs(verticalDistance) > verticalTolerance)
+                    return;
+            }
+
+            endCandidateIndices.Add(poly, endCandidates.Count);
+            endCandidates.Add(new(poly, point, horizontalDistanceSq, verticalDistance, forceInclude, isPointOverPoly));
         }
     }
 
-    private void LogStartCandidateDecision
-    (
-        MeshPathCandidate  selected,
-        Vector3            requestedTarget,
-        long               requestedStartRef,
-        MeshPathCandidate? requestedSuccessful,
-        bool               requestedFailed,
-        bool               lockedByRequested
-    )
+    internal PlannerResult PlanVolumePathDetailed(Vector3 from, Vector3 to, bool useRaycast, CancellationToken cancel)
     {
+        if (VolumeQuery == null)
+        {
+            Service.Log.Error("体素导航体未构建，无法执行飞行算路");
+            return CreateFlightFailure(to);
+        }
+
+        var volume         = VolumeQuery.Volume;
+        var locateTimer    = StopWatchTimer.Create();
+        var startVoxel     = FindNearestVolumeVoxel(from);
+        var endVoxel       = FindNearestVolumeVoxel(to);
+        var locateDuration = locateTimer.Value();
+        Service.Log.Debug($"[算路] 飞行体素 {startVoxel:X} -> {endVoxel:X}");
+
+        if (startVoxel == VoxelMap.INVALID_VOXEL || endVoxel == VoxelMap.INVALID_VOXEL)
+        {
+            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 无法定位空体素");
+            return CreateFlightFailure(to);
+        }
+
+        var requestedStartLeaf = volume.FindLeafVoxel(from);
+        var requestedTargetLeaf = volume.FindLeafVoxel(to);
+        var safeStart = requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ? from : VoxelSearch.FindClosestVoxelPoint(volume, startVoxel, from);
+        var safeDestination = requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ? to : VoxelSearch.FindClosestVoxelPoint(volume, endVoxel, to);
+        var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
+        var searchTimer = StopWatchTimer.Create();
+        var voxelPath = VolumeQuery.FindPath
+            (startVoxel, endVoxel, safeStart, safeDestination, useRaycast, false, cancel);
+        var telemetry = VolumeQuery.LastTelemetry;
+
+        if (voxelPath.Count == 0)
+        {
+            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空");
+            return CreateFlightFailure(to);
+        }
+
         Service.Log.Debug
         (
-            $"[算路] 已选起点多边形 {selected.StartRef:X}，投影点 = {selected.StartPoint:f3}，结果 = {selected.ResultStatus}，requested = {(selected.IsRequestedStart ? 1 : 0)}，overPoly = {(selected.IsPointOverPoly ? 1 : 0)}"
+            $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，搜索射线优化 = {(telemetry.SearchRaycastEnabled ? "是" : "否")}，搜索轮次 = {telemetry.SearchAttempts}，启发式权重 = {telemetry.HeuristicWeight:f2}，路径点 = {voxelPath.Count}，起点修正 = {(Vector3.DistanceSquared(safeStart, from) > 0.000001f ? "是" : "否")}，安全终点修正 = {(safeDestinationAdjusted ? "是" : "否")}"
         );
 
-        if (lockedByRequested)
-        {
-            Service.Log.Information($"[算路] 起点锁定：原始候选 = {requestedStartRef:X}，原因 = 原始候选在 over-poly 内且算路成功。");
-            return;
-        }
+        List<Vector3> rawWaypoints = new(voxelPath.Count);
+        foreach (var step in voxelPath)
+            rawWaypoints.Add(step.p);
 
-        if (selected.StartRef == requestedStartRef)
+        if (telemetry.Termination != VolumeSearchTermination.ReachedGoal)
         {
-            var keepReason = requestedFailed
-                                 ? "原始候选已恢复可用且综合评分最优"
-                                 : requestedSuccessful == null
-                                     ? "原始候选通过筛选并最终胜出"
-                                     : selected.IsPointOverPoly
-                                         ? "原始候选在 over-poly 内并保持最优"
-                                         : "原始候选在候选竞争中综合评分最优";
-            Service.Log.Debug
+            var partialDestination = rawWaypoints[^1];
+            Service.Log.Warning
             (
-                $"[算路] 起点保持：原始候选 = {requestedStartRef:X}，原因 = {keepReason}。"
+                $"飞行体素搜索未抵达终点：终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，请求空体素终点 = {safeDestination:f3}，当前终点 = {partialDestination:f3}，后续不再强接终点"
             );
-            return;
+
+            return new()
+            {
+                Status               = PathfindStatus.Partial,
+                RequestedMode        = MovementMode.Flight,
+                RequestedDestination = to,
+                FinalDestination     = partialDestination,
+                DestinationTolerance = 0,
+                Segments =
+                [
+                    new()
+                    {
+                        MovementMode         = MovementMode.Flight,
+                        SegmentKind          = MovementSegmentKind.FlightTraverse,
+                        AllowVerticalControl = true,
+                        ReachabilitySource   = PathReachabilitySource.Volume,
+                        GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                        StartPosition        = from,
+                        EndPosition          = partialDestination,
+                        Points               = [.. rawWaypoints]
+                    }
+                ]
+            };
         }
 
-        Service.Log.Warning
+        if (!requestedTargetLeaf.empty &&
+            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, useRaycast, cancel, out var hybridResult))
+            return hybridResult;
+
+        var finalDestination    = safeDestination;
+        var destinationAdjusted = safeDestinationAdjusted;
+        var landingPoint        = !requestedTargetLeaf.empty ? TryResolveFlightLandingPoint(to, safeDestination) : null;
+        var completionTolerance = MathF.Max(config.PathTolerance, HorizontalDistanceXZ(to, safeDestination));
+
+        if (landingPoint is { } resolvedLandingPoint)
+        {
+            finalDestination    = resolvedLandingPoint;
+            completionTolerance = MathF.Max(config.PathTolerance, HorizontalDistanceXZ(to, resolvedLandingPoint));
+            destinationAdjusted = Vector3.Distance(resolvedLandingPoint, to) > completionTolerance;
+
+            if (rawWaypoints.Count == 0 || Vector3.DistanceSquared(rawWaypoints[^1], resolvedLandingPoint) > 0.000001f)
+                rawWaypoints.Add(resolvedLandingPoint);
+        }
+
+        Service.Log.Debug
         (
-            $"[算路] 起点替换：原始候选 = {requestedStartRef:X}，选中 = {selected.StartRef:X}，原因 = {BuildStartReplacementReason(selected, requestedTarget, requestedSuccessful, requestedFailed)}。"
+            $"[算路] 飞行终点解析：请求终点 = {to:f3}，空体素终点 = {safeDestination:f3}，落地点 = {(landingPoint is { } lp ? lp.ToString("f3") : "无")}，最终终点 = {finalDestination:f3}，落地吸附 = {(landingPoint != null ? "是" : "否")}"
         );
-        Interlocked.Increment(ref startReplacementCount);
+
+        var finalDestinationTolerance = landingPoint != null ? completionTolerance : 0;
+
+        return new()
+        {
+            Status               = destinationAdjusted ? PathfindStatus.Partial : PathfindStatus.Complete,
+            RequestedMode        = MovementMode.Flight,
+            RequestedDestination = to,
+            FinalDestination     = finalDestination,
+            DestinationTolerance = finalDestinationTolerance,
+            Segments =
+            [
+                new()
+                {
+                    MovementMode         = MovementMode.Flight,
+                    SegmentKind          = MovementSegmentKind.FlightTraverse,
+                    AllowVerticalControl = true,
+                    ReachabilitySource   = PathReachabilitySource.Volume,
+                    GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                    StartPosition        = from,
+                    EndPosition          = finalDestination,
+                    Points               = [.. rawWaypoints]
+                }
+            ]
+        };
     }
 
-    private static string BuildStartReplacementReason
-        (MeshPathCandidate selected, Vector3 requestedTarget, MeshPathCandidate? requestedSuccessful, bool requestedFailed)
+    #endregion
+
+    #region 地面算路
+
+    private bool TryClosestPointOnPolyWithFlags(Vector3 point, long poly, out Vector3 closestPoint, out bool isOverPoly)
     {
-        if (requestedSuccessful == null)
-            return requestedFailed ? "原始候选算路失败" : "原始候选未通过有效路径评估";
+        if (MeshQuery.ClosestPointOnPoly(poly, point.SystemToRecast(), out var closest, out isOverPoly).Succeeded())
+        {
+            closestPoint = closest.RecastToSystem();
+            return true;
+        }
 
-        var requested = requestedSuccessful.Value;
-        if (!requested.IsPointOverPoly && selected.IsPointOverPoly)
-            return "原始候选不在 over-poly，且选中候选在 over-poly";
-
-        var selectedRank  = ResultStatusRank(selected.ResultStatus);
-        var requestedRank = ResultStatusRank(requested.ResultStatus);
-        if (selectedRank < requestedRank)
-            return $"选中候选路径状态更优（{selected.ResultStatus} > {requested.ResultStatus}）";
-
-        var selectedDistance  = selected.DistanceToRequestedTargetSq(requestedTarget);
-        var requestedDistance = requested.DistanceToRequestedTargetSq(requestedTarget);
-        if (!NearlyEqual(selectedDistance, requestedDistance) && selectedDistance < requestedDistance)
-            return "选中候选更接近最终目的地";
-
-        if (!NearlyEqual(selected.StartCandidate.VerticalDistanceAbs, requested.StartCandidate.VerticalDistanceAbs) &&
-            selected.StartCandidate.VerticalDistanceAbs < requested.StartCandidate.VerticalDistanceAbs)
-            return "选中候选的垂直偏移更小";
-
-        if (!NearlyEqual(selected.StartCandidate.HorizontalDistanceSq, requested.StartCandidate.HorizontalDistanceSq) &&
-            selected.StartCandidate.HorizontalDistanceSq < requested.StartCandidate.HorizontalDistanceSq)
-            return "选中候选的水平偏移更小";
-
-        return "选中候选综合评分更优";
+        closestPoint = default;
+        isOverPoly   = false;
+        return false;
     }
 
     private bool TryRepairGroundGap
@@ -702,224 +893,6 @@ public class NavmeshQuery
         return true;
     }
 
-    private static int ResultStatusRank(PathfindStatus status) => status switch
-    {
-        PathfindStatus.Complete           => 0,
-        PathfindStatus.ReachedWithinRange => 1,
-        PathfindStatus.Partial            => 2,
-        _                                 => 3
-    };
-
-    private static bool NearlyEqual(float left, float right) => MathF.Abs(left - right) <= 0.0001f;
-
-
-    internal PlannerResult PlanMeshPathDetailed(Vector3 from, Vector3 to, bool useRaycast, float range, CancellationToken cancel)
-    {
-        Interlocked.Increment(ref groundQueryCount);
-        var                    requestedStartRef   = FindNearestMeshPoly(from);
-        var                    requestedEndRef     = FindNearestMeshPoly(to);
-        Dictionary<long, int>  endCandidateIndices = [];
-        List<MeshEndCandidate> endCandidates       = [];
-
-        var meshTileSize = MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight);
-        foreach (var poly in FindIntersectingMeshPolys
-                     (to, new Vector3(meshTileSize, MathF.Max(meshTileSize, MathF.Max(config.PathTolerance, float.Epsilon)), meshTileSize)))
-            TryAddEndCandidate(poly, false);
-
-        TryAddEndCandidate(requestedEndRef, true);
-        endCandidates.Sort
-        ((a, b) =>
-            {
-                if (a.IsPointOverPoly != b.IsPointOverPoly)
-                    return b.IsPointOverPoly.CompareTo(a.IsPointOverPoly);
-
-                var aAbove = a.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon);
-                var bAbove = b.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon);
-                if (aAbove != bAbove)
-                    return aAbove.CompareTo(bAbove);
-
-                var cmp = a.VerticalDistanceAbs.CompareTo(b.VerticalDistanceAbs);
-                if (cmp != 0)
-                    return cmp;
-
-                cmp = a.HorizontalDistanceSq.CompareTo(b.HorizontalDistanceSq);
-                if (cmp != 0)
-                    return cmp;
-
-                if (a.IsRequestedEnd != b.IsRequestedEnd)
-                    return b.IsRequestedEnd.CompareTo(a.IsRequestedEnd);
-
-                return a.PolyRef.CompareTo(b.PolyRef);
-            }
-        );
-
-        MeshEndCandidate? endCandidate     = null;
-        List<string>      endCandidateLogs = [];
-
-        foreach (var candidate in endCandidates)
-        {
-            endCandidateLogs.Add
-            (
-                $"{candidate.PolyRef:X}: requested = {(candidate.IsRequestedEnd ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，水平偏移 {MathF.Sqrt(candidate.HorizontalDistanceSq):f3}，高差 {candidate.VerticalDelta:f3}"
-            );
-
-            if (endCandidate == null)
-            {
-                endCandidate = candidate;
-                continue;
-            }
-
-            var currentBest = endCandidate.Value;
-            var isBetterCandidate =
-                candidate.IsPointOverPoly != currentBest.IsPointOverPoly
-                    ? candidate.IsPointOverPoly
-                    :
-                    candidate.VerticalDelta   > MathF.Max(config.PathTolerance, float.Epsilon) !=
-                    currentBest.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon)
-                        ?
-                        !(candidate.VerticalDelta > MathF.Max(config.PathTolerance, float.Epsilon))
-                        :
-                        !NearlyEqual(candidate.VerticalDistanceAbs, currentBest.VerticalDistanceAbs)
-                            ? candidate.VerticalDistanceAbs < currentBest.VerticalDistanceAbs
-                            :
-                            !NearlyEqual(candidate.HorizontalDistanceSq, currentBest.HorizontalDistanceSq)
-                                ? candidate.HorizontalDistanceSq < currentBest.HorizontalDistanceSq
-                                :
-                                candidate.IsRequestedEnd != currentBest.IsRequestedEnd
-                                    ? candidate.IsRequestedEnd
-                                    :
-                                    candidate.PolyRef < currentBest.PolyRef;
-
-            if (isBetterCandidate)
-                endCandidate = candidate;
-        }
-
-        if (endCandidateLogs.Count > 0)
-            Service.Log.Debug($"[算路] 终点候选评估：{string.Join(" | ", endCandidateLogs)}");
-
-        if (endCandidate is { } selectedEndCandidate && selectedEndCandidate.PolyRef != requestedEndRef)
-            Interlocked.Increment(ref endReplacementCount);
-
-        if (endCandidate == null)
-            return LogMeshFailure(from, to, requestedStartRef, requestedEndRef, 0, range, "无法为终点选择可用的导航多边形");
-
-        var resolvedDestination = endCandidate.Value.ProjectedPoint;
-        var endRef              = endCandidate.Value.PolyRef;
-
-        var timer           = StopWatchTimer.Create();
-        var requestedEndPos = resolvedDestination.SystemToRecast();
-        var prunedAttempt   = ExecuteGroundPathAttempt(from, to, requestedStartRef, endRef, requestedEndPos, groundFilter, useRaycast, range, cancel);
-        var selectedAttempt = prunedAttempt;
-
-        if (prunedAttempt == null || prunedAttempt.Value.Result.Status == PathfindStatus.Partial)
-        {
-            var unprunedAttempt = ExecuteGroundPathAttempt
-            (
-                from,
-                to,
-                requestedStartRef,
-                endRef,
-                requestedEndPos,
-                groundFilterIgnoringUnreachable,
-                useRaycast,
-                range,
-                cancel
-            );
-
-            var shouldUseFallback = false;
-
-            if (unprunedAttempt is { } fallbackAttempt)
-            {
-                shouldUseFallback = selectedAttempt == null;
-
-                if (!shouldUseFallback && selectedAttempt is { } currentAttempt)
-                {
-                    var fallbackRank = ResultStatusRank(fallbackAttempt.Result.Status);
-                    var currentRank  = ResultStatusRank(currentAttempt.Result.Status);
-                    shouldUseFallback = fallbackRank       != currentRank
-                                            ? fallbackRank < currentRank
-                                            : IsBetterStartPathCandidate(fallbackAttempt.Candidate, currentAttempt.Candidate, to);
-                }
-            }
-
-            if (unprunedAttempt is { } fallbackAttemptToApply && shouldUseFallback)
-            {
-                var initialAttempt = selectedAttempt is { } currentAttempt
-                                         ? $"{currentAttempt.Candidate.StartRef:X}/{currentAttempt.Candidate.ResultStatus}/requested={(currentAttempt.Candidate.IsRequestedStart ? 1 : 0)}/overPoly={(currentAttempt.Candidate.IsPointOverPoly ? 1 : 0)}/距目标={MathF.Sqrt(currentAttempt.Candidate.DistanceToRequestedTargetSq(to)):f3}/结果={currentAttempt.Result.Status}/最后={currentAttempt.LastPoly:X}"
-                                         : "<none>";
-                var fallbackAttemptText =
-                    $"{fallbackAttemptToApply.Candidate.StartRef:X}/{fallbackAttemptToApply.Candidate.ResultStatus}/requested={(fallbackAttemptToApply.Candidate.IsRequestedStart ? 1 : 0)}/overPoly={(fallbackAttemptToApply.Candidate.IsPointOverPoly ? 1 : 0)}/距目标={MathF.Sqrt(fallbackAttemptToApply.Candidate.DistanceToRequestedTargetSq(to)):f3}/结果={fallbackAttemptToApply.Result.Status}/最后={fallbackAttemptToApply.LastPoly:X}";
-                Service.Log.Warning
-                (
-                    $"[算路] 已改用忽略裁剪标记的回退结果：首轮 = {initialAttempt}，回退 = {fallbackAttemptText}"
-                );
-                selectedAttempt = fallbackAttemptToApply;
-            }
-        }
-
-        if (selectedAttempt is not { } attempt)
-            return LogMeshFailure(from, to, requestedStartRef, endRef, 0, range, "无法为起点选择可用的导航多边形");
-
-        LastPath.Clear();
-        var pathCandidate = attempt.Candidate;
-        var startRef      = attempt.StartRef;
-        if (pathCandidate.QueryMode == GroundQueryMode.AnyAngle)
-            Interlocked.Increment(ref anyAnglePreferredCount);
-        LastPath.AddRange(pathCandidate.Corridor);
-        Service.Log.Debug($"[算路] 地面多边形 {startRef:X} -> {endRef:X}（原始起点候选 = {requestedStartRef:X}，查询模式 = {pathCandidate.QueryMode}）");
-        Service.Log.Debug($"[算路] 地面终点解析：原始终点候选 = {requestedEndRef:X}，选中 = {endRef:X}，终点投影 = {resolvedDestination:f3}");
-        Service.Log.Debug
-            ($"[算路] 地面路径查询耗时 {timer.Value().TotalSeconds:f3} 秒，状态 = {attempt.QueryStatus}，路径 = {string.Join(", ", LastPath.Select(r => r.ToString("X")))}");
-
-        cancel.ThrowIfCancellationRequested();
-        LogMeshResult(attempt.Result, from, startRef, endRef, attempt.LastPoly, range, timer.Value());
-        return attempt.Result;
-
-        void TryAddEndCandidate(long poly, bool forceInclude)
-        {
-            if (poly == 0)
-                return;
-
-            if (endCandidateIndices.TryGetValue(poly, out var existingIndex))
-            {
-                if (forceInclude && !endCandidates[existingIndex].IsRequestedEnd)
-                    endCandidates[existingIndex] = endCandidates[existingIndex] with { IsRequestedEnd = true };
-                return;
-            }
-
-            if (!TryClosestPointOnPolyWithFlags(to, poly, out var point, out var isPointOverPoly))
-                return;
-
-            var dx                   = point.X - to.X;
-            var dz                   = point.Z - to.Z;
-            var horizontalDistanceSq = dx * dx + dz * dz;
-            var verticalDistance     = point.Y - to.Y;
-            var toleranceFloor       = MathF.Max(config.PathTolerance, float.Epsilon);
-            var horizontalTolerance = MathF.Max
-            (
-                Vector3.Distance(point, to),
-                MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight) * 0.5f
-            );
-            var verticalTolerance = MathF.Max
-                                    (
-                                        MathF.Max(MeshQuery.GetAttachedNavMesh().GetParams().tileWidth, MeshQuery.GetAttachedNavMesh().GetParams().tileHeight),
-                                        toleranceFloor
-                                    ) *
-                                    0.5f;
-
-            if (!forceInclude)
-            {
-                if (horizontalDistanceSq > horizontalTolerance * horizontalTolerance)
-                    return;
-                if (MathF.Abs(verticalDistance) > verticalTolerance)
-                    return;
-            }
-
-            endCandidateIndices.Add(poly, endCandidates.Count);
-            endCandidates.Add(new(poly, point, horizontalDistanceSq, verticalDistance, forceInclude, isPointOverPoly));
-        }
-    }
-
     private GroundPathAttempt? ExecuteGroundPathAttempt
     (
         Vector3           from,
@@ -1030,9 +1003,9 @@ public class NavmeshQuery
             opt,
             queryMode,
             range,
-            cancel,
             false,
-            true
+            true,
+            cancel
         );
 
         if (selection.Selected == null || selection.Selected.Value.ResultStatus == PathfindStatus.Partial)
@@ -1048,9 +1021,9 @@ public class NavmeshQuery
                 opt,
                 queryMode,
                 range,
-                cancel,
                 true,
-                false
+                false,
+                cancel
             );
 
             if (expandedSelection.Selected is { } expandedCandidate &&
@@ -1086,9 +1059,9 @@ public class NavmeshQuery
         DtFindPathOption  opt,
         GroundQueryMode   queryMode,
         float             range,
-        CancellationToken cancel,
         bool              expandedSearch,
-        bool              allowRequestedLock
+        bool              allowRequestedLock,
+        CancellationToken cancel
     )
     {
         var candidates = CollectStartPolyCandidates(from, requestedStartRef, expandedSearch);
@@ -1309,8 +1282,7 @@ public class NavmeshQuery
         long              endRef,
         GroundQueryMode   queryMode,
         float             range
-    )
-        => BuildMeshPathCandidate(MeshQuery, startCandidate, corridor, status, requestedEndPos, requestedTarget, endRef, queryMode, range);
+    ) => BuildMeshPathCandidate(MeshQuery, startCandidate, corridor, status, requestedEndPos, requestedTarget, endRef, queryMode, range);
 
     private static MeshPathCandidate BuildMeshPathCandidate
     (
@@ -1357,7 +1329,7 @@ public class NavmeshQuery
         );
     }
 
-    private static float EstimatePathLength(DtNavMeshQuery query, RcVec3f startPos, RcVec3f endPos, IReadOnlyList<long> corridor)
+    private static float EstimatePathLength(DtNavMeshQuery query, RcVec3f startPos, RcVec3f endPos, List<long> corridor)
     {
         if (corridor.Count == 0)
             return float.MaxValue;
@@ -1485,8 +1457,8 @@ public class NavmeshQuery
 
     private static bool IsBetterStartPathCandidate(MeshPathCandidate candidate, MeshPathCandidate currentBest, Vector3 requestedTarget)
     {
-        var rankCandidate = ResultStatusRank(candidate.ResultStatus);
-        var rankCurrent   = ResultStatusRank(currentBest.ResultStatus);
+        var rankCandidate = GetResultStatusRank(candidate.ResultStatus);
+        var rankCurrent   = GetResultStatusRank(currentBest.ResultStatus);
         if (rankCandidate != rankCurrent)
             return rankCandidate < rankCurrent;
 
@@ -1565,133 +1537,9 @@ public class NavmeshQuery
             Points               = [.. points]
         };
 
-    internal PlannerResult PlanVolumePathDetailed(Vector3 from, Vector3 to, bool useRaycast, CancellationToken cancel)
-    {
-        if (VolumeQuery == null)
-        {
-            Service.Log.Error("体素导航体未构建，无法执行飞行算路");
-            return CreateFlightFailure(to);
-        }
+    #endregion
 
-        var volume         = VolumeQuery.Volume;
-        var locateTimer    = StopWatchTimer.Create();
-        var startVoxel     = FindNearestVolumeVoxel(from);
-        var endVoxel       = FindNearestVolumeVoxel(to);
-        var locateDuration = locateTimer.Value();
-        Service.Log.Debug($"[算路] 飞行体素 {startVoxel:X} -> {endVoxel:X}");
-
-        if (startVoxel == VoxelMap.INVALID_VOXEL || endVoxel == VoxelMap.INVALID_VOXEL)
-        {
-            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 无法定位空体素");
-            return CreateFlightFailure(to);
-        }
-
-        var requestedStartLeaf = volume.FindLeafVoxel(from);
-        var requestedTargetLeaf = volume.FindLeafVoxel(to);
-        var safeStart = requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ? from : VoxelSearch.FindClosestVoxelPoint(volume, startVoxel, from);
-        var safeDestination = requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ? to : VoxelSearch.FindClosestVoxelPoint(volume, endVoxel, to);
-        var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
-        var searchTimer = StopWatchTimer.Create();
-        var voxelPath = VolumeQuery.FindPath
-            (startVoxel, endVoxel, safeStart, safeDestination, useRaycast, false, cancel);
-        var telemetry = VolumeQuery.LastTelemetry;
-
-        if (voxelPath.Count == 0)
-        {
-            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空");
-            return CreateFlightFailure(to);
-        }
-
-        Service.Log.Debug
-        (
-            $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，终止 = {DescribeVolumeSearchTermination(telemetry.Termination)}，搜索射线优化 = {(telemetry.SearchRaycastEnabled ? "是" : "否")}，搜索轮次 = {telemetry.SearchAttempts}，启发式权重 = {telemetry.HeuristicWeight:f2}，路径点 = {voxelPath.Count}，起点修正 = {(Vector3.DistanceSquared(safeStart, from) > 0.000001f ? "是" : "否")}，安全终点修正 = {(safeDestinationAdjusted ? "是" : "否")}"
-        );
-
-        List<Vector3> rawWaypoints = new(voxelPath.Count);
-        foreach (var step in voxelPath)
-            rawWaypoints.Add(step.p);
-
-        if (telemetry.Termination != VolumeSearchTermination.ReachedGoal)
-        {
-            var partialDestination = rawWaypoints[^1];
-            Service.Log.Warning
-            (
-                $"飞行体素搜索未抵达终点：终止 = {DescribeVolumeSearchTermination(telemetry.Termination)}，请求空体素终点 = {safeDestination:f3}，当前终点 = {partialDestination:f3}，后续不再强接终点"
-            );
-
-            return new()
-            {
-                Status               = PathfindStatus.Partial,
-                RequestedMode        = MovementMode.Flight,
-                RequestedDestination = to,
-                FinalDestination     = partialDestination,
-                DestinationTolerance = 0,
-                Segments =
-                [
-                    new()
-                    {
-                        MovementMode         = MovementMode.Flight,
-                        SegmentKind          = MovementSegmentKind.FlightTraverse,
-                        AllowVerticalControl = true,
-                        ReachabilitySource   = PathReachabilitySource.Volume,
-                        GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
-                        StartPosition        = from,
-                        EndPosition          = partialDestination,
-                        Points               = [.. rawWaypoints]
-                    }
-                ]
-            };
-        }
-
-        if (!requestedTargetLeaf.empty &&
-            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, useRaycast, cancel, out var hybridResult))
-            return hybridResult;
-
-        var finalDestination    = safeDestination;
-        var destinationAdjusted = safeDestinationAdjusted;
-        var landingPoint        = !requestedTargetLeaf.empty ? TryResolveFlightLandingPoint(to, safeDestination) : null;
-        var completionTolerance = MathF.Max(config.PathTolerance, HorizontalDistanceXZ(to, safeDestination));
-
-        if (landingPoint is { } resolvedLandingPoint)
-        {
-            finalDestination    = resolvedLandingPoint;
-            completionTolerance = MathF.Max(config.PathTolerance, HorizontalDistanceXZ(to, resolvedLandingPoint));
-            destinationAdjusted = Vector3.Distance(resolvedLandingPoint, to) > completionTolerance;
-
-            if (rawWaypoints.Count == 0 || Vector3.DistanceSquared(rawWaypoints[^1], resolvedLandingPoint) > 0.000001f)
-                rawWaypoints.Add(resolvedLandingPoint);
-        }
-
-        Service.Log.Debug
-        (
-            $"[算路] 飞行终点解析：请求终点 = {to:f3}，空体素终点 = {safeDestination:f3}，落地点 = {(landingPoint is { } lp ? lp.ToString("f3") : "无")}，最终终点 = {finalDestination:f3}，落地吸附 = {(landingPoint != null ? "是" : "否")}"
-        );
-
-        var finalDestinationTolerance = landingPoint != null ? completionTolerance : 0;
-
-        return new()
-        {
-            Status               = destinationAdjusted ? PathfindStatus.Partial : PathfindStatus.Complete,
-            RequestedMode        = MovementMode.Flight,
-            RequestedDestination = to,
-            FinalDestination     = finalDestination,
-            DestinationTolerance = finalDestinationTolerance,
-            Segments =
-            [
-                new()
-                {
-                    MovementMode         = MovementMode.Flight,
-                    SegmentKind          = MovementSegmentKind.FlightTraverse,
-                    AllowVerticalControl = true,
-                    ReachabilitySource   = PathReachabilitySource.Volume,
-                    GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
-                    StartPosition        = from,
-                    EndPosition          = finalDestination,
-                    Points               = [.. rawWaypoints]
-                }
-            ]
-        };
-    }
+    #region 飞行算路
 
     private Vector3? TryResolveFlightLandingPoint(Vector3 requestedTarget, Vector3 safeDestination)
     {
@@ -1727,14 +1575,13 @@ public class NavmeshQuery
         return resolved;
     }
 
-    private static float HorizontalDistanceXZ(Vector3 left, Vector3 right)
-    {
-        var dx = left.X           - right.X;
-        var dz = left.Z           - right.Z;
-        return MathF.Sqrt(dx * dx + dz * dz);
-    }
-
-    private Vector3? TryBuildFlightGroundApproachPoint(Vector3 safeFlightDestination, Vector3 transitionPoint, Vector3 groundLeadTarget, Vector3 requestedTarget)
+    private Vector3? TryBuildFlightGroundApproachPoint
+    (
+        Vector3 safeFlightDestination,
+        Vector3 transitionPoint,
+        Vector3 groundLeadTarget,
+        Vector3 requestedTarget
+    )
     {
         var toleranceFloor      = MathF.Max(config.PathTolerance, float.Epsilon);
         var horizontalGap       = HorizontalDistanceXZ(safeFlightDestination, transitionPoint);
@@ -1876,7 +1723,164 @@ public class NavmeshQuery
             DestinationTolerance = 0
         };
 
-    private static string DescribeVolumeSearchTermination(VolumeSearchTermination termination) => termination switch
+    #endregion
+
+    #region 日志
+
+    private static PlannerResult LogMeshFailure(Vector3 from, Vector3 to, long startRef, long endRef, long lastPoly, float range, string reason)
+    {
+        var lastPolyText = lastPoly != 0 ? lastPoly.ToString("X") : "<none>";
+        Service.Log.Error($"地面算路失败：起点 = {from:f3}，请求终点 = {to:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPolyText}，容差 = {range:f3}，原因 = {reason}");
+        return new()
+        {
+            Status               = PathfindStatus.Failed,
+            RequestedMode        = MovementMode.Ground,
+            RequestedDestination = to,
+            FinalDestination     = to,
+            DestinationTolerance = range
+        };
+    }
+
+    private void LogMeshResult(PlannerResult result, Vector3 from, long startRef, long endRef, long lastPoly, float range, TimeSpan duration)
+    {
+        var startTile     = new TileCoord(FindMeshTile(from).X,                        FindMeshTile(from).Z);
+        var requestedTile = new TileCoord(FindMeshTile(result.RequestedDestination).X, FindMeshTile(result.RequestedDestination).Z);
+        var actualTile    = new TileCoord(FindMeshTile(result.FinalDestination).X,     FindMeshTile(result.FinalDestination).Z);
+        var (tileX, tileZ)     = FindMeshTile(result.FinalDestination);
+        var (tileMin, tileMax) = GetMeshTileBounds(tileX, tileZ);
+        var distanceToNearestBoundary = MathF.Min
+        (
+            MathF.Min(MathF.Abs(result.FinalDestination.X - tileMin.X), MathF.Abs(tileMax.X - result.FinalDestination.X)),
+            MathF.Min(MathF.Abs(result.FinalDestination.Z - tileMin.Z), MathF.Abs(tileMax.Z - result.FinalDestination.Z))
+        );
+        var meshParams            = MeshQuery.GetAttachedNavMesh().GetParams();
+        var seamBoundaryTolerance = MathF.Max(MathF.Min(meshParams.tileWidth, meshParams.tileHeight), MathF.Max(config.PathTolerance, float.Epsilon)) * 0.5f;
+        var seamGapTolerance      = MathF.Max(range, seamBoundaryTolerance);
+        var diagnostic = new SeamDiagnostic
+        (
+            startTile,
+            requestedTile,
+            actualTile,
+            distanceToNearestBoundary,
+            distanceToNearestBoundary <= seamBoundaryTolerance,
+            Math.Abs(requestedTile.X - actualTile.X) <= 1 && Math.Abs(requestedTile.Z - actualTile.Z) <= 1,
+            Vector3.Distance(result.RequestedDestination, result.FinalDestination) <= seamGapTolerance
+        );
+        var message =
+            $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，粗路径段 = {result.Segments.Count}";
+
+        if (result.Status == PathfindStatus.Partial)
+        {
+            message +=
+                $"，起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}";
+        }
+
+        switch (result.Status)
+        {
+            case PathfindStatus.Partial:
+                Interlocked.Increment(ref partialGroundQueryCount);
+                Service.Log.Warning(message);
+
+                if (diagnostic.IsSuspectedTileSeamCutoff)
+                {
+                    Interlocked.Increment(ref suspectedTileSeamCutoffCount);
+                    Service.Log.Warning
+                    (
+                        $"[SuspectedTileSeamCutoff] 疑似区块接缝截断：起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}"
+                    );
+                }
+
+                break;
+            case PathfindStatus.Failed:
+                Service.Log.Error(message);
+                break;
+            default:
+                Service.Log.Debug(message);
+                break;
+        }
+    }
+
+    private void LogStartCandidateDecision
+    (
+        MeshPathCandidate  selected,
+        Vector3            requestedTarget,
+        long               requestedStartRef,
+        MeshPathCandidate? requestedSuccessful,
+        bool               requestedFailed,
+        bool               lockedByRequested
+    )
+    {
+        Service.Log.Debug
+        (
+            $"[算路] 已选起点多边形 {selected.StartRef:X}，投影点 = {selected.StartPoint:f3}，结果 = {selected.ResultStatus}，requested = {(selected.IsRequestedStart ? 1 : 0)}，overPoly = {(selected.IsPointOverPoly ? 1 : 0)}"
+        );
+
+        if (lockedByRequested)
+        {
+            Service.Log.Information($"[算路] 起点锁定：原始候选 = {requestedStartRef:X}，原因 = 原始候选在 over-poly 内且算路成功。");
+            return;
+        }
+
+        if (selected.StartRef == requestedStartRef)
+        {
+            var keepReason = requestedFailed
+                                 ? "原始候选已恢复可用且综合评分最优"
+                                 : requestedSuccessful == null
+                                     ? "原始候选通过筛选并最终胜出"
+                                     : selected.IsPointOverPoly
+                                         ? "原始候选在 over-poly 内并保持最优"
+                                         : "原始候选在候选竞争中综合评分最优";
+            Service.Log.Debug
+            (
+                $"[算路] 起点保持：原始候选 = {requestedStartRef:X}，原因 = {keepReason}。"
+            );
+            return;
+        }
+
+        Service.Log.Warning
+        (
+            $"[算路] 起点替换：原始候选 = {requestedStartRef:X}，选中 = {selected.StartRef:X}，原因 = {GetLogStartReplacementReason(selected, requestedTarget, requestedSuccessful, requestedFailed)}。"
+        );
+        Interlocked.Increment(ref startReplacementCount);
+    }
+
+    private static string GetLogStartReplacementReason
+    (
+        MeshPathCandidate  selected,
+        Vector3            requestedTarget,
+        MeshPathCandidate? requestedSuccessful,
+        bool               requestedFailed
+    )
+    {
+        if (requestedSuccessful == null)
+            return requestedFailed ? "原始候选算路失败" : "原始候选未通过有效路径评估";
+
+        var requested = requestedSuccessful.Value;
+        if (!requested.IsPointOverPoly && selected.IsPointOverPoly)
+            return "原始候选不在 over-poly，且选中候选在 over-poly";
+
+        var selectedRank  = GetResultStatusRank(selected.ResultStatus);
+        var requestedRank = GetResultStatusRank(requested.ResultStatus);
+        if (selectedRank < requestedRank)
+            return $"选中候选路径状态更优（{selected.ResultStatus} > {requested.ResultStatus}）";
+
+        var selectedDistance  = selected.DistanceToRequestedTargetSq(requestedTarget);
+        var requestedDistance = requested.DistanceToRequestedTargetSq(requestedTarget);
+        if (!NearlyEqual(selectedDistance, requestedDistance) && selectedDistance < requestedDistance)
+            return "选中候选更接近最终目的地";
+
+        if (!NearlyEqual(selected.StartCandidate.VerticalDistanceAbs, requested.StartCandidate.VerticalDistanceAbs) &&
+            selected.StartCandidate.VerticalDistanceAbs < requested.StartCandidate.VerticalDistanceAbs)
+            return "选中候选的垂直偏移更小";
+
+        if (!NearlyEqual(selected.StartCandidate.HorizontalDistanceSq, requested.StartCandidate.HorizontalDistanceSq) &&
+            selected.StartCandidate.HorizontalDistanceSq < requested.StartCandidate.HorizontalDistanceSq)
+            return "选中候选的水平偏移更小";
+
+        return "选中候选综合评分更优";
+    }
+
+    private static string GetLogVolumeSearchTermination(VolumeSearchTermination termination) => termination switch
     {
         VolumeSearchTermination.ReachedGoal       => "达到终点",
         VolumeSearchTermination.SearchExhausted   => "搜索穷尽",
@@ -1884,14 +1888,38 @@ public class NavmeshQuery
         _                                         => "未知"
     };
 
+    #endregion
+
+    #region 工具
+
+    private static bool NearlyEqual(float left, float right) =>
+        MathF.Abs(left - right) <= 0.0001f;
+
+    private static int GetResultStatusRank(PathfindStatus status) => status switch
+    {
+        PathfindStatus.Complete           => 0,
+        PathfindStatus.ReachedWithinRange => 1,
+        PathfindStatus.Partial            => 2,
+        _                                 => 3
+    };
+
+    private static float HorizontalDistanceXZ(Vector3 left, Vector3 right)
+    {
+        var dx = left.X           - right.X;
+        var dz = left.Z           - right.Z;
+        return MathF.Sqrt(dx * dx + dz * dz);
+    }
+
+    #endregion
+
     #region 嵌套类
-    
+
     private enum GroundQueryMode
     {
         AnyAngle,
         Classic
     }
-    
+
     private readonly record struct StartCandidateEvaluation
     (
         MeshPathCandidate? PathCandidate,
