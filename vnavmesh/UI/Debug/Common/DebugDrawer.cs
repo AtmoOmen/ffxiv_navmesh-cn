@@ -94,28 +94,18 @@ public unsafe class DebugDrawer : IDisposable
     {
         RenderContext.Execute();
 
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(0, 0));
-        ImGuiHelpers.ForceNextWindowMainViewport();
-        ImGuiHelpers.SetNextWindowPosRelativeMainViewport(new Vector2(0, 0));
-        ImGui.Begin
-        (
-            "world_overlay",
-            ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoNav | ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoBackground
-        );
-        ImGui.SetWindowSize(ImGui.GetIO().DisplaySize);
+        var dl = ImGui.GetForegroundDrawList();
+        var viewportPos = ImGuiHelpers.MainViewport.Pos;
 
-        if (RenderTarget != null) ImGui.GetWindowDrawList().AddImage(RenderTarget.ImguiHandle, new(), new(RenderTarget.Size.X, RenderTarget.Size.Y));
+        if (RenderTarget != null)
+            dl.AddImage(RenderTarget.ImguiHandle, viewportPos, viewportPos + new Vector2(RenderTarget.Size.X, RenderTarget.Size.Y));
 
-        var dl = ImGui.GetWindowDrawList();
         foreach (var l in _viewportLines)
             dl.AddLine(l.from, l.to, l.col, l.thickness);
         foreach (var c in _viewportCircles)
             dl.AddCircleFilled(c.center, c.radius, c.color);
         _viewportLines.Clear();
         _viewportCircles.Clear();
-
-        ImGui.End();
-        ImGui.PopStyleVar();
     }
 
     public void DrawWorldLine(Vector3 start, Vector3 end, uint color, int thickness = 1)
@@ -157,6 +147,33 @@ public unsafe class DebugDrawer : IDisposable
     }
 
     public void DrawWorldAABB(AABB aabb, uint color, int thickness = 1) => DrawWorldAABB
+        ((aabb.Min + aabb.Max) * 0.5f, (aabb.Max - aabb.Min) * 0.5f, color, thickness);
+
+    public void DrawWorldCylinder(Vector3 origin, Vector3 halfSize, uint color, int thickness = 1)
+    {
+        var radius = MathF.Max(MathF.Max(MathF.Abs(halfSize.X), MathF.Abs(halfSize.Z)), 0.01f);
+        var numSegments = Math.Max(24, CurveApproxUtil.CalculateCircleSegments(radius, 360.Degrees(), 0.08f));
+        var prevBottom = origin + new Vector3(halfSize.X, -halfSize.Y, 0);
+        var prevMid    = origin + new Vector3(halfSize.X, 0, 0);
+        var prevTop    = origin + new Vector3(halfSize.X, halfSize.Y, 0);
+
+        for (var i = 1; i <= numSegments; ++i)
+        {
+            var dir = (i * 360.0f / numSegments).Degrees().ToDirection();
+            var bottom = origin + new Vector3(dir.X * halfSize.X, -halfSize.Y, dir.Y * halfSize.Z);
+            var mid = origin + new Vector3(dir.X * halfSize.X, 0, dir.Y * halfSize.Z);
+            var top = origin + new Vector3(dir.X * halfSize.X, halfSize.Y, dir.Y * halfSize.Z);
+            DrawWorldLine(prevBottom, bottom, color, thickness);
+            DrawWorldLine(prevMid, mid, color, thickness);
+            DrawWorldLine(prevTop, top, color, thickness);
+            DrawWorldLine(bottom, top, color, thickness);
+            prevBottom = bottom;
+            prevMid    = mid;
+            prevTop    = top;
+        }
+    }
+
+    public void DrawWorldCylinder(AABB aabb, uint color, int thickness = 1) => DrawWorldCylinder
         ((aabb.Min + aabb.Max) * 0.5f, (aabb.Max - aabb.Min) * 0.5f, color, thickness);
 
     public void DrawWorldSphere(Vector3 center, float radius, uint color, int thickness = 1)

@@ -18,7 +18,12 @@ public static class NavmeshCustomizationRegistry
         var sceneTypes = new List<Type>();
         var sceneInstances = new Dictionary<Type, SceneNavmeshCustomization>();
 
-        foreach (var t in Assembly.GetExecutingAssembly().DefinedTypes.Where(t => t.IsSubclassOf(baseType) && !t.IsAbstract && !t.IsDefined(typeof(NavmeshCustomizationIgnoreAttribute), false)))
+        foreach (var t in Assembly
+                     .GetExecutingAssembly()
+                     .DefinedTypes
+                     .Where(t => t.IsSubclassOf(baseType) && !t.IsAbstract && !t.IsDefined(typeof(NavmeshCustomizationIgnoreAttribute), false))
+                     .OrderBy(t => t.Namespace?.Contains(".Generated", StringComparison.Ordinal) == true ? 1 : 0)
+                     .ThenBy(t => t.FullName ?? t.Name, StringComparer.Ordinal))
         {
             var instance = Activator.CreateInstance(t) as NavmeshCustomization;
 
@@ -35,7 +40,10 @@ public static class NavmeshCustomizationRegistry
             }
 
             foreach (var attr in t.GetCustomAttributes<CustomizationTerritoryAttribute>())
-                PerTerritory.Add(attr.TerritoryID, instance);
+            {
+                if (!PerTerritory.TryAdd(attr.TerritoryID, instance))
+                    Service.Log.Warning($"忽略重复的 Territory 自定义: {t.FullName} -> {attr.TerritoryID}");
+            }
         }
 
         PerScene = OrderSceneCustomizations(sceneTypes, sceneInstances);

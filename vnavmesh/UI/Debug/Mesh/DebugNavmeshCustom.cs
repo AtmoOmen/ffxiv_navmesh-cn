@@ -12,6 +12,7 @@ using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations;
+using vnavmesh.Navigation.Customizations.Editor;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
@@ -73,119 +74,7 @@ internal class DebugNavmeshCustom : IDisposable
         }
     }
 
-    // async navmesh builder
-    public class AsyncBuilder
-    (
-        NavmeshManager manager,
-        Config         config
-    ) : IDisposable
-    {
-        public enum State
-        {
-            NotBuilt,
-            InProgress,
-            Failed,
-            Ready
-        }
-
-        public class IntermediateData
-        {
-            public int                 NumTilesX;
-            public int                 NumTilesZ;
-            public RcBuilderResult?[,] Tiles;
-
-            public IntermediateData(int numTilesX, int numTilesZ)
-            {
-                NumTilesX = numTilesX;
-                NumTilesZ = numTilesZ;
-                Tiles     = new RcBuilderResult?[numTilesX, numTilesZ];
-            }
-        }
-
-        // results - should not be accessed while task is running
-        private SceneDefinition?  _scene;
-        private NavmeshBuilder?   _builder;
-        private NavmeshQuery?     _query;
-        private IntermediateData? _intermediates;
-        private Task?             _task;
-        private NavmeshManager    _manager = manager;
-        private Config            _config  = config;
-
-        public State CurrentState => _task == null ? State.NotBuilt : !_task.IsCompleted ? State.InProgress : _task.IsFaulted ? State.Failed : State.Ready;
-        public SceneDefinition? Scene => _task != null && _task.IsCompletedSuccessfully ? _scene : null;
-        public SceneExtractor? Extractor => _task != null && _task.IsCompletedSuccessfully ? _builder?.Scene : null;
-        public IntermediateData? Intermediates => _task != null && _task.IsCompletedSuccessfully ? _intermediates : null;
-        public NavmeshQuery? Query => _task != null && _task.IsCompletedSuccessfully ? _query : null;
-        public DtNavMesh? Navmesh => _task != null && _task.IsCompletedSuccessfully ? _builder?.Navmesh.Mesh : null;
-        public DtNavMeshQuery? MeshQuery => _task != null && _task.IsCompletedSuccessfully ? _query?.MeshQuery : null;
-        public VoxelMap? Volume => _task != null && _task.IsCompletedSuccessfully ? _builder?.Navmesh.Volume : null;
-        public VoxelPathfind? VolumeQuery => _task != null && _task.IsCompletedSuccessfully ? _query?.VolumeQuery : null;
-        public NavmeshBuilder.BuildTelemetrySummary? BuildTelemetry => _task != null && _task.IsCompletedSuccessfully ? _builder?.LastBuildTelemetry : null;
-
-        public void Dispose() =>
-            Clear();
-
-        public void Rebuild(Customization settings, bool includeTiles)
-        {
-            Clear();
-            Service.Log.Debug("[navmesh] extract from scene");
-            _scene = new();
-            _scene.FillFromActiveLayout();
-            Service.Log.Debug("[navmesh] schedule async build");
-            _task = Task.Run(() => BuildNavmesh(_scene, settings, includeTiles));
-        }
-
-        public void Clear()
-        {
-            if (_task != null)
-            {
-                if (!_task.IsCompleted)
-                    _task.Wait();
-                _task.Dispose();
-                _task = null;
-            }
-
-            _scene         = null;
-            _builder       = null;
-            _query         = null;
-            _intermediates = null;
-            //GC.Collect();
-        }
-
-        private void BuildNavmesh(SceneDefinition scene, NavmeshCustomization customization, bool includeTiles)
-        {
-            try
-            {
-                var timer = StopWatchTimer.Create();
-                _builder = new(scene, customization, _config);
-
-                List<((int X, int Z), Task<NavmeshBuilder.Intermediates> Task)> _tiles = [];
-
-                // create tile data and add to navmesh
-                _intermediates = new(_builder.NumTilesX, _builder.NumTilesZ);
-
-                if (includeTiles)
-                {
-                    foreach (var result in _builder.BuildTiles())
-                        _intermediates.Tiles[result.TileX, result.TileZ] = result;
-
-                    //int x = 9, z = 15;
-                    //_intermediates.Tiles[x, z] = _builder.BuildTile(x, z);
-                    Service.Log.Debug("running customization code");
-                    customization.CustomizeMesh(_builder.Navmesh, [.. scene.FestivalLayers]);
-                }
-
-                _query = new(_builder.Navmesh, _config);
-                Service.Log.Debug($"navmesh build time: {timer.Value().TotalMilliseconds}ms");
-                _manager.ReplaceMesh(_builder.Navmesh);
-            }
-            catch (Exception ex)
-            {
-                Service.Log.Error($"Error building navmesh: {ex}");
-                throw;
-            }
-        }
-    }
+    public class AsyncBuilder(NavmeshManager manager, Config config) : CustomizationPreviewBuilder(manager, config);
 
     // TODO: should each debug drawer handle tiled geometry itself?
     private class PerTile : IDisposable
@@ -257,7 +146,7 @@ internal class DebugNavmeshCustom : IDisposable
             if (ImGui.Button("Rebuild navmesh"))
             {
                 Clear();
-                _navmesh.Rebuild(_settings, true);
+                _navmesh.RebuildFromActiveLayout(_settings, includeTiles: true);
             }
 
             ImGui.SameLine();
@@ -265,7 +154,7 @@ internal class DebugNavmeshCustom : IDisposable
             if (ImGui.Button("Rebuild scene extract only"))
             {
                 Clear();
-                _navmesh.Rebuild(_settings, false);
+                _navmesh.RebuildFromActiveLayout(_settings, includeTiles: false);
             }
 
             ImGui.SameLine();

@@ -7,6 +7,7 @@ using vnavmesh.Integration.Status;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.UI.Editor;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Layout;
@@ -22,6 +23,7 @@ public class MainWindow : Window, IDisposable
     private readonly DebugGameCollision   _debugGameColl;
     private readonly DebugNavmeshManager  _debugNavmeshManager;
     private readonly DebugNavmeshCustom   _debugNavmeshCustom;
+    private readonly CustomizationEditorView _customizationEditor;
     private readonly DebugLayout          _debugLayout;
 
     public MainWindow
@@ -33,12 +35,14 @@ public class MainWindow : Window, IDisposable
         _debugGameColl       = new(config, _dd);
         _debugNavmeshManager = new(_dd, manager, movementExecutor, move);
         _debugNavmeshCustom  = new(config, _dd, _debugGameColl, manager, paths.ConfigDirectory.FullName);
+        _customizationEditor = new(config, _dd, _debugGameColl, manager, paths.ConfigDirectory);
         _debugLayout         = new(_dd, _debugGameColl);
     }
 
     public void Dispose()
     {
         _debugLayout.Dispose();
+        _customizationEditor.Dispose();
         _debugNavmeshCustom.Dispose();
         _debugNavmeshManager.Dispose();
         _debugGameColl.Dispose();
@@ -100,6 +104,12 @@ public class MainWindow : Window, IDisposable
                 {
                     if (tab)
                         _debugNavmeshManager.Draw();
+                }
+                
+                using (var tab = ImRaii.TabItem("自定义编辑器"))
+                {
+                    if (tab)
+                        _customizationEditor.Draw();
                 }
 
                 using (var tab = ImRaii.TabItem("自定义"))
