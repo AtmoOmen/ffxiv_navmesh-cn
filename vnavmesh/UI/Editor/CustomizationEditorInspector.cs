@@ -10,6 +10,9 @@ namespace vnavmesh.UI.Editor;
 internal static class CustomizationEditorInspector
 {
     public delegate void CommitDelegate();
+    public delegate void WorkspaceCreateDelegate();
+    public delegate void WorkspaceDeleteDelegate();
+    public delegate void WorkspaceSelectDelegate(string workspaceId);
 
     public delegate void AddMeshRemovalDelegate(string key);
 
@@ -26,6 +29,8 @@ internal static class CustomizationEditorInspector
     public static void Draw
     (
         ref Selection                    selection,
+        CustomizationEditorTerritoryStore store,
+        bool                             hasWorkspace,
         ref CustomizationEditorWorkspace workspace,
         CustomizationPreviewBuilder      previewBuilder,
         ref string                       statusText,
@@ -35,6 +40,9 @@ internal static class CustomizationEditorInspector
         NavmeshSettings                  settingsDefaults,
         NavmeshBuildProfile              profileDefaults,
         CommitDelegate                   onCommit,
+        WorkspaceCreateDelegate          onCreateWorkspace,
+        WorkspaceDeleteDelegate          onDeleteWorkspace,
+        WorkspaceSelectDelegate          onSelectWorkspace,
         AddMeshRemovalDelegate           onAddMeshRemoval,
         AddInstancePatchDelegate         onAddInstancePatch,
         AddPartPatchDelegate             onAddPartPatch,
@@ -48,44 +56,68 @@ internal static class CustomizationEditorInspector
         switch (selection.Kind)
         {
             case SelectionKind.Workspace:
-                DrawWorkspaceInspector(ref workspace, ref exportDirText);
+                DrawWorkspaceInspector(store, hasWorkspace, ref workspace, ref exportDirText, onCommit, onCreateWorkspace, onDeleteWorkspace, onSelectWorkspace);
                 break;
             case SelectionKind.BuildProfile:
+                if (!hasWorkspace)
+                    break;
                 DrawBuildProfileInspector(ref workspace, profileDefaults, settingsDefaults, onCommit);
                 break;
             case SelectionKind.BuildSettings:
+                if (!hasWorkspace)
+                    break;
                 DrawBuildSettingsInspector(ref workspace, settingsDefaults, onCommit);
                 break;
             case SelectionKind.FlyingOverride:
+                if (!hasWorkspace)
+                    break;
                 DrawFlyingInspector(ref workspace, onCommit);
                 break;
             case SelectionKind.MeshRemoval:
+                if (!hasWorkspace)
+                    break;
                 DrawMeshRemovalInspector(ref workspace, ref selection, onCommit);
                 break;
             case SelectionKind.InstancePatch:
+                if (!hasWorkspace)
+                    break;
                 DrawInstancePatchInspector(ref workspace, ref selection, onCommit);
                 break;
             case SelectionKind.PartPatch:
+                if (!hasWorkspace)
+                    break;
                 DrawPartPatchInspector(ref workspace, ref selection, onCommit);
                 break;
             case SelectionKind.ColliderInsertion:
+                if (!hasWorkspace)
+                    break;
                 DrawColliderInsertionInspector(ref workspace, ref selection, onCommit);
                 break;
             case SelectionKind.MeshLink:
+                if (!hasWorkspace)
+                    break;
                 DrawMeshLinkInspector(ref workspace, ref selection, onCommit);
                 break;
             case SelectionKind.OffMeshConnection:
+                if (!hasWorkspace)
+                    break;
                 DrawOffMeshInspector(ref workspace, ref selection, onCommit);
                 break;
             case SelectionKind.PreviewMesh:
+                if (!hasWorkspace)
+                    break;
                 DrawPreviewMeshInspector(selection, previewBuilder, onAddMeshRemoval);
                 break;
             case SelectionKind.PreviewInstance:
+                if (!hasWorkspace)
+                    break;
                 DrawPreviewInstanceInspector(ref workspace, ref selection, previewBuilder, onCommit, onAddInstancePatch);
                 break;
             case SelectionKind.PreviewPart:
             case SelectionKind.PreviewVertex:
             case SelectionKind.PreviewPrimitive:
+                if (!hasWorkspace)
+                    break;
                 DrawPreviewPartInspector(ref workspace, ref selection, previewBuilder, onCommit, onAddPartPatch, onRemoveMatchingPartPatch);
                 break;
             case SelectionKind.Diagnostics:
@@ -147,16 +179,72 @@ internal static class CustomizationEditorInspector
 
     private static void DrawWorkspaceInspector
     (
+        CustomizationEditorTerritoryStore store,
+        bool                             hasWorkspace,
         ref CustomizationEditorWorkspace workspace,
-        ref string                       exportDirText
+        ref string                       exportDirText,
+        CommitDelegate                   onCommit,
+        WorkspaceCreateDelegate          onCreateWorkspace,
+        WorkspaceDeleteDelegate          onDeleteWorkspace,
+        WorkspaceSelectDelegate          onSelectWorkspace
     )
     {
+        if (ImGui.Button("新建工作区"))
+            onCreateWorkspace();
+
+        ImGui.SameLine();
+        using (ImRaii.Disabled(!hasWorkspace))
+        {
+            if (ImGui.Button("删除当前工作区"))
+                onDeleteWorkspace();
+        }
+
+        if (!hasWorkspace)
+        {
+            ImGui.Separator();
+            ImGui.TextDisabled("当前区域暂无工作区");
+            ImGui.TextWrapped("新建工作区后, 编辑、保存、导出和预览都会只针对该工作区");
+            return;
+        }
+
+        ImGui.TextUnformatted($"当前工作区: {workspace.WorkspaceName}");
+        ImGui.TextDisabled(workspace.IsApplied ? "当前生效结果: 当前工作区" : "当前生效结果: 默认场景");
+        ImGui.TextDisabled("当前编辑、保存和导出都只针对当前工作区");
+        ImGui.Separator();
+
+        if (ImGui.BeginCombo("切换工作区", workspace.WorkspaceName))
+        {
+            foreach (var item in store.Workspaces)
+            {
+                var selected = item.WorkspaceId == workspace.WorkspaceId;
+                if (ImGui.Selectable(item.WorkspaceName, selected))
+                    onSelectWorkspace(item.WorkspaceId);
+                if (selected)
+                    ImGui.SetItemDefaultFocus();
+            }
+
+            ImGui.EndCombo();
+        }
+
+        var renamed = workspace.WorkspaceName;
+        if (ImGui.InputText("工作区名称", ref renamed) && !string.IsNullOrWhiteSpace(renamed))
+        {
+            workspace.WorkspaceName = renamed.Trim();
+            onCommit();
+        }
+
+        if (CustomizationEditorWidgets.DrawBool("当前工作区生效", ref workspace.IsApplied))
+            onCommit();
+
         CustomizationEditorWidgets.DrawBool("自动重建", ref workspace.Settings.AutoRebuild);
         CustomizationEditorWidgets.DrawBool("自动保存", ref workspace.Settings.AutoSave);
         CustomizationEditorWidgets.DrawFloat("重建延迟", ref workspace.Settings.RebuildDelaySeconds, 0.05f, 0.1f, 5f);
 
         if (ImGui.InputText("导出目录", ref exportDirText))
+        {
             workspace.Settings.ExportDirectory = exportDirText;
+            onCommit();
+        }
     }
 
     private static void DrawBuildProfileInspector

@@ -40,17 +40,29 @@ public sealed class CustomizationDraft
 
 public sealed class CustomizationEditorWorkspace
 {
+    public string                WorkspaceId   = "";
+    public string                WorkspaceName = "";
+    public bool                  IsApplied     = true;
     public CustomizationDraft          Draft    = new();
     public CustomizationEditorSettings Settings = new();
 }
 
+public sealed class CustomizationEditorTerritoryStore
+{
+    public int    SchemaVersion = 1;
+    public uint   TerritoryID;
+    public string TerritoryKey = "";
+    public string TerritoryName = "";
+    public string CurrentWorkspaceId = "";
+    public List<CustomizationEditorWorkspace> Workspaces = [];
+}
+
 public sealed class CustomizationEditorSettings
 {
-    public string ExportDirectory               = "";
-    public bool   IncludeExistingCustomizations = true;
-    public bool   AutoRebuild                   = true;
-    public bool   AutoSave                      = true;
-    public float  RebuildDelaySeconds           = 0.4f;
+    public string ExportDirectory     = "";
+    public bool   AutoRebuild         = true;
+    public bool   AutoSave            = true;
+    public float  RebuildDelaySeconds = 0.4f;
 }
 
 public struct DraftMatrix4x3

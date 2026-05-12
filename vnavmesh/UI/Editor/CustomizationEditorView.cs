@@ -34,13 +34,15 @@ internal sealed class CustomizationEditorView
     private readonly NavmeshSettings               settingsDefaults = new();
     private readonly NavmeshBuildProfile           profileDefaults  = new();
 
-    private          CustomizationEditorWorkspace    workspace = new();
+    private          CustomizationEditorTerritoryStore store = new();
+    private          CustomizationEditorWorkspace      workspace = new();
     
     private uint   territoryID;
     private string territoryKey  = string.Empty;
     private string territoryName = string.Empty;
     
     private          bool                            workspaceLoaded;
+    private          bool                            hasWorkspace;
     private          bool                            historySuspended;
     private          CustomizationDraft              historySnapshot = new();
     private readonly Stack<CustomizationDraft>       undo            = new();
@@ -78,6 +80,7 @@ internal sealed class CustomizationEditorView
             ref lastPickEscapeDown,
             ref statusText,
             workspaceLoaded,
+            hasWorkspace,
             undo.Count,
             redo.Count,
             Undo,
@@ -90,6 +93,7 @@ internal sealed class CustomizationEditorView
         DrawStatus();
 
         if (workspaceLoaded                              &&
+            hasWorkspace                                 &&
             previewDirty                                 &&
             workspace.Settings.AutoRebuild               &&
             DateTime.UtcNow             >= nextRebuildAt &&
@@ -98,7 +102,7 @@ internal sealed class CustomizationEditorView
 
         ImGui.BeginChild("##customization_editor_left", new Vector2(340, 0), true);
 
-        if (workspaceLoaded)
+        if (workspaceLoaded && hasWorkspace)
         {
             CustomizationEditorLeftPanel.Draw
             (
@@ -110,6 +114,11 @@ internal sealed class CustomizationEditorView
                 AddInstancePatchFromPreview,
                 AddPartPatchFromPreview
             );
+        }
+        else if (workspaceLoaded)
+        {
+            ImGui.TextDisabled("当前区域暂无工作区");
+            ImGui.TextWrapped("右侧先新建一个工作区, 再开始编辑和预览自定义");
         }
         else
         {
@@ -128,6 +137,8 @@ internal sealed class CustomizationEditorView
             CustomizationEditorInspector.Draw
             (
                 ref selection,
+                store,
+                hasWorkspace,
                 ref workspace,
                 previewBuilder,
                 ref statusText,
@@ -137,6 +148,9 @@ internal sealed class CustomizationEditorView
                 settingsDefaults,
                 profileDefaults,
                 CommitDraftChange,
+                CreateWorkspace,
+                DeleteCurrentWorkspace,
+                SelectWorkspace,
                 AddMeshRemovalFromPreview,
                 AddInstancePatchFromPreview,
                 AddPartPatchFromPreview,
@@ -153,24 +167,27 @@ internal sealed class CustomizationEditorView
 
         ImGui.EndChild();
 
-        CustomizationEditorWorldOverlay.Draw
-        (
-            ref pickKind,
-            ref pendingPickPoint,
-            ref currentPickPoint,
-            ref lastPickMouseDown,
-            ref lastWorldSelectMouseDown,
-            ref lastPickEscapeDown,
-            ref workspace,
-            ref selection,
-            ref statusText,
-            collision,
-            dd,
-            previewBuilder,
-            AddColliderInsertion,
-            AddMeshLink,
-            AddOffMeshConnection
-        );
+        if (workspaceLoaded && hasWorkspace)
+        {
+            CustomizationEditorWorldOverlay.Draw
+            (
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref workspace,
+                ref selection,
+                ref statusText,
+                collision,
+                dd,
+                previewBuilder,
+                AddColliderInsertion,
+                AddMeshLink,
+                AddOffMeshConnection
+            );
+        }
     }
 
     private void EnsureWorkspace()
@@ -189,24 +206,18 @@ internal sealed class CustomizationEditorView
                 break;
         }
 
-        workspace = persistence.Load(zoneID);
-        
         var territory = Service.LuminaRow<TerritoryType>(zoneID);
         
         territoryID   = zoneID;
         territoryKey  = territory == null ? zoneID.ToString(CultureInfo.InvariantCulture) : territory.Value.Bg.ToString();
         territoryName = territory == null ? zoneID.ToString(CultureInfo.InvariantCulture) : territory.Value.PlaceName.Value.Name.ToString();
-        
-        workspace.Draft.TerritoryID   = zoneID;
-        workspace.Draft.TerritoryName = territoryName;
-        
-        
-        historySnapshot               = workspace.Draft.Clone();
-        exportDirText = string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory)
-                            ? Path.Combine(configDirectory.FullName, "customization-editor", "generated")
-                            : workspace.Settings.ExportDirectory;
-        workspace.Settings.ExportDirectory = exportDirText;
-        workspaceLoaded                    = true;
+
+        store = persistence.Load(zoneID);
+        store.TerritoryID   = zoneID;
+        store.TerritoryKey  = territoryKey;
+        store.TerritoryName = territoryName;
+        EnsureWorkspaceSelection();
+        workspaceLoaded = true;
         
         undo.Clear();
         redo.Clear();
@@ -220,47 +231,191 @@ internal sealed class CustomizationEditorView
         previewDirty             = true;
         nextRebuildAt            = DateTime.MinValue;
         statusText               = string.Empty;
+        if (hasWorkspace && workspace.Settings.AutoRebuild)
+            RebuildPreview();
+    }
+
+    private void EnsureWorkspaceSelection()
+    {
+        if (store.Workspaces.Count == 0)
+        {
+            workspace = new();
+            store.CurrentWorkspaceId = string.Empty;
+            exportDirText = Path.Combine(configDirectory.FullName, "customization-editor", "generated");
+            historySnapshot = new();
+            hasWorkspace = false;
+            return;
+        }
+
+        if (store.SchemaVersion == 0)
+        {
+            UpgradeLegacyWorkspace();
+        }
+
+        workspace = ResolveCurrentWorkspace() ?? store.Workspaces[0];
+        store.CurrentWorkspaceId = workspace.WorkspaceId;
+        workspace.Draft.TerritoryID   = territoryID;
+        workspace.Draft.TerritoryName = territoryName;
+        exportDirText = string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory)
+                            ? Path.Combine(configDirectory.FullName, "customization-editor", "generated")
+                            : workspace.Settings.ExportDirectory;
+        workspace.Settings.ExportDirectory = exportDirText;
+        historySnapshot = workspace.Draft.Clone();
+        hasWorkspace    = true;
+    }
+
+    private CustomizationEditorWorkspace? ResolveCurrentWorkspace() =>
+        store.Workspaces.FirstOrDefault(x => x.WorkspaceId == store.CurrentWorkspaceId);
+
+    private void CreateWorkspace(string name, bool save)
+    {
+        var scene = new SceneDefinition();
+        scene.FillFromActiveLayout();
+        scene.TerritoryID = territoryID;
+        var baseCustomization = NavmeshCustomizationRegistry.GetForScene(scene);
+        var draft = CustomizationDraftSeedBuilder.CreateFromCustomization(scene, baseCustomization, territoryName, config);
+        var created = new CustomizationEditorWorkspace
+        {
+            WorkspaceId   = Convert.ToHexString(Guid.NewGuid().ToByteArray()),
+            WorkspaceName = string.IsNullOrWhiteSpace(name) ? $"工作区 {store.Workspaces.Count + 1}" : name,
+            IsApplied     = true,
+            Draft         = draft,
+            Settings      = new()
+            {
+                ExportDirectory     = Path.Combine(configDirectory.FullName, "customization-editor", "generated"),
+                AutoRebuild         = true,
+                AutoSave            = true,
+                RebuildDelaySeconds = 0.4f
+            }
+        };
+        store.Workspaces.Add(created);
+        store.CurrentWorkspaceId = created.WorkspaceId;
+        store.SchemaVersion      = 1;
+        if (save)
+            SaveWorkspace(true);
+    }
+
+    private void CreateWorkspace()
+    {
+        CreateWorkspace($"工作区 {store.Workspaces.Count + 1}", true);
+        SelectWorkspace(store.CurrentWorkspaceId);
+        statusText = $"已新建工作区: {workspace.WorkspaceName}";
+    }
+
+    private void DeleteCurrentWorkspace()
+    {
+        if (!hasWorkspace)
+            return;
+
+        var currentIndex = store.Workspaces.FindIndex(x => x.WorkspaceId == workspace.WorkspaceId);
+        if (currentIndex < 0)
+            return;
+
+        store.Workspaces.RemoveAt(currentIndex);
+        if (store.Workspaces.Count == 0)
+        {
+            workspace = new();
+            store.CurrentWorkspaceId = string.Empty;
+            exportDirText = Path.Combine(configDirectory.FullName, "customization-editor", "generated");
+            historySnapshot = new();
+            hasWorkspace = false;
+            undo.Clear();
+            redo.Clear();
+            selection = new(SelectionKind.Workspace);
+            pickKind = PickKind.None;
+            pendingPickPoint = null;
+            currentPickPoint = null;
+            previewDirty = false;
+            nextRebuildAt = DateTime.MinValue;
+            previewBuilder.Clear();
+            SaveWorkspace(true);
+            statusText = "已删除当前工作区, 当前区域暂无工作区";
+            return;
+        }
+
+        var nextIndex = Math.Clamp(currentIndex, 0, store.Workspaces.Count - 1);
+        store.CurrentWorkspaceId = store.Workspaces[nextIndex].WorkspaceId;
+        SelectWorkspace(store.CurrentWorkspaceId);
+        statusText = $"已删除工作区, 当前为: {workspace.WorkspaceName}";
+    }
+
+    private void SelectWorkspace(string workspaceId)
+    {
+        var selected = store.Workspaces.FirstOrDefault(x => x.WorkspaceId == workspaceId);
+        if (selected == null)
+            return;
+
+        if (hasWorkspace && store.Workspaces.Any(x => x.WorkspaceId == workspace.WorkspaceId))
+            SaveWorkspace(true);
+        workspace = selected;
+        hasWorkspace = true;
+        store.CurrentWorkspaceId = workspace.WorkspaceId;
+        workspace.Draft.TerritoryID   = territoryID;
+        workspace.Draft.TerritoryName = territoryName;
+        exportDirText = string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory)
+                            ? Path.Combine(configDirectory.FullName, "customization-editor", "generated")
+                            : workspace.Settings.ExportDirectory;
+        workspace.Settings.ExportDirectory = exportDirText;
+        historySnapshot = workspace.Draft.Clone();
+        undo.Clear();
+        redo.Clear();
+        selection     = new(SelectionKind.Workspace);
+        previewDirty  = true;
+        nextRebuildAt = DateTime.UtcNow;
         if (workspace.Settings.AutoRebuild)
             RebuildPreview();
+        else
+            previewBuilder.Clear();
+    }
+
+    private void UpgradeLegacyWorkspace()
+    {
+        if (store.Workspaces.Count == 0)
+            return;
+
+        var legacyWorkspace = store.Workspaces[0];
+        var scene = new SceneDefinition();
+        scene.FillFromActiveLayout();
+        scene.TerritoryID = territoryID;
+        var baseCustomization = NavmeshCustomizationRegistry.GetForScene(scene);
+        var baseDraft = CustomizationDraftSeedBuilder.CreateFromCustomization(scene, baseCustomization, territoryName, config);
+        MergeDraft(baseDraft, legacyWorkspace.Draft);
+        legacyWorkspace.Draft = baseDraft;
+        store.SchemaVersion = 1;
+        SaveWorkspace(true);
+    }
+
+    private static void MergeDraft(CustomizationDraft target, CustomizationDraft overlay)
+    {
+        target.FlyingSupportedOverride = overlay.FlyingSupportedOverride ?? target.FlyingSupportedOverride;
+        target.BuildProfile  = overlay.BuildProfile;
+        target.BuildSettings = overlay.BuildSettings;
+        target.MeshRemovals  = overlay.MeshRemovals;
+        target.InstancePatches = overlay.InstancePatches;
+        target.PartPatches = overlay.PartPatches;
+        target.ColliderInsertions = overlay.ColliderInsertions;
+        target.MeshLinks = overlay.MeshLinks;
+        target.OffMeshConnections = overlay.OffMeshConnections;
     }
 
     private void DrawStatus()
     {
-        ImGui.TextUnformatted($"区域: [{territoryID}] [{territoryKey}] [{territoryName}] ");
-        ImGui.TextUnformatted($"预览: {previewBuilder.CurrentState}");
+        var workspaceSummary = hasWorkspace
+                                   ? $"工作区: {workspace.WorkspaceName}"
+                                   : "工作区: 无";
+        var sourceSummary = hasWorkspace
+                                ? workspace.IsApplied
+                                    ? $"生效来源: {workspace.WorkspaceName}"
+                                    : "生效来源: 默认场景"
+                                : "生效来源: 默认场景";
+        ImGui.TextUnformatted($"区域: [{territoryID}] [{territoryKey}] [{territoryName}]  |  {workspaceSummary}  |  {sourceSummary}");
 
-        if (!string.IsNullOrEmpty(statusText))
-            ImGui.TextUnformatted($"状态: {statusText}");
-
-        if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Failed, LastError: not null })
-            ImGui.TextColored(KnownColor.Red.Vector(), previewBuilder.LastError.Message);
-
-        if (previewBuilder.CurrentState == CustomizationPreviewBuilder.State.Ready && previewBuilder.Query != null)
-        {
-            try
-            {
-                var navmesh = previewBuilder.Navmesh;
-                if (navmesh != null)
-                {
-                    var playerPos = Service.ObjectTable.LocalPlayer?.Position ?? default;
-                    navmesh.CalcTileLoc(playerPos.SystemToRecast(), out var tileX, out var tileZ);
-                    ImGui.TextUnformatted($"玩家区块: {tileX}x{tileZ}");
-                }
-            }
-            catch (InvalidOperationException ex) when (ex.Message == "缺少地面导航网格载荷")
-            {
-                ImGui.TextDisabled("玩家区块: 导航网格已卸载");
-            }
-        }
-
-        if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, BuildTelemetry: { } telemetry })
-        {
-            ImGui.TextDisabled($"构建: {telemetry.ThreadCount} 线程, {telemetry.ConfiguredBuildMaxCores} 核心, " +
-                               $"{telemetry.ParallelTicks / (double)TimeSpan.TicksPerMillisecond:f0} ms");
-        }
-
-        if (lastExport != null)
-            ImGui.TextDisabled($"导出: {lastExport.ClassName} v{lastExport.Version} {lastExport.ContentHash[..16]} -> {lastExport.File.FullName}");
+        var statusSummary = previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Failed, LastError: not null }
+                                ? $"错误: {previewBuilder.LastError.Message}"
+                                : string.IsNullOrWhiteSpace(statusText)
+                                    ? "状态: 就绪"
+                                    : $"状态: {statusText}";
+        ImGui.TextUnformatted($"预览: {previewBuilder.CurrentState}  |  {statusSummary}");
     }
 
     private void RebuildSceneExtract(uint territoryID)
@@ -268,7 +423,7 @@ internal sealed class CustomizationEditorView
         var scene = new SceneDefinition();
         scene.FillFromActiveLayout();
         scene.TerritoryID = territoryID;
-        var customization = new CustomizationDraftCustomization(NavmeshCustomizationRegistry.GetForScene(scene), workspace.Draft.Clone());
+        var customization = BuildPreviewCustomization(scene);
         previewDirty = false;
         nextRebuildAt = DateTime.MinValue;
         previewBuilder.Rebuild(scene, customization, false);
@@ -441,22 +596,33 @@ internal sealed class CustomizationEditorView
 
     private void RebuildPreview()
     {
-        if (!workspaceLoaded)
+        if (!workspaceLoaded || !hasWorkspace)
             return;
 
         var scene = new SceneDefinition();
         scene.FillFromActiveLayout();
         scene.TerritoryID = territoryID;
 
-        var customization = new CustomizationDraftCustomization(NavmeshCustomizationRegistry.GetForScene(scene), workspace.Draft.Clone());
+        var customization = BuildPreviewCustomization(scene);
         previewDirty  = false;
         nextRebuildAt = DateTime.MinValue;
         statusText    = string.Empty;
         previewBuilder.Rebuild(scene, customization, true);
     }
 
+    private NavmeshCustomization BuildPreviewCustomization(SceneDefinition scene)
+    {
+        if (!workspace.IsApplied)
+            return new NavmeshCustomization();
+
+        return new CustomizationDraftCustomization(new NavmeshCustomization(), workspace.Draft.Clone());
+    }
+
     private void ExportCurrentDraft()
     {
+        if (!hasWorkspace)
+            return;
+
         if (string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory))
             workspace.Settings.ExportDirectory = Path.Combine(configDirectory.FullName, "customization-editor", "generated");
 
@@ -468,6 +634,9 @@ internal sealed class CustomizationEditorView
 
     private void OpenExportedDirectory()
     {
+        if (!hasWorkspace)
+            return;
+
         if (string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory))
             workspace.Settings.ExportDirectory = Path.Combine(configDirectory.FullName, "customization-editor", "generated");
 
@@ -476,7 +645,7 @@ internal sealed class CustomizationEditorView
 
     private void CommitDraftChange()
     {
-        if (historySuspended)
+        if (historySuspended || !hasWorkspace)
             return;
 
         undo.Push(historySnapshot.Clone());
@@ -495,7 +664,7 @@ internal sealed class CustomizationEditorView
 
     private void Undo()
     {
-        if (undo.Count == 0)
+        if (!hasWorkspace || undo.Count == 0)
             return;
 
         historySuspended = true;
@@ -511,7 +680,7 @@ internal sealed class CustomizationEditorView
 
     private void Redo()
     {
-        if (redo.Count == 0)
+        if (!hasWorkspace || redo.Count == 0)
             return;
 
         historySuspended = true;
@@ -530,12 +699,21 @@ internal sealed class CustomizationEditorView
         if (!workspaceLoaded)
             return;
 
-        workspace.Draft.TerritoryID        = territoryID;
-        workspace.Draft.TerritoryName      = territoryKey;
-        workspace.Settings.ExportDirectory = exportDirText;
+        if (hasWorkspace)
+        {
+            workspace.Draft.TerritoryID        = territoryID;
+            workspace.Draft.TerritoryName      = territoryName;
+            workspace.Settings.ExportDirectory = exportDirText;
+            store.CurrentWorkspaceId           = workspace.WorkspaceId;
+        }
 
-        if (force || workspace.Settings.AutoSave)
-            persistence.Save(workspace);
+        store.TerritoryID                  = territoryID;
+        store.TerritoryKey                 = territoryKey;
+        store.TerritoryName                = territoryName;
+        store.SchemaVersion                = 1;
+
+        if (force || (hasWorkspace && workspace.Settings.AutoSave))
+            persistence.Save(store);
     }
 
     private static void NormalizeBounds(ref Vector3 min, ref Vector3 max)

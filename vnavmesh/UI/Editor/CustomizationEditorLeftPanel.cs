@@ -31,7 +31,7 @@ internal static class CustomizationEditorLeftPanel
             if (ImGui.TreeNodeEx("预览对象", ImGuiTreeNodeFlags.DefaultOpen))
             {
                 ImGui.TextDisabled("左键选择, 右键加入草稿补丁");
-                DrawPreviewMeshes(previewBuilder.Extractor, ref selection, dd, onAddMeshRemoval, onAddInstancePatch, onAddPartPatch);
+                DrawPreviewMeshes(workspace, previewBuilder.Extractor, ref selection, dd, onAddMeshRemoval, onAddInstancePatch, onAddPartPatch);
                 ImGui.TreePop();
             }
         }
@@ -45,6 +45,7 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawPreviewMeshes
     (
+        CustomizationEditorWorkspace workspace,
         SceneExtractor           extractor,
         ref Selection            selection,
         DebugDrawer              dd,
@@ -189,7 +190,8 @@ internal static class CustomizationEditorLeftPanel
 
                 foreach (var instance in mesh.Instances)
                 {
-                    var instanceLabel = $"[{instanceIndex}] {instance.Id:X} {instance.WorldBounds.Min:f1}-{instance.WorldBounds.Max:f1}";
+                    var patchTag = BuildInstancePatchTag(workspace, key, instanceIndex, instance.Id);
+                    var instanceLabel = $"[{instanceIndex}] {instance.Id:X} {instance.WorldBounds.Min:f1}-{instance.WorldBounds.Max:f1}{patchTag}";
                     var instanceSelected = selection is { Kind: SelectionKind.PreviewInstance, Key: var instanceKey, Index: var selectedIndex } &&
                                            instanceKey   == key                                                                                 &&
                                            selectedIndex == instanceIndex;
@@ -336,5 +338,42 @@ internal static class CustomizationEditorLeftPanel
         }
 
         ImGui.TreePop();
+    }
+
+    private static string BuildInstancePatchTag(CustomizationEditorWorkspace workspace, string meshKey, int instanceIndex, ulong instanceId)
+    {
+        List<string> tags = [];
+
+        foreach (var patch in workspace.Draft.InstancePatches.Where(x => x.Enabled && x.MeshKey == meshKey))
+        {
+            var matches = patch.Kind == DraftSceneInstancePatchKind.ClearInstances ||
+                          patch.InstanceId != 0
+                              ? patch.InstanceId == instanceId
+                              : patch.InstanceIndex == instanceIndex;
+            if (!matches && patch.Kind != DraftSceneInstancePatchKind.ClearInstances)
+                continue;
+
+            switch (patch.Kind)
+            {
+                case DraftSceneInstancePatchKind.ClearInstances:
+                    if (!tags.Contains("清空"))
+                        tags.Add("清空");
+                    break;
+                case DraftSceneInstancePatchKind.RemoveInstance:
+                    if (!tags.Contains("移除"))
+                        tags.Add("移除");
+                    break;
+                case DraftSceneInstancePatchKind.Transform:
+                    if (!tags.Contains("Transform"))
+                        tags.Add("Transform");
+                    break;
+                case DraftSceneInstancePatchKind.SetFlags:
+                    if (!tags.Contains("Flags"))
+                        tags.Add("Flags");
+                    break;
+            }
+        }
+
+        return tags.Count == 0 ? string.Empty : $" [{string.Join(", ", tags)}]";
     }
 }

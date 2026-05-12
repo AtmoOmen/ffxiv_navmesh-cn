@@ -78,6 +78,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
 
         DrawPreviewInstancesOverlay(selection, previewBuilder, dd);
+        DrawInstancePatchOverlay(workspace, selection, previewBuilder, dd);
 
         if (pendingPickPoint is { } pending)
         {
@@ -372,7 +373,193 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private static void DrawMeshPreview(SceneExtractor.MeshPart part, Matrix4x3 transform, DebugDrawer dd, uint color = 0xFF00FFAA)
+    private static void DrawInstancePatchOverlay
+    (
+        CustomizationEditorWorkspace workspace,
+        Selection                    selection,
+        CustomizationPreviewBuilder  previewBuilder,
+        DebugDrawer                  dd
+    )
+    {
+        if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
+            return;
+
+        Dictionary<(string MeshKey, ulong InstanceId, int InstanceIndex), InstanceOverlayInfo> overlays = [];
+
+        for (var i = 0; i < workspace.Draft.InstancePatches.Count; ++i)
+        {
+            var patch = workspace.Draft.InstancePatches[i];
+            if (!patch.Enabled || string.IsNullOrWhiteSpace(patch.MeshKey))
+                continue;
+
+            if (patch.Kind == DraftSceneInstancePatchKind.ClearInstances)
+            {
+                continue;
+            }
+
+            if (!TryResolvePatchedInstance(previewBuilder.Extractor, patch, out var mesh, out var targetInstance))
+                continue;
+
+            var key = (patch.MeshKey, patch.InstanceId, patch.InstanceIndex);
+            ref var overlay = ref CollectionsMarshal.GetValueRefOrAddDefault(overlays, key, out _);
+            overlay ??= new(mesh, patch.WorldTransform.ToRuntime(), targetInstance.WorldBounds);
+            overlay.IsSelected |= selection.Kind == SelectionKind.InstancePatch && selection.Index == i;
+
+            switch (patch.Kind)
+            {
+                case DraftSceneInstancePatchKind.RemoveInstance:
+                    overlay.HasRemove = true;
+                    break;
+                case DraftSceneInstancePatchKind.Transform:
+                    overlay.HasTransform = true;
+                    overlay.Transform    = patch.WorldTransform.ToRuntime();
+                    overlay.Bounds       = CalculateTransformedBounds(mesh.LocalBounds, overlay.Transform);
+                    break;
+                case DraftSceneInstancePatchKind.SetFlags:
+                    overlay.HasFlags        = true;
+                    overlay.FlagSetMask    |= patch.ForceSetPrimFlags;
+                    overlay.FlagClearMask  |= patch.ForceClearPrimFlags;
+                    overlay.Transform       = targetInstance.WorldTransform;
+                    overlay.Bounds          = targetInstance.WorldBounds;
+                    break;
+            }
+        }
+
+        foreach (var overlay in overlays.Values)
+        {
+            var color = overlay.IsSelected
+                            ? 0xFFFFD94A
+                            : overlay.HasRemove
+                                ? 0xFFFF4D4D
+                                : overlay.HasTransform
+                                    ? 0xFF00E0FF
+                                    : 0xFF33FF66;
+            var thickness = overlay.IsSelected ? 3 : 2;
+
+            if (overlay.HasRemove)
+            {
+                overlay.Bounds = CalculateTransformedBounds(overlay.Mesh.LocalBounds, overlay.Transform);
+            }
+
+            dd.DrawWorldAABB(overlay.Bounds, color, thickness);
+            foreach (var part in overlay.Mesh.Parts)
+                DrawMeshPreview(part, overlay.Transform, dd, color, thickness);
+
+            if (overlay.HasRemove)
+                DrawBoundsCross(overlay.Bounds, dd, color, thickness);
+
+            if (overlay.HasFlags)
+                DrawFlagOverlay(overlay.Bounds, overlay.FlagSetMask, overlay.FlagClearMask, dd, overlay.IsSelected);
+        }
+    }
+
+    private static void DrawBoundsCross(FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB bounds, DebugDrawer dd, uint color, int thickness)
+    {
+        dd.DrawWorldLine(bounds.Min, bounds.Max, color, thickness);
+        dd.DrawWorldLine(new(bounds.Min.X, bounds.Min.Y, bounds.Max.Z), new(bounds.Max.X, bounds.Max.Y, bounds.Min.Z), color, thickness);
+        dd.DrawWorldLine(new(bounds.Min.X, bounds.Max.Y, bounds.Min.Z), new(bounds.Max.X, bounds.Min.Y, bounds.Max.Z), color, thickness);
+        dd.DrawWorldLine(new(bounds.Min.X, bounds.Max.Y, bounds.Max.Z), new(bounds.Max.X, bounds.Min.Y, bounds.Min.Z), color, thickness);
+    }
+
+    private static void DrawFlagOverlay
+    (
+        FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB bounds,
+        SceneExtractor.PrimitiveFlags                                   setFlags,
+        SceneExtractor.PrimitiveFlags                                   clearFlags,
+        DebugDrawer                                                     dd,
+        bool                                                            isSelected
+    )
+    {
+        var lines = new List<string>(2);
+        var setText = FormatFlagOperation("Set", setFlags);
+        if (!string.IsNullOrEmpty(setText))
+            lines.Add(setText);
+
+        var clearText = FormatFlagOperation("Clear", clearFlags);
+        if (!string.IsNullOrEmpty(clearText))
+            lines.Add(clearText);
+
+        if (lines.Count == 0)
+            return;
+
+        var anchor = new Vector3(bounds.Min.X, bounds.Max.Y, bounds.Min.Z);
+        var color = isSelected ? 0xFFFFD94A : 0xFFFFFFFF;
+        dd.DrawWorldText(anchor, string.Join("\n", lines), color);
+    }
+
+    private static string FormatFlagOperation(string prefix, SceneExtractor.PrimitiveFlags flags)
+    {
+        if (flags == SceneExtractor.PrimitiveFlags.None)
+            return string.Empty;
+
+        List<string> names = [];
+        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.ForceUnwalkable, "ForceUnwalkable", names);
+        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.FlyThrough,      "FlyThrough",      names);
+        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.Unlandable,      "Unlandable",      names);
+        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.ForceWalkable,   "ForceWalkable",   names);
+        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.Fishable,        "Fishable",        names);
+        return names.Count == 0 ? string.Empty : $"{prefix}: {string.Join(", ", names)}";
+    }
+
+    private static void AppendFlagName
+    (
+        SceneExtractor.PrimitiveFlags flags,
+        SceneExtractor.PrimitiveFlags target,
+        string                        name,
+        List<string>                  names
+    )
+    {
+        if (flags.HasFlag(target))
+            names.Add(name);
+    }
+
+    private static bool TryResolvePatchedInstance
+    (
+        SceneExtractor          extractor,
+        DraftSceneInstancePatch patch,
+        out SceneExtractor.Mesh mesh,
+        out SceneExtractor.MeshInstance instance
+    )
+    {
+        mesh = null!;
+        instance = null!;
+
+        if (!extractor.Meshes.TryGetValue(patch.MeshKey, out mesh))
+            return false;
+
+        if (patch.InstanceId != 0)
+        {
+            instance = mesh.Instances.FirstOrDefault(x => x.Id == patch.InstanceId)!;
+            if (instance != null)
+                return true;
+        }
+
+        if (patch.InstanceIndex < 0 || patch.InstanceIndex >= mesh.Instances.Count)
+            return false;
+
+        instance = mesh.Instances[patch.InstanceIndex];
+        return true;
+    }
+
+    private static FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB CalculateTransformedBounds
+    (
+        FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB localBounds,
+        Matrix4x3 transform
+    )
+    {
+        var localCenter = (localBounds.Min + localBounds.Max) * 0.5f;
+        var localExtent = (localBounds.Max - localBounds.Min) * 0.5f;
+        var axisX       = transform.Row0;
+        var axisY       = transform.Row1;
+        var axisZ       = transform.Row2;
+        var center      = axisX      * localCenter.X + axisY      * localCenter.Y + axisZ      * localCenter.Z + transform.Row3;
+        var extent      = Abs(axisX) * localExtent.X + Abs(axisY) * localExtent.Y + Abs(axisZ) * localExtent.Z;
+        return new() { Min = center - extent, Max = center + extent };
+    }
+
+    private static Vector3 Abs(Vector3 value) => new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
+
+    private static void DrawMeshPreview(SceneExtractor.MeshPart part, Matrix4x3 transform, DebugDrawer dd, uint color = 0xFF00FFAA, int thickness = 1)
     {
         foreach (var primitive in part.Primitives)
         {
@@ -381,9 +568,28 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 transform.TransformCoordinate(part.Vertices[primitive.V1]),
                 transform.TransformCoordinate(part.Vertices[primitive.V2]),
                 transform.TransformCoordinate(part.Vertices[primitive.V3]),
-                color
+                color,
+                thickness
             );
         }
+    }
+
+    private sealed class InstanceOverlayInfo
+    (
+        SceneExtractor.Mesh mesh,
+        Matrix4x3           transform,
+        FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB bounds
+    )
+    {
+        public SceneExtractor.Mesh Mesh = mesh;
+        public Matrix4x3 Transform = transform;
+        public FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB Bounds = bounds;
+        public bool HasTransform;
+        public bool HasFlags;
+        public bool HasRemove;
+        public bool IsSelected;
+        public SceneExtractor.PrimitiveFlags FlagSetMask;
+        public SceneExtractor.PrimitiveFlags FlagClearMask;
     }
 
     private static void DrawPendingPickPreview(PickKind pickKind, Vector3 first, Vector3 current, DebugDrawer dd)

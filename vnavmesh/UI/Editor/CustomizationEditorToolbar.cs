@@ -22,6 +22,7 @@ internal static class CustomizationEditorToolbar
         ref bool     lastPickEscapeDown,
         ref string   statusText,
         bool         workspaceLoaded,
+        bool         hasWorkspace,
         int          undoCount,
         int          redoCount,
         VoidDelegate onUndo,
@@ -49,7 +50,7 @@ internal static class CustomizationEditorToolbar
         ImGui.TextUnformatted("工具");
         
         ImGui.SameLine();
-        using (ImRaii.Disabled(!workspaceLoaded))
+        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             DrawModeButton
             (
@@ -175,42 +176,42 @@ internal static class CustomizationEditorToolbar
         ImGui.TextUnformatted("草稿");
         
         ImGui.SameLine();
-        using (ImRaii.Disabled(!workspaceLoaded || undoCount == 0))
+        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || undoCount == 0))
         {
             if (ImGui.Button("撤销"))
                 onUndo();
         }
 
         ImGui.SameLine();
-        using (ImRaii.Disabled(!workspaceLoaded || redoCount == 0))
+        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || redoCount == 0))
         {
             if (ImGui.Button("重做"))
                 onRedo();
         }
 
         ImGui.SameLine();
-        using (ImRaii.Disabled(!workspaceLoaded))
+        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             if (ImGui.Button("重建预览"))
                 onRebuildPreview();
         }
 
         ImGui.SameLine();
-        using (ImRaii.Disabled(!workspaceLoaded))
+        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             if (ImGui.Button("保存草稿"))
                 onSaveWorkspace();
         }
 
         ImGui.SameLine();
-        using (ImRaii.Disabled(!workspaceLoaded))
+        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             if (ImGui.Button("导出 C#"))
                 onExportDraft();
         }
         
         ImGui.SameLine();
-        using (ImRaii.Disabled(!workspaceLoaded))
+        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             if (ImGui.Button("打开导出文件夹"))
                 onOpenExportedDirectory();

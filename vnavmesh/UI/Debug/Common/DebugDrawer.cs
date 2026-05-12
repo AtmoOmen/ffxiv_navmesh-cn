@@ -33,6 +33,7 @@ public unsafe class DebugDrawer : IDisposable
 
     private List<(Vector2 from, Vector2 to, uint col, int thickness)> _viewportLines   = new();
     private List<(Vector2 center, float radius, uint color)>          _viewportCircles = new();
+    private List<(Vector2 pos, uint color, string text)>             _viewportTexts   = new();
 
     public DebugDrawer()
     {
@@ -104,8 +105,11 @@ public unsafe class DebugDrawer : IDisposable
             dl.AddLine(l.from, l.to, l.col, l.thickness);
         foreach (var c in _viewportCircles)
             dl.AddCircleFilled(c.center, c.radius, c.color);
+        foreach (var t in _viewportTexts)
+            dl.AddText(t.pos, t.color, t.text);
         _viewportLines.Clear();
         _viewportCircles.Clear();
+        _viewportTexts.Clear();
     }
 
     public void DrawWorldLine(Vector3 start, Vector3 end, uint color, int thickness = 1)
@@ -220,6 +224,14 @@ public unsafe class DebugDrawer : IDisposable
         if (Vector4.Dot(new(p, 1), NearPlane) >= 0)
             return;
         _viewportCircles.Add((WorldToScreen(p), radius, color));
+    }
+
+    public void DrawWorldText(Vector3 p, string text, uint color)
+    {
+        if (string.IsNullOrWhiteSpace(text) || Vector4.Dot(new(p, 1), NearPlane) >= 0)
+            return;
+
+        _viewportTexts.Add((WorldToScreen(p), color, text));
     }
 
     // arrow with pointer at p coming from the direction of q
