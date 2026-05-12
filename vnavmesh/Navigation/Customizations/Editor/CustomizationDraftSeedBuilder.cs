@@ -33,8 +33,25 @@ internal static class CustomizationDraftSeedBuilder
         CopyBuildProfile(draft.BuildProfile, scene, customization);
         CopySceneDiffs(draft, scene, customization);
         CopyOffMeshConnections(draft, customization);
-        CopyMeshLinks(draft, scene, customization, config);
         return draft;
+    }
+
+    public static void CopyMeshLinksFromNavmesh(CustomizationDraft draft, Navmesh navmesh)
+    {
+        foreach (var link in navmesh.Links)
+        {
+            if (link.Kind is NavmeshOffMeshKind.GeneratedClimbDown or NavmeshOffMeshKind.GeneratedEdgeJump or NavmeshOffMeshKind.ManualOffMesh)
+                continue;
+
+            var kind = link.Kind switch
+            {
+                NavmeshOffMeshKind.Teleport   => DraftMeshLinkKind.Points,
+                NavmeshOffMeshKind.ClientPath => DraftMeshLinkKind.ClientPath,
+                _                             => DraftMeshLinkKind.Drop
+            };
+
+            draft.MeshLinks.Add(new() { Kind = kind, Start = link.Start, End = link.End });
+        }
     }
 
     private static void CopyBuildProfile(DraftBuildProfileOverrides target, SceneDefinition scene, NavmeshCustomization customization)
@@ -329,28 +346,6 @@ internal static class CustomizationDraftSeedBuilder
                     Kind          = kind
                 }
             );
-        }
-    }
-
-    private static void CopyMeshLinks(CustomizationDraft draft, SceneDefinition scene, NavmeshCustomization customization, Config config)
-    {
-        var builder = new NavmeshBuilder(scene, customization, config);
-        builder.BuildTiles();
-        customization.CustomizeMesh(builder.Navmesh, [.. scene.FestivalLayers]);
-
-        foreach (var link in builder.Navmesh.Links)
-        {
-            if (link.Kind is NavmeshOffMeshKind.GeneratedClimbDown or NavmeshOffMeshKind.GeneratedEdgeJump or NavmeshOffMeshKind.ManualOffMesh)
-                continue;
-
-            var kind = link.Kind switch
-            {
-                NavmeshOffMeshKind.Teleport   => DraftMeshLinkKind.Points,
-                NavmeshOffMeshKind.ClientPath => DraftMeshLinkKind.ClientPath,
-                _                             => DraftMeshLinkKind.Drop
-            };
-
-            draft.MeshLinks.Add(new() { Kind = kind, Start = link.Start, End = link.End });
         }
     }
 

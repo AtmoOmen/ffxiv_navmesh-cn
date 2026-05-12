@@ -1,6 +1,10 @@
+using System;
+using System.Linq;
+using System.Threading;
 using DotRecast.Detour;
 using DotRecast.Recast;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
@@ -37,23 +41,124 @@ internal class CustomizationPreviewBuilder
         public RcBuilderResult?[,] Tiles     = new RcBuilderResult?[numTilesX, numTilesZ];
     }
 
-    private SceneDefinition?  sceneDefinition;
-    private NavmeshBuilder?   builder;
-    private NavmeshQuery?     query;
-    private IntermediateData? intermediates;
-    private Task?             task;
+    private sealed class PreviewResult
+    {
+        public required SceneDefinition                  Scene { get; init; }
+        public required SceneExtractor                   Extractor { get; init; }
+        public Navmesh?                                 NavmeshData { get; init; }
+        public NavmeshQuery?                             Query { get; init; }
+        public IntermediateData?                         Intermediates { get; init; }
+        public NavmeshBuilder.BuildTelemetrySummary?     BuildTelemetry { get; init; }
+        public bool                                      NavmeshOwnedByManager { get; set; }
+    }
 
-    public State CurrentState => task == null ? State.NotBuilt : !task.IsCompleted ? State.InProgress : task.IsFaulted ? State.Failed : State.Ready;
-    public SceneDefinition? Scene => task is { IsCompletedSuccessfully: true } ? sceneDefinition : null;
-    public SceneExtractor? Extractor => task is { IsCompletedSuccessfully: true } ? builder?.Scene : null;
-    public IntermediateData? Intermediates => task is { IsCompletedSuccessfully: true } ? intermediates : null;
-    public NavmeshQuery? Query => task is { IsCompletedSuccessfully: true } ? query : null;
-    public DtNavMesh? Navmesh => task is { IsCompletedSuccessfully: true } ? builder?.Navmesh.Mesh : null;
-    public DtNavMeshQuery? MeshQuery => task is { IsCompletedSuccessfully: true } ? query?.MeshQuery : null;
-    public VoxelMap? Volume => task is { IsCompletedSuccessfully: true } ? builder?.Navmesh.Volume : null;
-    public VoxelPathfind? VolumeQuery => task is { IsCompletedSuccessfully: true } ? query?.VolumeQuery : null;
-    public NavmeshBuilder.BuildTelemetrySummary? BuildTelemetry => task is { IsCompletedSuccessfully: true } ? builder?.LastBuildTelemetry : null;
-    public Exception? LastError => task?.Exception?.GetBaseException();
+    private readonly object stateLock = new();
+
+    private PreviewResult?            publishedResult;
+    private CancellationTokenSource?  cancelSource;
+    private Task?                     activeTask;
+    private Exception?                lastError;
+    private int                       generation;
+    private State                     currentState;
+
+    public State CurrentState
+    {
+        get
+        {
+            lock (stateLock)
+                return currentState;
+        }
+    }
+
+    public SceneDefinition? Scene
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.Scene;
+        }
+    }
+
+    public SceneExtractor? Extractor
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.Extractor;
+        }
+    }
+
+    public IntermediateData? Intermediates
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.Intermediates;
+        }
+    }
+
+    public NavmeshQuery? Query
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.Query;
+        }
+    }
+
+    public DtNavMesh? Navmesh
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.NavmeshData?.Mesh;
+        }
+    }
+
+    public DtNavMeshQuery? MeshQuery
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.Query?.MeshQuery;
+        }
+    }
+
+    public VoxelMap? Volume
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.NavmeshData?.Volume;
+        }
+    }
+
+    public VoxelPathfind? VolumeQuery
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.Query?.VolumeQuery;
+        }
+    }
+
+    public NavmeshBuilder.BuildTelemetrySummary? BuildTelemetry
+    {
+        get
+        {
+            lock (stateLock)
+                return publishedResult?.BuildTelemetry;
+        }
+    }
+
+    public Exception? LastError
+    {
+        get
+        {
+            lock (stateLock)
+                return lastError;
+        }
+    }
 
     public void Dispose() =>
         Clear();
@@ -68,53 +173,208 @@ internal class CustomizationPreviewBuilder
     public void Rebuild(SceneDefinition scene, NavmeshCustomization customization, bool includeTiles)
     {
         Clear();
-        sceneDefinition = scene;
-        Service.Log.Debug("[navmesh] schedule async build");
-        task = Task.Run(() => BuildNavmesh(scene, customization, includeTiles));
+
+        var requestGeneration = Interlocked.Increment(ref generation);
+        var requestScene      = CloneScene(scene);
+        var requestCancel     = new CancellationTokenSource();
+
+        lock (stateLock)
+        {
+            cancelSource  = requestCancel;
+            currentState  = State.InProgress;
+            lastError     = null;
+            activeTask    = Task.Run(() => BuildPreviewAsync(requestGeneration, requestScene, customization, includeTiles, requestCancel.Token));
+        }
+
+        Service.Log.Debug("[navmesh] schedule async preview build");
     }
 
     public void Clear()
     {
-        if (task != null)
+        CancellationTokenSource? oldCancel;
+        PreviewResult?           oldResult;
+
+        lock (stateLock)
         {
-            if (!task.IsCompleted)
-                task.Wait();
-            task.Dispose();
-            task = null;
+            Interlocked.Increment(ref generation);
+
+            oldCancel       = cancelSource;
+            cancelSource    = null;
+            activeTask      = null;
+            currentState    = State.NotBuilt;
+            lastError       = null;
+            oldResult       = publishedResult;
+            publishedResult = null;
         }
 
-        sceneDefinition = null;
-        builder         = null;
-        query           = null;
-        intermediates   = null;
+        oldCancel?.Cancel();
+        oldCancel?.Dispose();
+        ReleasePreviewResult(oldResult);
     }
 
-    private void BuildNavmesh(SceneDefinition scene, NavmeshCustomization customization, bool includeTiles)
+    private async Task BuildPreviewAsync(int requestGeneration, SceneDefinition scene, NavmeshCustomization customization, bool includeTiles, CancellationToken cancel)
     {
         try
         {
-            var timer = StopWatchTimer.Create();
-            builder = new(scene, customization, config);
+            var timer  = StopWatchTimer.Create();
+            var result = await CreatePreviewResult(requestGeneration, scene, customization, includeTiles, cancel);
 
-            intermediates = new(builder.NumTilesX, builder.NumTilesZ);
-
-            if (includeTiles)
+            lock (stateLock)
             {
-                foreach (var result in builder.BuildTiles())
-                    intermediates.Tiles[result.TileX, result.TileZ] = result;
+                if (requestGeneration != generation || cancel.IsCancellationRequested)
+                {
+                    ReleasePreviewResult(result);
+                    return;
+                }
 
-                Service.Log.Debug("running customization code");
-                customization.CustomizeMesh(builder.Navmesh, [.. scene.FestivalLayers]);
+                if (result.NavmeshData != null)
+                {
+                    result.NavmeshOwnedByManager = true;
+                    manager.ReplaceMesh(result.NavmeshData);
+                }
+
+                var oldResult    = publishedResult;
+                publishedResult  = result;
+                lastError        = null;
+                currentState     = State.Ready;
+                activeTask       = null;
+                cancelSource?.Dispose();
+                cancelSource     = null;
+                ReleasePreviewResult(oldResult);
             }
 
-            query = new(builder.Navmesh, config);
-            Service.Log.Debug($"navmesh build time: {timer.Value().TotalMilliseconds}ms");
-            manager.ReplaceMesh(builder.Navmesh);
+            Service.Log.Debug($"[navmesh] preview build time: {timer.Value().TotalMilliseconds:f1}ms");
+        }
+        catch (OperationCanceledException)
+        {
+            Service.Log.Debug("[navmesh] preview build canceled");
+            FinishCanceledBuild(requestGeneration);
         }
         catch (Exception ex)
         {
-            Service.Log.Error($"Error building navmesh: {ex}");
-            throw;
+            Service.Log.Error($"Error building navmesh preview: {ex}");
+            FinishFailedBuild(requestGeneration, ex);
         }
+    }
+
+    private async Task<PreviewResult> CreatePreviewResult
+    (
+        int                  requestGeneration,
+        SceneDefinition      scene,
+        NavmeshCustomization customization,
+        bool                 includeTiles,
+        CancellationToken    cancel
+    )
+    {
+        cancel.ThrowIfCancellationRequested();
+
+        var extractor = await Task.Run
+        (
+            () =>
+            {
+                cancel.ThrowIfCancellationRequested();
+                var created = new SceneExtractor(scene);
+                customization.CustomizeScene(created);
+                return created;
+            },
+            cancel
+        );
+
+        if (!includeTiles)
+        {
+            return new()
+            {
+                Scene         = scene,
+                Extractor     = extractor,
+                NavmeshData   = null,
+                Query         = null,
+                Intermediates = null,
+                BuildTelemetry = null
+            };
+        }
+
+        var settings       = customization.GetBuildSettings(scene);
+        var flyable        = customization.IsFlyingSupported(scene);
+        var buildScene     = extractor.ToBuildScene();
+        var buildSettings  = settings.ToBuildSettings(flyable, customization.Version);
+        var buildSignature = vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(buildScene, buildSettings);
+        var cacheKey       = $"editor-preview-{scene.TerritoryID}-{requestGeneration:X8}-{Guid.NewGuid():N}";
+
+        cancel.ThrowIfCancellationRequested();
+        var navmesh = await manager.BuildExternalNavmesh(cacheKey, buildScene, buildSettings, customization.Version, buildSignature, cancel);
+        cancel.ThrowIfCancellationRequested();
+
+        customization.CustomizeMesh(navmesh, [.. scene.FestivalLayers]);
+        var query = new NavmeshQuery(navmesh, config);
+
+        return new()
+        {
+            Scene          = scene,
+            Extractor      = extractor,
+            NavmeshData    = navmesh,
+            Query          = query,
+            Intermediates  = null,
+            BuildTelemetry = null
+        };
+    }
+
+    private void FinishCanceledBuild(int requestGeneration)
+    {
+        lock (stateLock)
+        {
+            if (requestGeneration != generation)
+                return;
+
+            activeTask = null;
+            cancelSource?.Dispose();
+            cancelSource = null;
+
+            if (publishedResult == null)
+                currentState = State.NotBuilt;
+        }
+    }
+
+    private void FinishFailedBuild(int requestGeneration, Exception error)
+    {
+        lock (stateLock)
+        {
+            if (requestGeneration != generation)
+                return;
+
+            activeTask = null;
+            cancelSource?.Dispose();
+            cancelSource = null;
+            lastError    = error;
+            currentState = State.Failed;
+        }
+    }
+
+    private void ReleasePreviewResult(PreviewResult? result)
+    {
+        if (result == null)
+            return;
+
+        result.Query?.ReleaseRetainedState();
+        if (!result.NavmeshOwnedByManager)
+            result.NavmeshData?.ReleaseRetainedState();
+    }
+
+    private static SceneDefinition CloneScene(SceneDefinition source)
+    {
+        var clone = new SceneDefinition
+        {
+            TerritoryID               = source.TerritoryID,
+            ContentsFinderConditionID = source.ContentsFinderConditionID
+        };
+
+        clone.FestivalLayers = [.. source.FestivalLayers];
+        clone.ZoneSGs        = [.. source.ZoneSGs];
+        clone.Terrains       = [.. source.Terrains];
+        clone.AnalyticShapes = source.AnalyticShapes.ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value);
+        clone.MeshPaths      = source.MeshPaths.ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value);
+        clone.BgParts        = [.. source.BgParts];
+        clone.Colliders      = [.. source.Colliders];
+        clone.ExitRanges     = [.. source.ExitRanges];
+        return clone;
     }
 }

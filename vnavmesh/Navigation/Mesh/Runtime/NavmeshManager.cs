@@ -356,7 +356,7 @@ public sealed class NavmeshManager : IDisposable
         cancel.ThrowIfCancellationRequested();
 
         var buildTimer = StopWatchTimer.Create();
-        var rawFile    = await RunExternalBuild(cacheKey, buildSnapshot.Scene, buildSnapshot.Settings, cancel);
+        var rawFile    = await RunExternalBuild(cacheKey, buildSnapshot.Scene, buildSnapshot.Settings, cancel, true);
         Log($"外置冷构建耗时: {buildTimer.Value().TotalMilliseconds:f1} 毫秒");
 
         Navmesh runtimeMesh;
@@ -447,7 +447,14 @@ public sealed class NavmeshManager : IDisposable
             cancel
         );
 
-    private async Task<FileInfo> RunExternalBuild(string cacheKey, BuildScene scene, vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuildSettings settings, CancellationToken cancel)
+    private async Task<FileInfo> RunExternalBuild
+    (
+        string                                                    cacheKey,
+        BuildScene                                                scene,
+        vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuildSettings settings,
+        CancellationToken                                         cancel,
+        bool                                                      updateLoadProgress
+    )
     {
         paths.WorkerStateDirectory.Create();
 
@@ -492,7 +499,7 @@ public sealed class NavmeshManager : IDisposable
                 switch (message.Type)
                 {
                     case "progress":
-                        if (message.Progress != null)
+                        if (updateLoadProgress && message.Progress != null)
                             Interlocked.Exchange(ref loadTaskProgress, Math.Clamp((float)message.Progress.Progress, 0, 0.99f));
                         break;
                     case "final":
@@ -513,7 +520,8 @@ public sealed class NavmeshManager : IDisposable
             if (string.IsNullOrWhiteSpace(response.RawNavmeshPath) || !File.Exists(response.RawNavmeshPath))
                 throw new InvalidOperationException("外置构建没有生成导航网格文件");
 
-            Interlocked.Exchange(ref loadTaskProgress, 0.99f);
+            if (updateLoadProgress)
+                Interlocked.Exchange(ref loadTaskProgress, 0.99f);
             Log($"外置构建完成。耗时: {response.DurationMs:f1} 毫秒 文件: {response.RawNavmeshPath}");
             return new(response.RawNavmeshPath);
         }
@@ -533,6 +541,31 @@ public sealed class NavmeshManager : IDisposable
 
             TryDelete(sceneFile.FullName);
             TryDelete(manifestFile.FullName);
+        }
+    }
+
+    internal async Task<Navmesh> BuildExternalNavmesh
+    (
+        string                                                  cacheKey,
+        BuildScene                                              scene,
+        vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuildSettings settings,
+        int                                                     customizationVersion,
+        string                                                  buildSignature,
+        CancellationToken                                       cancel
+    )
+    {
+        var rawFile = await RunExternalBuild(cacheKey, scene, settings, cancel, false);
+
+        try
+        {
+            await using var stream = new FileStream(rawFile.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan | FileOptions.Asynchronous);
+            using var reader = new BinaryReader(stream, Encoding.UTF8, true);
+            var (mesh, _, _) = Navmesh.Deserialize(reader, customizationVersion, buildSignature);
+            return mesh;
+        }
+        finally
+        {
+            TryDelete(rawFile.FullName);
         }
     }
 

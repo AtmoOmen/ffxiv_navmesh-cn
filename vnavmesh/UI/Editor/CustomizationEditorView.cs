@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Numerics;
+using System.Threading;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Lumina.Excel.Sheets;
@@ -59,9 +60,14 @@ internal sealed class CustomizationEditorView
     private          CustomizationDraftExportResult? lastExport;
     private          bool                            previewDirty  = true;
     private          DateTime                        nextRebuildAt = DateTime.MinValue;
+    private          Task<CustomizationEditorWorkspace>? pendingWorkspaceCreation;
+    private          CancellationTokenSource?             pendingWorkspaceCreationCancel;
+    private          float                                leftPaneWidth = 340;
 
     public void Dispose()
     {
+        pendingWorkspaceCreationCancel?.Cancel();
+        pendingWorkspaceCreationCancel?.Dispose();
         if (workspaceLoaded)
             SaveWorkspace(true);
         previewBuilder.Dispose();
@@ -70,6 +76,7 @@ internal sealed class CustomizationEditorView
     public void Draw()
     {
         EnsureWorkspace();
+        PollPendingWorkspaceCreation();
         CustomizationEditorToolbar.Draw
         (
             ref pickKind,
@@ -94,78 +101,94 @@ internal sealed class CustomizationEditorView
 
         if (workspaceLoaded                              &&
             hasWorkspace                                 &&
+            pendingWorkspaceCreation == null             &&
             previewDirty                                 &&
             workspace.Settings.AutoRebuild               &&
             DateTime.UtcNow             >= nextRebuildAt &&
             previewBuilder.CurrentState != CustomizationPreviewBuilder.State.InProgress)
             RebuildPreview();
 
-        ImGui.BeginChild("##customization_editor_left", new Vector2(340, 0), true);
-
-        if (workspaceLoaded && hasWorkspace)
+        if (ImGui.BeginTable("##customization_editor_split", 2, ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV))
         {
-            CustomizationEditorLeftPanel.Draw
-            (
-                ref workspace,
-                ref selection,
-                previewBuilder,
-                dd,
-                AddMeshRemovalFromPreview,
-                AddInstancePatchFromPreview,
-                AddPartPatchFromPreview
-            );
-        }
-        else if (workspaceLoaded)
-        {
-            ImGui.TextDisabled("当前区域暂无工作区");
-            ImGui.TextWrapped("右侧先新建一个工作区, 再开始编辑和预览自定义");
-        }
-        else
-        {
-            ImGui.TextDisabled("等待区域加载");
-            ImGui.TextWrapped("进入游戏区域后, 左侧会显示场景预览对象和本地草稿");
-        }
+            ImGui.TableSetupColumn("left", ImGuiTableColumnFlags.WidthFixed, leftPaneWidth);
+            ImGui.TableSetupColumn("right", ImGuiTableColumnFlags.WidthStretch);
 
-        ImGui.EndChild();
+            ImGui.TableNextColumn();
+            ImGui.BeginChild("##customization_editor_left", new Vector2(0, 0), true);
 
-        ImGui.SameLine();
+            if (workspaceLoaded && hasWorkspace)
+            {
+                CustomizationEditorLeftPanel.Draw
+                (
+                    ref workspace,
+                    ref selection,
+                    previewBuilder,
+                    dd,
+                    AddMeshRemovalFromPreview,
+                    AddInstancePatchFromPreview,
+                    AddPartPatchFromPreview
+                );
+            }
+            else if (pendingWorkspaceCreation != null)
+            {
+                ImGui.TextDisabled("正在创建工作区");
+                ImGui.TextWrapped("正在通过外置 worker 准备初始数据, 完成后会自动切换到新工作区");
+            }
+            else if (workspaceLoaded)
+            {
+                ImGui.TextDisabled("当前区域暂无工作区");
+                ImGui.TextWrapped("右侧先新建一个工作区, 再开始编辑和预览自定义");
+            }
+            else
+            {
+                ImGui.TextDisabled("等待区域加载");
+                ImGui.TextWrapped("进入游戏区域后, 左侧会显示场景预览对象和本地草稿");
+            }
 
-        ImGui.BeginChild("##customization_editor_right", new Vector2(0, 0), true);
+            ImGui.EndChild();
 
-        if (workspaceLoaded)
-        {
-            CustomizationEditorInspector.Draw
-            (
-                ref selection,
-                store,
-                hasWorkspace,
-                ref workspace,
-                previewBuilder,
-                ref statusText,
-                territoryID,
-                territoryKey,
-                ref exportDirText,
-                settingsDefaults,
-                profileDefaults,
-                CommitDraftChange,
-                CreateWorkspace,
-                DeleteCurrentWorkspace,
-                SelectWorkspace,
-                AddMeshRemovalFromPreview,
-                AddInstancePatchFromPreview,
-                AddPartPatchFromPreview,
-                RemoveMatchingPartPatch,
-                RebuildSceneExtract,
-                RebuildPreview
-            );
+            if (ImGui.TableGetColumnFlags(0).HasFlag(ImGuiTableColumnFlags.IsEnabled))
+                leftPaneWidth = ImGui.GetColumnWidth(0);
+
+            ImGui.TableNextColumn();
+            ImGui.BeginChild("##customization_editor_right", new Vector2(0, 0), true);
+
+            if (workspaceLoaded)
+            {
+                CustomizationEditorInspector.Draw
+                (
+                    ref selection,
+                    store,
+                    hasWorkspace,
+                    ref workspace,
+                    previewBuilder,
+                    ref statusText,
+                    territoryID,
+                    territoryKey,
+                    ref exportDirText,
+                    settingsDefaults,
+                    profileDefaults,
+                    CommitDraftChange,
+                    CreateWorkspace,
+                    DeleteCurrentWorkspace,
+                    SelectWorkspace,
+                    AddMeshRemovalFromPreview,
+                    AddInstancePatchFromPreview,
+                    AddPartPatchFromPreview,
+                    RemoveMatchingPartPatch,
+                    RebuildSceneExtract,
+                    RebuildPreview
+                );
+            }
+            else
+            {
+                ImGui.TextDisabled("等待区域加载");
+                ImGui.TextWrapped("进入游戏区域后自动加载草稿, 可直接在画面中点两点创建障碍或连接");
+            }
+
+            ImGui.EndChild();
+            ImGui.EndTable();
         }
-        else
-        {
-            ImGui.TextDisabled("等待区域加载");
-            ImGui.TextWrapped("进入游戏区域后自动加载草稿, 可直接在画面中点两点创建障碍或连接");
-        }
-
-        ImGui.EndChild();
 
         if (workspaceLoaded && hasWorkspace)
         {
@@ -201,6 +224,7 @@ internal sealed class CustomizationEditorView
             case true when zoneID == territoryID:
                 return;
             case true:
+                CancelPendingWorkspaceCreation();
                 SaveWorkspace(true);
                 previewBuilder.Clear();
                 break;
@@ -235,6 +259,48 @@ internal sealed class CustomizationEditorView
             RebuildPreview();
     }
 
+    private void PollPendingWorkspaceCreation()
+    {
+        if (pendingWorkspaceCreation == null || !pendingWorkspaceCreation.IsCompleted)
+            return;
+
+        try
+        {
+            if (pendingWorkspaceCreation.IsCanceled)
+            {
+                statusText = "工作区创建已取消";
+            }
+            else if (pendingWorkspaceCreation.IsFaulted)
+            {
+                statusText = $"工作区创建失败: {pendingWorkspaceCreation.Exception?.GetBaseException().Message}";
+            }
+            else
+            {
+                var created = pendingWorkspaceCreation.Result;
+                store.Workspaces.Add(created);
+                store.CurrentWorkspaceId = created.WorkspaceId;
+                store.SchemaVersion      = 1;
+                SaveWorkspace(true);
+                SelectWorkspace(created.WorkspaceId);
+                statusText = $"已新建工作区: {workspace.WorkspaceName}";
+            }
+        }
+        finally
+        {
+            pendingWorkspaceCreationCancel?.Dispose();
+            pendingWorkspaceCreationCancel = null;
+            pendingWorkspaceCreation = null;
+        }
+    }
+
+    private void CancelPendingWorkspaceCreation()
+    {
+        pendingWorkspaceCreationCancel?.Cancel();
+        pendingWorkspaceCreationCancel?.Dispose();
+        pendingWorkspaceCreationCancel = null;
+        pendingWorkspaceCreation = null;
+    }
+
     private void EnsureWorkspaceSelection()
     {
         if (store.Workspaces.Count == 0)
@@ -267,14 +333,31 @@ internal sealed class CustomizationEditorView
     private CustomizationEditorWorkspace? ResolveCurrentWorkspace() =>
         store.Workspaces.FirstOrDefault(x => x.WorkspaceId == store.CurrentWorkspaceId);
 
-    private void CreateWorkspace(string name, bool save)
+    private async Task<CustomizationEditorWorkspace> CreateWorkspaceAsync(string name, CancellationToken cancel)
     {
         var scene = new SceneDefinition();
         scene.FillFromActiveLayout();
         scene.TerritoryID = territoryID;
         var baseCustomization = NavmeshCustomizationRegistry.GetForScene(scene);
-        var draft = CustomizationDraftSeedBuilder.CreateFromCustomization(scene, baseCustomization, territoryName, config);
-        var created = new CustomizationEditorWorkspace
+        var draft = await Task.Run(() => CustomizationDraftSeedBuilder.CreateFromCustomization(scene, baseCustomization, territoryName, config), cancel);
+        cancel.ThrowIfCancellationRequested();
+
+        var settings = baseCustomization.GetBuildSettings(scene).ToBuildSettings(baseCustomization.IsFlyingSupported(scene), baseCustomization.Version);
+        var customizedScene = await Task.Run(() =>
+        {
+            var extractor = new SceneExtractor(scene);
+            baseCustomization.CustomizeScene(extractor);
+            return extractor.ToBuildScene();
+        }, cancel);
+        cancel.ThrowIfCancellationRequested();
+
+        var buildSignature = vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(customizedScene, settings);
+        var navmesh = await manager.BuildExternalNavmesh($"editor-seed-{territoryID}-{Guid.NewGuid():N}", customizedScene, settings, baseCustomization.Version, buildSignature, cancel);
+        cancel.ThrowIfCancellationRequested();
+        baseCustomization.CustomizeMesh(navmesh, [.. scene.FestivalLayers]);
+        CustomizationDraftSeedBuilder.CopyMeshLinksFromNavmesh(draft, navmesh);
+
+        return new()
         {
             WorkspaceId   = Convert.ToHexString(Guid.NewGuid().ToByteArray()),
             WorkspaceName = string.IsNullOrWhiteSpace(name) ? $"工作区 {store.Workspaces.Count + 1}" : name,
@@ -288,22 +371,25 @@ internal sealed class CustomizationEditorView
                 RebuildDelaySeconds = 0.4f
             }
         };
-        store.Workspaces.Add(created);
-        store.CurrentWorkspaceId = created.WorkspaceId;
-        store.SchemaVersion      = 1;
-        if (save)
-            SaveWorkspace(true);
     }
 
     private void CreateWorkspace()
     {
-        CreateWorkspace($"工作区 {store.Workspaces.Count + 1}", true);
-        SelectWorkspace(store.CurrentWorkspaceId);
-        statusText = $"已新建工作区: {workspace.WorkspaceName}";
+        if (pendingWorkspaceCreation != null)
+            return;
+
+        pendingWorkspaceCreationCancel?.Cancel();
+        pendingWorkspaceCreationCancel?.Dispose();
+        pendingWorkspaceCreationCancel = new();
+        var workspaceName = $"工作区 {store.Workspaces.Count + 1}";
+        pendingWorkspaceCreation = CreateWorkspaceAsync(workspaceName, pendingWorkspaceCreationCancel.Token);
+        statusText = $"正在创建工作区: {workspaceName}";
     }
 
     private void DeleteCurrentWorkspace()
     {
+        CancelPendingWorkspaceCreation();
+
         if (!hasWorkspace)
             return;
 
@@ -341,6 +427,8 @@ internal sealed class CustomizationEditorView
 
     private void SelectWorkspace(string workspaceId)
     {
+        CancelPendingWorkspaceCreation();
+
         var selected = store.Workspaces.FirstOrDefault(x => x.WorkspaceId == workspaceId);
         if (selected == null)
             return;
