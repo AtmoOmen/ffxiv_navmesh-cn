@@ -1,6 +1,8 @@
+using System.Drawing;
 using System.Globalization;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Lumina.Excel.Sheets;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
@@ -31,8 +33,11 @@ internal sealed class CustomizationEditorView
     private readonly NavmeshBuildProfile           profileDefaults  = new();
 
     private          CustomizationEditorWorkspace    workspace = new();
-    private          uint                            territoryID;
-    private          string                          territoryLabel = "";
+    
+    private uint   territoryID;
+    private string territoryKey  = string.Empty;
+    private string territoryName = string.Empty;
+    
     private          bool                            workspaceLoaded;
     private          bool                            historySuspended;
     private          CustomizationDraft              historySnapshot = new();
@@ -45,7 +50,7 @@ internal sealed class CustomizationEditorView
     private          bool                            lastPickMouseDown;
     private          bool                            lastPickEscapeDown;
     private          bool                            lastWorldSelectMouseDown;
-    private          string                          statusText    = "未加载";
+    private          string                          statusText    = string.Empty;
     private          string                          exportDirText = "";
     private          CustomizationDraftExportResult? lastExport;
     private          bool                            previewDirty  = true;
@@ -124,7 +129,7 @@ internal sealed class CustomizationEditorView
                 previewBuilder,
                 ref statusText,
                 territoryID,
-                territoryLabel,
+                territoryKey,
                 ref exportDirText,
                 settingsDefaults,
                 profileDefaults,
@@ -165,30 +170,41 @@ internal sealed class CustomizationEditorView
 
     private void EnsureWorkspace()
     {
-        var territoryId = Service.ClientState.TerritoryType;
-        if (territoryId == 0)
+        var zoneID = Service.ClientState.TerritoryType;
+        if (zoneID == 0)
             return;
 
-        if (workspaceLoaded && territoryId == territoryID)
-            return;
+        switch (workspaceLoaded)
+        {
+            case true when zoneID == territoryID:
+                return;
+            case true:
+                SaveWorkspace(true);
+                break;
+        }
 
-        if (workspaceLoaded)
-            SaveWorkspace(true);
-
-        workspace   = persistence.Load(territoryId);
-        territoryID = territoryId;
-        var territory = Service.LuminaRow<TerritoryType>(territoryId);
-        territoryLabel                = territory == null ? territoryId.ToString(CultureInfo.InvariantCulture) : territory.Value.Bg.ToString();
-        workspace.Draft.TerritoryID   = territoryId;
-        workspace.Draft.TerritoryName = territoryLabel;
+        workspace = persistence.Load(zoneID);
+        
+        var territory = Service.LuminaRow<TerritoryType>(zoneID);
+        
+        territoryID   = zoneID;
+        territoryKey  = territory == null ? zoneID.ToString(CultureInfo.InvariantCulture) : territory.Value.Bg.ToString();
+        territoryName = territory == null ? zoneID.ToString(CultureInfo.InvariantCulture) : territory.Value.PlaceName.Value.Name.ToString();
+        
+        workspace.Draft.TerritoryID   = zoneID;
+        workspace.Draft.TerritoryName = territoryName;
+        
+        
         historySnapshot               = workspace.Draft.Clone();
         exportDirText = string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory)
                             ? Path.Combine(configDirectory.FullName, "customization-editor", "generated")
                             : workspace.Settings.ExportDirectory;
         workspace.Settings.ExportDirectory = exportDirText;
         workspaceLoaded                    = true;
+        
         undo.Clear();
         redo.Clear();
+        
         selection                = new(SelectionKind.Workspace);
         pendingPickPoint         = null;
         pickKind                 = PickKind.None;
@@ -197,21 +213,22 @@ internal sealed class CustomizationEditorView
         lastPickEscapeDown       = CustomizationEditorWorldOverlay.TakeKeyPress(0x1B, ref lastPickEscapeDown);
         previewDirty             = true;
         nextRebuildAt            = DateTime.MinValue;
-        statusText               = $"已加载 Territory {territoryId} ({territoryLabel})";
+        statusText               = string.Empty;
         if (workspace.Settings.AutoRebuild)
             RebuildPreview();
     }
 
     private void DrawStatus()
     {
-        ImGui.TextUnformatted($"Territory: {territoryID} {territoryLabel}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted($"Preview: {previewBuilder.CurrentState}");
-        ImGui.SameLine();
-        ImGui.TextUnformatted(statusText);
+        ImGui.TextUnformatted($"区域: [{territoryID}] [{territoryKey}] [{territoryName}] ");
+        
+        ImGui.TextUnformatted($"预览: {previewBuilder.CurrentState}");
+
+        if (!string.IsNullOrEmpty(statusText))
+            ImGui.TextUnformatted($"状态: {statusText}");
 
         if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Failed, LastError: not null })
-            ImGui.TextColored(new Vector4(1, 0.5f, 0.5f, 1), previewBuilder.LastError.Message);
+            ImGui.TextColored(KnownColor.Red.Vector(), previewBuilder.LastError.Message);
 
         if (lastExport != null)
             ImGui.TextDisabled($"导出: {lastExport.ClassName} v{lastExport.Version} {lastExport.ContentHash[..16]} -> {lastExport.File.FullName}");
@@ -394,7 +411,7 @@ internal sealed class CustomizationEditorView
         var customization = new CustomizationDraftCustomization(NavmeshCustomizationRegistry.GetForScene(scene), workspace.Draft.Clone());
         previewDirty  = false;
         nextRebuildAt = DateTime.MinValue;
-        statusText    = "重建中";
+        statusText    = string.Empty;
         previewBuilder.Rebuild(scene, customization, true);
     }
 
@@ -466,7 +483,7 @@ internal sealed class CustomizationEditorView
             return;
 
         workspace.Draft.TerritoryID        = territoryID;
-        workspace.Draft.TerritoryName      = territoryLabel;
+        workspace.Draft.TerritoryName      = territoryKey;
         workspace.Settings.ExportDirectory = exportDirText;
 
         if (force || workspace.Settings.AutoSave)

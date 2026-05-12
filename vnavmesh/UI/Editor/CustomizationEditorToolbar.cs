@@ -32,13 +32,22 @@ internal static class CustomizationEditorToolbar
     )
     {
         HandleKeyboardShortcuts
-            (ref pickKind, ref pendingPickPoint, ref currentPickPoint, ref lastPickMouseDown, ref lastWorldSelectMouseDown, ref lastPickEscapeDown, ref statusText);
+        (
+            ref pickKind,
+            ref pendingPickPoint,
+            ref currentPickPoint,
+            ref lastPickMouseDown,
+            ref lastWorldSelectMouseDown,
+            ref lastPickEscapeDown,
+            ref statusText
+        );
 
-        ImGui.BeginGroup();
-
+        using var group = ImRaii.Group();
+        
+        ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted("工具");
+        
         ImGui.SameLine();
-
         using (ImRaii.Disabled(!workspaceLoaded))
         {
             DrawModeButton
@@ -54,6 +63,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
+            
             ImGui.SameLine();
             DrawModeButton
             (
@@ -68,6 +78,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
+            
             ImGui.SameLine();
             DrawModeButton
             (
@@ -82,6 +93,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
+            
             ImGui.SameLine();
             DrawModeButton
             (
@@ -96,6 +108,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
+            
             ImGui.SameLine();
             DrawModeButton
             (
@@ -110,6 +123,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
+            
             ImGui.SameLine();
             DrawModeButton
             (
@@ -124,6 +138,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
+            
             ImGui.SameLine();
             DrawModeButton
             (
@@ -138,6 +153,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
+            
             ImGui.SameLine();
             DrawModeButton
             (
@@ -154,9 +170,10 @@ internal static class CustomizationEditorToolbar
             );
         }
 
+        ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted("草稿");
+        
         ImGui.SameLine();
-
         using (ImRaii.Disabled(!workspaceLoaded || undoCount == 0))
         {
             if (ImGui.Button("撤销"))
@@ -164,7 +181,6 @@ internal static class CustomizationEditorToolbar
         }
 
         ImGui.SameLine();
-
         using (ImRaii.Disabled(!workspaceLoaded || redoCount == 0))
         {
             if (ImGui.Button("重做"))
@@ -172,7 +188,6 @@ internal static class CustomizationEditorToolbar
         }
 
         ImGui.SameLine();
-
         using (ImRaii.Disabled(!workspaceLoaded))
         {
             if (ImGui.Button("重建预览"))
@@ -180,7 +195,6 @@ internal static class CustomizationEditorToolbar
         }
 
         ImGui.SameLine();
-
         using (ImRaii.Disabled(!workspaceLoaded))
         {
             if (ImGui.Button("保存草稿"))
@@ -188,7 +202,6 @@ internal static class CustomizationEditorToolbar
         }
 
         ImGui.SameLine();
-
         using (ImRaii.Disabled(!workspaceLoaded))
         {
             if (ImGui.Button("导出 C#"))
@@ -212,10 +225,6 @@ internal static class CustomizationEditorToolbar
                     "已退出当前工具模式"
                 );
         }
-
-        ImGui.EndGroup();
-
-        ImGui.TextWrapped(GetToolbarHint(pickKind, pendingPickPoint, workspaceLoaded));
     }
 
     internal static void HandleKeyboardShortcuts
@@ -346,21 +355,6 @@ internal static class CustomizationEditorToolbar
         statusText = kind == PickKind.SelectCollider
                          ? "选中碰撞体: 在游戏画面点击一个碰撞体"
                          : $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)}: 等待第 1 个世界点, 在游戏画面点击";
-    }
-
-    private static string GetToolbarHint(PickKind pickKind, Vector3? pendingPickPoint, bool workspaceLoaded)
-    {
-        if (!workspaceLoaded)
-            return "进入一个游戏区域后, 编辑器会自动加载该 Territory 的草稿";
-
-        if (pickKind == PickKind.None)
-            return "浏览模式: 世界点击不会选中对象; 需要编辑现有碰撞体时, 先点击“选碰撞体”";
-
-        if (pickKind == PickKind.SelectCollider)
-            return "选中碰撞体: 鼠标指向的碰撞体会高亮, 左键选中后在右侧编辑, Esc 可退出";
-
-        var step = pendingPickPoint == null ? "点击第 1 个世界点" : "点击第 2 个世界点完成创建";
-        return $"{CustomizationEditorWorldOverlay.GetPickKindTitle(pickKind)}: {step}; 在游戏画面点击落点, 点在插件窗口或其他 UI 上不会落点, Esc 可取消";
     }
 
     private static bool IsKeyDown(int virtualKey) =>

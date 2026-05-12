@@ -26,12 +26,7 @@ internal static class CustomizationEditorLeftPanel
         AddPartPatchDelegate             onAddPartPatch
     )
     {
-        if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
-        {
-            ImGui.TextDisabled("预览对象未就绪");
-            ImGui.TextWrapped("点击“重建预览”或等待自动重建完成后, 可在这里选择 mesh、实例、顶点和三角");
-        }
-        else
+        if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, Extractor: not null })
         {
             if (ImGui.TreeNodeEx("预览对象", ImGuiTreeNodeFlags.DefaultOpen))
             {
@@ -43,7 +38,6 @@ internal static class CustomizationEditorLeftPanel
 
         if (ImGui.TreeNodeEx("草稿与设置", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.TextDisabled("选中草稿项后, 在右侧调整数值并触发重建预览");
             DrawDraftTree(ref selection, workspace);
             ImGui.TreePop();
         }

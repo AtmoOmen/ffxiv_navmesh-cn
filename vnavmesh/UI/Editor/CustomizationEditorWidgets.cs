@@ -52,11 +52,10 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.TreeNodeEx(label, ImGuiTreeNodeFlags.DefaultOpen))
         {
-            ImGui.PushItemWidth(90);
             changed |= ImGui.DragFloat("X", ref value.X, 0.1f, -100000, 100000, "%.3f");
             changed |= ImGui.DragFloat("Y", ref value.Y, 0.1f, -100000, 100000, "%.3f");
             changed |= ImGui.DragFloat("Z", ref value.Z, 0.1f, -100000, 100000, "%.3f");
-            ImGui.PopItemWidth();
+            
             ImGui.TreePop();
         }
 
@@ -121,192 +120,169 @@ internal static class CustomizationEditorWidgets
     public static bool DrawNullableFloat(string label, ref float? value, float fallback)
     {
         var enabled = value.HasValue;
-        var changed = ImGui.Checkbox($"启用##{label}", ref enabled);
+        if (ImGui.Checkbox($"启用##{label}", ref enabled))
+        {
+            value = enabled ? fallback : null;
+            return true;
+        }
+
         ImGui.SameLine();
         ImGui.TextUnformatted(label);
 
         if (!enabled)
-        {
-            if (value.HasValue)
-            {
-                value = null;
-                return true;
-            }
+            return false;
 
-            return changed;
-        }
-
-        var current = value ?? fallback;
-        ImGui.PushItemWidth(200);
+        var current = value!.Value;
 
         if (ImGui.DragFloat($"##{label}_value", ref current, 0.1f, -100000, 100000, "%.3f"))
         {
-            value   = current;
-            changed = true;
+            value = current;
+            return true;
         }
 
-        ImGui.PopItemWidth();
-        return changed;
+        return false;
     }
 
     public static bool DrawNullableInt(string label, ref int? value, int fallback)
     {
         var enabled = value.HasValue;
-        var changed = ImGui.Checkbox($"启用##{label}", ref enabled);
+        if (ImGui.Checkbox($"启用##{label}", ref enabled))
+        {
+            value = enabled ? fallback : null;
+            return true;
+        }
+
         ImGui.SameLine();
         ImGui.TextUnformatted(label);
 
         if (!enabled)
-        {
-            if (value.HasValue)
-            {
-                value = null;
-                return true;
-            }
+            return false;
 
-            return changed;
-        }
-
-        var current = value ?? fallback;
-        ImGui.PushItemWidth(200);
-
+        var current = value!.Value;
         if (ImGui.InputInt($"##{label}_value", ref current))
         {
-            value   = current;
-            changed = true;
+            value = current;
+            return true;
         }
 
-        ImGui.PopItemWidth();
-        return changed;
+        return false;
     }
 
     public static bool DrawNullableBool(string label, ref bool? value, bool fallback)
     {
         var enabled = value.HasValue;
-        var changed = ImGui.Checkbox($"启用##{label}", ref enabled);
+        if (ImGui.Checkbox($"启用##{label}", ref enabled))
+        {
+            value = enabled ? fallback : null;
+            return true;
+        }
+
         ImGui.SameLine();
         ImGui.TextUnformatted(label);
 
         if (!enabled)
-        {
-            if (value.HasValue)
-            {
-                value = null;
-                return true;
-            }
+            return false;
 
-            return changed;
-        }
-
-        var current = value ?? fallback;
+        var current = value!.Value;
 
         if (ImGui.Checkbox($"##{label}_value", ref current))
         {
-            value   = current;
-            changed = true;
+            value = current;
+            return true;
         }
 
-        return changed;
+        return false;
     }
 
     public static bool DrawNullableEnum<T>(string label, ref T? value, T? fallback) where T : struct, Enum
     {
         var enabled = value.HasValue;
-        var changed = ImGui.Checkbox($"启用##{label}", ref enabled);
+        if (ImGui.Checkbox($"启用##{label}", ref enabled))
+        {
+            value = enabled ? fallback : null;
+            return true;
+        }
+
         ImGui.SameLine();
         ImGui.TextUnformatted(label);
 
         if (!enabled)
-        {
-            if (value.HasValue)
-            {
-                value = null;
-                return true;
-            }
+            return false;
 
-            return changed;
-        }
-
-        var current = value ?? fallback.GetValueOrDefault();
+        var current = value!.Value;
 
         if (DrawEnumCombo($"##{label}_value", ref current))
         {
-            value   = current;
-            changed = true;
+            value = current;
+            return true;
         }
 
-        return changed;
+        return false;
     }
 
     public static bool DrawNullableIntArray(string label, ref int[]? value, int[] fallback)
     {
         var enabled = value != null;
-        var changed = ImGui.Checkbox($"启用##{label}", ref enabled);
+        if (ImGui.Checkbox($"启用##{label}", ref enabled))
+        {
+            value = enabled ? (int[])fallback.Clone() : null;
+            return true;
+        }
+
         ImGui.SameLine();
         ImGui.TextUnformatted(label);
 
         if (!enabled)
+            return false;
+
+        var current = (int[])value!.Clone();
+
+        switch (current.Length)
         {
-            if (value != null)
-            {
-                value = null;
+            case > 0 when ImGui.InputInt($"##{label}_0", ref current[0]):
+                value = current;
                 return true;
-            }
-
-            return changed;
-        }
-
-        var current = value != null ? (int[])value.Clone() : (int[])fallback.Clone();
-        ImGui.PushItemWidth(120);
-
-        if (current.Length > 0 && ImGui.InputInt($"##{label}_0", ref current[0]))
-        {
-            value   = current;
-            changed = true;
-        }
-
-        if (current.Length > 1)
-        {
-            ImGui.SameLine();
-
-            if (ImGui.InputInt($"##{label}_1", ref current[1]))
+            case > 1:
             {
-                value   = current;
-                changed = true;
+                ImGui.SameLine();
+
+                if (ImGui.InputInt($"##{label}_1", ref current[1]))
+                {
+                    value = current;
+                    return true;
+                }
+
+                break;
             }
         }
 
-        ImGui.PopItemWidth();
-        return changed;
+        return false;
     }
 
     public static bool DrawNullableFlags<T>(string label, ref T? value, T? fallback) where T : struct, Enum
     {
         var enabled = value.HasValue;
-        var changed = ImGui.Checkbox($"启用##{label}", ref enabled);
+        if (ImGui.Checkbox($"启用##{label}", ref enabled))
+        {
+            value = enabled ? fallback : null;
+            return true;
+        }
+
         ImGui.SameLine();
         ImGui.TextUnformatted(label);
 
         if (!enabled)
-        {
-            if (value.HasValue)
-            {
-                value = null;
-                return true;
-            }
+            return false;
 
-            return changed;
-        }
-
-        var current = value ?? fallback.GetValueOrDefault();
+        var current = value!.Value;
 
         if (DrawFlags($"##{label}_value", ref current))
         {
-            value   = current;
-            changed = true;
+            value = current;
+            return true;
         }
 
-        return changed;
+        return false;
     }
 
     public static bool DrawEnumCombo<T>(string label, ref T value) where T : struct, Enum

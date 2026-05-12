@@ -36,12 +36,12 @@ internal static class CustomizationEditorInspector
         RemoveMatchingPartPatchDelegate  onRemoveMatchingPartPatch
     )
     {
-        DrawInspectorHeader(selection, territoryID, territoryLabel);
+        DrawInspectorHeader(selection);
 
         switch (selection.Kind)
         {
             case SelectionKind.Workspace:
-                DrawWorkspaceInspector(ref workspace, ref selection, territoryID, territoryLabel, ref exportDirText, ref statusText, onCommit);
+                DrawWorkspaceInspector(ref workspace, ref exportDirText);
                 break;
             case SelectionKind.BuildProfile:
                 DrawBuildProfileInspector(ref workspace, profileDefaults, settingsDefaults, onCommit);
@@ -84,17 +84,17 @@ internal static class CustomizationEditorInspector
         }
     }
 
-    private static void DrawInspectorHeader(Selection selection, uint territoryID, string territoryLabel)
+    private static void DrawInspectorHeader(Selection selection)
     {
-        ImGui.TextUnformatted(GetSelectionTitle(selection, territoryID, territoryLabel));
-        ImGui.TextWrapped(GetSelectionHelp(selection));
+        ImGui.TextUnformatted(GetSelectionTitle(selection));
+        ImGui.TextDisabled(GetSelectionHelp(selection));
         ImGui.Separator();
     }
 
-    private static string GetSelectionTitle(Selection selection, uint territoryID, string territoryLabel) =>
+    private static string GetSelectionTitle(Selection selection) =>
         selection.Kind switch
         {
-            SelectionKind.Workspace         => $"工作区 / Territory {territoryID} {territoryLabel}",
+            SelectionKind.Workspace         => "工作区",
             SelectionKind.BuildProfile      => "构建参数覆盖",
             SelectionKind.BuildSettings     => "构建设置覆盖",
             SelectionKind.FlyingOverride    => "飞行支持",
@@ -136,61 +136,77 @@ internal static class CustomizationEditorInspector
     private static void DrawWorkspaceInspector
     (
         ref CustomizationEditorWorkspace workspace,
-        ref Selection                    selection,
-        uint                             territoryID,
-        string                           territoryLabel,
-        ref string                       exportDirText,
-        ref string                       statusText,
-        CommitDelegate                   onCommit
+        ref string                       exportDirText
     )
     {
-        ImGui.TextUnformatted($"Territory {territoryID} {territoryLabel}");
-        ImGui.Separator();
         CustomizationEditorWidgets.DrawBool("自动重建", ref workspace.Settings.AutoRebuild);
         CustomizationEditorWidgets.DrawBool("自动保存", ref workspace.Settings.AutoSave);
         CustomizationEditorWidgets.DrawFloat("重建延迟", ref workspace.Settings.RebuildDelaySeconds, 0.05f, 0.1f, 5f);
 
-        ImGui.SetNextItemWidth(-1);
-
         if (ImGui.InputText("导出目录", ref exportDirText))
             workspace.Settings.ExportDirectory = exportDirText;
-
-        if (ImGui.Button("手动重建预览"))
-        {
-            statusText = "重建中";
-            onCommit();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("导出 C#"))
-            onCommit();
     }
 
     private static void DrawBuildProfileInspector
         (ref CustomizationEditorWorkspace workspace, NavmeshBuildProfile profileDefaults, NavmeshSettings settingsDefaults, CommitDelegate onCommit)
     {
         var changed = false;
-        changed |= CustomizationEditorWidgets.DrawNullableEnum
-            ("Partitioning", ref workspace.Draft.BuildProfile.PartitioningOverride, profileDefaults.PartitioningOverride);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Cell Size",   ref workspace.Draft.BuildProfile.CellSizeOverride,   settingsDefaults.CellSize);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Cell Height", ref workspace.Draft.BuildProfile.CellHeightOverride, settingsDefaults.CellHeight);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Region Min Size", ref workspace.Draft.BuildProfile.RegionMinSizeOverride, settingsDefaults.RegionMinSize);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Region Merge Size", ref workspace.Draft.BuildProfile.RegionMergeSizeOverride, settingsDefaults.RegionMergeSize);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Poly Max Edge Len", ref workspace.Draft.BuildProfile.PolyMaxEdgeLenOverride, settingsDefaults.PolyMaxEdgeLen);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Poly Max Simplification Error", ref workspace.Draft.BuildProfile.PolyMaxSimplificationErrorOverride, settingsDefaults.PolyMaxSimplificationError);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Agent Radius", ref workspace.Draft.BuildProfile.AgentRadiusOverride, settingsDefaults.AgentRadius);
-        changed |= CustomizationEditorWidgets.DrawNullableIntArray
-            ("Volume Tiles", ref workspace.Draft.BuildProfile.VolumeTilesOverride, settingsDefaults.VolumeTiles);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Detail Sample Dist", ref workspace.Draft.BuildProfile.DetailSampleDistOverride, settingsDefaults.DetailSampleDist);
-        changed |= CustomizationEditorWidgets.DrawNullableBool
-            ("Generate Edge Climb Links", ref workspace.Draft.BuildProfile.GenerateEdgeClimbLinksOverride, settingsDefaults.GenerateEdgeClimbLinks);
-        changed |= CustomizationEditorWidgets.DrawNullableBool
-            ("Generate Edge Jump Links", ref workspace.Draft.BuildProfile.GenerateEdgeJumpLinksOverride, settingsDefaults.GenerateEdgeJumpLinks);
+
+        if (ImGui.TreeNodeEx("Cell", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Cell Size",   ref workspace.Draft.BuildProfile.CellSizeOverride,   settingsDefaults.CellSize);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Cell Height", ref workspace.Draft.BuildProfile.CellHeightOverride, settingsDefaults.CellHeight);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Region", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableEnum
+                ("Partitioning", ref workspace.Draft.BuildProfile.PartitioningOverride, profileDefaults.PartitioningOverride);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Region Min Size", ref workspace.Draft.BuildProfile.RegionMinSizeOverride, settingsDefaults.RegionMinSize);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Region Merge Size", ref workspace.Draft.BuildProfile.RegionMergeSizeOverride, settingsDefaults.RegionMergeSize);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Polygonization", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Poly Max Edge Len", ref workspace.Draft.BuildProfile.PolyMaxEdgeLenOverride, settingsDefaults.PolyMaxEdgeLen);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Poly Max Simplification Error", ref workspace.Draft.BuildProfile.PolyMaxSimplificationErrorOverride, settingsDefaults.PolyMaxSimplificationError);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Agent", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Agent Radius", ref workspace.Draft.BuildProfile.AgentRadiusOverride, settingsDefaults.AgentRadius);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Detail", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Detail Sample Dist", ref workspace.Draft.BuildProfile.DetailSampleDistOverride, settingsDefaults.DetailSampleDist);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Edge Links", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableBool
+                ("Generate Edge Climb Links", ref workspace.Draft.BuildProfile.GenerateEdgeClimbLinksOverride, settingsDefaults.GenerateEdgeClimbLinks);
+            changed |= CustomizationEditorWidgets.DrawNullableBool
+                ("Generate Edge Jump Links", ref workspace.Draft.BuildProfile.GenerateEdgeJumpLinksOverride, settingsDefaults.GenerateEdgeJumpLinks);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Volume", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableIntArray
+                ("Volume Tiles", ref workspace.Draft.BuildProfile.VolumeTilesOverride, settingsDefaults.VolumeTiles);
+            ImGui.TreePop();
+        }
 
         if (changed) onCommit();
     }
@@ -198,53 +214,103 @@ internal static class CustomizationEditorInspector
     private static void DrawBuildSettingsInspector(ref CustomizationEditorWorkspace workspace, NavmeshSettings settingsDefaults, CommitDelegate onCommit)
     {
         var changed = false;
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Cell Size",       ref workspace.Draft.BuildSettings.CellSize,      settingsDefaults.CellSize);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Cell Height",     ref workspace.Draft.BuildSettings.CellHeight,    settingsDefaults.CellHeight);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Agent Height",    ref workspace.Draft.BuildSettings.AgentHeight,   settingsDefaults.AgentHeight);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Agent Radius",    ref workspace.Draft.BuildSettings.AgentRadius,   settingsDefaults.AgentRadius);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Agent Max Climb", ref workspace.Draft.BuildSettings.AgentMaxClimb, settingsDefaults.AgentMaxClimb);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Agent Max Slope", ref workspace.Draft.BuildSettings.AgentMaxSlopeDeg, settingsDefaults.AgentMaxSlopeDeg);
-        changed |= CustomizationEditorWidgets.DrawNullableFlags("Filtering", ref workspace.Draft.BuildSettings.Filtering, settingsDefaults.Filtering);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat("Region Min Size", ref workspace.Draft.BuildSettings.RegionMinSize, settingsDefaults.RegionMinSize);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Region Merge Size", ref workspace.Draft.BuildSettings.RegionMergeSize, settingsDefaults.RegionMergeSize);
-        changed |= CustomizationEditorWidgets.DrawNullableEnum("Partitioning", ref workspace.Draft.BuildSettings.Partitioning, settingsDefaults.Partitioning);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Poly Max Edge Len", ref workspace.Draft.BuildSettings.PolyMaxEdgeLen, settingsDefaults.PolyMaxEdgeLen);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Poly Max Simplification Error", ref workspace.Draft.BuildSettings.PolyMaxSimplificationError, settingsDefaults.PolyMaxSimplificationError);
-        changed |= CustomizationEditorWidgets.DrawNullableInt("Poly Max Verts", ref workspace.Draft.BuildSettings.PolyMaxVerts, settingsDefaults.PolyMaxVerts);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Detail Sample Dist", ref workspace.Draft.BuildSettings.DetailSampleDist, settingsDefaults.DetailSampleDist);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Detail Max Sample Error", ref workspace.Draft.BuildSettings.DetailMaxSampleError, settingsDefaults.DetailMaxSampleError);
-        changed |= CustomizationEditorWidgets.DrawNullableBool("Fast Build", ref workspace.Draft.BuildSettings.FastBuild, settingsDefaults.FastBuild);
-        changed |= CustomizationEditorWidgets.DrawNullableBool
-            ("Generate Edge Climb Links", ref workspace.Draft.BuildSettings.GenerateEdgeClimbLinks, settingsDefaults.GenerateEdgeClimbLinks);
-        changed |= CustomizationEditorWidgets.DrawNullableBool
-            ("Generate Edge Jump Links", ref workspace.Draft.BuildSettings.GenerateEdgeJumpLinks, settingsDefaults.GenerateEdgeJumpLinks);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Ground Tolerance", ref workspace.Draft.BuildSettings.GroundTolerance, settingsDefaults.GroundTolerance);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Climb Down Distance", ref workspace.Draft.BuildSettings.ClimbDownDistance, settingsDefaults.ClimbDownDistance);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Climb Down Max Height", ref workspace.Draft.BuildSettings.ClimbDownMaxHeight, settingsDefaults.ClimbDownMaxHeight);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Climb Down Min Height", ref workspace.Draft.BuildSettings.ClimbDownMinHeight, settingsDefaults.ClimbDownMinHeight);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Edge Jump End Distance", ref workspace.Draft.BuildSettings.EdgeJumpEndDistance, settingsDefaults.EdgeJumpEndDistance);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Edge Jump Height", ref workspace.Draft.BuildSettings.EdgeJumpHeight, settingsDefaults.EdgeJumpHeight);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Edge Jump Max Drop", ref workspace.Draft.BuildSettings.EdgeJumpMaxDrop, settingsDefaults.EdgeJumpMaxDrop);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Edge Jump Min Drop", ref workspace.Draft.BuildSettings.EdgeJumpMinDrop, settingsDefaults.EdgeJumpMinDrop);
-        changed |= CustomizationEditorWidgets.DrawNullableFloat
-            ("Ground Tile Size", ref workspace.Draft.BuildSettings.GroundTileSize, settingsDefaults.GroundTileSize);
-        changed |= CustomizationEditorWidgets.DrawNullableInt
-            ("Ground Tile Count Max", ref workspace.Draft.BuildSettings.GroundTileCountMax, settingsDefaults.GroundTileCountMax);
-        changed |= CustomizationEditorWidgets.DrawNullableIntArray("Volume Tiles", ref workspace.Draft.BuildSettings.VolumeTiles, settingsDefaults.VolumeTiles);
+
+        if (ImGui.TreeNodeEx("通用", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableBool("Fast Build", ref workspace.Draft.BuildSettings.FastBuild, settingsDefaults.FastBuild);
+            changed |= CustomizationEditorWidgets.DrawNullableFlags("Filtering", ref workspace.Draft.BuildSettings.Filtering, settingsDefaults.Filtering);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Cell", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Cell Size",   ref workspace.Draft.BuildSettings.CellSize,   settingsDefaults.CellSize);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Cell Height", ref workspace.Draft.BuildSettings.CellHeight, settingsDefaults.CellHeight);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Agent", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Agent Height",    ref workspace.Draft.BuildSettings.AgentHeight,   settingsDefaults.AgentHeight);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Agent Radius",    ref workspace.Draft.BuildSettings.AgentRadius,   settingsDefaults.AgentRadius);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Agent Max Climb", ref workspace.Draft.BuildSettings.AgentMaxClimb, settingsDefaults.AgentMaxClimb);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Agent Max Slope", ref workspace.Draft.BuildSettings.AgentMaxSlopeDeg, settingsDefaults.AgentMaxSlopeDeg);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Region", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat("Region Min Size",   ref workspace.Draft.BuildSettings.RegionMinSize,   settingsDefaults.RegionMinSize);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Region Merge Size", ref workspace.Draft.BuildSettings.RegionMergeSize, settingsDefaults.RegionMergeSize);
+            changed |= CustomizationEditorWidgets.DrawNullableEnum("Partitioning", ref workspace.Draft.BuildSettings.Partitioning, settingsDefaults.Partitioning);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Polygonization", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Poly Max Edge Len", ref workspace.Draft.BuildSettings.PolyMaxEdgeLen, settingsDefaults.PolyMaxEdgeLen);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Poly Max Simplification Error", ref workspace.Draft.BuildSettings.PolyMaxSimplificationError, settingsDefaults.PolyMaxSimplificationError);
+            changed |= CustomizationEditorWidgets.DrawNullableInt("Poly Max Verts", ref workspace.Draft.BuildSettings.PolyMaxVerts, settingsDefaults.PolyMaxVerts);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Detail Mesh", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Detail Sample Dist", ref workspace.Draft.BuildSettings.DetailSampleDist, settingsDefaults.DetailSampleDist);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Detail Max Sample Error", ref workspace.Draft.BuildSettings.DetailMaxSampleError, settingsDefaults.DetailMaxSampleError);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Edge Links", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableBool
+                ("Generate Edge Climb Links", ref workspace.Draft.BuildSettings.GenerateEdgeClimbLinks, settingsDefaults.GenerateEdgeClimbLinks);
+            changed |= CustomizationEditorWidgets.DrawNullableBool
+                ("Generate Edge Jump Links", ref workspace.Draft.BuildSettings.GenerateEdgeJumpLinks, settingsDefaults.GenerateEdgeJumpLinks);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Climb Down", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Ground Tolerance", ref workspace.Draft.BuildSettings.GroundTolerance, settingsDefaults.GroundTolerance);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Climb Down Distance", ref workspace.Draft.BuildSettings.ClimbDownDistance, settingsDefaults.ClimbDownDistance);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Climb Down Max Height", ref workspace.Draft.BuildSettings.ClimbDownMaxHeight, settingsDefaults.ClimbDownMaxHeight);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Climb Down Min Height", ref workspace.Draft.BuildSettings.ClimbDownMinHeight, settingsDefaults.ClimbDownMinHeight);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Edge Jump", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Edge Jump End Distance", ref workspace.Draft.BuildSettings.EdgeJumpEndDistance, settingsDefaults.EdgeJumpEndDistance);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Edge Jump Height", ref workspace.Draft.BuildSettings.EdgeJumpHeight, settingsDefaults.EdgeJumpHeight);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Edge Jump Max Drop", ref workspace.Draft.BuildSettings.EdgeJumpMaxDrop, settingsDefaults.EdgeJumpMaxDrop);
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Edge Jump Min Drop", ref workspace.Draft.BuildSettings.EdgeJumpMinDrop, settingsDefaults.EdgeJumpMinDrop);
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNodeEx("Tiles", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+                ("Ground Tile Size", ref workspace.Draft.BuildSettings.GroundTileSize, settingsDefaults.GroundTileSize);
+            changed |= CustomizationEditorWidgets.DrawNullableInt
+                ("Ground Tile Count Max", ref workspace.Draft.BuildSettings.GroundTileCountMax, settingsDefaults.GroundTileCountMax);
+            changed |= CustomizationEditorWidgets.DrawNullableIntArray("Volume Tiles", ref workspace.Draft.BuildSettings.VolumeTiles, settingsDefaults.VolumeTiles);
+            ImGui.TreePop();
+        }
 
         if (changed) onCommit();
     }
