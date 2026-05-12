@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Utility.Raii;
 using Lumina.Excel.Sheets;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
@@ -16,7 +15,7 @@ using Action = System.Action;
 
 namespace vnavmesh.UI.Editor;
 
-internal sealed unsafe class CustomizationEditorView
+internal sealed class CustomizationEditorView
 (
     Config             config,
     DebugDrawer        dd,
@@ -31,26 +30,26 @@ internal sealed unsafe class CustomizationEditorView
     private readonly NavmeshSettings               settingsDefaults = new();
     private readonly NavmeshBuildProfile           profileDefaults  = new();
 
-    private CustomizationEditorWorkspace    workspace        = new();
-    private uint                            territoryID;
-    private string                          territoryLabel   = "";
-    private bool                            workspaceLoaded;
-    private bool                            historySuspended;
-    private CustomizationDraft              historySnapshot  = new();
-    private readonly Stack<CustomizationDraft> undo               = new();
-    private readonly Stack<CustomizationDraft> redo               = new();
-    private Selection                       selection        = new(SelectionKind.Workspace);
-    private PickKind                        pickKind         = PickKind.None;
-    private Vector3?                        pendingPickPoint;
-    private Vector3?                        currentPickPoint;
-    private bool                            lastPickMouseDown;
-    private bool                            lastPickEscapeDown;
-    private bool                            lastWorldSelectMouseDown;
-    private string                          statusText       = "未加载";
-    private string                          exportDirText    = "";
-    private CustomizationDraftExportResult? lastExport;
-    private bool                            previewDirty     = true;
-    private DateTime                        nextRebuildAt    = DateTime.MinValue;
+    private          CustomizationEditorWorkspace    workspace = new();
+    private          uint                            territoryID;
+    private          string                          territoryLabel = "";
+    private          bool                            workspaceLoaded;
+    private          bool                            historySuspended;
+    private          CustomizationDraft              historySnapshot = new();
+    private readonly Stack<CustomizationDraft>       undo            = new();
+    private readonly Stack<CustomizationDraft>       redo            = new();
+    private          Selection                       selection       = new(SelectionKind.Workspace);
+    private          PickKind                        pickKind        = PickKind.None;
+    private          Vector3?                        pendingPickPoint;
+    private          Vector3?                        currentPickPoint;
+    private          bool                            lastPickMouseDown;
+    private          bool                            lastPickEscapeDown;
+    private          bool                            lastWorldSelectMouseDown;
+    private          string                          statusText    = "未加载";
+    private          string                          exportDirText = "";
+    private          CustomizationDraftExportResult? lastExport;
+    private          bool                            previewDirty  = true;
+    private          DateTime                        nextRebuildAt = DateTime.MinValue;
 
     public void Dispose()
     {
@@ -64,27 +63,44 @@ internal sealed unsafe class CustomizationEditorView
         EnsureWorkspace();
         CustomizationEditorToolbar.Draw
         (
-            ref pickKind, ref pendingPickPoint, ref currentPickPoint,
-            ref lastPickMouseDown, ref lastWorldSelectMouseDown, ref lastPickEscapeDown,
-            ref statusText, workspaceLoaded, undo.Count, redo.Count,
-            Undo, Redo, RebuildPreview, () => SaveWorkspace(true), ExportCurrentDraft
+            ref pickKind,
+            ref pendingPickPoint,
+            ref currentPickPoint,
+            ref lastPickMouseDown,
+            ref lastWorldSelectMouseDown,
+            ref lastPickEscapeDown,
+            ref statusText,
+            workspaceLoaded,
+            undo.Count,
+            redo.Count,
+            Undo,
+            Redo,
+            RebuildPreview,
+            () => SaveWorkspace(true),
+            ExportCurrentDraft
         );
         DrawStatus();
 
-        if (workspaceLoaded                               &&
-            previewDirty                                  &&
-            workspace.Settings.AutoRebuild                &&
-            DateTime.UtcNow              >= nextRebuildAt &&
+        if (workspaceLoaded                              &&
+            previewDirty                                 &&
+            workspace.Settings.AutoRebuild               &&
+            DateTime.UtcNow             >= nextRebuildAt &&
             previewBuilder.CurrentState != CustomizationPreviewBuilder.State.InProgress)
             RebuildPreview();
 
         ImGui.BeginChild("##customization_editor_left", new Vector2(340, 0), true);
+
         if (workspaceLoaded)
         {
             CustomizationEditorLeftPanel.Draw
             (
-                ref workspace, ref selection, previewBuilder, dd,
-                AddMeshRemovalFromPreview, AddInstancePatchFromPreview, AddPartPatchFromPreview
+                ref workspace,
+                ref selection,
+                previewBuilder,
+                dd,
+                AddMeshRemovalFromPreview,
+                AddInstancePatchFromPreview,
+                AddPartPatchFromPreview
             );
         }
         else
@@ -92,20 +108,30 @@ internal sealed unsafe class CustomizationEditorView
             ImGui.TextDisabled("尚未加载 Territory");
             ImGui.TextWrapped("进入游戏区域后, 这里会显示当前 Territory 的预览对象和本地草稿");
         }
+
         ImGui.EndChild();
 
         ImGui.SameLine();
 
         ImGui.BeginChild("##customization_editor_right", new Vector2(0, 0), true);
+
         if (workspaceLoaded)
         {
             CustomizationEditorInspector.Draw
             (
-                ref selection, ref workspace, previewBuilder, ref statusText,
-                territoryID, territoryLabel, ref exportDirText,
-                settingsDefaults, profileDefaults,
+                ref selection,
+                ref workspace,
+                previewBuilder,
+                ref statusText,
+                territoryID,
+                territoryLabel,
+                ref exportDirText,
+                settingsDefaults,
+                profileDefaults,
                 CommitDraftChange,
-                AddMeshRemovalFromPreview, AddInstancePatchFromPreview, AddPartPatchFromPreview,
+                AddMeshRemovalFromPreview,
+                AddInstancePatchFromPreview,
+                AddPartPatchFromPreview,
                 RemoveMatchingPartPatch
             );
         }
@@ -114,15 +140,26 @@ internal sealed unsafe class CustomizationEditorView
             ImGui.TextDisabled("等待 Territory");
             ImGui.TextWrapped("进入游戏区域后, 编辑器会自动加载当前 Territory 的草稿; 加载后可直接在游戏画面点两点创建障碍或连接");
         }
+
         ImGui.EndChild();
 
         CustomizationEditorWorldOverlay.Draw
         (
-            ref pickKind, ref pendingPickPoint, ref currentPickPoint,
-            ref lastPickMouseDown, ref lastWorldSelectMouseDown, ref lastPickEscapeDown,
-            ref workspace, ref selection, ref statusText,
-            collision, dd, previewBuilder,
-            AddColliderInsertion, AddMeshLink, AddOffMeshConnection
+            ref pickKind,
+            ref pendingPickPoint,
+            ref currentPickPoint,
+            ref lastPickMouseDown,
+            ref lastWorldSelectMouseDown,
+            ref lastPickEscapeDown,
+            ref workspace,
+            ref selection,
+            ref statusText,
+            collision,
+            dd,
+            previewBuilder,
+            AddColliderInsertion,
+            AddMeshLink,
+            AddOffMeshConnection
         );
     }
 
@@ -146,8 +183,8 @@ internal sealed unsafe class CustomizationEditorView
         workspace.Draft.TerritoryName = territoryLabel;
         historySnapshot               = workspace.Draft.Clone();
         exportDirText = string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory)
-                             ? Path.Combine(configDirectory.FullName, "customization-editor", "generated")
-                             : workspace.Settings.ExportDirectory;
+                            ? Path.Combine(configDirectory.FullName, "customization-editor", "generated")
+                            : workspace.Settings.ExportDirectory;
         workspace.Settings.ExportDirectory = exportDirText;
         workspaceLoaded                    = true;
         undo.Clear();
@@ -211,7 +248,7 @@ internal sealed unsafe class CustomizationEditorView
         (() =>
             {
                 workspace.Draft.MeshLinks.Add(new() { Kind = kind, Start = a, End = b });
-                selection  = new(SelectionKind.MeshLink, workspace.Draft.MeshLinks.Count - 1);
+                selection = new(SelectionKind.MeshLink, workspace.Draft.MeshLinks.Count - 1);
                 statusText = kind switch
                 {
                     DraftMeshLinkKind.Points     => "已添加网格连线",
@@ -293,8 +330,8 @@ internal sealed unsafe class CustomizationEditorView
 
     private void AddPartPatchFromPreview(SceneExtractor.Mesh mesh, string key, int partIndex, DraftScenePartPatchKind kind, int subIndex = -1)
     {
-        var part          = mesh.Parts[partIndex];
-        var vertexIndex   = kind == DraftScenePartPatchKind.Vertex && subIndex >= 0 && subIndex < part.Vertices.Count ? subIndex : 0;
+        var part        = mesh.Parts[partIndex];
+        var vertexIndex = kind == DraftScenePartPatchKind.Vertex && subIndex >= 0 && subIndex < part.Vertices.Count ? subIndex : 0;
         var primitiveIndex = (kind == DraftScenePartPatchKind.PrimitiveFlags || kind == DraftScenePartPatchKind.PrimitiveEdit) &&
                              subIndex >= 0                                                                                     &&
                              subIndex < part.Primitives.Count
@@ -367,8 +404,8 @@ internal sealed unsafe class CustomizationEditorView
             workspace.Settings.ExportDirectory = Path.Combine(configDirectory.FullName, "customization-editor", "generated");
 
         var outputDirectory = new DirectoryInfo(workspace.Settings.ExportDirectory);
-        lastExport  = CustomizationDraftExporter.Export(workspace.Draft.Clone(), outputDirectory);
-        statusText  = $"已导出 {lastExport.File.FullName}";
+        lastExport = CustomizationDraftExporter.Export(workspace.Draft.Clone(), outputDirectory);
+        statusText = $"已导出 {lastExport.File.FullName}";
         SaveWorkspace(true);
     }
 

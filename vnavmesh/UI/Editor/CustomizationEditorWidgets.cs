@@ -8,10 +8,8 @@ namespace vnavmesh.UI.Editor;
 
 internal static class CustomizationEditorWidgets
 {
-    public static bool DrawBool(string label, ref bool value)
-    {
-        return ImGui.Checkbox(label, ref value);
-    }
+    public static bool DrawBool(string label, ref bool value) =>
+        ImGui.Checkbox(label, ref value);
 
     public static bool DrawString(string label, ref string value)
     {
