@@ -185,6 +185,7 @@ internal sealed class CustomizationEditorView
                 return;
             case true:
                 SaveWorkspace(true);
+                previewBuilder.Clear();
                 break;
         }
 
@@ -234,11 +235,22 @@ internal sealed class CustomizationEditorView
         if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Failed, LastError: not null })
             ImGui.TextColored(KnownColor.Red.Vector(), previewBuilder.LastError.Message);
 
-        if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, Navmesh: not null, Query: not null })
+        if (previewBuilder.CurrentState == CustomizationPreviewBuilder.State.Ready && previewBuilder.Query != null)
         {
-            var playerPos = Service.ObjectTable.LocalPlayer?.Position ?? default;
-            previewBuilder.Navmesh.CalcTileLoc(playerPos.SystemToRecast(), out var tileX, out var tileZ);
-            ImGui.TextUnformatted($"玩家区块: {tileX}x{tileZ}");
+            try
+            {
+                var navmesh = previewBuilder.Navmesh;
+                if (navmesh != null)
+                {
+                    var playerPos = Service.ObjectTable.LocalPlayer?.Position ?? default;
+                    navmesh.CalcTileLoc(playerPos.SystemToRecast(), out var tileX, out var tileZ);
+                    ImGui.TextUnformatted($"玩家区块: {tileX}x{tileZ}");
+                }
+            }
+            catch (InvalidOperationException ex) when (ex.Message == "缺少地面导航网格载荷")
+            {
+                ImGui.TextDisabled("玩家区块: 导航网格已卸载");
+            }
         }
 
         if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, BuildTelemetry: { } telemetry })
