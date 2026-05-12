@@ -459,7 +459,7 @@ internal sealed class CustomizationEditorView
         if (string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory))
             workspace.Settings.ExportDirectory = Path.Combine(configDirectory.FullName, "customization-editor", "generated");
 
-        Process.Start(new ProcessStartInfo(workspace.Settings.ExportDirectory));
+        Process.Start(new ProcessStartInfo(workspace.Settings.ExportDirectory) { UseShellExecute = true });
     }
 
     private void CommitDraftChange()
