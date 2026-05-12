@@ -142,7 +142,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (pendingPickPoint == null)
         {
             pendingPickPoint = point;
-            statusText       = $"{GetPickKindTitle(pickKind)}: 已记录第 1 个点 {point:f3}, 等待第 2 个世界点";
+            statusText       = $"{GetPickKindTitle(pickKind)}: 已记录第 1 个点 {point:f3}, 点击第 2 个世界点";
             return;
         }
 
@@ -214,7 +214,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (hasHit && TrySelectPreviewInstance(ref selection, hit.Object, previewBuilder, ref statusText))
             return;
 
-        statusText = "未命中可编辑对象";
+        statusText = "未选中可编辑对象";
     }
 
     private static bool TrySelectPreviewInstance(ref Selection selection, Collider* collider, CustomizationPreviewBuilder previewBuilder, ref string statusText)
@@ -237,7 +237,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 }
 
                 selection  = new(SelectionKind.PreviewInstance, instanceIndex, Key: key);
-                statusText = $"已选中预览实例: {key} #{instanceIndex}";
+                statusText = $"已选预览实例: {key} #{instanceIndex}";
                 return true;
             }
         }
@@ -272,7 +272,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return false;
 
         selection  = bestSelection;
-        statusText = $"已选中碰撞插入: {workspace.Draft.ColliderInsertions[selection.Index].Kind}";
+        statusText = $"已选碰撞插入: {workspace.Draft.ColliderInsertions[selection.Index].Kind}";
         return true;
     }
 

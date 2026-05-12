@@ -16,5 +16,6 @@ internal enum SelectionKind
     PreviewInstance,
     PreviewPart,
     PreviewVertex,
-    PreviewPrimitive
+    PreviewPrimitive,
+    Diagnostics
 }

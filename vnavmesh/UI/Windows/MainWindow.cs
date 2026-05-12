@@ -3,121 +3,115 @@ using Dalamud.Interface.Windowing;
 using vnavmesh.Bootstrap;
 using vnavmesh.Bootstrap.Composition;
 using vnavmesh.Configuration;
-using vnavmesh.Integration.Status;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
-using vnavmesh.UI.Editor;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Layout;
 using vnavmesh.UI.Debug.Mesh;
+using vnavmesh.UI.Editor;
 
 namespace vnavmesh.UI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private readonly Config               _config;
-    private readonly MovementPlanExecutor _movementExecutor;
-    private readonly DebugDrawer          _dd = new();
-    private readonly DebugGameCollision   _debugGameColl;
-    private readonly DebugNavmeshManager  _debugNavmeshManager;
-    private readonly DebugNavmeshCustom   _debugNavmeshCustom;
-    private readonly CustomizationEditorView _customizationEditor;
-    private readonly DebugLayout          _debugLayout;
+    private readonly Config                  config;
+    private readonly MovementPlanExecutor    movementExecutor;
+    private readonly DebugDrawer             debugDrawer = new();
+    private readonly DebugGameCollision      debugGameColl;
+    private readonly DebugNavmeshManager     debugNavmeshManager;
+    private readonly CustomizationEditorView customizationEditor;
+    private readonly DebugLayout             debugLayout;
 
     public MainWindow
-        (Config config, PluginPaths paths, NavmeshManager manager, MovementPlanExecutor movementExecutor, AsyncMoveRequest move, DTRProvider dtr) : base
+    (
+        Config               config,
+        PluginPaths          paths,
+        NavmeshManager       manager,
+        MovementPlanExecutor movementExecutor,
+        AsyncMoveRequest     move
+    ) : base
         ("vnavmesh 寻路导航")
     {
-        _config              = config;
-        _movementExecutor    = movementExecutor;
-        _debugGameColl       = new(config, _dd);
-        _debugNavmeshManager = new(_dd, manager, movementExecutor, move);
-        _debugNavmeshCustom  = new(config, _dd, _debugGameColl, manager, paths.ConfigDirectory.FullName);
-        _customizationEditor = new(config, _dd, _debugGameColl, manager, paths.ConfigDirectory);
-        _debugLayout         = new(_dd, _debugGameColl);
+        this.config           = config;
+        this.movementExecutor = movementExecutor;
+        debugGameColl         = new(config, debugDrawer);
+        debugNavmeshManager   = new(debugDrawer, manager, movementExecutor, move);
+        customizationEditor   = new(config, debugDrawer, debugGameColl, manager, paths.ConfigDirectory);
+        debugLayout           = new(debugDrawer, debugGameColl);
     }
 
     public void Dispose()
     {
-        _debugLayout.Dispose();
-        _customizationEditor.Dispose();
-        _debugNavmeshCustom.Dispose();
-        _debugNavmeshManager.Dispose();
-        _debugGameColl.Dispose();
-        _dd.Dispose();
+        debugLayout.Dispose();
+        customizationEditor.Dispose();
+        debugNavmeshManager.Dispose();
+        debugGameColl.Dispose();
+        debugDrawer.Dispose();
     }
 
     public void StartFrame() =>
-        _dd.StartFrame();
+        debugDrawer.StartFrame();
 
     public void EndFrame()
     {
-        _debugGameColl.DrawVisualizers();
+        debugGameColl.DrawVisualizers();
 
-        if (_config.ShowWaypoints)
+        if (config.ShowWaypoints)
         {
             var player = Service.ObjectTable.LocalPlayer;
-
             if (player != null)
             {
                 var from  = player.Position;
                 var color = 0xff00ff00;
 
-                foreach (var to in _movementExecutor.Waypoints)
+                foreach (var to in movementExecutor.Waypoints)
                 {
-                    _dd.DrawWorldLine(from, to, color);
-                    _dd.DrawWorldPointFilled(to, 3, 0xff0000ff);
+                    debugDrawer.DrawWorldLine(from, to, color);
+                    debugDrawer.DrawWorldPointFilled(to, 3, 0xff0000ff);
                     from  = to;
                     color = 0xff00ffff;
                 }
             }
         }
 
-        _dd.EndFrame();
+        debugDrawer.EndFrame();
     }
 
     public override void Draw()
     {
-        using (var tabs = ImRaii.TabBar("Tabs"))
+        using var tabs = ImRaii.TabBar("Tabs");
+        if (!tabs) return;
+
+        using (var tab = ImRaii.TabItem("配置"))
         {
-            if (tabs)
-            {
-                using (var tab = ImRaii.TabItem("配置"))
-                {
-                    if (tab)
-                        _config.Draw();
-                }
+            if (tab)
+                config.Draw();
+        }
 
-                using (var tab = ImRaii.TabItem("布局"))
-                {
-                    if (tab)
-                        _debugLayout.Draw();
-                }
+        using (var tab = ImRaii.TabItem("布局"))
+        {
+            if (tab)
+                debugLayout.Draw();
+        }
 
-                using (var tab = ImRaii.TabItem("碰撞"))
-                    if (tab)
-                        _debugGameColl.Draw();
-                
-                using (var tab = ImRaii.TabItem("管理"))
-                {
-                    if (tab)
-                        _debugNavmeshManager.Draw();
-                }
-                
-                using (var tab = ImRaii.TabItem("自定义编辑器"))
-                {
-                    if (tab)
-                        _customizationEditor.Draw();
-                }
+        using (var tab = ImRaii.TabItem("碰撞"))
+        {
+            if (tab)
+                debugGameColl.Draw();
+        }
 
-                using (var tab = ImRaii.TabItem("自定义"))
-                {
-                    if (tab)
-                        _debugNavmeshCustom.Draw();
-                }
-            }
+        using (var tab = ImRaii.TabItem("管理"))
+        {
+            if (tab)
+                debugNavmeshManager.Draw();
+        }
+
+        using (var tab = ImRaii.TabItem("自定义编辑器"))
+        {
+            if (tab)
+                customizationEditor.Draw();
         }
     }
 }

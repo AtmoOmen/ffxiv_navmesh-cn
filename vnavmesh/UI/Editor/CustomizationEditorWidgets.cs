@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
 using vnavmesh.Navigation.Customizations.Editor;
 
@@ -117,7 +118,7 @@ internal static class CustomizationEditorWidgets
         return changed;
     }
 
-    public static bool DrawNullableFloat(string label, ref float? value, float fallback)
+    public static bool DrawNullableFloat(string label, ref float? value, float fallback, string help = "")
     {
         var enabled = value.HasValue;
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
@@ -130,7 +131,14 @@ internal static class CustomizationEditorWidgets
         ImGui.TextUnformatted(label);
 
         if (!enabled)
+        {
+            if (!string.IsNullOrEmpty(help))
+            {
+                ImGui.SameLine();
+                ImGuiComponents.HelpMarker(help);
+            }
             return false;
+        }
 
         var current = value!.Value;
 
@@ -140,10 +148,12 @@ internal static class CustomizationEditorWidgets
             return true;
         }
 
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(help);
         return false;
     }
 
-    public static bool DrawNullableInt(string label, ref int? value, int fallback)
+    public static bool DrawNullableInt(string label, ref int? value, int fallback, string help = "")
     {
         var enabled = value.HasValue;
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
@@ -156,7 +166,14 @@ internal static class CustomizationEditorWidgets
         ImGui.TextUnformatted(label);
 
         if (!enabled)
+        {
+            if (!string.IsNullOrEmpty(help))
+            {
+                ImGui.SameLine();
+                ImGuiComponents.HelpMarker(help);
+            }
             return false;
+        }
 
         var current = value!.Value;
         if (ImGui.InputInt($"##{label}_value", ref current))
@@ -165,10 +182,12 @@ internal static class CustomizationEditorWidgets
             return true;
         }
 
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(help);
         return false;
     }
 
-    public static bool DrawNullableBool(string label, ref bool? value, bool fallback)
+    public static bool DrawNullableBool(string label, ref bool? value, bool fallback, string help = "")
     {
         var enabled = value.HasValue;
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
@@ -181,7 +200,14 @@ internal static class CustomizationEditorWidgets
         ImGui.TextUnformatted(label);
 
         if (!enabled)
+        {
+            if (!string.IsNullOrEmpty(help))
+            {
+                ImGui.SameLine();
+                ImGuiComponents.HelpMarker(help);
+            }
             return false;
+        }
 
         var current = value!.Value;
 
@@ -191,10 +217,12 @@ internal static class CustomizationEditorWidgets
             return true;
         }
 
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(help);
         return false;
     }
 
-    public static bool DrawNullableEnum<T>(string label, ref T? value, T? fallback) where T : struct, Enum
+    public static bool DrawNullableEnum<T>(string label, ref T? value, T? fallback, string help = "") where T : struct, Enum
     {
         var enabled = value.HasValue;
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
@@ -207,7 +235,14 @@ internal static class CustomizationEditorWidgets
         ImGui.TextUnformatted(label);
 
         if (!enabled)
+        {
+            if (!string.IsNullOrEmpty(help))
+            {
+                ImGui.SameLine();
+                ImGuiComponents.HelpMarker(help);
+            }
             return false;
+        }
 
         var current = value!.Value;
 
@@ -217,10 +252,12 @@ internal static class CustomizationEditorWidgets
             return true;
         }
 
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(help);
         return false;
     }
 
-    public static bool DrawNullableIntArray(string label, ref int[]? value, int[] fallback)
+    public static bool DrawNullableIntArray(string label, ref int[]? value, int[] fallback, string help = "")
     {
         var enabled = value != null;
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
@@ -233,7 +270,14 @@ internal static class CustomizationEditorWidgets
         ImGui.TextUnformatted(label);
 
         if (!enabled)
+        {
+            if (!string.IsNullOrEmpty(help))
+            {
+                ImGui.SameLine();
+                ImGuiComponents.HelpMarker(help);
+            }
             return false;
+        }
 
         var current = (int[])value!.Clone();
 
@@ -256,10 +300,12 @@ internal static class CustomizationEditorWidgets
             }
         }
 
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(help);
         return false;
     }
 
-    public static bool DrawNullableFlags<T>(string label, ref T? value, T? fallback) where T : struct, Enum
+    public static bool DrawNullableFlags<T>(string label, ref T? value, T? fallback, string help = "") where T : struct, Enum
     {
         var enabled = value.HasValue;
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
@@ -272,7 +318,14 @@ internal static class CustomizationEditorWidgets
         ImGui.TextUnformatted(label);
 
         if (!enabled)
+        {
+            if (!string.IsNullOrEmpty(help))
+            {
+                ImGui.SameLine();
+                ImGuiComponents.HelpMarker(help);
+            }
             return false;
+        }
 
         var current = value!.Value;
 
@@ -282,6 +335,8 @@ internal static class CustomizationEditorWidgets
             return true;
         }
 
+        ImGui.SameLine();
+        ImGuiComponents.HelpMarker(help);
         return false;
     }
 

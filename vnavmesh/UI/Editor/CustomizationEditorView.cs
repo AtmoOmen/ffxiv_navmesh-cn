@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.Numerics;
@@ -5,6 +6,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Lumina.Excel.Sheets;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations;
 using vnavmesh.Navigation.Customizations.Editor;
@@ -82,7 +84,8 @@ internal sealed class CustomizationEditorView
             Redo,
             RebuildPreview,
             () => SaveWorkspace(true),
-            ExportCurrentDraft
+            ExportCurrentDraft,
+            OpenExportedDirectory
         );
         DrawStatus();
 
@@ -110,8 +113,8 @@ internal sealed class CustomizationEditorView
         }
         else
         {
-            ImGui.TextDisabled("尚未加载 Territory");
-            ImGui.TextWrapped("进入游戏区域后, 这里会显示当前 Territory 的预览对象和本地草稿");
+            ImGui.TextDisabled("等待区域加载");
+            ImGui.TextWrapped("进入游戏区域后, 左侧会显示场景预览对象和本地草稿");
         }
 
         ImGui.EndChild();
@@ -137,13 +140,15 @@ internal sealed class CustomizationEditorView
                 AddMeshRemovalFromPreview,
                 AddInstancePatchFromPreview,
                 AddPartPatchFromPreview,
-                RemoveMatchingPartPatch
+                RemoveMatchingPartPatch,
+                RebuildSceneExtract,
+                RebuildPreview
             );
         }
         else
         {
-            ImGui.TextDisabled("等待 Territory");
-            ImGui.TextWrapped("进入游戏区域后, 编辑器会自动加载当前 Territory 的草稿; 加载后可直接在游戏画面点两点创建障碍或连接");
+            ImGui.TextDisabled("等待区域加载");
+            ImGui.TextWrapped("进入游戏区域后自动加载草稿, 可直接在画面中点两点创建障碍或连接");
         }
 
         ImGui.EndChild();
@@ -221,7 +226,6 @@ internal sealed class CustomizationEditorView
     private void DrawStatus()
     {
         ImGui.TextUnformatted($"区域: [{territoryID}] [{territoryKey}] [{territoryName}] ");
-        
         ImGui.TextUnformatted($"预览: {previewBuilder.CurrentState}");
 
         if (!string.IsNullOrEmpty(statusText))
@@ -230,8 +234,32 @@ internal sealed class CustomizationEditorView
         if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Failed, LastError: not null })
             ImGui.TextColored(KnownColor.Red.Vector(), previewBuilder.LastError.Message);
 
+        if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, Navmesh: not null, Query: not null })
+        {
+            var playerPos = Service.ObjectTable.LocalPlayer?.Position ?? default;
+            previewBuilder.Navmesh.CalcTileLoc(playerPos.SystemToRecast(), out var tileX, out var tileZ);
+            ImGui.TextUnformatted($"玩家区块: {tileX}x{tileZ}");
+        }
+
+        if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, BuildTelemetry: { } telemetry })
+        {
+            ImGui.TextDisabled($"构建: {telemetry.ThreadCount} 线程, {telemetry.ConfiguredBuildMaxCores} 核心, " +
+                               $"{telemetry.ParallelTicks / (double)TimeSpan.TicksPerMillisecond:f0} ms");
+        }
+
         if (lastExport != null)
             ImGui.TextDisabled($"导出: {lastExport.ClassName} v{lastExport.Version} {lastExport.ContentHash[..16]} -> {lastExport.File.FullName}");
+    }
+
+    private void RebuildSceneExtract(uint territoryID)
+    {
+        var scene = new SceneDefinition();
+        scene.FillFromActiveLayout();
+        scene.TerritoryID = territoryID;
+        var customization = new CustomizationDraftCustomization(NavmeshCustomizationRegistry.GetForScene(scene), workspace.Draft.Clone());
+        previewDirty = false;
+        nextRebuildAt = DateTime.MinValue;
+        previewBuilder.Rebuild(scene, customization, false);
     }
 
     private void AddColliderInsertion(Vector3 a, Vector3 b, DraftSceneColliderInsertionKind kind)
@@ -296,7 +324,7 @@ internal sealed class CustomizationEditorView
         if (existingIndex >= 0)
         {
             selection  = new(SelectionKind.MeshRemoval, existingIndex);
-            statusText = "已选中已有 mesh 删除项";
+            statusText = "已选现有 mesh 删除项";
             return;
         }
 
@@ -319,7 +347,7 @@ internal sealed class CustomizationEditorView
         if (existingIndex >= 0)
         {
             selection  = new(SelectionKind.InstancePatch, existingIndex);
-            statusText = "已选中已有实例补丁";
+            statusText = "已选现有实例补丁";
             return;
         }
 
@@ -360,7 +388,7 @@ internal sealed class CustomizationEditorView
         if (existingIndex >= 0)
         {
             selection  = new(SelectionKind.PartPatch, existingIndex);
-            statusText = "已选中已有顶点 / 三角补丁";
+            statusText = "已选现有顶点或三角补丁";
             return;
         }
 
@@ -424,6 +452,14 @@ internal sealed class CustomizationEditorView
         lastExport = CustomizationDraftExporter.Export(workspace.Draft.Clone(), outputDirectory);
         statusText = $"已导出 {lastExport.File.FullName}";
         SaveWorkspace(true);
+    }
+
+    private void OpenExportedDirectory()
+    {
+        if (string.IsNullOrWhiteSpace(workspace.Settings.ExportDirectory))
+            workspace.Settings.ExportDirectory = Path.Combine(configDirectory.FullName, "customization-editor", "generated");
+
+        Process.Start(new ProcessStartInfo(workspace.Settings.ExportDirectory));
     }
 
     private void CommitDraftChange()

@@ -28,7 +28,8 @@ internal static class CustomizationEditorToolbar
         VoidDelegate onRedo,
         VoidDelegate onRebuildPreview,
         VoidDelegate onSaveWorkspace,
-        VoidDelegate onExportDraft
+        VoidDelegate onExportDraft,
+        VoidDelegate onOpenExportedDirectory
     )
     {
         HandleKeyboardShortcuts
@@ -54,7 +55,7 @@ internal static class CustomizationEditorToolbar
             (
                 "浏览",
                 PickKind.None,
-                "只查看和选择对象; 在左侧选中后, 右侧会显示可编辑内容",
+                "查看和选择对象, 左侧选中后右侧显示可编辑内容",
                 ref pickKind,
                 ref pendingPickPoint,
                 ref currentPickPoint,
@@ -69,7 +70,7 @@ internal static class CustomizationEditorToolbar
             (
                 "选碰撞体",
                 PickKind.SelectCollider,
-                "进入世界点选模式; 在游戏画面点击碰撞体后, 右侧直接编辑",
+                "在游戏画面点选碰撞体, 选中后右侧直接编辑",
                 ref pickKind,
                 ref pendingPickPoint,
                 ref currentPickPoint,
@@ -84,7 +85,7 @@ internal static class CustomizationEditorToolbar
             (
                 "AABB 障碍",
                 PickKind.Aabb,
-                "在游戏画面点两个世界点, 生成一个轴对齐障碍体",
+                "在画面点两个世界点生成轴对齐障碍体",
                 ref pickKind,
                 ref pendingPickPoint,
                 ref currentPickPoint,
@@ -99,7 +100,7 @@ internal static class CustomizationEditorToolbar
             (
                 "圆柱障碍",
                 PickKind.Cylinder,
-                "在游戏画面点两个世界点, 生成一个圆柱障碍体",
+                "在画面点两个世界点生成圆柱障碍体",
                 ref pickKind,
                 ref pendingPickPoint,
                 ref currentPickPoint,
@@ -114,7 +115,7 @@ internal static class CustomizationEditorToolbar
             (
                 "网格连线",
                 PickKind.LinkPoints,
-                "在游戏画面点两个世界点, 生成 LinkPoints 连接",
+                "在画面点两个世界点生成网格连接点",
                 ref pickKind,
                 ref pendingPickPoint,
                 ref currentPickPoint,
@@ -129,7 +130,7 @@ internal static class CustomizationEditorToolbar
             (
                 "下落连接",
                 PickKind.LinkDrop,
-                "在游戏画面点两个世界点, 生成 LinkDrop 连接",
+                "在画面点两个世界点生成下落连接",
                 ref pickKind,
                 ref pendingPickPoint,
                 ref currentPickPoint,
@@ -144,7 +145,7 @@ internal static class CustomizationEditorToolbar
             (
                 "客户端路径",
                 PickKind.LinkClientPath,
-                "在游戏画面点两个世界点, 生成 LinkClientPath 连接",
+                "在画面点两个世界点生成客户端路径连接",
                 ref pickKind,
                 ref pendingPickPoint,
                 ref currentPickPoint,
@@ -159,7 +160,7 @@ internal static class CustomizationEditorToolbar
             (
                 "离网连接",
                 PickKind.OffMesh,
-                "在游戏画面点两个世界点, 生成构建期 off-mesh connection",
+                "在画面点两个世界点生成构建期离网连接",
                 ref pickKind,
                 ref pendingPickPoint,
                 ref currentPickPoint,
@@ -207,6 +208,13 @@ internal static class CustomizationEditorToolbar
             if (ImGui.Button("导出 C#"))
                 onExportDraft();
         }
+        
+        ImGui.SameLine();
+        using (ImRaii.Disabled(!workspaceLoaded))
+        {
+            if (ImGui.Button("打开导出文件夹"))
+                onOpenExportedDirectory();
+        }
 
         if (pickKind != PickKind.None)
         {
@@ -222,7 +230,7 @@ internal static class CustomizationEditorToolbar
                     ref lastWorldSelectMouseDown,
                     ref lastPickEscapeDown,
                     ref statusText,
-                    "已退出当前工具模式"
+                "已退出当前工具"
                 );
         }
     }
@@ -289,7 +297,7 @@ internal static class CustomizationEditorToolbar
                     ref lastWorldSelectMouseDown,
                     ref lastPickEscapeDown,
                     ref statusText,
-                    "已切换到浏览模式"
+                    "已切换为浏览模式"
                 );
             else
                 BeginPick
@@ -353,8 +361,8 @@ internal static class CustomizationEditorToolbar
         lastWorldSelectMouseDown = lastPickMouseDown;
         lastPickEscapeDown       = IsKeyDown(VK_ESCAPE);
         statusText = kind == PickKind.SelectCollider
-                         ? "选中碰撞体: 在游戏画面点击一个碰撞体"
-                         : $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)}: 等待第 1 个世界点, 在游戏画面点击";
+                         ? "点击游戏画面中的碰撞体以选中"
+                         : $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)}: 在画面点击第 1 个世界点";
     }
 
     private static bool IsKeyDown(int virtualKey) =>

@@ -30,7 +30,7 @@ internal static class CustomizationEditorLeftPanel
         {
             if (ImGui.TreeNodeEx("预览对象", ImGuiTreeNodeFlags.DefaultOpen))
             {
-                ImGui.TextDisabled("左键选择, 右键加入对应草稿补丁");
+                ImGui.TextDisabled("左键选择, 右键加入草稿补丁");
                 DrawPreviewMeshes(previewBuilder.Extractor, ref selection, dd, onAddMeshRemoval, onAddInstancePatch, onAddPartPatch);
                 ImGui.TreePop();
             }
@@ -273,6 +273,8 @@ internal static class CustomizationEditorLeftPanel
             selection = new(SelectionKind.BuildSettings);
         if (ImGui.Selectable("飞行支持", selection.Kind == SelectionKind.FlyingOverride))
             selection = new(SelectionKind.FlyingOverride);
+        if (ImGui.Selectable("诊断", selection.Kind == SelectionKind.Diagnostics))
+            selection = new(SelectionKind.Diagnostics);
 
         if (ImGui.TreeNodeEx("场景几何", ImGuiTreeNodeFlags.DefaultOpen))
         {
