@@ -7,7 +7,9 @@
   <Project Path="DotRecast/src/DotRecast.Detour.Extras/DotRecast.Detour.Extras.csproj" />
   <Project Path="DotRecast/src/DotRecast.Detour/DotRecast.Detour.csproj" />
   <Project Path="DotRecast/src/DotRecast.Recast/DotRecast.Recast.csproj" />
-  <Project Path="vnavmesh.Common/vnavmesh.Common.csproj" />
+  <Project Path="vnavmesh.Common/vnavmesh.Common.csproj">
+    <Platform Project="x64" />
+  </Project>
   <Project Path="vnavmesh.Worker/vnavmesh.Worker.csproj">
     <Platform Project="x64" />
   </Project>

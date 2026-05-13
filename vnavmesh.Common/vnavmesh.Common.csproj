@@ -6,6 +6,8 @@
     <LangVersion>latest</LangVersion>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
+    <Configurations>Release;Debug</Configurations>
+    <Platforms>x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
