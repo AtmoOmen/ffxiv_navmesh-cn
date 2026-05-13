@@ -237,7 +237,6 @@ internal static class CustomizationEditorInspector
         if (CustomizationEditorWidgets.DrawBool("当前工作区生效", ref workspace.IsApplied))
             onCommit();
 
-        CustomizationEditorWidgets.DrawBool("自动重建", ref workspace.Settings.AutoRebuild);
         CustomizationEditorWidgets.DrawBool("自动保存", ref workspace.Settings.AutoSave);
         CustomizationEditorWidgets.DrawFloat("重建延迟", ref workspace.Settings.RebuildDelaySeconds, 0.05f, 0.1f, 5f);
 

@@ -60,7 +60,6 @@ public sealed class CustomizationEditorTerritoryStore
 public sealed class CustomizationEditorSettings
 {
     public string ExportDirectory     = "";
-    public bool   AutoRebuild         = false;
     public bool   AutoSave            = true;
     public float  RebuildDelaySeconds = 0.4f;
 }

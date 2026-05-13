@@ -61,7 +61,6 @@ internal sealed class CustomizationEditorView
     private          string                          exportDirText = "";
     private          CustomizationDraftExportResult? lastExport;
     private          bool                            previewDirty  = true;
-    private          DateTime                        nextRebuildAt = DateTime.MinValue;
     private          Task<CustomizationEditorWorkspace>? pendingWorkspaceCreation;
     private          CancellationTokenSource?             pendingWorkspaceCreationCancel;
     private          float                                leftPaneWidth = 340;
@@ -100,15 +99,6 @@ internal sealed class CustomizationEditorView
             OpenExportedDirectory
         );
         DrawStatus();
-
-        if (workspaceLoaded                              &&
-            hasWorkspace                                 &&
-            pendingWorkspaceCreation == null             &&
-            previewDirty                                 &&
-            workspace.Settings.AutoRebuild               &&
-            DateTime.UtcNow             >= nextRebuildAt &&
-            previewBuilder.CurrentState != CustomizationPreviewBuilder.State.InProgress)
-            RebuildPreview();
 
         if (ImGui.BeginTable("##customization_editor_split", 2, ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV))
         {
@@ -255,15 +245,12 @@ internal sealed class CustomizationEditorView
         lastWorldSelectMouseDown = lastPickMouseDown;
         lastPickEscapeDown       = CustomizationEditorWorldOverlay.TakeKeyPress(0x1B, ref lastPickEscapeDown);
         previewDirty             = true;
-        nextRebuildAt            = DateTime.MinValue;
         statusText               = string.Empty;
-        if (hasWorkspace && workspace.Settings.AutoRebuild)
-            RebuildPreview();
     }
 
     private void PollPendingWorkspaceCreation()
     {
-        if (pendingWorkspaceCreation == null || !pendingWorkspaceCreation.IsCompleted)
+        if (pendingWorkspaceCreation is not { IsCompleted: true })
             return;
 
         try
@@ -353,7 +340,7 @@ internal sealed class CustomizationEditorView
         }, cancel);
         cancel.ThrowIfCancellationRequested();
 
-        var buildSignature = vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(customizedScene, settings);
+        var buildSignature = Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(customizedScene, settings);
         var navmesh = await manager.BuildExternalNavmesh($"editor-seed-{territoryID}-{Guid.NewGuid():N}", customizedScene, settings, baseCustomization.Version, buildSignature, cancel);
         cancel.ThrowIfCancellationRequested();
         baseCustomization.CustomizeMesh(navmesh, [.. scene.FestivalLayers]);
@@ -368,7 +355,6 @@ internal sealed class CustomizationEditorView
             Settings      = new()
             {
                 ExportDirectory     = Path.Combine(configDirectory.FullName, "customization-editor", "generated"),
-                AutoRebuild         = true,
                 AutoSave            = true,
                 RebuildDelaySeconds = 0.4f
             }
@@ -414,7 +400,6 @@ internal sealed class CustomizationEditorView
             pendingPickPoint = null;
             currentPickPoint = null;
             previewDirty = false;
-            nextRebuildAt = DateTime.MinValue;
             previewBuilder.Clear();
             SaveWorkspace(true);
             statusText = "已删除当前工作区, 当前区域暂无工作区";
@@ -451,11 +436,7 @@ internal sealed class CustomizationEditorView
         redo.Clear();
         selection     = new(SelectionKind.Workspace);
         previewDirty  = true;
-        nextRebuildAt = DateTime.UtcNow;
-        if (workspace.Settings.AutoRebuild)
-            RebuildPreview();
-        else
-            previewBuilder.Clear();
+        previewBuilder.Clear();
     }
 
     private void UpgradeLegacyWorkspace()
@@ -520,7 +501,6 @@ internal sealed class CustomizationEditorView
         scene.TerritoryID = territoryID;
         var customization = BuildPreviewCustomization(scene);
         previewDirty = false;
-        nextRebuildAt = DateTime.MinValue;
         previewBuilder.Rebuild(scene, customization, false);
     }
 
@@ -700,7 +680,6 @@ internal sealed class CustomizationEditorView
 
         var customization = BuildPreviewCustomization(scene);
         previewDirty  = false;
-        nextRebuildAt = DateTime.MinValue;
         statusText    = string.Empty;
         previewBuilder.Rebuild(scene, customization, true);
     }
@@ -747,7 +726,6 @@ internal sealed class CustomizationEditorView
         historySnapshot = workspace.Draft.Clone();
         redo.Clear();
         previewDirty  = true;
-        nextRebuildAt = DateTime.UtcNow + TimeSpan.FromSeconds(Math.Clamp(workspace.Settings.RebuildDelaySeconds, 0.05f, 10f));
         SaveWorkspace();
     }
 
@@ -768,7 +746,6 @@ internal sealed class CustomizationEditorView
         historySnapshot  = workspace.Draft.Clone();
         selection        = new(SelectionKind.Workspace);
         previewDirty     = true;
-        nextRebuildAt    = DateTime.UtcNow;
         historySuspended = false;
         SaveWorkspace();
     }
@@ -784,7 +761,6 @@ internal sealed class CustomizationEditorView
         historySnapshot  = workspace.Draft.Clone();
         selection        = new(SelectionKind.Workspace);
         previewDirty     = true;
-        nextRebuildAt    = DateTime.UtcNow;
         historySuspended = false;
         SaveWorkspace();
     }
