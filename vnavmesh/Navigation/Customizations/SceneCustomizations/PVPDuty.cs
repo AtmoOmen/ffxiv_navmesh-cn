@@ -12,8 +12,8 @@ public class PVPDuty : SceneNavmeshCustomization
     {
         if (Service.LuminaRow<TerritoryType>(definition.TerritoryID) is not { IsPvpZone: true })
             return false;
-        
-        ApplyNormalPrecisionSettings();
+
+        Settings.AgentRadius = 1f;
         return true;
     }
 }

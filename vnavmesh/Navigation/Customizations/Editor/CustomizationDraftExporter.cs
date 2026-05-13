@@ -33,19 +33,10 @@ internal static class CustomizationDraftExporter
     {
         className ??= BuildClassName(draft);
 
-        var sb = new StringBuilder(8192);
-        Line(sb, 0, "using System.Collections.Generic;");
-        Line(sb, 0, "using System.Numerics;");
-        Line(sb, 0, "using DotRecast.Detour;");
-        Line(sb, 0, "using DotRecast.Recast;");
-        Line(sb, 0, "using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;");
-        Line(sb, 0, "using vnavmesh.Common.Navigation.Mesh.Runtime;");
-        Line(sb, 0, "using vnavmesh.Navigation.Customizations;");
+        var context = DraftExportContext.Create(draft);
+        var sb      = new StringBuilder(8192);
+        AppendUsings(sb, context);
         Line(sb, 0, "using vnavmesh.Navigation.Customizations.Attributes;");
-        Line(sb, 0, "using vnavmesh.Navigation.Customizations.Extensions;");
-        Line(sb, 0, "using vnavmesh.Navigation.Mesh.Build;");
-        Line(sb, 0, "using vnavmesh.Navigation.Mesh.Runtime;");
-        Line(sb, 0, "using vnavmesh.Navigation.Scene;");
         Line(sb);
         Line(sb, 0, "namespace vnavmesh.Navigation.Customizations.Territories.Generated;");
         Line(sb);
@@ -65,13 +56,154 @@ internal static class CustomizationDraftExporter
 
         AppendBuildProfileMethod(sb, draft.BuildProfile);
         AppendBuildSettingsMethod(sb, draft.BuildSettings);
-        AppendSceneMethod(sb, draft);
+        AppendSceneMethod(sb, draft, context);
         AppendSettingsMethod(sb, draft);
         AppendMeshMethod(sb, draft);
-        AppendHelpers(sb, draft);
+        AppendHelpers(sb, context);
 
         Line(sb, 0, "}");
         return NormalizeLineEndings(sb.ToString());
+    }
+
+    private sealed record DraftExportContext
+    (
+        bool HasScene,
+        bool HasBuildProfile,
+        bool HasBuildSettings,
+        bool HasSettings,
+        bool HasMesh,
+        bool HasFlyingOverride,
+        bool NeedsVector,
+        bool NeedsAabb,
+        bool NeedsMatrix,
+        bool NeedsRcPartition,
+        bool NeedsNavmeshRuntime,
+        bool NeedsNavmeshBuild,
+        bool NeedsSceneExtensions,
+        bool NeedsList,
+        bool NeedsInstanceHelpers,
+        bool NeedsTransformBoundsHelper,
+        bool NeedsLocalBoundsHelpers
+    )
+    {
+        public static DraftExportContext Create(CustomizationDraft draft)
+        {
+            var hasBuildProfile  = HasBuildProfileOverrides(draft.BuildProfile);
+            var hasBuildSettings = HasBuildSettingsOverrides(draft.BuildSettings);
+            var hasSettings      = draft.OffMeshConnections.Any(static x => x.Enabled);
+            var hasMesh          = draft.MeshLinks.Any(static x => x.Enabled);
+            var hasScene =
+                draft.MeshRemovals.Any(static x => x.Enabled && !string.IsNullOrWhiteSpace(x.MeshKey)) ||
+                draft.PartPatches.Any(IsValidPartPatch)                                                ||
+                draft.InstancePatches.Any(IsValidInstancePatch)                                        ||
+                draft.ColliderInsertions.Any(static x => x.Enabled);
+
+            var needsInstanceHelpers = draft.InstancePatches.Any(static x => IsValidInstancePatch(x) && x.Kind != DraftSceneInstancePatchKind.ClearInstances);
+            var needsTransformBoundsHelper =
+                draft.InstancePatches.Any(static x => IsValidInstancePatch(x) && x.Kind == DraftSceneInstancePatchKind.Transform) ||
+                draft.PartPatches.Any(static x => IsValidPartPatch(x)         && x.Kind == DraftScenePartPatchKind.Vertex);
+            var needsLocalBoundsHelpers = draft.PartPatches.Any(static x => IsValidPartPatch(x) && x.Kind == DraftScenePartPatchKind.Vertex);
+            var needsVector =
+                hasSettings                                                                                                       ||
+                hasMesh                                                                                                           ||
+                draft.PartPatches.Any(static x => IsValidPartPatch(x)         && x.Kind == DraftScenePartPatchKind.Vertex)        ||
+                draft.InstancePatches.Any(static x => IsValidInstancePatch(x) && x.Kind == DraftSceneInstancePatchKind.Transform) ||
+                draft.ColliderInsertions.Any(static x => x.Enabled);
+            var needsAabb        = draft.ColliderInsertions.Any(static x => x.Enabled) || needsTransformBoundsHelper;
+            var needsMatrix      = needsTransformBoundsHelper;
+            var needsRcPartition = draft.BuildProfile.PartitioningOverride.HasValue || draft.BuildSettings.Partitioning.HasValue;
+
+            return new
+            (
+                hasScene,
+                hasBuildProfile,
+                hasBuildSettings,
+                hasSettings,
+                hasMesh,
+                draft.FlyingSupportedOverride.HasValue,
+                needsVector,
+                needsAabb,
+                needsMatrix,
+                needsRcPartition,
+                hasSettings     || hasMesh,
+                hasBuildProfile || hasBuildSettings,
+                draft.ColliderInsertions.Any(static x => x.Enabled),
+                hasMesh || needsLocalBoundsHelpers,
+                needsInstanceHelpers,
+                needsTransformBoundsHelper,
+                needsLocalBoundsHelpers
+            );
+        }
+
+        private static bool HasBuildProfileOverrides(DraftBuildProfileOverrides profile) =>
+            profile.PartitioningOverride.HasValue               ||
+            profile.CellSizeOverride.HasValue                   ||
+            profile.CellHeightOverride.HasValue                 ||
+            profile.RegionMinSizeOverride.HasValue              ||
+            profile.RegionMergeSizeOverride.HasValue            ||
+            profile.PolyMaxEdgeLenOverride.HasValue             ||
+            profile.PolyMaxSimplificationErrorOverride.HasValue ||
+            profile.AgentRadiusOverride.HasValue                ||
+            profile.VolumeTilesOverride != null                 ||
+            profile.DetailSampleDistOverride.HasValue           ||
+            profile.GenerateEdgeClimbLinksOverride.HasValue     ||
+            profile.GenerateEdgeJumpLinksOverride.HasValue;
+
+        private static bool HasBuildSettingsOverrides(DraftBuildSettingsOverrides settings) =>
+            settings.CellSize.HasValue                   ||
+            settings.CellHeight.HasValue                 ||
+            settings.AgentHeight.HasValue                ||
+            settings.AgentRadius.HasValue                ||
+            settings.AgentMaxClimb.HasValue              ||
+            settings.AgentMaxSlopeDeg.HasValue           ||
+            settings.Filtering.HasValue                  ||
+            settings.RegionMinSize.HasValue              ||
+            settings.RegionMergeSize.HasValue            ||
+            settings.Partitioning.HasValue               ||
+            settings.PolyMaxEdgeLen.HasValue             ||
+            settings.PolyMaxSimplificationError.HasValue ||
+            settings.PolyMaxVerts.HasValue               ||
+            settings.DetailSampleDist.HasValue           ||
+            settings.DetailMaxSampleError.HasValue       ||
+            settings.FastBuild.HasValue                  ||
+            settings.GenerateEdgeClimbLinks.HasValue     ||
+            settings.GenerateEdgeJumpLinks.HasValue      ||
+            settings.GroundTolerance.HasValue            ||
+            settings.ClimbDownDistance.HasValue          ||
+            settings.ClimbDownMaxHeight.HasValue         ||
+            settings.ClimbDownMinHeight.HasValue         ||
+            settings.EdgeJumpEndDistance.HasValue        ||
+            settings.EdgeJumpHeight.HasValue             ||
+            settings.EdgeJumpMaxDrop.HasValue            ||
+            settings.EdgeJumpMinDrop.HasValue            ||
+            settings.GroundTileSize.HasValue             ||
+            settings.GroundTileCountMax.HasValue         ||
+            settings.VolumeTiles != null;
+    }
+
+    private static void AppendUsings(StringBuilder sb, DraftExportContext context)
+    {
+        if (context.NeedsList)
+            Line(sb, 0, "using System.Collections.Generic;");
+        if (context.NeedsVector)
+            Line(sb, 0, "using System.Numerics;");
+        if (context.HasSettings)
+            Line(sb, 0, "using DotRecast.Detour;");
+        if (context.NeedsRcPartition)
+            Line(sb, 0, "using DotRecast.Recast;");
+        if (context.NeedsAabb || context.NeedsMatrix)
+            Line(sb, 0, "using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;");
+        if (context.NeedsNavmeshRuntime)
+            Line(sb, 0, "using vnavmesh.Common.Navigation.Mesh.Runtime;");
+        Line(sb, 0, "using vnavmesh.Navigation.Customizations.Abstractions;");
+        if (context.HasSettings || context.NeedsSceneExtensions)
+            Line(sb, 0, "using vnavmesh.Navigation.Customizations.Extensions;");
+        if (context.NeedsNavmeshBuild)
+            Line(sb, 0, "using vnavmesh.Navigation.Mesh.Build;");
+        if (context.HasMesh)
+            Line(sb, 0, "using vnavmesh.Navigation.Mesh.Runtime;");
+        if (context.HasScene || context.HasBuildProfile || context.HasBuildSettings || context.HasSettings || context.HasFlyingOverride)
+            Line(sb, 0, "using vnavmesh.Navigation.Scene;");
     }
 
     private static void AppendBuildProfileMethod(StringBuilder sb, DraftBuildProfileOverrides profile)
@@ -143,31 +275,89 @@ internal static class CustomizationDraftExporter
         Line(sb);
     }
 
-    private static void AppendSceneMethod(StringBuilder sb, CustomizationDraft draft)
+    private static void AppendSceneMethod(StringBuilder sb, CustomizationDraft draft, DraftExportContext context)
     {
-        var body = new StringBuilder();
-
-        foreach (var removal in draft.MeshRemovals.Where(static x => x.Enabled))
-            Line(body, 2, $"scene.Meshes.Remove(\"{Escape(removal.MeshKey)}\");");
-
-        foreach (var patch in draft.PartPatches.Where(static x => x.Enabled))
-            AppendPartPatch(body, patch);
-
-        foreach (var patch in draft.InstancePatches.Where(static x => x.Enabled))
-            AppendInstancePatch(body, patch);
-
-        foreach (var insertion in draft.ColliderInsertions.Where(static x => x.Enabled))
-            AppendColliderInsertion(body, insertion);
-
-        if (body.Length == 0)
+        if (!context.HasScene)
             return;
 
         Line(sb, 1, "public override void CustomizeScene(SceneExtractor scene)");
         Line(sb, 1, "{");
-        sb.Append(body);
+
+        foreach (var removal in draft.MeshRemovals.Where(static x => x.Enabled && !string.IsNullOrWhiteSpace(x.MeshKey)))
+            Line(sb, 2, $"scene.Meshes.Remove(\"{Escape(removal.MeshKey)}\");");
+
+        AppendMeshPatchGroups(sb, draft);
+
+        foreach (var insertion in draft.ColliderInsertions.Where(static x => x.Enabled))
+            AppendColliderInsertion(sb, insertion);
+
         Line(sb, 1, "}");
         Line(sb);
     }
+
+    private static void AppendMeshPatchGroups(StringBuilder sb, CustomizationDraft draft)
+    {
+        var meshKeys = draft.PartPatches
+                            .Where(IsValidPartPatch)
+                            .Select(static x => x.MeshKey)
+                            .Concat
+                            (
+                                draft.InstancePatches
+                                     .Where(IsValidInstancePatch)
+                                     .Select(static x => x.MeshKey)
+                            )
+                            .Distinct(StringComparer.Ordinal);
+
+        var meshIndex = 0;
+
+        foreach (var meshKey in meshKeys)
+        {
+            var meshVariable = $"mesh{meshIndex++}";
+            var partPatches = draft.PartPatches
+                                   .Where(x => IsValidPartPatch(x) && string.Equals(x.MeshKey, meshKey, StringComparison.Ordinal))
+                                   .ToArray();
+            var instancePatches = draft.InstancePatches
+                                       .Where(x => IsValidInstancePatch(x) && string.Equals(x.MeshKey, meshKey, StringComparison.Ordinal))
+                                       .ToArray();
+
+            Line(sb, 2, $"if (scene.Meshes.TryGetValue(\"{Escape(meshKey)}\", out var {meshVariable}))");
+            Line(sb, 2, "{");
+
+            foreach (var patch in partPatches)
+                AppendPartPatch(sb, patch, meshVariable, 3);
+
+            for (var i = 0; i < instancePatches.Length; ++i)
+                AppendInstancePatch(sb, instancePatches[i], meshVariable, i, 3);
+
+            Line(sb, 2, "}");
+        }
+    }
+
+    private static bool IsValidPartPatch(DraftScenePartPatch patch) =>
+        patch.Enabled                             &&
+        !string.IsNullOrWhiteSpace(patch.MeshKey) &&
+        patch.PartIndex >= 0                      &&
+        patch.Kind switch
+        {
+            DraftScenePartPatchKind.Vertex         => patch.VertexIndex    >= 0,
+            DraftScenePartPatchKind.PrimitiveFlags => patch.PrimitiveIndex >= 0,
+            DraftScenePartPatchKind.PrimitiveEdit  => patch.PrimitiveIndex >= 0,
+            _                                      => false
+        };
+
+    private static bool IsValidInstancePatch(DraftSceneInstancePatch patch) =>
+        patch.Enabled                             &&
+        !string.IsNullOrWhiteSpace(patch.MeshKey) &&
+        patch.Kind switch
+        {
+            DraftSceneInstancePatchKind.ClearInstances => true,
+            DraftSceneInstancePatchKind.RemoveInstance => patch.InstanceId != 0 || patch.InstanceIndex >= 0,
+            DraftSceneInstancePatchKind.Transform      => patch.InstanceId != 0 || patch.InstanceIndex >= 0,
+            DraftSceneInstancePatchKind.SetFlags => (patch.InstanceId != 0 || patch.InstanceIndex >= 0) &&
+                                                    (patch.ForceSetPrimFlags   != SceneExtractor.PrimitiveFlags.None ||
+                                                     patch.ForceClearPrimFlags != SceneExtractor.PrimitiveFlags.None),
+            _ => false
+        };
 
     private static void AppendSettingsMethod(StringBuilder sb, CustomizationDraft draft)
     {
@@ -226,91 +416,86 @@ internal static class CustomizationDraftExporter
         Line(sb);
     }
 
-    private static void AppendPartPatch(StringBuilder sb, DraftScenePartPatch patch)
+    private static void AppendPartPatch(StringBuilder sb, DraftScenePartPatch patch, string meshVariable, int indent)
     {
-        Line(sb, 2, $"if (scene.Meshes.TryGetValue(\"{Escape(patch.MeshKey)}\", out var mesh))");
-        Line(sb, 2, "{");
-        Line(sb, 3, $"if ({patch.PartIndex} >= 0 && {patch.PartIndex} < mesh.Parts.Count)");
-        Line(sb, 3, "{");
-        Line(sb, 4, $"var part = mesh.Parts[{patch.PartIndex}];");
+        Line(sb, indent,     $"if ({patch.PartIndex} < {meshVariable}.Parts.Count)");
+        Line(sb, indent,     "{");
+        Line(sb, indent + 1, $"var part = {meshVariable}.Parts[{patch.PartIndex}];");
 
         switch (patch.Kind)
         {
             case DraftScenePartPatchKind.Vertex:
-                Line(sb, 4, $"if ({patch.VertexIndex} >= 0 && {patch.VertexIndex} < part.Vertices.Count)");
-                Line(sb, 4, "{");
-                Line(sb, 5, $"part.Vertices[{patch.VertexIndex}] = {FormatVector(patch.Position)};");
-                Line(sb, 5, "part.LocalBounds = CalculateLocalBounds(part.Vertices);");
-                Line(sb, 5, "RecalculateMeshBounds(mesh);");
-                Line(sb, 4, "}");
+                Line(sb, indent + 1, $"if ({patch.VertexIndex} < part.Vertices.Count)");
+                Line(sb, indent + 1, "{");
+                Line(sb, indent + 2, $"part.Vertices[{patch.VertexIndex}] = {FormatVector(patch.Position)};");
+                Line(sb, indent + 2, "part.LocalBounds = CalculateLocalBounds(part.Vertices);");
+                Line(sb, indent + 2, $"RecalculateMeshBounds({meshVariable});");
+                Line(sb, indent + 1, "}");
                 break;
             case DraftScenePartPatchKind.PrimitiveFlags:
-                Line(sb, 4, $"if ({patch.PrimitiveIndex} >= 0 && {patch.PrimitiveIndex} < part.Primitives.Count)");
-                Line(sb, 4, "{");
-                Line(sb, 5, $"var primitive = part.Primitives[{patch.PrimitiveIndex}];");
-                Line(sb, 5, $"primitive.Flags = {FormatPrimitiveFlags(patch.Flags)};");
-                Line(sb, 5, $"part.Primitives[{patch.PrimitiveIndex}] = primitive;");
-                Line(sb, 4, "}");
+                Line(sb, indent + 1, $"if ({patch.PrimitiveIndex} < part.Primitives.Count)");
+                Line(sb, indent + 1, "{");
+                Line(sb, indent + 2, $"var primitive = part.Primitives[{patch.PrimitiveIndex}];");
+                Line(sb, indent + 2, $"primitive.Flags = {FormatPrimitiveFlags(patch.Flags)};");
+                Line(sb, indent + 2, $"part.Primitives[{patch.PrimitiveIndex}] = primitive;");
+                Line(sb, indent + 1, "}");
                 break;
             case DraftScenePartPatchKind.PrimitiveEdit:
-                Line(sb, 4, $"if ({patch.PrimitiveIndex} >= 0 && {patch.PrimitiveIndex} < part.Primitives.Count)");
-                Line(sb, 4, "{");
+                Line(sb, indent + 1, $"if ({patch.PrimitiveIndex} < part.Primitives.Count)");
+                Line(sb, indent + 1, "{");
                 Line
                 (
                     sb,
-                    5,
+                    indent + 2,
                     $"part.Primitives[{patch.PrimitiveIndex}] = new({patch.V1}, {patch.V2}, {patch.V3}, {FormatPrimitiveFlags(patch.Flags)}, {FormatUlong(patch.Material)});"
                 );
-                Line(sb, 4, "}");
+                Line(sb, indent + 1, "}");
                 break;
         }
 
-        Line(sb, 3, "}");
-        Line(sb, 2, "}");
+        Line(sb, indent, "}");
     }
 
-    private static void AppendInstancePatch(StringBuilder sb, DraftSceneInstancePatch patch)
+    private static void AppendInstancePatch(StringBuilder sb, DraftSceneInstancePatch patch, string meshVariable, int patchIndex, int indent)
     {
-        Line(sb, 2, $"if (scene.Meshes.TryGetValue(\"{Escape(patch.MeshKey)}\", out var mesh))");
-        Line(sb, 2, "{");
-
         switch (patch.Kind)
         {
             case DraftSceneInstancePatchKind.ClearInstances:
-                Line(sb, 3, "mesh.Instances.Clear();");
+                Line(sb, indent, $"{meshVariable}.Instances.Clear();");
                 break;
             case DraftSceneInstancePatchKind.RemoveInstance:
-                Line(sb, 3, $"var index = ResolveInstanceIndex(mesh, {FormatUlong(patch.InstanceId)}, {patch.InstanceIndex});");
-                Line(sb, 3, "if (index >= 0)");
-                Line(sb, 4, "mesh.Instances.RemoveAt(index);");
+                Line(sb, indent,     "{");
+                Line(sb, indent + 1, $"var index = ResolveInstanceIndex({meshVariable}, {FormatUlong(patch.InstanceId)}, {patch.InstanceIndex});");
+                Line(sb, indent + 1, "if (index >= 0)");
+                Line(sb, indent + 2, $"{meshVariable}.Instances.RemoveAt(index);");
+                Line(sb, indent,     "}");
                 break;
             case DraftSceneInstancePatchKind.Transform:
-                Line(sb, 3, $"if (ResolveInstance(mesh, {FormatUlong(patch.InstanceId)}, {patch.InstanceIndex}) is {{ }} inst)");
-                Line(sb, 3, "{");
-                Line(sb, 4, $"inst.WorldTransform.Row0 = {FormatVector(patch.WorldTransform.Row0)};");
-                Line(sb, 4, $"inst.WorldTransform.Row1 = {FormatVector(patch.WorldTransform.Row1)};");
-                Line(sb, 4, $"inst.WorldTransform.Row2 = {FormatVector(patch.WorldTransform.Row2)};");
-                Line(sb, 4, $"inst.WorldTransform.Row3 = {FormatVector(patch.WorldTransform.Row3)};");
-                Line(sb, 4, "inst.WorldBounds = TransformBounds(inst.WorldTransform, mesh.LocalBounds);");
-                Line(sb, 3, "}");
+                var transformInstance = $"instance{patchIndex}";
+                Line(sb, indent, $"if (ResolveInstance({meshVariable}, {FormatUlong(patch.InstanceId)}, {patch.InstanceIndex}) is {{ }} {transformInstance})");
+                Line(sb, indent, "{");
+                AppendMatrixAssignment(sb, indent + 1, $"{transformInstance}.WorldTransform", patch.WorldTransform);
+                Line(sb, indent + 1, $"{transformInstance}.WorldBounds = TransformBounds({transformInstance}.WorldTransform, {meshVariable}.LocalBounds);");
+                Line(sb, indent, "}");
                 break;
             case DraftSceneInstancePatchKind.SetFlags:
-                Line(sb, 3, $"if (ResolveInstance(mesh, {FormatUlong(patch.InstanceId)}, {patch.InstanceIndex}) is {{ }} inst)");
-                Line(sb, 3, "{");
-                Line(sb, 4, $"inst.ForceSetPrimFlags = {FormatPrimitiveFlags(patch.ForceSetPrimFlags)};");
-                Line(sb, 4, $"inst.ForceClearPrimFlags = {FormatPrimitiveFlags(patch.ForceClearPrimFlags)};");
-                Line(sb, 3, "}");
+                var flagsInstance = $"instance{patchIndex}";
+                Line(sb, indent,     $"if (ResolveInstance({meshVariable}, {FormatUlong(patch.InstanceId)}, {patch.InstanceIndex}) is {{ }} {flagsInstance})");
+                Line(sb, indent,     "{");
+                Line(sb, indent + 1, $"{flagsInstance}.ForceSetPrimFlags = {FormatPrimitiveFlags(patch.ForceSetPrimFlags)};");
+                Line(sb, indent + 1, $"{flagsInstance}.ForceClearPrimFlags = {FormatPrimitiveFlags(patch.ForceClearPrimFlags)};");
+                Line(sb, indent,     "}");
                 break;
         }
-
-        Line(sb, 2, "}");
     }
 
     private static void AppendColliderInsertion(StringBuilder sb, DraftSceneColliderInsertion insertion)
     {
-        var min  = Vector3.Min(insertion.Min, insertion.Max);
-        var max  = Vector3.Max(insertion.Min, insertion.Max);
-        var call = insertion.Kind == DraftSceneColliderInsertionKind.Cylinder ? "InsertCylinderCollider" : "InsertAABoxCollider";
+        var min             = Vector3.Min(insertion.Min, insertion.Max);
+        var max             = Vector3.Max(insertion.Min, insertion.Max);
+        var call            = insertion.Kind == DraftSceneColliderInsertionKind.Cylinder ? "InsertCylinderCollider" : "InsertAABoxCollider";
+        var forceSetFlags   = FormatPrimitiveFlags(insertion.ForceSetPrimFlags);
+        var forceClearFlags = FormatPrimitiveFlags(insertion.ForceClearPrimFlags);
 
         Line(sb, 2, "scene." + call);
         Line(sb, 2, "(");
@@ -318,19 +503,34 @@ internal static class CustomizationDraftExporter
         Line(sb, 3, "{");
         Line(sb, 4, $"Min = {FormatVector(min)},");
         Line(sb, 4, $"Max = {FormatVector(max)}");
-        Line(sb, 3, "},");
-        Line(sb, 3, $"{FormatPrimitiveFlags(insertion.ForceSetPrimFlags)},");
-        Line(sb, 3, $"{FormatPrimitiveFlags(insertion.ForceClearPrimFlags)}");
+
+        if (insertion is { ForceSetPrimFlags: SceneExtractor.PrimitiveFlags.None, ForceClearPrimFlags: SceneExtractor.PrimitiveFlags.None })
+            Line(sb, 3, "}");
+        else
+        {
+            Line(sb, 3, "},");
+            Line(sb, 3, insertion.ForceClearPrimFlags == SceneExtractor.PrimitiveFlags.None ? forceSetFlags : $"{forceSetFlags},");
+            if (insertion.ForceClearPrimFlags != SceneExtractor.PrimitiveFlags.None)
+                Line(sb, 3, forceClearFlags);
+        }
+
         Line(sb, 2, ");");
     }
 
-    private static void AppendHelpers(StringBuilder sb, CustomizationDraft draft)
+    private static void AppendMatrixAssignment(StringBuilder sb, int indent, string target, DraftMatrix4x3 value)
     {
-        var needsInstanceHelpers = draft.InstancePatches.Any(static x => x.Enabled && x.Kind != DraftSceneInstancePatchKind.ClearInstances);
-        var needsBoundsHelpers = draft.InstancePatches.Any(static x => x is { Enabled: true, Kind: DraftSceneInstancePatchKind.Transform }) ||
-                                 draft.PartPatches.Any(static x => x is { Enabled: true, Kind: DraftScenePartPatchKind.Vertex });
+        Line(sb, indent,     $"{target} = new()");
+        Line(sb, indent,     "{");
+        Line(sb, indent + 1, $"Row0 = {FormatVector(value.Row0)},");
+        Line(sb, indent + 1, $"Row1 = {FormatVector(value.Row1)},");
+        Line(sb, indent + 1, $"Row2 = {FormatVector(value.Row2)},");
+        Line(sb, indent + 1, $"Row3 = {FormatVector(value.Row3)}");
+        Line(sb, indent,     "};");
+    }
 
-        if (needsInstanceHelpers)
+    private static void AppendHelpers(StringBuilder sb, DraftExportContext context)
+    {
+        if (context.NeedsInstanceHelpers)
         {
             Line(sb, 1, "private static SceneExtractor.MeshInstance? ResolveInstance(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)");
             Line(sb, 1, "{");
@@ -341,6 +541,9 @@ internal static class CustomizationDraftExporter
 
             Line(sb, 1, "private static int ResolveInstanceIndex(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)");
             Line(sb, 1, "{");
+            Line(sb, 2, "if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))");
+            Line(sb, 3, "return instanceIndex;");
+            Line(sb);
             Line(sb, 2, "if (instanceId != 0)");
             Line(sb, 2, "{");
             Line(sb, 3, "for (var i = 0; i < mesh.Instances.Count; ++i)");
@@ -350,45 +553,48 @@ internal static class CustomizationDraftExporter
             Line(sb, 3, "}");
             Line(sb, 2, "}");
             Line(sb);
-            Line(sb, 2, "return instanceIndex >= 0 && instanceIndex < mesh.Instances.Count ? instanceIndex : -1;");
+            Line(sb, 2, "return -1;");
             Line(sb, 1, "}");
             Line(sb);
         }
 
-        if (!needsBoundsHelpers)
+        if (context.NeedsLocalBoundsHelpers)
+        {
+            Line(sb, 1, "private static void RecalculateMeshBounds(SceneExtractor.Mesh mesh)");
+            Line(sb, 1, "{");
+            Line(sb, 2, "mesh.LocalBounds = CalculateLocalBounds(mesh.Parts);");
+            Line(sb, 2, "foreach (var instance in mesh.Instances)");
+            Line(sb, 3, "instance.WorldBounds = TransformBounds(instance.WorldTransform, mesh.LocalBounds);");
+            Line(sb, 1, "}");
+            Line(sb);
+
+            Line(sb, 1, "private static AABB CalculateLocalBounds(List<SceneExtractor.MeshPart> parts)");
+            Line(sb, 1, "{");
+            Line(sb, 2, "var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };");
+            Line(sb, 2, "foreach (var part in parts)");
+            Line(sb, 2, "{");
+            Line(sb, 3, "bounds.Min = Vector3.Min(bounds.Min, part.LocalBounds.Min);");
+            Line(sb, 3, "bounds.Max = Vector3.Max(bounds.Max, part.LocalBounds.Max);");
+            Line(sb, 2, "}");
+            Line(sb, 2, "return bounds;");
+            Line(sb, 1, "}");
+            Line(sb);
+
+            Line(sb, 1, "private static AABB CalculateLocalBounds(List<Vector3> vertices)");
+            Line(sb, 1, "{");
+            Line(sb, 2, "var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };");
+            Line(sb, 2, "foreach (var vertex in vertices)");
+            Line(sb, 2, "{");
+            Line(sb, 3, "bounds.Min = Vector3.Min(bounds.Min, vertex);");
+            Line(sb, 3, "bounds.Max = Vector3.Max(bounds.Max, vertex);");
+            Line(sb, 2, "}");
+            Line(sb, 2, "return bounds;");
+            Line(sb, 1, "}");
+            Line(sb);
+        }
+
+        if (!context.NeedsTransformBoundsHelper)
             return;
-
-        Line(sb, 1, "private static void RecalculateMeshBounds(SceneExtractor.Mesh mesh)");
-        Line(sb, 1, "{");
-        Line(sb, 2, "mesh.LocalBounds = CalculateLocalBounds(mesh.Parts);");
-        Line(sb, 2, "foreach (var instance in mesh.Instances)");
-        Line(sb, 3, "instance.WorldBounds = TransformBounds(instance.WorldTransform, mesh.LocalBounds);");
-        Line(sb, 1, "}");
-        Line(sb);
-
-        Line(sb, 1, "private static AABB CalculateLocalBounds(List<SceneExtractor.MeshPart> parts)");
-        Line(sb, 1, "{");
-        Line(sb, 2, "var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };");
-        Line(sb, 2, "foreach (var part in parts)");
-        Line(sb, 2, "{");
-        Line(sb, 3, "bounds.Min = Vector3.Min(bounds.Min, part.LocalBounds.Min);");
-        Line(sb, 3, "bounds.Max = Vector3.Max(bounds.Max, part.LocalBounds.Max);");
-        Line(sb, 2, "}");
-        Line(sb, 2, "return bounds;");
-        Line(sb, 1, "}");
-        Line(sb);
-
-        Line(sb, 1, "private static AABB CalculateLocalBounds(List<Vector3> vertices)");
-        Line(sb, 1, "{");
-        Line(sb, 2, "var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };");
-        Line(sb, 2, "foreach (var vertex in vertices)");
-        Line(sb, 2, "{");
-        Line(sb, 3, "bounds.Min = Vector3.Min(bounds.Min, vertex);");
-        Line(sb, 3, "bounds.Max = Vector3.Max(bounds.Max, vertex);");
-        Line(sb, 2, "}");
-        Line(sb, 2, "return bounds;");
-        Line(sb, 1, "}");
-        Line(sb);
 
         Line(sb, 1, "private static AABB TransformBounds(Matrix4x3 worldTransform, AABB localBounds)");
         Line(sb, 1, "{");
