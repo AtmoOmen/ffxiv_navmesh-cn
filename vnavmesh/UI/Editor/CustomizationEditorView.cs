@@ -500,11 +500,16 @@ internal sealed class CustomizationEditorView
                                 : "生效来源: 默认场景";
         ImGui.TextUnformatted($"区域: [{territoryID}] [{territoryKey}] [{territoryName}]  |  {workspaceSummary}  |  {sourceSummary}");
 
-        var statusSummary = previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Failed, LastError: not null }
-                                ? $"错误: {previewBuilder.LastError.Message}"
-                                : string.IsNullOrWhiteSpace(statusText)
-                                    ? "状态: 就绪"
-                                    : $"状态: {statusText}";
+        var statusSummary = previewBuilder.CurrentState switch
+        {
+            CustomizationPreviewBuilder.State.InProgress when previewBuilder.BuildProgress >= 0
+                => $"构建进度: {previewBuilder.BuildProgress * 100:f0}%",
+            CustomizationPreviewBuilder.State.Failed when previewBuilder.LastError is not null
+                => $"错误: {previewBuilder.LastError.Message}",
+            _ => string.IsNullOrWhiteSpace(statusText)
+                     ? "状态: 就绪"
+                     : $"状态: {statusText}"
+        };
         ImGui.TextUnformatted($"预览: {previewBuilder.CurrentState}  |  {statusSummary}");
     }
 

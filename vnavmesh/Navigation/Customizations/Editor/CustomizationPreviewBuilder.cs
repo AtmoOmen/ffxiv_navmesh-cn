@@ -61,6 +61,9 @@ internal class CustomizationPreviewBuilder
     private Exception?                lastError;
     private int                       generation;
     private State                     currentState;
+    private float                     buildProgress = -1f;
+
+    public float BuildProgress => Volatile.Read(ref buildProgress);
 
     public State CurrentState
     {
@@ -184,6 +187,7 @@ internal class CustomizationPreviewBuilder
             cancelSource  = requestCancel;
             currentState  = State.InProgress;
             lastError     = null;
+            Volatile.Write(ref buildProgress, 0f);
             activeTask    = Task.Run(() => BuildPreviewAsync(requestGeneration, requestScene, customization, includeTiles, requestCancel.Token));
         }
 
@@ -204,6 +208,7 @@ internal class CustomizationPreviewBuilder
             activeTask      = null;
             currentState    = State.NotBuilt;
             lastError       = null;
+            Volatile.Write(ref buildProgress, -1f);
             oldResult       = publishedResult;
             publishedResult = null;
         }
@@ -238,6 +243,8 @@ internal class CustomizationPreviewBuilder
                 publishedResult  = result;
                 lastError        = null;
                 currentState     = State.Ready;
+                Volatile.Write(ref buildProgress, -1f);
+                manager.ExternalBuildProgress = -1f;
                 activeTask       = null;
                 cancelSource?.Dispose();
                 cancelSource     = null;
@@ -302,8 +309,25 @@ internal class CustomizationPreviewBuilder
         var cacheKey       = $"editor-preview-{scene.TerritoryID}-{requestGeneration:X8}-{Guid.NewGuid():N}";
 
         cancel.ThrowIfCancellationRequested();
-        var navmesh = await manager.BuildExternalNavmesh(cacheKey, buildScene, buildSettings, customization.Version, buildSignature, cancel);
+        var navmesh = await manager.BuildExternalNavmesh
+        (
+            cacheKey,
+            buildScene,
+            buildSettings,
+            customization.Version,
+            buildSignature,
+            cancel,
+            progress =>
+            {
+                var clamped = Math.Clamp((float)progress, 0f, 0.99f);
+                Volatile.Write(ref buildProgress, clamped);
+                manager.ExternalBuildProgress = clamped;
+            }
+        );
         cancel.ThrowIfCancellationRequested();
+
+        Volatile.Write(ref buildProgress, -1f);
+        manager.ExternalBuildProgress = -1f;
 
         customization.CustomizeMesh(navmesh, [.. scene.FestivalLayers]);
         var query = new NavmeshQuery(navmesh, config);
@@ -326,9 +350,11 @@ internal class CustomizationPreviewBuilder
             if (requestGeneration != generation)
                 return;
 
-            activeTask = null;
+            activeTask    = null;
             cancelSource?.Dispose();
-            cancelSource = null;
+            cancelSource  = null;
+            Volatile.Write(ref buildProgress, -1f);
+            manager.ExternalBuildProgress = -1f;
 
             if (publishedResult == null)
                 currentState = State.NotBuilt;
@@ -342,11 +368,13 @@ internal class CustomizationPreviewBuilder
             if (requestGeneration != generation)
                 return;
 
-            activeTask = null;
+            activeTask    = null;
             cancelSource?.Dispose();
-            cancelSource = null;
-            lastError    = error;
-            currentState = State.Failed;
+            cancelSource  = null;
+            lastError     = error;
+            currentState  = State.Failed;
+            Volatile.Write(ref buildProgress, -1f);
+            manager.ExternalBuildProgress = -1f;
         }
     }
 

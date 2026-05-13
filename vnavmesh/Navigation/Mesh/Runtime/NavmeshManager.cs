@@ -43,6 +43,14 @@ public sealed class NavmeshManager : IDisposable
     public NavmeshQuery? Query      { get; private set; }
 
     public float LoadTaskProgress          => loadTaskProgress;
+
+    private float externalBuildProgress = -1f;
+    public  float ExternalBuildProgress
+    {
+        get => Volatile.Read(ref externalBuildProgress);
+        internal set => Volatile.Write(ref externalBuildProgress, value);
+    }
+
     public bool  PathfindInProgress        => numActivePathfinds > 0;
     public int   NumQueuedPathfindRequests => numActivePathfinds > 0 ? numActivePathfinds - 1 : 0;
     
@@ -454,7 +462,8 @@ public sealed class NavmeshManager : IDisposable
         BuildScene                                                scene,
         vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuildSettings settings,
         CancellationToken                                         cancel,
-        bool                                                      updateLoadProgress
+        bool                                                      updateLoadProgress,
+        Action<double>?                                           onProgress = null
     )
     {
         paths.WorkerStateDirectory.Create();
@@ -500,8 +509,12 @@ public sealed class NavmeshManager : IDisposable
                 switch (message.Type)
                 {
                     case "progress":
-                        if (updateLoadProgress && message.Progress != null)
-                            Interlocked.Exchange(ref loadTaskProgress, Math.Clamp((float)message.Progress.Progress, 0, 0.99f));
+                        if (message.Progress != null)
+                        {
+                            if (updateLoadProgress)
+                                Interlocked.Exchange(ref loadTaskProgress, Math.Clamp((float)message.Progress.Progress, 0, 0.99f));
+                            onProgress?.Invoke(message.Progress.Progress);
+                        }
                         break;
                     case "final":
                         response = message.Response ?? throw new InvalidOperationException("外置构建程序最终结果为空");
@@ -552,10 +565,11 @@ public sealed class NavmeshManager : IDisposable
         vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuildSettings settings,
         int                                                     customizationVersion,
         string                                                  buildSignature,
-        CancellationToken                                       cancel
+        CancellationToken                                       cancel,
+        Action<double>?                                         onProgress = null
     )
     {
-        var rawFile = await RunExternalBuild(cacheKey, scene, settings, cancel, false);
+        var rawFile = await RunExternalBuild(cacheKey, scene, settings, cancel, false, onProgress);
 
         try
         {

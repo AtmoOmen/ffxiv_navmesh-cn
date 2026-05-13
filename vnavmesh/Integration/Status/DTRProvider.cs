@@ -28,7 +28,17 @@ public class DTRProvider
         if (dtrBarEntry.Shown)
         {
             var loadProgress = manager.LoadTaskProgress;
-            var meshStatus   = loadProgress >= 0 ? $"{loadProgress * 100:f0}%" : manager.Navmesh != null ? "就绪" : "未就绪";
+            float buildProgress;
+            if (loadProgress >= 0)
+            {
+                buildProgress = loadProgress;
+            }
+            else
+            {
+                buildProgress = manager.ExternalBuildProgress;
+            }
+
+            var meshStatus   = buildProgress >= 0 ? $"{buildProgress * 100:f0}%" : manager.Navmesh != null ? "就绪" : "未就绪";
 
             var statusText = "导航: " + meshStatus;
 
