@@ -10,12 +10,14 @@ using vnavmesh.Bootstrap;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations;
+using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Editor;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
+using vnavmesh.UI.Editor.Types;
 using Action = System.Action;
 
 namespace vnavmesh.UI.Editor;

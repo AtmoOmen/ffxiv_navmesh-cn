@@ -14,6 +14,7 @@ using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations;
+using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Extensions;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;

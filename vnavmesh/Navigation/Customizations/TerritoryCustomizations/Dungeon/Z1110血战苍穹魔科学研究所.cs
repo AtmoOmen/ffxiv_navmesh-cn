@@ -1,0 +1,23 @@
+using System.Numerics;
+using vnavmesh.Navigation.Customizations.Abstractions;
+using vnavmesh.Navigation.Customizations.Attributes;
+using vnavmesh.Navigation.Customizations.Extensions;
+using vnavmesh.Navigation.Scene;
+
+namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.Dungeon;
+
+[CustomizationTerritory(1110)]
+internal class Z1110血战苍穹魔科学研究所 : NavmeshCustomization
+{
+    public override int Version => 3;
+
+    public override void CustomizeScene(SceneExtractor scene)
+    {
+        // colliders blocking lifts
+        scene.Meshes.Remove("<box>");
+
+        // the lifts in the final room move when being used, so if the client triggers a rebuild at the end of the dungeon for whatever reason, it will break mesh connectivity (for subsequent runs)
+        scene.InsertCylinderCollider(new Vector3(10, 1, 10), new(221.229f, -60, 95f));
+        scene.InsertCylinderCollider(new Vector3(10, 1, 10), new(195f, -29f, 196f));
+    }
+}

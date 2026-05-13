@@ -4,6 +4,7 @@ using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Navigation.Customizations.Editor;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Debug.Common;
+using vnavmesh.UI.Editor.Types;
 
 namespace vnavmesh.UI.Editor;
 

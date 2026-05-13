@@ -1,4 +1,4 @@
-namespace vnavmesh.UI.Editor;
+namespace vnavmesh.UI.Editor.Types;
 
 internal enum SelectionKind
 {

@@ -4,6 +4,7 @@ using vnavmesh.Navigation.Customizations;
 using vnavmesh.Navigation.Customizations.Editor;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Scene;
+using vnavmesh.UI.Editor.Types;
 
 namespace vnavmesh.UI.Editor;
 

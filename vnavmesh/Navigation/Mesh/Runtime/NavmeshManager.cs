@@ -21,6 +21,7 @@ using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Navigation.Scene;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Navigation.Customizations;
+using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Planning;

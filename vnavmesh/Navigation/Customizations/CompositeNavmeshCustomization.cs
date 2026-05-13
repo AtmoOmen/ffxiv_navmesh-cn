@@ -4,6 +4,7 @@ using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 using DotRecast.Detour;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation.Customizations.Abstractions;
 
 namespace vnavmesh.Navigation.Customizations;
 

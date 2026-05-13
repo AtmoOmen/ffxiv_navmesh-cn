@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
+using vnavmesh.UI.Editor.Types;
 
 namespace vnavmesh.UI.Editor;
 

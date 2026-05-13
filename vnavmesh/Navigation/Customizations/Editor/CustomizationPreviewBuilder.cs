@@ -8,6 +8,7 @@ using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
+using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;

@@ -1,5 +1,6 @@
 using DotRecast.Detour;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;

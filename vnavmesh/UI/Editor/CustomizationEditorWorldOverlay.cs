@@ -7,6 +7,7 @@ using vnavmesh.Navigation.Customizations.Editor;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
+using vnavmesh.UI.Editor.Types;
 using Collider = FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Collider;
 
 namespace vnavmesh.UI.Editor;
