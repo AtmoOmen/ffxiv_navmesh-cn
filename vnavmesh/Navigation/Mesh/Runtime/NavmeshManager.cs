@@ -1,5 +1,5 @@
-using System.Collections.Concurrent;
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO.Pipes;
@@ -15,19 +15,20 @@ using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Lumina.Excel.Sheets;
 using vnavmesh.Bootstrap;
 using vnavmesh.Bootstrap.Composition;
-using vnavmesh.Configuration;
 using vnavmesh.Common.Ipc;
+using vnavmesh.Common.Navigation.Mesh.Build;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Navigation.Scene;
 using vnavmesh.Common.Utilities;
+using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Planning;
 using vnavmesh.Navigation.Scene;
-using vnavmesh.Shared.Utilities;
 using Action = System.Action;
+using NavmeshBuilder = vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuilder;
 
 namespace vnavmesh.Navigation.Mesh.Runtime;
 
@@ -42,20 +43,19 @@ public sealed class NavmeshManager : IDisposable
     public Navmesh?      Navmesh    { get; private set; }
     public NavmeshQuery? Query      { get; private set; }
 
-    public float LoadTaskProgress          => loadTaskProgress;
+    public float LoadTaskProgress => loadTaskProgress;
 
-    private float externalBuildProgress = -1f;
-    public  float ExternalBuildProgress
+    public float ExternalBuildProgress
     {
-        get => Volatile.Read(ref externalBuildProgress);
-        internal set => Volatile.Write(ref externalBuildProgress, value);
-    }
+        get => Volatile.Read(ref field);
+        internal set => Volatile.Write(ref field, value);
+    } = -1f;
 
-    public bool  PathfindInProgress        => numActivePathfinds > 0;
-    public int   NumQueuedPathfindRequests => numActivePathfinds > 0 ? numActivePathfinds - 1 : 0;
-    
+    public bool PathfindInProgress        => numActivePathfinds > 0;
+    public int  NumQueuedPathfindRequests => numActivePathfinds > 0 ? numActivePathfinds - 1 : 0;
+
     public event Action<Navmesh?, NavmeshQuery?>? OnNavmeshChanged;
-    
+
     private static bool InInCutscene =>
         Service.Condition.Any(ConditionFlag.WatchingCutscene, ConditionFlag.OccupiedInCutSceneEvent);
 
@@ -67,21 +67,21 @@ public sealed class NavmeshManager : IDisposable
     private readonly Config        config;
     private readonly PluginPaths   paths;
     private readonly DirectoryInfo cacheDirectory;
-    
+
     private readonly ConcurrentDictionary<string, Task>  cacheWriteTasks          = new();
     private readonly ConcurrentDictionary<Navmesh, Task> cacheWriteTasksByNavmesh = new(ReferenceEqualityComparer.Instance);
-    
+
     private float                    loadTaskProgress = -1;
     private CancellationTokenSource? currentCancelSource;
     private Task                     loadQueryTask;
     private int                      numActivePathfinds;
     private int                      nextBuildSequence;
-    
+
     public NavmeshManager(PluginPaths paths, Config config)
     {
         this.config = config;
         this.paths  = paths;
-        
+
         cacheDirectory = paths.MeshCacheDirectory;
         cacheDirectory.Create();
         paths.WorkerStateDirectory.Create();
@@ -103,12 +103,12 @@ public sealed class NavmeshManager : IDisposable
         {
             if (CurrentKey.Length == 0)
                 return;
-            
+
             curKey = string.Empty;
         }
 
         Log($"场景转换。当前: '{CurrentKey}' 目标: '{curKey}'");
-        
+
         CurrentKey = curKey;
         Reload(true);
     }
@@ -120,8 +120,7 @@ public sealed class NavmeshManager : IDisposable
         bool              flying,
         float             range          = 0,
         CancellationToken externalCancel = default
-    ) =>
-        (await QueryPathDetailed(from, to, flying, range, externalCancel)).Waypoints;
+    ) => (await QueryPathDetailed(from, to, flying, range, externalCancel)).Waypoints;
 
     internal Task<PostprocessedPath> QueryPathDetailed
     (
@@ -137,14 +136,14 @@ public sealed class NavmeshManager : IDisposable
 
         var combined = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
         ++numActivePathfinds;
-        
+
         return ExecuteWhenIdle
         (
             async _ =>
             {
                 using var autoDisposeCombined  = combined;
                 using var autoDecrementCounter = new OnDispose(() => --numActivePathfinds);
-                
+
                 Log($"发起算路。起点: {from} 终点: {to}");
                 var result = await Task.Run
                              (
@@ -153,9 +152,9 @@ public sealed class NavmeshManager : IDisposable
                                      combined.Token.ThrowIfCancellationRequested();
                                      if (Query == null)
                                          throw new Exception("无法发起算路, 导航数据构建未成功");
-                                     
+
                                      Log($"执行算路。起点: {from:f3} 终点: {to:f3}");
-                                     
+
                                      var plannerResult = flying
                                                              ? Query.PlanVolumePathDetailed(from, to, true, combined.Token)
                                                              : Query.PlanMeshPathDetailed(from, to, true, range, combined.Token);
@@ -163,7 +162,7 @@ public sealed class NavmeshManager : IDisposable
                                  },
                                  combined.Token
                              );
-                
+
                 Log($"算路结束。结果: {result.Status} 路径点总数: {result.Waypoints.Count}");
                 return result;
             },
@@ -176,9 +175,9 @@ public sealed class NavmeshManager : IDisposable
         Vector3           from,
         Vector3           to,
         bool              flying,
-        float             range                = 0,
-        int               straightPathOptions  = 0,
-        CancellationToken externalCancel       = default
+        float             range               = 0,
+        int               straightPathOptions = 0,
+        CancellationToken externalCancel      = default
     )
     {
         if (currentCancelSource == null)
@@ -220,7 +219,7 @@ public sealed class NavmeshManager : IDisposable
         );
     }
 
-    public (Vector3 min, Vector3 max) BuildBitmap(Vector3 startingPos, string filename, float pixelSize, AABB? mapBounds = null)
+    public (Vector3 Min, Vector3 Max) BuildBitmap(Vector3 startingPos, string filename, float pixelSize, AABB? mapBounds = null)
     {
         if (Navmesh == null || Query == null)
             throw new InvalidOperationException("无法生成位图。导航路网数据未就绪");
@@ -255,9 +254,9 @@ public sealed class NavmeshManager : IDisposable
         foreach (var p in polysInbounds)
             bitmap.RasterizePolygon(Navmesh.Mesh, p);
         bitmap.Save(filename);
-        
+
         Log($"已生成位图。文件名: {filename} 中心点: {startingPos} 范围: {bitmap.MinBounds}-{bitmap.MaxBounds}");
-        
+
         return (bitmap.MinBounds, bitmap.MaxBounds);
 
         bool AreInBounds(Vector3 vert)
@@ -273,7 +272,7 @@ public sealed class NavmeshManager : IDisposable
 
         if (CurrentKey.Length <= 0)
             return true;
-        
+
         var cts = currentCancelSource = new();
         ExecuteWhenIdle
         (
@@ -284,6 +283,7 @@ public sealed class NavmeshManager : IDisposable
                 using var resetLoadProgress = new OnDispose(() => loadTaskProgress = -1);
 
                 var cutsceneStart = DateTime.Now;
+
                 while (InInCutscene)
                 {
                     if ((DateTime.Now - cutsceneStart).TotalSeconds >= 5)
@@ -294,8 +294,9 @@ public sealed class NavmeshManager : IDisposable
 
                     await Task.Delay(100, cancel);
                 }
-                
+
                 var territoryLoadStart = DateTime.Now;
+
                 while (!IsTerritoryFullyLoaded)
                 {
                     if ((DateTime.Now - territoryLoadStart).TotalSeconds >= 5)
@@ -320,9 +321,9 @@ public sealed class NavmeshManager : IDisposable
 
                 Log($"开始构建。键: {cacheKey} 允许重载: {allowLoadFromCache}");
                 var (navmesh, cacheFile) = await BuildNavmesh(scene, cacheKey, allowLoadFromCache, cancel);
-                
+
                 Log($"加载完毕。键: {cacheKey}");
-                
+
                 Navmesh = navmesh;
                 Query   = new(Navmesh, config);
 
@@ -347,7 +348,7 @@ public sealed class NavmeshManager : IDisposable
     public void ClearForSceneChange()
     {
         Log("清除路径状态。场景发生切换");
-        
+
         CurrentKey = string.Empty;
         ClearState();
     }
@@ -356,12 +357,12 @@ public sealed class NavmeshManager : IDisposable
     {
         var retiredNavmesh = Navmesh;
         var retiredQuery   = Query;
-        
+
         Navmesh = mesh;
         Query   = new(Navmesh, config);
-        
+
         Log("导航路网替换完成");
-        
+
         OnNavmeshChanged?.Invoke(Navmesh, Query);
         ReleaseRetiredState(retiredNavmesh, retiredQuery, "网格替换");
     }
@@ -374,17 +375,17 @@ public sealed class NavmeshManager : IDisposable
         var cts = currentCancelSource;
         currentCancelSource = null;
         cts.Cancel();
-        
+
         var retiredNavmesh = Navmesh;
         var retiredQuery   = Query;
         Log("入队状态清理");
-        
+
         ExecuteWhenIdle
         (
             () =>
             {
                 Log("清理状态中");
-                
+
                 numActivePathfinds = 0;
                 cts.Dispose();
                 OnNavmeshChanged?.Invoke(null, null);
@@ -400,7 +401,7 @@ public sealed class NavmeshManager : IDisposable
     {
         var totalTimer = StopWatchTimer.Create();
         Log($"构建任务开始。键: {cacheKey}");
-        
+
         var customization = NavmeshCustomizationRegistry.GetForScene(scene);
         Log($"自定义数据搜寻获取。区域: {scene.TerritoryID} 类型: {customization.GetType()}");
 
@@ -418,7 +419,9 @@ public sealed class NavmeshManager : IDisposable
         Log($"外置冷构建耗时: {buildTimer.Value().TotalMilliseconds:f1} 毫秒");
 
         Navmesh runtimeMesh;
-        await using (var stream = new FileStream(rawFile.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan | FileOptions.Asynchronous))
+
+        await using (var stream = new FileStream
+                         (rawFile.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan | FileOptions.Asynchronous))
         using (var reader = new BinaryReader(stream, Encoding.UTF8, true))
         {
             var (mesh, cacheTelemetry, _) = Navmesh.Deserialize(reader, customization.Version, buildSnapshot.BuildSignature);
@@ -460,19 +463,19 @@ public sealed class NavmeshManager : IDisposable
         {
             var cacheReadTimer = StopWatchTimer.Create();
             Log($"缓存加载。文件: {cache.FullName}");
-            
+
             using var stream = new FileStream(cache.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan);
             using var reader = new BinaryReader(stream);
-            
+
             var (mesh, cacheTelemetry, requiresRewrite) = Navmesh.Deserialize(reader, customization.Version, buildSignature);
 
             Log($"缓存已读取。耗时: {cacheReadTimer.Value().TotalMilliseconds:f1} ms");
             LogCacheSegment("读取", cacheTelemetry.Mesh);
             LogCacheSegment("读取", cacheTelemetry.Volume);
-            
+
             if (!mesh.CustomizationApplied)
                 customization.CustomizeMesh(mesh, layers);
-            
+
             Log($"缓存命中。总耗时: {totalTimer.Value().TotalMilliseconds:f1} ms");
             result = new(mesh, requiresRewrite ? cache : null);
             return true;
@@ -480,7 +483,7 @@ public sealed class NavmeshManager : IDisposable
         catch (Exception ex)
         {
             Log($"加载缓存失败。{ex}");
-            
+
             result = new(null!, null);
             return false;
         }
@@ -493,26 +496,26 @@ public sealed class NavmeshManager : IDisposable
             {
                 cancel.ThrowIfCancellationRequested();
 
-                var settings = customization.GetBuildSettings(scene);
-                var flyable  = customization.IsFlyingSupported(scene);
+                var settings  = customization.GetBuildSettings(scene);
+                var flyable   = customization.IsFlyingSupported(scene);
                 var extractor = new SceneExtractor(scene);
                 customization.CustomizeScene(extractor);
 
                 var buildScene    = extractor.ToBuildScene();
                 var buildSettings = settings.ToBuildSettings(flyable, customization.Version);
-                return new BuildSnapshot(buildScene, buildSettings, vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(buildScene, buildSettings));
+                return new BuildSnapshot(buildScene, buildSettings, NavmeshBuilder.ComputeBuildSignature(buildScene, buildSettings));
             },
             cancel
         );
 
     private async Task<FileInfo> RunExternalBuild
     (
-        string                                                    cacheKey,
-        BuildScene                                                scene,
-        vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuildSettings settings,
-        CancellationToken                                         cancel,
-        bool                                                      updateLoadProgress,
-        Action<double>?                                           onProgress = null
+        string               cacheKey,
+        BuildScene           scene,
+        NavmeshBuildSettings settings,
+        CancellationToken    cancel,
+        bool                 updateLoadProgress,
+        Action<double>?      onProgress = null
     )
     {
         paths.WorkerStateDirectory.Create();
@@ -524,8 +527,9 @@ public sealed class NavmeshManager : IDisposable
         var manifestFile = new FileInfo(Path.Combine(paths.WorkerStateDirectory.FullName, $"{buildId}.manifest.json"));
         var pipeName     = $"vnavmesh-build-{Environment.ProcessId}-{buildId}";
 
-        await using (var sceneStream = new FileStream(sceneFile.FullName, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 22, FileOptions.SequentialScan | FileOptions.Asynchronous))
-        using (var sceneWriter = new BinaryWriter(sceneStream, Encoding.UTF8, true))
+        await using (var sceneStream = new FileStream
+                         (sceneFile.FullName, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 22, FileOptions.SequentialScan | FileOptions.Asynchronous))
+        await using (var sceneWriter = new BinaryWriter(sceneStream, Encoding.UTF8, true))
         {
             scene.Write(sceneWriter);
             sceneWriter.Flush();
@@ -535,14 +539,15 @@ public sealed class NavmeshManager : IDisposable
         var manifest = new NavmeshBuildManifest(sceneFile.FullName, rawFile.FullName, cacheKey, settings);
         await File.WriteAllTextAsync(manifestFile.FullName, JsonSerializer.Serialize(manifest, ManifestJsonOptions), new UTF8Encoding(false), cancel);
 
-        await using var pipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-        using var process = StartWorker(pipeName, manifestFile.FullName);
-        var waitForExitTask = process.WaitForExitAsync(cancel);
+        await using var pipe            = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        using var       process         = StartWorker(pipeName, manifestFile.FullName);
+        var             waitForExitTask = process.WaitForExitAsync(cancel);
 
         try
         {
             var waitForConnectionTask = pipe.WaitForConnectionAsync(cancel);
-            var connectedTask = await Task.WhenAny(waitForConnectionTask, waitForExitTask);
+            var connectedTask         = await Task.WhenAny(waitForConnectionTask, waitForExitTask);
+
             if (connectedTask == waitForExitTask)
             {
                 await waitForExitTask;
@@ -551,6 +556,7 @@ public sealed class NavmeshManager : IDisposable
 
             await waitForConnectionTask;
             NavmeshBuildResponse? response = null;
+
             while (response == null)
             {
                 var message = await ReadBuildMessage(pipe, cancel);
@@ -564,6 +570,7 @@ public sealed class NavmeshManager : IDisposable
                                 Interlocked.Exchange(ref loadTaskProgress, Math.Clamp((float)message.Progress.Progress, 0, 0.99f));
                             onProgress?.Invoke(message.Progress.Progress);
                         }
+
                         break;
                     case "final":
                         response = message.Response ?? throw new InvalidOperationException("外置构建程序最终结果为空");
@@ -609,20 +616,21 @@ public sealed class NavmeshManager : IDisposable
 
     internal async Task<Navmesh> BuildExternalNavmesh
     (
-        string                                                  cacheKey,
-        BuildScene                                              scene,
-        vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuildSettings settings,
-        int                                                     customizationVersion,
-        string                                                  buildSignature,
-        CancellationToken                                       cancel,
-        Action<double>?                                         onProgress = null
+        string               cacheKey,
+        BuildScene           scene,
+        NavmeshBuildSettings settings,
+        int                  customizationVersion,
+        string               buildSignature,
+        CancellationToken    cancel,
+        Action<double>?      onProgress = null
     )
     {
         var rawFile = await RunExternalBuild(cacheKey, scene, settings, cancel, false, onProgress);
 
         try
         {
-            await using var stream = new FileStream(rawFile.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan | FileOptions.Asynchronous);
+            await using var stream = new FileStream
+                (rawFile.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan | FileOptions.Asynchronous);
             using var reader = new BinaryReader(stream, Encoding.UTF8, true);
             var (mesh, _, _) = Navmesh.Deserialize(reader, customizationVersion, buildSignature);
             return mesh;
@@ -655,7 +663,7 @@ public sealed class NavmeshManager : IDisposable
 
         var process = Process.Start(startInfo) ?? throw new InvalidOperationException("无法启动外置导航网格构建程序");
         _ = process.StandardOutput.ReadToEndAsync().ContinueWith(t => LogWorkerOutput("stdout", t), TaskScheduler.Default);
-        _ = process.StandardError.ReadToEndAsync().ContinueWith(t => LogWorkerOutput("stderr", t), TaskScheduler.Default);
+        _ = process.StandardError.ReadToEndAsync().ContinueWith(t => LogWorkerOutput("stderr",  t), TaskScheduler.Default);
         return process;
     }
 
@@ -677,6 +685,7 @@ public sealed class NavmeshManager : IDisposable
     private static async Task ReadExactlyOrThrow(Stream stream, byte[] buffer, CancellationToken cancel)
     {
         var offset = 0;
+
         while (offset < buffer.Length)
         {
             var read = await stream.ReadAsync(buffer.AsMemory(offset), cancel);
@@ -775,7 +784,7 @@ public sealed class NavmeshManager : IDisposable
             Log($"后台写入缓存。文件: {cache.FullName}");
 
             var serializeTimer = StopWatchTimer.Create();
-            
+
             Navmesh.CacheTelemetry telemetry;
 
             using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 22, FileOptions.SequentialScan))
@@ -869,7 +878,7 @@ public sealed class NavmeshManager : IDisposable
         return res;
     }
 
-    private static void Log(string message) => 
+    private static void Log(string message) =>
         Service.Log.Debug($"[NavmeshManager] [{Environment.CurrentManagedThreadId}] {message}");
 
     private static void LogCacheSegment(string action, Navmesh.CacheSegmentTelemetry segment) =>
@@ -1097,9 +1106,9 @@ public sealed class NavmeshManager : IDisposable
 
     private sealed record BuildSnapshot
     (
-        BuildScene                                                       Scene,
-        vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuildSettings       Settings,
-        string                                                           BuildSignature
+        BuildScene           Scene,
+        NavmeshBuildSettings Settings,
+        string               BuildSignature
     );
 
     #region 常量
