@@ -61,6 +61,67 @@ internal sealed class NavmeshGroundQuery
         cancel.ThrowIfCancellationRequested();
         LogMeshResult(result, from, startRef, endRef, lastPoly, range, timer.Value());
         return result;
+
+        void LogMeshResult(PlannerResult result, Vector3 from, long startRef, long endRef, long lastPoly, float range, TimeSpan duration)
+        {
+            var startTile     = new TileCoord(query.FindMeshTile(from).X,                        query.FindMeshTile(from).Z);
+            var requestedTile = new TileCoord(query.FindMeshTile(result.RequestedDestination).X, query.FindMeshTile(result.RequestedDestination).Z);
+            var actualTile    = new TileCoord(query.FindMeshTile(result.FinalDestination).X,     query.FindMeshTile(result.FinalDestination).Z);
+            var (tileX, tileZ)     = query.FindMeshTile(result.FinalDestination);
+            var (tileMin, tileMax) = query.GetMeshTileBounds(tileX, tileZ);
+            var distanceToNearestBoundary = MathF.Min
+            (
+                MathF.Min(MathF.Abs(result.FinalDestination.X - tileMin.X), MathF.Abs(tileMax.X - result.FinalDestination.X)),
+                MathF.Min(MathF.Abs(result.FinalDestination.Z - tileMin.Z), MathF.Abs(tileMax.Z - result.FinalDestination.Z))
+            );
+            var meshParams = query.MeshQuery.GetAttachedNavMesh().GetParams();
+            var seamBoundaryTolerance = MathF.Max
+                                            (MathF.Min(meshParams.tileWidth, meshParams.tileHeight), MathF.Max(query.ConfigData.PathTolerance, float.Epsilon)) *
+                                        0.5f;
+            var seamGapTolerance = MathF.Max(range, seamBoundaryTolerance);
+            var diagnostic = new SeamDiagnostic
+            (
+                startTile,
+                requestedTile,
+                actualTile,
+                distanceToNearestBoundary,
+                distanceToNearestBoundary <= seamBoundaryTolerance,
+                Math.Abs(requestedTile.X - actualTile.X) <= 1 && Math.Abs(requestedTile.Z - actualTile.Z) <= 1,
+                Vector3.Distance(result.RequestedDestination, result.FinalDestination) <= seamGapTolerance
+            );
+            var message =
+                $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，粗路径段 = {result.Segments.Count}";
+
+            if (result.Status == PathfindStatus.Partial)
+            {
+                message +=
+                    $"，起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}";
+            }
+
+            switch (result.Status)
+            {
+                case PathfindStatus.Partial:
+                    Interlocked.Increment(ref partialGroundQueryCount);
+                    Service.Log.Warning(message);
+
+                    if (diagnostic.IsSuspectedTileSeamCutoff)
+                    {
+                        Interlocked.Increment(ref suspectedTileSeamCutoffCount);
+                        Service.Log.Warning
+                        (
+                            $"[SuspectedTileSeamCutoff] 疑似区块接缝截断：起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}"
+                        );
+                    }
+
+                    break;
+                case PathfindStatus.Failed:
+                    Service.Log.Error(message);
+                    break;
+                default:
+                    Service.Log.Debug(message);
+                    break;
+            }
+        }
     }
 
     internal GroundPathDiagnosticsSnapshot GetGroundDiagnostics() =>
@@ -241,8 +302,10 @@ internal sealed class NavmeshGroundQuery
                 else if (selected.WeightedLinkPenalty != requested.WeightedLinkPenalty)
                     reason = $"跳链代价更低: {requested.WeightedLinkPenalty} -> {selected.WeightedLinkPenalty}";
                 else if (!NearlyEqual(selected.StartCandidate.HorizontalDistanceSq, requested.StartCandidate.HorizontalDistanceSq))
+                {
                     reason =
                         $"水平偏移更小: {MathF.Sqrt(requested.StartCandidate.HorizontalDistanceSq):f3} -> {MathF.Sqrt(selected.StartCandidate.HorizontalDistanceSq):f3}";
+                }
                 else if (selected.SupportProbeHits > requested.SupportProbeHits)
                     reason = $"支撑探针命中更多: {requested.SupportProbeHits} -> {selected.SupportProbeHits}";
                 else if (selected.QueryMode != requested.QueryMode)
@@ -1032,67 +1095,6 @@ internal sealed class NavmeshGroundQuery
             FinalDestination     = to,
             DestinationTolerance = range
         };
-    }
-
-    private void LogMeshResult(PlannerResult result, Vector3 from, long startRef, long endRef, long lastPoly, float range, TimeSpan duration)
-    {
-        var startTile     = new TileCoord(query.FindMeshTile(from).X,                        query.FindMeshTile(from).Z);
-        var requestedTile = new TileCoord(query.FindMeshTile(result.RequestedDestination).X, query.FindMeshTile(result.RequestedDestination).Z);
-        var actualTile    = new TileCoord(query.FindMeshTile(result.FinalDestination).X,     query.FindMeshTile(result.FinalDestination).Z);
-        var (tileX, tileZ)     = query.FindMeshTile(result.FinalDestination);
-        var (tileMin, tileMax) = query.GetMeshTileBounds(tileX, tileZ);
-        var distanceToNearestBoundary = MathF.Min
-        (
-            MathF.Min(MathF.Abs(result.FinalDestination.X - tileMin.X), MathF.Abs(tileMax.X - result.FinalDestination.X)),
-            MathF.Min(MathF.Abs(result.FinalDestination.Z - tileMin.Z), MathF.Abs(tileMax.Z - result.FinalDestination.Z))
-        );
-        var meshParams = query.MeshQuery.GetAttachedNavMesh().GetParams();
-        var seamBoundaryTolerance = MathF.Max
-                                        (MathF.Min(meshParams.tileWidth, meshParams.tileHeight), MathF.Max(query.ConfigData.PathTolerance, float.Epsilon)) *
-                                    0.5f;
-        var seamGapTolerance = MathF.Max(range, seamBoundaryTolerance);
-        var diagnostic = new SeamDiagnostic
-        (
-            startTile,
-            requestedTile,
-            actualTile,
-            distanceToNearestBoundary,
-            distanceToNearestBoundary <= seamBoundaryTolerance,
-            Math.Abs(requestedTile.X - actualTile.X) <= 1 && Math.Abs(requestedTile.Z - actualTile.Z) <= 1,
-            Vector3.Distance(result.RequestedDestination, result.FinalDestination) <= seamGapTolerance
-        );
-        var message =
-            $"地面算路完成：状态 = {result.Status}，起点 = {from:f3}，请求终点 = {result.RequestedDestination:f3}，实际终点 = {result.FinalDestination:f3}，多边形 = {startRef:X} -> {endRef:X}，最后可达 = {lastPoly:X}，容差 = {range:f3}，耗时 = {duration.TotalSeconds:f3} 秒，粗路径段 = {result.Segments.Count}";
-
-        if (result.Status == PathfindStatus.Partial)
-        {
-            message +=
-                $"，起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}";
-        }
-
-        switch (result.Status)
-        {
-            case PathfindStatus.Partial:
-                Interlocked.Increment(ref partialGroundQueryCount);
-                Service.Log.Warning(message);
-
-                if (diagnostic.IsSuspectedTileSeamCutoff)
-                {
-                    Interlocked.Increment(ref suspectedTileSeamCutoffCount);
-                    Service.Log.Warning
-                    (
-                        $"[SuspectedTileSeamCutoff] 疑似区块接缝截断：起点区块 = {diagnostic.StartTile}，目标区块 = {diagnostic.RequestedTile}，终点区块 = {diagnostic.FinalTile}，最近边界距离 = {diagnostic.DistanceToNearestBoundary:f3}"
-                    );
-                }
-
-                break;
-            case PathfindStatus.Failed:
-                Service.Log.Error(message);
-                break;
-            default:
-                Service.Log.Debug(message);
-                break;
-        }
     }
 
     private static bool NearlyEqual(float left, float right) =>
