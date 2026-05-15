@@ -97,13 +97,15 @@ public class SceneExtractor
     private static List<MeshPart> MeshSphere;
     private static List<MeshPart> MeshCylinder;
     private static List<MeshPart> MeshPlane;
+    private static List<MeshPart> MeshPlaneDouble;
 
     static SceneExtractor()
     {
         MeshBox      = BuildBoxMesh();
         MeshSphere   = BuildSphereMesh(16);
         MeshCylinder = BuildCylinderMesh(16);
-        MeshPlane    = BuildPlaneMesh();
+        MeshPlane      = BuildPlaneMesh();
+        MeshPlaneDouble = BuildPlaneMesh(true);
     }
 
     public unsafe SceneExtractor(SceneDefinition scene)
@@ -111,8 +113,8 @@ public class SceneExtractor
         Meshes[KEY_ANALYTIC_BOX]          = CreateBuiltinMesh(MeshBox,      MeshType.AnalyticShape);
         Meshes[KEY_ANALYTIC_SPHERE]       = CreateBuiltinMesh(MeshSphere,   MeshType.AnalyticShape);
         Meshes[KEY_ANALYTIC_CYLINDER]     = CreateBuiltinMesh(MeshCylinder, MeshType.AnalyticShape);
-        Meshes[KEY_ANALYTIC_PLANE_SINGLE] = CreateBuiltinMesh(MeshPlane,    MeshType.AnalyticPlane);
-        Meshes[KEY_ANALYTIC_PLANE_DOUBLE] = CreateBuiltinMesh(MeshPlane,    MeshType.AnalyticPlane);
+        Meshes[KEY_ANALYTIC_PLANE_SINGLE] = CreateBuiltinMesh(MeshPlane,       MeshType.AnalyticPlane);
+        Meshes[KEY_ANALYTIC_PLANE_DOUBLE] = CreateBuiltinMesh(MeshPlaneDouble, MeshType.AnalyticPlane);
         Meshes[KEY_MESH_CYLINDER]         = CreateBuiltinMesh(MeshCylinder, MeshType.CylinderMesh);
         foreach (var path in scene.MeshPaths.Values)
             AddMesh(path, MeshType.FileMesh);
@@ -534,7 +536,7 @@ public class SceneExtractor
         return [FinalizePart(mesh)];
     }
 
-    private static List<MeshPart> BuildPlaneMesh()
+    private static List<MeshPart> BuildPlaneMesh(bool doubleSided = false)
     {
         var mesh = new MeshPart();
         mesh.Vertices.Add(new(-1, +1, 0));
@@ -543,6 +545,11 @@ public class SceneExtractor
         mesh.Vertices.Add(new(+1, +1, 0));
         mesh.Primitives.Add(new(0, 1, 2, PrimitiveFlags.None));
         mesh.Primitives.Add(new(0, 2, 3, PrimitiveFlags.None));
+        if (doubleSided)
+        {
+            mesh.Primitives.Add(new(2, 1, 0, PrimitiveFlags.None));
+            mesh.Primitives.Add(new(3, 2, 0, PrimitiveFlags.None));
+        }
         return [FinalizePart(mesh)];
     }
 }

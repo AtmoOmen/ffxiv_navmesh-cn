@@ -2078,23 +2078,23 @@ internal sealed class PathPostprocessor
             return true;
         if (Vector3.DistanceSquared(previous, next) <= DUPLICATE_WAYPOINT_DISTANCE_SQ)
             return true;
-        if (NeedsFlightDescentPreservation(previous, next))
+        if (NeedsFlightVerticalPreservation(previous, next))
             return false;
 
         return DistanceToLineSegment(current, previous, next) <= COLLINEAR_WAYPOINT_TOLERANCE;
     }
 
-    private static bool NeedsFlightDescentPreservation(Vector3 previous, Vector3 next)
+    private static bool NeedsFlightVerticalPreservation(Vector3 previous, Vector3 next)
     {
-        var verticalDrop = previous.Y - next.Y;
-        if (verticalDrop <= FLIGHT_DESCENT_PRESERVE_MIN_DROP)
+        var verticalDelta = MathF.Abs(next.Y - previous.Y);
+        if (verticalDelta <= FLIGHT_DESCENT_PRESERVE_MIN_DROP)
             return false;
 
         var horizontalDistance = HorizontalDistanceXZ(previous, next);
         if (horizontalDistance <= FLIGHT_DESCENT_PRESERVE_NEAR_VERTICAL_HORIZONTAL)
             return true;
 
-        return verticalDrop / horizontalDistance >= FLIGHT_DESCENT_PRESERVE_MAX_SLOPE;
+        return verticalDelta / horizontalDistance >= FLIGHT_DESCENT_PRESERVE_MAX_SLOPE;
     }
 
     private static float DistanceToLineSegment(Vector3 value, Vector3 start, Vector3 end)

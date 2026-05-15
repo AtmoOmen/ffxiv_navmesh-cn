@@ -427,6 +427,13 @@ public class NavmeshRasterizer
     private readonly int _tileX;
     private readonly int _tileZ;
     private readonly ScratchBuffers _scratch;
+    private const float VolumeWallThickenNormalYThreshold = 0.15f;
+    private const int   VolumeWallThickenHorizontalRadius = 1;
+    private const float VolumePreparedProjectionNormalYThreshold = 0.35f;
+    private const float VolumeThinWallStripNormalYThreshold = 0.30f;
+    private const float VolumeThinWallStripMaxProjectedThickness = 0.55f;
+    private const float VolumeThinWallStripBaseRadius            = 0.75f;
+    private const float VolumeThinWallStripExtraPadding          = 0.20f;
 
     public NavmeshRasterizer
     (
@@ -746,6 +753,16 @@ public class NavmeshRasterizer
             var areaId        = unwalkable ? 0 : RC_WALKABLE_AREA;
             var inverseCrossY = _iset != null && crossY != 0 ? -1.0f / crossY : 0;
             var normalUp      = crossY > 0;
+            if (_voxelizer != null && realSolid)
+                RasterizeVolumeThinWallStrip
+                (
+                    new(v1x, v1y, v1z),
+                    new(v2x, v2y, v2z),
+                    new(v3x, v3y, v3z),
+                    crossX,
+                    crossY,
+                    crossZ
+                );
             var minZ          = Math.Min(v1z, Math.Min(v2z, v3z));
             var maxZ          = Math.Max(v1z, Math.Max(v2z, v3z));
             var z0            = Math.Clamp((int)((minZ - heightfieldZ) * _invCellXZ), -1, _heightfield.height - 1);
@@ -798,6 +815,8 @@ public class NavmeshRasterizer
                     y0 = Math.Clamp(y0, 0,  _maxY - 1);
                     y1 = Math.Clamp(y1, y0, _maxY - 1);
                     AddSpan(x, z, y0, y1, areaId, realSolid);
+                    if (_voxelizer != null && realSolid)
+                        WriteVolumeWallThickness(x, z, y0, y1, crossX, crossY, crossZ);
 
                     if (realSolid && _iset != null && inverseCrossY != 0)
                     {
@@ -843,6 +862,31 @@ public class NavmeshRasterizer
                 continue;
 
             ref readonly var primitive = ref Unsafe.Add(ref primitiveRef, primitiveIndex);
+            if (_voxelizer != null && info.RealSolid)
+            {
+                var offset1 = primitive.V1 * 3;
+                var offset2 = primitive.V2 * 3;
+                var offset3 = primitive.V3 * 3;
+                var v1x     = worldVertices[offset1];
+                var v1y     = worldVertices[offset1 + 1];
+                var v1z     = worldVertices[offset1 + 2];
+                var v2x     = worldVertices[offset2];
+                var v2y     = worldVertices[offset2 + 1];
+                var v2z     = worldVertices[offset2 + 2];
+                var v3x     = worldVertices[offset3];
+                var v3y     = worldVertices[offset3 + 1];
+                var v3z     = worldVertices[offset3 + 2];
+                var v12x    = v2x - v1x;
+                var v12y    = v2y - v1y;
+                var v12z    = v2z - v1z;
+                var v13x    = v3x - v1x;
+                var v13y    = v3y - v1y;
+                var v13z    = v3z - v1z;
+                var crossX  = v12y * v13z - v12z * v13y;
+                var crossY  = v12z * v13x - v12x * v13z;
+                var crossZ  = v12x * v13y - v12y * v13x;
+                RasterizeVolumeThinWallStrip(new(v1x, v1y, v1z), new(v2x, v2y, v2z), new(v3x, v3y, v3z), crossX, crossY, crossZ);
+            }
             if (info.Projected)
                 RasterizePreparedTerrainPrimitiveProjected(info, ref minimalY);
             else
@@ -919,6 +963,8 @@ public class NavmeshRasterizer
                 y0 = Math.Clamp(y0, 0,  _maxY - 1);
                 y1 = Math.Clamp(y1, y0, _maxY - 1);
                 AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid);
+                if (_voxelizer != null && info.RealSolid)
+                    WriteVolumeWallThicknessFromProjectedPlane(x, z, y0, y1, info.PlaneGradX, info.PlaneGradZ);
 
                 if (info.RealSolid && _iset != null)
                 {
@@ -1009,6 +1055,8 @@ public class NavmeshRasterizer
                 y0 = Math.Clamp(y0, 0,  _maxY - 1);
                 y1 = Math.Clamp(y1, y0, _maxY - 1);
                 AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid);
+                if (_voxelizer != null && info.RealSolid)
+                    WriteVolumeWallThicknessFromTriangle(x, z, y0, y1, worldVertices, offset1, offset2, offset3);
 
                 if (info.RealSolid && _iset != null && info.InverseCrossY != 0)
                 {
@@ -1077,6 +1125,8 @@ public class NavmeshRasterizer
                              flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable) &&
                              !flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
             var areaId = unwalkable ? 0 : RC_WALKABLE_AREA;
+            if (_voxelizer != null && realSolid)
+                RasterizeVolumeThinWallStrip(v1, v2, v3, v12cross13.X, crossY, v12cross13.Z);
 
             var numRemainingZ = 0;
             clipRemainingZ[numRemainingZ++] = v1;
@@ -1138,6 +1188,8 @@ public class NavmeshRasterizer
                     y1 = Math.Clamp(y1, y0, _maxY - 1);
 
                     AddSpan(x, z, y0, y1, areaId, realSolid);
+                    if (_voxelizer != null && realSolid)
+                        WriteVolumeWallThickness(x, z, y0, y1, v12cross13.X, crossY, v12cross13.Z);
 
                     if (realSolid && _iset != null && invDiv != 0)
                     {
@@ -1277,29 +1329,243 @@ public class NavmeshRasterizer
 
     private void WriteVolumeSpan(int x, int z, int y0, int y1, bool includeInVolume)
     {
-        if (!includeInVolume || _voxelizer == null)
+        if (!includeInVolume || !TryMapVolumeSpan(x, z, y0, y1, out var volumeX, out var volumeZ, out var volumeY0, out var volumeY1))
             return;
+
+        _voxelizer!.AddSpan(volumeX, volumeZ, volumeY0, volumeY1);
+    }
+
+    private bool TryMapVolumeSpan(int x, int z, int y0, int y1, out int volumeX, out int volumeZ, out int volumeY0, out int volumeY1)
+    {
+        volumeX = 0;
+        volumeZ = 0;
+        volumeY0 = 0;
+        volumeY1 = 0;
+
+        if (_voxelizer == null)
+            return false;
 
         x -= _heightfield.borderSize;
         z -= _heightfield.borderSize;
 
         if ((uint)x >= (uint)_voxSourceX || (uint)z >= (uint)_voxSourceZ)
-            return;
+            return false;
 
         var yMin = y0 - _minSpanGap;
         if (y1 < 0 || yMin >= _voxSourceY)
-            return;
+            return false;
 
         yMin = Math.Clamp(yMin, 0,    _voxSourceY - 1);
         y1   = Math.Clamp(y1,   yMin, _voxSourceY - 1);
 
-        var volumeX  = MapVoxelIndex(x,    _voxSourceX, _voxelizer.SizeX, _voxShiftX);
-        var volumeZ  = MapVoxelIndex(z,    _voxSourceZ, _voxelizer.SizeZ, _voxShiftZ);
-        var volumeY0 = MapVoxelIndex(yMin, _voxSourceY, _voxelizer.SizeY, _voxShiftY);
-        var volumeY1 = MapVoxelSpanMaxInclusive(y1, _voxSourceY, _voxelizer.SizeY, _voxShiftY);
+        volumeX  = MapVoxelIndex(x,    _voxSourceX, _voxelizer.SizeX, _voxShiftX);
+        volumeZ  = MapVoxelIndex(z,    _voxSourceZ, _voxelizer.SizeZ, _voxShiftZ);
+        volumeY0 = MapVoxelIndex(yMin, _voxSourceY, _voxelizer.SizeY, _voxShiftY);
+        volumeY1 = MapVoxelSpanMaxInclusive(y1, _voxSourceY, _voxelizer.SizeY, _voxShiftY);
+        return true;
+    }
 
-        // block pixels beneath the span for a distance roughly equal to agent height, otherwise volume pathfind will try to move the player through doorframes etc
-        _voxelizer.AddSpan(volumeX, volumeZ, volumeY0, volumeY1);
+    private bool TryMapVolumeYSpan(int y0, int y1, out int volumeY0, out int volumeY1)
+    {
+        volumeY0 = 0;
+        volumeY1 = 0;
+
+        if (_voxelizer == null)
+            return false;
+
+        var yMin = y0 - _minSpanGap;
+        if (y1 < 0 || yMin >= _voxSourceY)
+            return false;
+
+        yMin = Math.Clamp(yMin, 0,    _voxSourceY - 1);
+        y1   = Math.Clamp(y1,   yMin, _voxSourceY - 1);
+
+        volumeY0 = MapVoxelIndex(yMin, _voxSourceY, _voxelizer.SizeY, _voxShiftY);
+        volumeY1 = MapVoxelSpanMaxInclusive(y1, _voxSourceY, _voxelizer.SizeY, _voxShiftY);
+        return true;
+    }
+
+    private void AddVolumeSpanDirect(int x, int z, int y0, int y1)
+    {
+        if (_voxelizer == null)
+            return;
+
+        if ((uint)x >= (uint)_voxelizer.SizeX || (uint)z >= (uint)_voxelizer.SizeZ)
+            return;
+
+        if (y1 < 0 || y0 >= _voxelizer.SizeY)
+            return;
+
+        y0 = Math.Clamp(y0, 0,             _voxelizer.SizeY - 1);
+        y1 = Math.Clamp(y1, y0,            _voxelizer.SizeY - 1);
+        _voxelizer.AddSpan(x, z, y0, y1);
+    }
+
+    private void WriteVolumeWallThickness(int x, int z, int y0, int y1, float normalX, float normalY, float normalZ)
+    {
+        if (_voxelizer == null || !TryMapVolumeSpan(x, z, y0, y1, out var volumeX, out var volumeZ, out var volumeY0, out var volumeY1))
+            return;
+
+        var horizontalLengthSq = normalX * normalX + normalZ * normalZ;
+        if (horizontalLengthSq <= 0.000001f)
+            return;
+
+        var normalLength = MathF.Sqrt(horizontalLengthSq + normalY * normalY);
+        if (normalLength <= 0.000001f)
+            return;
+
+        var absNormalY = MathF.Abs(normalY) / normalLength;
+        if (absNormalY > VolumeWallThickenNormalYThreshold)
+            return;
+
+        var horizontalLength = MathF.Sqrt(horizontalLengthSq);
+        var dirX = normalX / horizontalLength;
+        var dirZ = normalZ / horizontalLength;
+        var stepX = Math.Abs(dirX) >= 0.35f ? Math.Sign(dirX) : 0;
+        var stepZ = Math.Abs(dirZ) >= 0.35f ? Math.Sign(dirZ) : 0;
+
+        if (stepX == 0 && stepZ == 0)
+            return;
+
+        for (var radius = 1; radius <= VolumeWallThickenHorizontalRadius; ++radius)
+        {
+            AddVolumeSpanDirect(volumeX + stepX * radius, volumeZ + stepZ * radius, volumeY0, volumeY1);
+            AddVolumeSpanDirect(volumeX - stepX * radius, volumeZ - stepZ * radius, volumeY0, volumeY1);
+
+            if (stepX != 0 && stepZ != 0)
+            {
+                AddVolumeSpanDirect(volumeX + stepX * radius, volumeZ,                  volumeY0, volumeY1);
+                AddVolumeSpanDirect(volumeX - stepX * radius, volumeZ,                  volumeY0, volumeY1);
+                AddVolumeSpanDirect(volumeX,                  volumeZ + stepZ * radius, volumeY0, volumeY1);
+                AddVolumeSpanDirect(volumeX,                  volumeZ - stepZ * radius, volumeY0, volumeY1);
+            }
+        }
+    }
+
+    private void RasterizeVolumeThinWallStrip(Vector3 v1, Vector3 v2, Vector3 v3, float normalX, float normalY, float normalZ)
+    {
+        if (_voxelizer == null)
+            return;
+
+        var horizontalLengthSq = normalX * normalX + normalZ * normalZ;
+        if (horizontalLengthSq <= 0.000001f)
+            return;
+
+        var normalLength = MathF.Sqrt(horizontalLengthSq + normalY * normalY);
+        if (normalLength <= 0.000001f)
+            return;
+
+        var absNormalY = MathF.Abs(normalY) / normalLength;
+        if (absNormalY > VolumeThinWallStripNormalYThreshold)
+            return;
+
+        var minY = Math.Min(v1.Y, Math.Min(v2.Y, v3.Y));
+        var maxY = Math.Max(v1.Y, Math.Max(v2.Y, v3.Y));
+        var y0   = (int)MathF.Floor((minY - _heightfield.bmin.Y) * _invCellY);
+        var y1   = (int)MathF.Ceiling((maxY - _heightfield.bmin.Y) * _invCellY);
+        if (!TryMapVolumeYSpan(y0, y1, out var volumeY0, out var volumeY1))
+            return;
+
+        var p1 = WorldToVolumePlane(v1);
+        var p2 = WorldToVolumePlane(v2);
+        var p3 = WorldToVolumePlane(v3);
+
+        var segA = p1;
+        var segB = p2;
+        var other = p3;
+        var len12 = Vector2.DistanceSquared(p1, p2);
+        var len23 = Vector2.DistanceSquared(p2, p3);
+        var len31 = Vector2.DistanceSquared(p3, p1);
+
+        if (len23 > len12 && len23 >= len31)
+        {
+            segA  = p2;
+            segB  = p3;
+            other = p1;
+        }
+        else if (len31 > len12 && len31 > len23)
+        {
+            segA  = p3;
+            segB  = p1;
+            other = p2;
+        }
+
+        if (Vector2.DistanceSquared(segA, segB) <= 0.0001f)
+            return;
+
+        var projectedThickness = MathF.Sqrt(DistanceToSegmentSquared(other, segA, segB));
+        if (projectedThickness > VolumeThinWallStripMaxProjectedThickness)
+            return;
+
+        var radius   = MathF.Max(VolumeThinWallStripBaseRadius, projectedThickness + VolumeThinWallStripExtraPadding);
+        var minX               = Math.Max(0, (int)MathF.Floor(Math.Min(segA.X, segB.X) - radius));
+        var maxX               = Math.Min(_voxelizer.SizeX - 1, (int)MathF.Ceiling(Math.Max(segA.X, segB.X) + radius));
+        var minZ               = Math.Max(0, (int)MathF.Floor(Math.Min(segA.Y, segB.Y) - radius));
+        var maxZ               = Math.Min(_voxelizer.SizeZ - 1, (int)MathF.Ceiling(Math.Max(segA.Y, segB.Y) + radius));
+        var radiusSq           = radius * radius;
+
+        for (var z = minZ; z <= maxZ; ++z)
+        {
+            for (var x = minX; x <= maxX; ++x)
+            {
+                var cellCenter = new Vector2(x + 0.5f, z + 0.5f);
+                if (DistanceToSegmentSquared(cellCenter, segA, segB) <= radiusSq)
+                    AddVolumeSpanDirect(x, z, volumeY0, volumeY1);
+            }
+        }
+    }
+
+    private Vector2 WorldToVolumePlane(Vector3 world)
+    {
+        var sourceX = (world.X - _heightfield.bmin.X) * _invCellXZ - _heightfield.borderSize;
+        var sourceZ = (world.Z - _heightfield.bmin.Z) * _invCellXZ - _heightfield.borderSize;
+        var volumeX = sourceX * _voxelizer!.SizeX / _voxSourceX;
+        var volumeZ = sourceZ * _voxelizer.SizeZ / _voxSourceZ;
+        return new(volumeX, volumeZ);
+    }
+
+    private static float DistanceToSegmentSquared(Vector2 point, Vector2 a, Vector2 b)
+    {
+        var ab     = b - a;
+        var abLenSq = ab.LengthSquared();
+        if (abLenSq <= 0.000001f)
+            return Vector2.DistanceSquared(point, a);
+
+        var t = Vector2.Dot(point - a, ab) / abLenSq;
+        t = Math.Clamp(t, 0f, 1f);
+        var projection = a + ab * t;
+        return Vector2.DistanceSquared(point, projection);
+    }
+
+    private void WriteVolumeWallThicknessFromProjectedPlane(int x, int z, int y0, int y1, float planeGradX, float planeGradZ)
+    {
+        var normalX = -planeGradX;
+        var normalY = 1f;
+        var normalZ = -planeGradZ;
+        WriteVolumeWallThickness(x, z, y0, y1, normalX, normalY, normalZ);
+    }
+
+    private void WriteVolumeWallThicknessFromTriangle(int x, int z, int y0, int y1, ReadOnlySpan<float> worldVertices, int offset1, int offset2, int offset3)
+    {
+        var v1x = worldVertices[offset1];
+        var v1y = worldVertices[offset1 + 1];
+        var v1z = worldVertices[offset1 + 2];
+        var v2x = worldVertices[offset2];
+        var v2y = worldVertices[offset2 + 1];
+        var v2z = worldVertices[offset2 + 2];
+        var v3x = worldVertices[offset3];
+        var v3y = worldVertices[offset3 + 1];
+        var v3z = worldVertices[offset3 + 2];
+        var v12x = v2x - v1x;
+        var v12y = v2y - v1y;
+        var v12z = v2z - v1z;
+        var v13x = v3x - v1x;
+        var v13y = v3y - v1y;
+        var v13z = v3z - v1z;
+        var crossX = v12y * v13z - v12z * v13y;
+        var crossY = v12z * v13x - v12x * v13z;
+        var crossZ = v12x * v13y - v12y * v13x;
+        WriteVolumeWallThickness(x, z, y0, y1, crossX, crossY, crossZ);
     }
 
     private RcSpan AllocSpan()

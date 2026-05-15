@@ -39,6 +39,9 @@ internal unsafe struct ColliderStreamedEx
 
 public unsafe partial class DebugGameCollision : IDisposable
 {
+    private const float DefaultCollisionRenderHorizontalDistance = 50f;
+    private const float DefaultCollisionRenderVerticalDistance   = 10f;
+
     private readonly Config      _config;
     private          UITree      _tree = new();
     private          DebugDrawer _dd;
@@ -48,6 +51,8 @@ public unsafe partial class DebugGameCollision : IDisposable
     private          bool        _showZeroLayer = true;
     private          bool        _showOnlyFlagRaycast;
     private          bool        _showOnlyFlagVisit;
+    private          float       _renderHorizontalDistance = DefaultCollisionRenderHorizontalDistance;
+    private          float       _renderVerticalDistance   = DefaultCollisionRenderVerticalDistance;
 
     private HashSet<nint> _streamedMeshes = new();
     private BitMask       _availableLayers;
@@ -432,7 +437,7 @@ public unsafe partial class DebugGameCollision : IDisposable
 
         using var n = _tree.Node(tag);
         if (n.SelectedOrHovered)
-            VisualizeColliderMeshPCBNode(node, ref world, new(1, 1, 0, 0.7f), objMatId, objMatId, _materialId, _materialMask);
+            VisualizeColliderMeshPCBNode(node, ref world, new(1, 1, 0, 0.7f), objMatId, objMatId, _materialId, _materialMask, Service.ObjectTable.LocalPlayer?.Position);
         if (!n.Opened)
             return;
 

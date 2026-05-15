@@ -427,6 +427,8 @@ public class NavmeshRasterizer
     private readonly int _tileX;
     private readonly int _tileZ;
     private readonly ScratchBuffers _scratch;
+    private const float VolumeWallThickenNormalYThreshold = 0.15f;
+    private const int   VolumeWallThickenHorizontalRadius = 1;
 
     public NavmeshRasterizer
     (
@@ -798,6 +800,8 @@ public class NavmeshRasterizer
                     y0 = Math.Clamp(y0, 0,  _maxY - 1);
                     y1 = Math.Clamp(y1, y0, _maxY - 1);
                     AddSpan(x, z, y0, y1, areaId, realSolid);
+                    if (_voxelizer != null && realSolid)
+                        WriteVolumeWallThickness(x, z, y0, y1, crossX, crossY, crossZ);
 
                     if (realSolid && _iset != null && inverseCrossY != 0)
                     {
@@ -919,6 +923,8 @@ public class NavmeshRasterizer
                 y0 = Math.Clamp(y0, 0,  _maxY - 1);
                 y1 = Math.Clamp(y1, y0, _maxY - 1);
                 AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid);
+                if (_voxelizer != null && info.RealSolid)
+                    WriteVolumeWallThicknessFromProjectedPlane(x, z, y0, y1, info.PlaneGradX, info.PlaneGradZ);
 
                 if (info.RealSolid && _iset != null)
                 {
@@ -1009,6 +1015,8 @@ public class NavmeshRasterizer
                 y0 = Math.Clamp(y0, 0,  _maxY - 1);
                 y1 = Math.Clamp(y1, y0, _maxY - 1);
                 AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid);
+                if (_voxelizer != null && info.RealSolid)
+                    WriteVolumeWallThicknessFromTriangle(x, z, y0, y1, worldVertices, offset1, offset2, offset3);
 
                 if (info.RealSolid && _iset != null && info.InverseCrossY != 0)
                 {
@@ -1138,6 +1146,8 @@ public class NavmeshRasterizer
                     y1 = Math.Clamp(y1, y0, _maxY - 1);
 
                     AddSpan(x, z, y0, y1, areaId, realSolid);
+                    if (_voxelizer != null && realSolid)
+                        WriteVolumeWallThickness(x, z, y0, y1, v12cross13.X, crossY, v12cross13.Z);
 
                     if (realSolid && _iset != null && invDiv != 0)
                     {
@@ -1300,6 +1310,70 @@ public class NavmeshRasterizer
 
         // block pixels beneath the span for a distance roughly equal to agent height, otherwise volume pathfind will try to move the player through doorframes etc
         _voxelizer.AddSpan(volumeX, volumeZ, volumeY0, volumeY1);
+    }
+
+    private void WriteVolumeWallThickness(int x, int z, int y0, int y1, float normalX, float normalY, float normalZ)
+    {
+        if (_voxelizer == null)
+            return;
+
+        var horizontalLengthSq = normalX * normalX + normalZ * normalZ;
+        if (horizontalLengthSq <= 0.000001f)
+            return;
+
+        var normalLength = MathF.Sqrt(horizontalLengthSq + normalY * normalY);
+        if (normalLength <= 0.000001f)
+            return;
+
+        var absNormalY = MathF.Abs(normalY) / normalLength;
+        if (absNormalY > VolumeWallThickenNormalYThreshold)
+            return;
+
+        var horizontalLength = MathF.Sqrt(horizontalLengthSq);
+        var dirX = normalX / horizontalLength;
+        var dirZ = normalZ / horizontalLength;
+        var stepX = Math.Abs(dirX) >= 0.35f ? Math.Sign(dirX) : 0;
+        var stepZ = Math.Abs(dirZ) >= 0.35f ? Math.Sign(dirZ) : 0;
+
+        if (stepX == 0 && stepZ == 0)
+            return;
+
+        for (var radius = 1; radius <= VolumeWallThickenHorizontalRadius; ++radius)
+        {
+            WriteVolumeSpan(x + stepX * radius, z + stepZ * radius, y0, y1, true);
+            WriteVolumeSpan(x - stepX * radius, z - stepZ * radius, y0, y1, true);
+        }
+    }
+
+    private void WriteVolumeWallThicknessFromProjectedPlane(int x, int z, int y0, int y1, float planeGradX, float planeGradZ)
+    {
+        var normalX = -planeGradX;
+        var normalY = 1f;
+        var normalZ = -planeGradZ;
+        WriteVolumeWallThickness(x, z, y0, y1, normalX, normalY, normalZ);
+    }
+
+    private void WriteVolumeWallThicknessFromTriangle(int x, int z, int y0, int y1, ReadOnlySpan<float> worldVertices, int offset1, int offset2, int offset3)
+    {
+        var v1x = worldVertices[offset1];
+        var v1y = worldVertices[offset1 + 1];
+        var v1z = worldVertices[offset1 + 2];
+        var v2x = worldVertices[offset2];
+        var v2y = worldVertices[offset2 + 1];
+        var v2z = worldVertices[offset2 + 2];
+        var v3x = worldVertices[offset3];
+        var v3y = worldVertices[offset3 + 1];
+        var v3z = worldVertices[offset3 + 2];
+        var v12x = v2x - v1x;
+        var v12y = v2y - v1y;
+        var v12z = v2z - v1z;
+        var v13x = v3x - v1x;
+        var v13y = v3y - v1y;
+        var v13z = v3z - v1z;
+        var crossX = v12y * v13z - v12z * v13y;
+        var crossY = v12z * v13x - v12x * v13z;
+        var crossZ = v12x * v13y - v12y * v13x;
+        WriteVolumeWallThickness(x, z, y0, y1, crossX, crossY, crossZ);
     }
 
     private RcSpan AllocSpan()

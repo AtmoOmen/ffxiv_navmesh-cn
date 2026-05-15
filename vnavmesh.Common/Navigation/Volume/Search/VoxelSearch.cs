@@ -5,6 +5,10 @@ namespace vnavmesh.Common.Navigation.Volume.Search;
 
 public static class VoxelSearch
 {
+    private const float UpwardVoxelPreferencePenaltyScale  = 12f;
+    private const float UpwardVoxelPreferencePenaltyLinear = 4f;
+    private const float DownwardVoxelPreferencePenalty     = 0.5f;
+
     public static Vector3 FindClosestVoxelPoint(VoxelMap volume, ulong index, Vector3 p, float eps = 0.1f) =>
         volume.ClampPointToVoxel(index, p, eps);
 
@@ -22,13 +26,14 @@ public static class VoxelSearch
             if (!v.empty)
                 continue;
 
-            var p    = FindClosestVoxelPoint(volume, v.index, center, 0);
-            var d    = p - center;
-            var dist = d.LengthSquared();
-            if (d.X != 0 || d.Z != 0)
-                dist += 100;
-            if (d.Y < 0)
-                dist += 400;
+            var p          = FindClosestVoxelPoint(volume, v.index, center, 0);
+            var d          = p - center;
+            var dist       = d.LengthSquared();
+            var upward     = MathF.Max(d.Y, 0f);
+            var downward   = MathF.Max(-d.Y, 0f);
+            dist          += upward * upward * UpwardVoxelPreferencePenaltyScale;
+            dist          += upward * UpwardVoxelPreferencePenaltyLinear;
+            dist          += downward * DownwardVoxelPreferencePenalty;
 
             if (dist < minDist)
             {

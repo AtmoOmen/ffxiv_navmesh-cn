@@ -128,5 +128,10 @@ public unsafe partial class DebugGameCollision
                 ImGui.Checkbox("隐藏无全局访问标志的对象 (0x2)", ref _showOnlyFlagVisit);
             }
         }
+
+        ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
+        ImGui.SliderFloat("碰撞 水平渲染距离###collisionRenderHorizontalDistance", ref _renderHorizontalDistance, 2f, 500f, "%.0f");
+        ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
+        ImGui.SliderFloat("碰撞 垂直渲染距离###collisionRenderVerticalDistance", ref _renderVerticalDistance, 1f, 100f, "%.0f");
     }
 }

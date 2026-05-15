@@ -1122,9 +1122,10 @@ public class NavmeshBuilder
         if (primitives.IsEmpty)
             return prepared;
 
-        var primitiveInfos            = GC.AllocateUninitializedArray<PreparedTerrainGeometry.PrimitiveInfo>(primitives.Length);
-        var walkableNormalThresholdSq = _walkableNormalThreshold * _walkableNormalThreshold;
-        var includeVolume             = Navmesh.Volume != null;
+        var primitiveInfos                 = GC.AllocateUninitializedArray<PreparedTerrainGeometry.PrimitiveInfo>(primitives.Length);
+        var walkableNormalThresholdSq      = _walkableNormalThreshold * _walkableNormalThreshold;
+        var includeVolume                  = Navmesh.Volume != null;
+        var projectionNormalThresholdSq    = 0.35f * 0.35f;
 
         for (var primitiveIndex = 0; primitiveIndex < primitives.Length; ++primitiveIndex)
         {
@@ -1168,7 +1169,7 @@ public class NavmeshBuilder
                              includeVolume                                           &&
                              flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable) &&
                              !flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
-            var projected  = crossY != 0;
+            var projected  = crossY != 0 && (!includeVolume || crossY * crossY >= projectionNormalThresholdSq * lenSq);
             var planeGradX = projected ? -crossX / crossY : 0;
             var planeGradZ = projected ? -crossZ / crossY : 0;
             var planeBias  = projected ? v1y - planeGradX * v1x - planeGradZ * v1z : 0;
@@ -1187,7 +1188,7 @@ public class NavmeshBuilder
                 planeGradX,
                 planeGradZ,
                 planeBias,
-                projected ? -1.0f / crossY : 0,
+                crossY != 0 ? -1.0f / crossY : 0,
                 unwalkable ? 0 : RcRecast.RC_WALKABLE_AREA,
                 PreparedTerrainGeometry.PrimitiveInfo.BuildFlags(realSolid, crossY > 0, projected, true)
             );
