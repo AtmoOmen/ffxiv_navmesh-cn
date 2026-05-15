@@ -10,9 +10,6 @@ namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.Alexandar;
 internal class Z0442启动之章1 : NavmeshCustomization
 {
     public override int Version => 2;
-    
-    public Z0442启动之章1() =>
-        ApplyExtremeHighPrecisionSettings();
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
