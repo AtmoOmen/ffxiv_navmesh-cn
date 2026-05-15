@@ -20,7 +20,7 @@ internal sealed class NavmeshFlightQuery
         this.groundQuery = groundQuery;
     }
 
-    internal PlannerResult PlanVolumePathDetailed(Vector3 from, Vector3 to, bool useRaycast, CancellationToken cancel)
+    internal PlannerResult PlanVolumePathDetailed(Vector3 from, Vector3 to, CancellationToken cancel)
     {
         if (query.VolumeQuery == null)
         {
@@ -49,7 +49,7 @@ internal sealed class NavmeshFlightQuery
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
         var searchTimer = StopWatchTimer.Create();
         var voxelPath = volumeQuery.FindPath
-            (startVoxel, endVoxel, safeStart, safeDestination, useRaycast, false, cancel);
+            (startVoxel, endVoxel, safeStart, safeDestination, false, cancel);
         var telemetry = volumeQuery.LastTelemetry;
 
         if (voxelPath.Count == 0)
@@ -60,7 +60,7 @@ internal sealed class NavmeshFlightQuery
 
         Service.Log.Debug
         (
-            $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，搜索射线优化 = {(telemetry.SearchRaycastEnabled ? "是" : "否")}，搜索轮次 = {telemetry.SearchAttempts}，启发式权重 = {telemetry.HeuristicWeight:f2}，路径点 = {voxelPath.Count}，安全终点修正 = {(safeDestinationAdjusted ? "是" : "否")}"
+            $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，搜索轮次 = {telemetry.SearchAttempts}，启发式权重 = {telemetry.HeuristicWeight:f2}，路径点 = {voxelPath.Count}，起点修正 = {(Vector3.DistanceSquared(safeStart, from) > 0.000001f ? "是" : "否")}，安全终点修正 = {(safeDestinationAdjusted ? "是" : "否")}"
         );
 
         List<Vector3> rawWaypoints = new(voxelPath.Count);
@@ -103,7 +103,7 @@ internal sealed class NavmeshFlightQuery
         }
 
         if (!requestedTargetLeaf.empty &&
-            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, useRaycast, cancel, out var hybridResult))
+            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, cancel, out var hybridResult))
             return hybridResult;
 
         var finalDestination    = safeDestination;
@@ -258,13 +258,12 @@ internal sealed class NavmeshFlightQuery
         Vector3           requestedTarget,
         Vector3           safeFlightDestination,
         List<Vector3>     rawFlightWaypoints,
-        bool              useRaycast,
         CancellationToken cancel,
         out PlannerResult result
     )
     {
         var toleranceFloor = MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
-        var groundResult   = groundQuery.PlanMeshPathDetailed(safeFlightDestination, requestedTarget, useRaycast, 0, cancel);
+        var groundResult   = groundQuery.PlanMeshPathDetailed(safeFlightDestination, requestedTarget, 0, cancel);
 
         if (!groundResult.Succeeded || groundResult.Segments.Count == 0)
         {

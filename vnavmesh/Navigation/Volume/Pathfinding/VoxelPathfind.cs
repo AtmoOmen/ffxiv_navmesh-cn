@@ -29,7 +29,6 @@ public class VoxelPathfind
     private ulong                     goalVoxel;
     private Vector3                   goalPos;
     private bool                      goalReached;
-    private bool                      useSearchRaycast;
     private bool                      useGuidedCorridor;
     private float                     heuristicWeight;
     private int                       visitedNodes;
@@ -38,7 +37,6 @@ public class VoxelPathfind
     private int                       lineOfSightHits;
     private int                       peakOpenListSize;
     private VolumeSearchTermination   lastTermination;
-    private bool                      lastSearchRaycastEnabled;
     private int                       lastSearchAttempts;
     private HashSet<ulong>?           l1PathSet;
     private Dictionary<ulong, float>? l1DistanceField;
@@ -57,7 +55,6 @@ public class VoxelPathfind
         lineOfSightHits,
         peakOpenListSize,
         lastTermination,
-        lastSearchRaycastEnabled,
         lastSearchAttempts,
         heuristicWeight
     );
@@ -80,7 +77,6 @@ public class VoxelPathfind
         ulong             toVoxel,
         Vector3           fromPos,
         Vector3           toPos,
-        bool              useRaycast,
         bool              returnIntermediatePoints,
         CancellationToken cancel
     )
@@ -117,14 +113,14 @@ public class VoxelPathfind
             return [(toVoxel, toPos)];
         }
 
-        if (useRaycast && TryBuildDirectPath(fromVoxel, toVoxel, fromPos, toPos, out var directPath))
+        if (TryBuildDirectPath(fromVoxel, toVoxel, fromPos, toPos, out var directPath))
             return directPath;
 
-        var searchRaycast = useRaycast && Vector3.Distance(fromPos, toPos) <= maxSearchRaycastDistance;
+        var searchRaycast = Vector3.Distance(fromPos, toPos) <= maxSearchRaycastDistance;
 
         if (searchRaycast)
         {
-            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, true, returnIntermediatePoints, cancel, RAYCAST_SEARCH_STEP_BUDGET, 1);
+            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, RAYCAST_SEARCH_STEP_BUDGET, 1);
 
             if (lastTermination == VolumeSearchTermination.StepBudgetReached)
             {
@@ -132,10 +128,10 @@ public class VoxelPathfind
                 (
                     $"[算路] 飞行体素搜索触发降级重试：直线距离 = {Vector3.Distance(fromPos, toPos):f3}，首轮访问节点 = {visitedNodes}，LoS 检查 = {lineOfSightChecks}"
                 );
-                path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, false, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 2);
+                path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 2);
             }
 
-            return useRaycast ? RefineSimplifiedPath(path, cancel) : path;
+            return RefineSimplifiedPath(path, cancel);
         }
 
         if (TryCreateGuidedCorridor(fromPos, toPos, out var corridor))
@@ -146,7 +142,6 @@ public class VoxelPathfind
                 toVoxel,
                 fromPos,
                 toPos,
-                false,
                 returnIntermediatePoints,
                 cancel,
                 GUIDED_CORRIDOR_SEARCH_STEP_BUDGET,
@@ -161,7 +156,7 @@ public class VoxelPathfind
                 (
                     $"[算路] 飞行体素定向走廊搜索完成：访问节点 = {visitedNodes}，走廊半径 = {corridor.HorizontalRadius:f3}，上抬余量 = {corridor.UpwardAllowance:f3}"
                 );
-                return useRaycast ? RefineSimplifiedPath(corridorPath, cancel) : corridorPath;
+                return RefineSimplifiedPath(corridorPath, cancel);
             }
 
             Service.Log.Debug
@@ -176,7 +171,7 @@ public class VoxelPathfind
         {
             l1PathSet = pathSet;
             var constrainedPath = RunSearchAttempt
-                (fromVoxel, toVoxel, fromPos, toPos, false, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 1);
+                (fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 1);
 
             if (lastTermination == VolumeSearchTermination.ReachedGoal)
             {
@@ -184,7 +179,7 @@ public class VoxelPathfind
                 (
                     $"[算路] 飞行体素 L1 约束搜索完成：访问节点 = {visitedNodes}，L1 路径单元 = {pathSet.Count}"
                 );
-                return useRaycast ? RefineSimplifiedPath(constrainedPath, cancel) : constrainedPath;
+                return RefineSimplifiedPath(constrainedPath, cancel);
             }
 
             Service.Log.Debug
@@ -197,8 +192,8 @@ public class VoxelPathfind
         l1PathSet = null;
         if (l1DistanceField is not { Count: > 0 })
             ComputeL1DistanceField(toVoxel);
-        var fallbackPath = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, false, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 1);
-        return useRaycast ? RefineSimplifiedPath(fallbackPath, cancel) : fallbackPath;
+        var fallbackPath = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 1);
+        return RefineSimplifiedPath(fallbackPath, cancel);
     }
 
     public void Start(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
@@ -247,30 +242,22 @@ public class VoxelPathfind
 
     private List<(ulong voxel, Vector3 p)> RunSearchAttempt
     (
-        ulong             fromVoxel,
-        ulong             toVoxel,
-        Vector3           fromPos,
-        Vector3           toPos,
-        bool              useRaycast,
-        bool              returnIntermediatePoints,
-        CancellationToken cancel,
-        int               maxSteps,
-        int               attempts,
-        GuidedSearchCorridor? corridor = null,
-        float?            heuristicWeightOverride = null
+        ulong                 fromVoxel,
+        ulong                 toVoxel,
+        Vector3               fromPos,
+        Vector3               toPos,
+        bool                  returnIntermediatePoints,
+        CancellationToken     cancel,
+        int                   maxSteps,
+        int                   attempts,
+        GuidedSearchCorridor? corridor                = null,
+        float?                heuristicWeightOverride = null
     )
     {
         Start(fromVoxel, toVoxel, fromPos, toPos);
-        useSearchRaycast = useRaycast;
-        useGuidedCorridor = corridor.HasValue;
-        guidedCorridor    = corridor.GetValueOrDefault();
-        heuristicWeight = heuristicWeightOverride ??
-                          (useRaycast
-                              ? SHORT_RANGE_HEURISTIC_WEIGHT
-                              : SHORT_RANGE_HEURISTIC_WEIGHT +
-                                (LONG_RANGE_HEURISTIC_WEIGHT - SHORT_RANGE_HEURISTIC_WEIGHT) *
-                                Math.Clamp(Vector3.Distance(fromPos, toPos) / (maxSearchRaycastDistance * LONG_RANGE_HEURISTIC_BLEND_DISTANCE), 0f, 1f));
-        lastSearchRaycastEnabled = useRaycast;
+        useGuidedCorridor        = corridor.HasValue;
+        guidedCorridor           = corridor.GetValueOrDefault();
+        heuristicWeight          = heuristicWeightOverride ?? SHORT_RANGE_HEURISTIC_WEIGHT;
         lastSearchAttempts       = attempts;
         lastTermination          = Execute(cancel, maxSteps);
         return BuildPathToVisitedNode(bestNodeIndex, returnIntermediatePoints);
@@ -331,7 +318,7 @@ public class VoxelPathfind
 
         var neighbours = CollectNeighbours(current.Voxel);
 
-        if (useSearchRaycast && neighbours.Count >= RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD && Environment.ProcessorCount > 1)
+        if (neighbours.Count >= RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD && Environment.ProcessorCount > 1)
         {
             var evaluations = new VolumeNeighbourEvaluation?[neighbours.Count];
             Parallel.For
@@ -383,7 +370,6 @@ public class VoxelPathfind
         useGuidedCorridor        = false;
         guidedCorridor           = default;
         lastTermination          = VolumeSearchTermination.SearchExhausted;
-        lastSearchRaycastEnabled = false;
         lastSearchAttempts       = 0;
         lastPathDebug            = null;
     }
@@ -550,10 +536,7 @@ public class VoxelPathfind
                 horizontalForward = new Vector2(current.p.X - previous.p.X, current.p.Z - previous.p.Z);
         }
 
-        if (!TryNormalize(horizontalForward, out var normalizedHorizontalForward))
-            horizontalForward = Vector2.UnitX;
-        else
-            horizontalForward = normalizedHorizontalForward;
+        horizontalForward = !TryNormalize(horizontalForward, out var normalizedHorizontalForward) ? Vector2.UnitX : normalizedHorizontalForward;
 
         var horizontalRight = new Vector2(-horizontalForward.Y, horizontalForward.X);
         var forward3        = new Vector3(horizontalForward.X, 0, horizontalForward.Y);
@@ -1291,13 +1274,10 @@ public class VoxelPathfind
         var directionHint = horizontal.LengthSquared() > SCORE_EPSILON * SCORE_EPSILON
                                 ? Vector3.Normalize(horizontal) * FLIGHT_PUSH_HEIGHT_RAISE_HORIZONTAL_BLEND + Vector3.UnitY
                                 : Vector3.UnitY;
-        if (!TryNormalize(directionHint, out var normalizedDirectionHint))
-            directionHint = Vector3.UnitY;
-        else
-            directionHint = normalizedDirectionHint;
+        directionHint = !TryNormalize(directionHint, out var normalizedDirectionHint) ? Vector3.UnitY : normalizedDirectionHint;
 
         var attemptLift = requiredLift + FLIGHT_PUSH_HEIGHT_STRICT_BIAS;
-        Span<float> scales = stackalloc float[4] { 1.0f, 0.85f, 0.70f, 0.55f };
+        Span<float> scales = [1.0f, 0.85f, 0.70f, 0.55f];
         for (var i = 0; i < 4; ++i)
         {
             var candidatePoint = current.p + Vector3.UnitY * (attemptLift * scales[i]);
@@ -2056,9 +2036,6 @@ public class VoxelPathfind
 
         if (!TryEvaluateCandidate(currentIndex, neighbourVoxel, false, ref bestParentIndex, ref bestPosition, ref bestScore))
             return false;
-
-        if (!useSearchRaycast)
-            return true;
 
         var nodeSpan      = NodeSpan;
         var ancestorIndex = nodeSpan[currentIndex].ParentIndex;

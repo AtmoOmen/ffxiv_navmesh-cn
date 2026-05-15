@@ -8,13 +8,13 @@ using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.Alexandar;
 
-// [CustomizationTerritory(444)]
+[CustomizationTerritory(444)]
 internal class Z0444启动之章3 : NavmeshCustomization
 {
     public override int Version => 2;
-
+    
     public Z0444启动之章3() =>
-        ApplyExtremeHighPrecisionSettings();
+        Settings.Filtering -= NavmeshFilter.LedgeSpans;
 
     public override void CustomizeScene(SceneExtractor scene)
     {

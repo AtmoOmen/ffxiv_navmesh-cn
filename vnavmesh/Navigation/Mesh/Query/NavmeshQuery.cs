@@ -76,14 +76,8 @@ public class NavmeshQuery
         released    = true;
     }
 
-    internal List<Vector3> PathfindMesh(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, float range, CancellationToken cancel) =>
-        Postprocess(PlanMeshPathDetailed(from, to, useRaycast, range, cancel), useStringPulling, cancel).Waypoints;
-
-    internal List<Vector3> PathfindVolume(Vector3 from, Vector3 to, bool useRaycast, bool useStringPulling, CancellationToken cancel) =>
-        Postprocess(PlanVolumePathDetailed(from, to, useRaycast, cancel), useStringPulling, cancel).Waypoints;
-
-    internal PostprocessedPath Postprocess(PlannerResult result, bool useStringPulling, CancellationToken cancel) =>
-        postprocessor.Process(result, useStringPulling, cancel);
+    internal PostprocessedPath Postprocess(PlannerResult result, CancellationToken cancel) =>
+        postprocessor.Process(result, cancel);
 
     internal PostprocessedPath PostprocessStraightPath(PlannerResult result, CancellationToken cancel, int straightPathOptions = 0) =>
         postprocessor.ProcessStraightPath(result, cancel, straightPathOptions);
@@ -91,11 +85,11 @@ public class NavmeshQuery
     internal NavmeshGroundQuery.GroundPathDiagnosticsSnapshot GetGroundDiagnostics() =>
         GroundQuery.GetGroundDiagnostics();
 
-    internal PlannerResult PlanMeshPathDetailed(Vector3 from, Vector3 to, bool useRaycast, float range, CancellationToken cancel) =>
-        GroundQuery.PlanMeshPathDetailed(from, to, useRaycast, range, cancel);
+    internal PlannerResult PlanMeshPathDetailed(Vector3 from, Vector3 to, float range, CancellationToken cancel) =>
+        GroundQuery.PlanMeshPathDetailed(from, to, range, cancel);
 
-    internal PlannerResult PlanVolumePathDetailed(Vector3 from, Vector3 to, bool useRaycast, CancellationToken cancel) =>
-        FlightQuery.PlanVolumePathDetailed(from, to, useRaycast, cancel);
+    internal PlannerResult PlanVolumePathDetailed(Vector3 from, Vector3 to, CancellationToken cancel) =>
+        FlightQuery.PlanVolumePathDetailed(from, to, cancel);
 
     internal (int X, int Z) FindMeshTile(Vector3 position)
     {
