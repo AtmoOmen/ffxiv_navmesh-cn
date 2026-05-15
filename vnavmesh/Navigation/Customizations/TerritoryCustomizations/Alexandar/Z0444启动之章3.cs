@@ -1,4 +1,4 @@
-﻿using DotRecast.Detour;
+using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Customizations.Abstractions;
@@ -8,7 +8,7 @@ using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.Alexandar;
 
-[CustomizationTerritory(444)]
+// [CustomizationTerritory(444)]
 internal class Z0444启动之章3 : NavmeshCustomization
 {
     public override int Version => 2;

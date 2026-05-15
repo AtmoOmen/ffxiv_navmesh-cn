@@ -61,7 +61,7 @@ public class NavmeshQuery
     {
         this.NavmeshData = navmesh;
         this.ConfigData  = config;
-        postprocessor    = new(() => MeshQuery);
+        postprocessor    = new(() => MeshQuery, () => GroundAreaFilter);
         GroundQuery      = new(this);
         FlightQuery      = new(this, GroundQuery);
     }
@@ -84,6 +84,9 @@ public class NavmeshQuery
 
     internal PostprocessedPath Postprocess(PlannerResult result, bool useStringPulling, CancellationToken cancel) =>
         postprocessor.Process(result, useStringPulling, cancel);
+
+    internal PostprocessedPath PostprocessStraightPath(PlannerResult result, CancellationToken cancel, int straightPathOptions = 0) =>
+        postprocessor.ProcessStraightPath(result, cancel, straightPathOptions);
 
     internal NavmeshGroundQuery.GroundPathDiagnosticsSnapshot GetGroundDiagnostics() =>
         GroundQuery.GetGroundDiagnostics();

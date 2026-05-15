@@ -171,6 +171,55 @@ public sealed class NavmeshManager : IDisposable
         );
     }
 
+    internal Task<PostprocessedPath> QueryStraightPathDetailed
+    (
+        Vector3           from,
+        Vector3           to,
+        bool              flying,
+        float             range                = 0,
+        int               straightPathOptions  = 0,
+        CancellationToken externalCancel       = default
+    )
+    {
+        if (currentCancelSource == null)
+            throw new Exception("无法发起查询, 导航数据未就绪");
+
+        var combined = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
+        ++numActivePathfinds;
+
+        return ExecuteWhenIdle
+        (
+            async _ =>
+            {
+                using var autoDisposeCombined  = combined;
+                using var autoDecrementCounter = new OnDispose(() => --numActivePathfinds);
+
+                Log($"发起 straight path 查询。起点: {from} 终点: {to}");
+                var result = await Task.Run
+                             (
+                                 () =>
+                                 {
+                                     combined.Token.ThrowIfCancellationRequested();
+                                     if (Query == null)
+                                         throw new Exception("无法发起 straight path 查询, 导航数据构建未成功");
+
+                                     Log($"执行 straight path 查询。起点: {from:f3} 终点: {to:f3}");
+
+                                     var plannerResult = flying
+                                                             ? Query.PlanVolumePathDetailed(from, to, true, combined.Token)
+                                                             : Query.PlanMeshPathDetailed(from, to, true, range, combined.Token);
+                                     return Query.PostprocessStraightPath(plannerResult, combined.Token, straightPathOptions);
+                                 },
+                                 combined.Token
+                             );
+
+                Log($"straight path 查询结束。结果: {result.Status} 路径点总数: {result.Waypoints.Count}");
+                return result;
+            },
+            combined.Token
+        );
+    }
+
     public (Vector3 min, Vector3 max) BuildBitmap(Vector3 startingPos, string filename, float pixelSize, AABB? mapBounds = null)
     {
         if (Navmesh == null || Query == null)

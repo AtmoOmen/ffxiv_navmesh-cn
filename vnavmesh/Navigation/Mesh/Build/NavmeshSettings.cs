@@ -20,12 +20,12 @@ public class NavmeshSettings
     public float         RegionMinSize    = 8;
     public float         RegionMergeSize  = 20;
     public RcPartition   Partitioning     = RcPartition.WATERSHED;
-    public float         PolyMaxEdgeLen;
-    public float         PolyMaxSimplificationError = 1.1f;
+    public float         PolyMaxEdgeLen   = 12;
+    public float         PolyMaxSimplificationError = 1.5f;
     public int           PolyMaxVerts               = 6;
     public float         DetailSampleDist           = 6f;
     public float         DetailMaxSampleError       = 1f;
-    public bool          FastBuild                  = true;
+    public bool          FastBuild                  = false;
 
     public bool  GenerateEdgeClimbLinks;
     public bool  GenerateEdgeJumpLinks;

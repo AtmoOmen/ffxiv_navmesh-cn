@@ -12,6 +12,12 @@ internal static class DriverMath
     private const float MinSegmentLengthSq = 0.000001f;
     private const float SegmentEndCaptureRadius = 0.05f;
 
+    public static int ConsumeGroundWaypoints(Vector3 currentPosition, Vector3? previousPosition, Vector3 startPosition, IReadOnlyList<Vector3> waypoints) =>
+        ConsumeTraverseWaypoints(currentPosition, previousPosition, startPosition, waypoints, flatten: true);
+
+    public static int ConsumeFlightWaypoints(Vector3 currentPosition, Vector3? previousPosition, Vector3 startPosition, IReadOnlyList<Vector3> waypoints) =>
+        ConsumeTraverseWaypoints(currentPosition, previousPosition, startPosition, waypoints, flatten: false);
+
     public static int ConsumeGroundWaypoints(MovementExecutionContext context) =>
         ConsumeTraverseSegments(context, flatten: true);
 
@@ -55,23 +61,7 @@ internal static class DriverMath
                 break;
             }
 
-            var projectedStart = Project(segmentStart, flatten);
-            var projectedEnd   = Project(segmentEnd, flatten);
-            var progress       = ComputeProjectionParameter(current, projectedStart, projectedEnd);
-
-            if (progress >= 1f)
-            {
-                currentTraverseSegmentIndex++;
-                continue;
-            }
-
-            if (Vector3.Distance(current, projectedEnd) <= SegmentEndCaptureRadius)
-            {
-                currentTraverseSegmentIndex++;
-                continue;
-            }
-
-            if (DistanceToLineSegment(projectedEnd, previous, current) <= SegmentEndCaptureRadius)
+            if (ShouldAdvanceTraverseSegment(current, previous, segmentStart, segmentEnd, flatten))
             {
                 currentTraverseSegmentIndex++;
                 continue;
@@ -81,6 +71,62 @@ internal static class DriverMath
         }
 
         return currentTraverseSegmentIndex;
+    }
+
+    private static int ConsumeTraverseWaypoints
+    (
+        Vector3                currentPosition,
+        Vector3?               previousPosition,
+        Vector3                startPosition,
+        IReadOnlyList<Vector3> waypoints,
+        bool                   flatten
+    )
+    {
+        var currentTraverseSegmentIndex = 0;
+        var current                     = Project(currentPosition, flatten);
+        var previous                    = Project(previousPosition ?? currentPosition, flatten);
+
+        while (TryGetTraverseSegment(startPosition, waypoints, currentTraverseSegmentIndex, out var segmentStart, out var segmentEnd))
+        {
+            if (ShouldAdvanceTraverseSegment(current, previous, segmentStart, segmentEnd, flatten))
+            {
+                currentTraverseSegmentIndex++;
+                continue;
+            }
+
+            break;
+        }
+
+        return currentTraverseSegmentIndex;
+    }
+
+    private static bool TryGetTraverseSegment(Vector3 startPosition, IReadOnlyList<Vector3> waypoints, int traverseSegmentIndex, out Vector3 start, out Vector3 end)
+    {
+        if (traverseSegmentIndex < 0 || traverseSegmentIndex >= waypoints.Count)
+        {
+            start = default;
+            end   = default;
+            return false;
+        }
+
+        start = traverseSegmentIndex == 0 ? startPosition : waypoints[traverseSegmentIndex - 1];
+        end   = waypoints[traverseSegmentIndex];
+        return true;
+    }
+
+    private static bool ShouldAdvanceTraverseSegment(Vector3 current, Vector3 previous, Vector3 segmentStart, Vector3 segmentEnd, bool flatten)
+    {
+        var projectedStart = Project(segmentStart, flatten);
+        var projectedEnd   = Project(segmentEnd, flatten);
+        var progress       = ComputeProjectionParameter(current, projectedStart, projectedEnd);
+
+        if (progress >= 1f)
+            return true;
+
+        if (Vector3.Distance(current, projectedEnd) <= SegmentEndCaptureRadius)
+            return true;
+
+        return DistanceToLineSegment(projectedEnd, previous, current) <= SegmentEndCaptureRadius;
     }
 
     private static float ComputeProjectionParameter(Vector3 position, Vector3 start, Vector3 end)

@@ -66,6 +66,7 @@ internal sealed class NavmeshFlightQuery
         List<Vector3> rawWaypoints = new(voxelPath.Count);
         foreach (var step in voxelPath)
             rawWaypoints.Add(step.p);
+        var flightDebug = volumeQuery.LastPathDebug;
 
         if (telemetry.Termination != VolumeSearchTermination.ReachedGoal)
         {
@@ -91,9 +92,11 @@ internal sealed class NavmeshFlightQuery
                         AllowVerticalControl = true,
                         ReachabilitySource   = PathReachabilitySource.Volume,
                         GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                        TraversalStartPosition = from,
                         StartPosition        = from,
                         EndPosition          = partialDestination,
-                        Points               = [.. rawWaypoints]
+                        Points               = [.. rawWaypoints],
+                        FlightPathDebug      = flightDebug
                     }
                 ]
             };
@@ -141,9 +144,11 @@ internal sealed class NavmeshFlightQuery
                     AllowVerticalControl = true,
                     ReachabilitySource   = PathReachabilitySource.Volume,
                     GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                    TraversalStartPosition = from,
                     StartPosition        = from,
                     EndPosition          = finalDestination,
-                    Points               = [.. rawWaypoints]
+                    Points               = [.. rawWaypoints],
+                    FlightPathDebug      = flightDebug
                 }
             ]
         };
@@ -290,9 +295,11 @@ internal sealed class NavmeshFlightQuery
                 AllowVerticalControl = true,
                 ReachabilitySource   = PathReachabilitySource.Volume,
                 GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                TraversalStartPosition = requestedStart,
                 StartPosition        = requestedStart,
                 EndPosition          = transitionPoint,
-                Points               = flightWaypoints
+                Points               = flightWaypoints,
+                FlightPathDebug      = query.VolumeQuery?.LastPathDebug
             }
         ];
         foreach (var segment in groundResult.Segments)

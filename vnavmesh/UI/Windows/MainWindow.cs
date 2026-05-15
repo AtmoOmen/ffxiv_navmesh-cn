@@ -57,6 +57,7 @@ public class MainWindow : Window, IDisposable
     public void EndFrame()
     {
         debugGameColl.DrawVisualizers();
+        debugNavmeshManager.DrawRenderedPaths();
 
         if (config.ShowWaypoints)
         {

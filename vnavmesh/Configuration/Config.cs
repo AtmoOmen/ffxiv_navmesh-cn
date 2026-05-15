@@ -17,6 +17,7 @@ public class Config : IPluginConfiguration
     public float AlignCameraHeight = -15;
     public bool  ShowWaypoints;
     public bool  ForceShowGameCollision;
+    public bool  RenderWhenGameUiHidden;
     public bool  CancelMoveOnUserInput;
     public bool  StopOnStuck;
     public float UnstuckDetectionSeconds = 2f;
@@ -41,6 +42,7 @@ public class Config : IPluginConfiguration
         DrawCheckbox("切换区域时自动加载导航数据", ref AutoLoadNavmesh,        "进入新区域后自动尝试载入对应的导航数据。");
         DrawCheckbox("显示路径点",         ref ShowWaypoints,          "在世界中绘制当前路径的关键点。");
         DrawCheckbox("始终显示游戏碰撞体积",    ref ForceShowGameCollision, "用于排查地形碰撞与导航结果之间的差异。");
+        DrawCheckbox("游戏隐藏界面时仍然渲染", ref RenderWhenGameUiHidden, "即使使用游戏内隐藏界面功能，插件的调试渲染与窗口仍继续绘制。");
         DrawCheckbox("启用 DTR 信息栏",    ref EnableDTR,              "在界面上方的信息栏显示插件状态。");
 
         using var disabled = ImRaii.Disabled(!EnableDTR);

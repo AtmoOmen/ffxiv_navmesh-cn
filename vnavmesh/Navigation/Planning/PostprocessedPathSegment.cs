@@ -14,4 +14,5 @@ internal sealed class PostprocessedPathSegment
     public required PathReachabilitySource ReachabilitySource   { get; init; }
     public          IReadOnlyList<Vector3> Waypoints            { get; init; } = [];
     public          GroundCorridorPayload? GroundCorridor       { get; init; }
+    public          FlightPathDebugPayload? FlightPathDebug     { get; init; }
 }

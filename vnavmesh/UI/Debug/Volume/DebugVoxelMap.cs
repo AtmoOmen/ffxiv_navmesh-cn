@@ -1,4 +1,5 @@
 using System.Numerics;
+using Dalamud.Bindings.ImGui;
 using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
@@ -13,14 +14,18 @@ namespace vnavmesh.UI.Debug.Volume;
 
 public class DebugVoxelMap : IDisposable
 {
+    private const float DefaultVoxelRenderHorizontalDistance = 50f;
+    private const float DefaultVoxelRenderVerticalDistance   = 10f;
+
     private VoxelMap                                                _vm;
     private VoxelPathfind?                                          _query;
     private UITree                                                  _tree;
     private DebugDrawer                                             _dd;
-    private EffectMesh.Data?                                        _visu;
-    private Dictionary<VolumeTile, (int firstBox, int numBoxes)> _visuBoxes = new();
     private int[]                                                   _numSubdivPerLevel;
     private int[]                                                   _numLeavesPerLevel;
+    private float                                                   _renderHorizontalDistance = DefaultVoxelRenderHorizontalDistance;
+    private float                                                   _renderVerticalDistance   = DefaultVoxelRenderVerticalDistance;
+    private bool                                                    _statsInitialized;
 
     public DebugVoxelMap(VoxelMap vm, VoxelPathfind? query, UITree tree, DebugDrawer dd)
     {
@@ -31,11 +36,9 @@ public class DebugVoxelMap : IDisposable
 
         _numSubdivPerLevel = new int[vm.Levels.Length];
         _numLeavesPerLevel = new int[vm.Levels.Length];
-        InitTile(vm.RootTile);
     }
 
-    public void Dispose() =>
-        _visu?.Dispose();
+    public void Dispose() { }
 
     public void Draw()
     {
@@ -44,7 +47,12 @@ public class DebugVoxelMap : IDisposable
             return;
 
         var playerVoxel = _vm.FindLeafVoxel(Service.ObjectTable.LocalPlayer?.Position ?? default);
+        EnsureTileStatsInitialized();
         _tree.LeafNode($"玩家所在体素：{playerVoxel.voxel:X} (是否为空={playerVoxel.empty})");
+        ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
+        ImGui.SliderFloat("Voxel 水平渲染距离###voxelRenderHorizontalDistance", ref _renderHorizontalDistance, 2f, 500f, "%.0f");
+        ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
+        ImGui.SliderFloat("Voxel 垂直渲染距离###voxelRenderVerticalDistance", ref _renderVerticalDistance, 1f, 100f, "%.0f");
 
         for (var level = 0; level < _vm.Levels.Length; ++level)
         {
@@ -99,6 +107,17 @@ public class DebugVoxelMap : IDisposable
             InitTile(sub);
     }
 
+    private void EnsureTileStatsInitialized()
+    {
+        if (_statsInitialized)
+            return;
+
+        Array.Clear(_numSubdivPerLevel);
+        Array.Clear(_numLeavesPerLevel);
+        InitTile(_vm.RootTile);
+        _statsInitialized = true;
+    }
+
     private void DrawTile(VolumeTile tile, string name)
     {
         using var nr = _tree.Node($"{name}: {tile.BoundsMin:f3} - {tile.BoundsMax:f3} ({tile.SubdivisionCount} subtiles)");
@@ -107,10 +126,10 @@ public class DebugVoxelMap : IDisposable
         if (!nr.Opened)
             return;
 
-        for (ushort i = 0; i < tile.CellCount; i++)
+        for (var i = 0; i < tile.CellCount; i++)
             if ((tile.GetCell(i) & VoxelMap.VOXEL_OCCUPIED_BIT) != 0)
             {
-                var v  = tile.LevelDesc.IndexToVoxel(i);
+                var v  = IndexToVoxel(tile, i);
                 var cn = $"{v.x}x{v.y}x{v.z}";
                 var id = tile.GetCell(i) & VoxelMap.VOXEL_ID_MASK;
 
@@ -128,50 +147,16 @@ public class DebugVoxelMap : IDisposable
             }
     }
 
-    private void InitTileVisualizer(VolumeTile tile, EffectMesh.Data.Builder builder, AnalyticMeshBox box)
-    {
-        var start = builder.NumInstances;
-
-        for (ushort i = 0; i < tile.CellCount; i++)
-            if ((tile.GetCell(i) & VoxelMap.VOXEL_OCCUPIED_BIT) != 0)
-            {
-                var id = tile.GetCell(i) & VoxelMap.VOXEL_ID_MASK;
-
-                if (id == VoxelMap.VOXEL_ID_MASK)
-                {
-                    var bounds = tile.CalculateSubdivisionBounds(tile.LevelDesc.IndexToVoxel(i));
-                    box.Add(bounds.min, bounds.max, new(0.7f));
-                }
-                else InitTileVisualizer(tile.GetSubdivision(id), builder, box);
-            }
-
-        if (builder.NumInstances > start)
-            _visuBoxes[tile] = (start, builder.NumInstances - start);
-    }
-
-    private EffectMesh.Data GetOrInitVisualizer()
-    {
-        if (_visu == null)
-        {
-            _visu = new(_dd.RenderContext, 8, 12, _numLeavesPerLevel.Sum(), false);
-            using var builder = _visu.Map(_dd.RenderContext);
-            var       box     = new AnalyticMeshBox(builder);
-
-            var timer = StopWatchTimer.Create();
-            InitTileVisualizer(_vm.RootTile, builder, box);
-            Service.Log.Debug($"体素图可视化构建耗时：{timer.Value().TotalMilliseconds:f3}ms");
-        }
-
-        return _visu;
-    }
-
     private void VisualizeTile(VolumeTile tile)
     {
-        if (_dd.EffectMesh == null)
+        var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
+        if (playerPosition == null)
+        {
+            VisualizeAllTileCells(tile);
             return;
-        var data = GetOrInitVisualizer();
-        if (_visuBoxes.TryGetValue(tile, out var b))
-            _dd.EffectMesh.DrawSubset(_dd.RenderContext, data, b.firstBox, b.numBoxes);
+        }
+
+        VisualizeTileCulled(tile, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance);
     }
 
     private void VisualizeQuery()
@@ -181,6 +166,81 @@ public class DebugVoxelMap : IDisposable
             var ns = _query.NodeSpan;
             for (var i = 0; i < ns.Length; ++i) VisualizeVoxel(ns[i].Voxel);
         }
+    }
+
+    private void VisualizeAllTileCells(VolumeTile tile)
+    {
+        for (var i = 0; i < tile.CellCount; i++)
+        {
+            var cell = tile.GetCell(i);
+            if ((cell & VoxelMap.VOXEL_OCCUPIED_BIT) == 0)
+                continue;
+
+            var id = cell & VoxelMap.VOXEL_ID_MASK;
+            if (id == VoxelMap.VOXEL_ID_MASK)
+            {
+                var bounds = tile.CalculateSubdivisionBounds(IndexToVoxel(tile, i));
+                VisualizeCell(bounds);
+            }
+            else
+            {
+                VisualizeAllTileCells(tile.GetSubdivision(id));
+            }
+        }
+    }
+
+    private void VisualizeTileCulled(VolumeTile tile, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    {
+        if (!IsBoundsWithinRenderDistance(tile.BoundsMin, tile.BoundsMax, playerPosition, maxHorizontalDistance, maxVerticalDistance))
+            return;
+
+        for (var i = 0; i < tile.CellCount; i++)
+        {
+            var cell = tile.GetCell(i);
+            if ((cell & VoxelMap.VOXEL_OCCUPIED_BIT) == 0)
+                continue;
+
+            var id = cell & VoxelMap.VOXEL_ID_MASK;
+            if (id == VoxelMap.VOXEL_ID_MASK)
+            {
+                var bounds = tile.CalculateSubdivisionBounds(IndexToVoxel(tile, i));
+                if (IsBoundsWithinRenderDistance(bounds.min, bounds.max, playerPosition, maxHorizontalDistance, maxVerticalDistance))
+                    VisualizeCell(bounds);
+            }
+            else
+            {
+                VisualizeTileCulled(tile.GetSubdivision(id), playerPosition, maxHorizontalDistance, maxVerticalDistance);
+            }
+        }
+    }
+
+    private static (int x, int y, int z) IndexToVoxel(VolumeTile tile, int index)
+    {
+        var level = tile.LevelDesc;
+        var y     = index & (level.NumCellsY - 1);
+        var xz    = index >> level.ShiftYX;
+        var x     = xz & (level.NumCellsX - 1);
+        var z     = xz >> level.ShiftXZ;
+        return (x, y, z);
+    }
+
+    private static bool IsBoundsWithinRenderDistance
+    (
+        Vector3 min,
+        Vector3 max,
+        Vector3 playerPosition,
+        float   maxHorizontalDistance,
+        float   maxVerticalDistance
+    )
+    {
+        if (playerPosition.Y < min.Y - maxVerticalDistance || playerPosition.Y > max.Y + maxVerticalDistance)
+            return false;
+
+        var clampedX = Math.Clamp(playerPosition.X, min.X, max.X);
+        var clampedZ = Math.Clamp(playerPosition.Z, min.Z, max.Z);
+        var dx       = playerPosition.X - clampedX;
+        var dz       = playerPosition.Z - clampedZ;
+        return dx * dx + dz * dz <= maxHorizontalDistance * maxHorizontalDistance;
     }
 
     private void VisualizeCell((Vector3 min, Vector3 max) bounds) => _dd.DrawWorldAABB

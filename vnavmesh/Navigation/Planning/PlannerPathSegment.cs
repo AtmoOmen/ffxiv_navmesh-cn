@@ -10,9 +10,11 @@ internal sealed class PlannerPathSegment
     public required bool                       AllowVerticalControl { get; init; }
     public required PathReachabilitySource     ReachabilitySource   { get; init; }
     public required PlannerSegmentGeometryKind GeometryKind         { get; init; }
+    public required Vector3                    TraversalStartPosition { get; init; }
     public required Vector3                    StartPosition        { get; init; }
     public required Vector3                    EndPosition          { get; init; }
     public          IReadOnlyList<long>        Corridor             { get; init; } = [];
     public          IReadOnlyList<Vector3>     Points               { get; init; } = [];
     public          GroundCorridorPayload?     GroundCorridor       { get; init; }
+    public          FlightPathDebugPayload?    FlightPathDebug      { get; init; }
 }

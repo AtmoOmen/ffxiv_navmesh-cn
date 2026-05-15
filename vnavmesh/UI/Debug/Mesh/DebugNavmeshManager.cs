@@ -11,6 +11,7 @@ using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation.Planning;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume;
 using vnavmesh.Shared.Utilities;
@@ -22,6 +23,26 @@ namespace vnavmesh.UI.Debug.Mesh;
 
 internal class DebugNavmeshManager : IDisposable
 {
+    private const float DuplicateRenderedPointDistanceSq = 0.000001f;
+    private const uint  PathCornerScanColor              = 0x669B59B6u;
+    private const uint  PathCornerOriginalColor          = 0xFFB71C1Cu;
+    private const uint  PathCornerScanOriginColor        = 0xFF26A69Au;
+    private const uint  PathCornerAdjustedColor          = 0xFF66BB6Au;
+    private const uint  PathCornerInteriorColor          = 0xFF26C6DAu;
+    private const uint  PathCornerPreferredColor         = 0xFF42A5F5u;
+    private const uint  PathCornerPressureColor          = 0xFFFFA726u;
+    private const uint  PathCornerMoveColor              = 0xFFFFFF00u;
+    private const uint  PathCornerSkippedColor           = 0xFF9E9E9Eu;
+    private const uint  PathRequestedStartLinkColor      = 0xFFEC407Au;
+    private const uint  PathActualStartColor             = 0xFF8E24AAu;
+    private const uint  PathConsumedPrefixColor          = 0xFF757575u;
+    private const uint  PathFlightOriginalColor          = 0xFF8E24AAu;
+    private const uint  PathFlightHorizontalColor        = 0xFF42A5F5u;
+    private const uint  PathFlightVerticalColor          = 0xFF26A69Au;
+    private const uint  PathFlightCombinedColor          = 0xFFFFB300u;
+
+    private sealed record RenderedPath(Vector3 RequestStart, PostprocessedPath Result, uint LineColor, uint PointColor, uint StartColor, uint EndColor, string Label);
+
     private NavmeshManager       manager;
     private MovementPlanExecutor movementExecutor;
     private AsyncMoveRequest     asyncMove;
@@ -33,6 +54,13 @@ internal class DebugNavmeshManager : IDisposable
     private DebugLinks?         debugLinks;
 
     private Vector3 target;
+    private Task<PostprocessedPath>?      renderPathTask;
+    private CancellationTokenSource?      renderPathCancelSource;
+    private List<RenderedPath>            renderedPaths = [];
+    private bool                          renderPathFlyMode;
+    private Vector3                       renderPathRequestStart;
+    private bool                          renderStraightPathMode;
+    private bool                          showCornerPushDebug = true;
 
     public DebugNavmeshManager
     (
@@ -51,6 +79,7 @@ internal class DebugNavmeshManager : IDisposable
 
     public void Dispose()
     {
+        CancelRenderPathTask();
         manager.OnNavmeshChanged -= OnNavmeshChanged;
         drawNavmesh?.Dispose();
         debugVoxelMap?.Dispose();
@@ -86,9 +115,15 @@ internal class DebugNavmeshManager : IDisposable
         if (manager.Navmesh == null || manager.Query == null)
             return;
 
+        TryCollectRenderedPathResult();
+
         if (ImGui.CollapsingHeader("寻路", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextUnformatted($"正在执行: {(manager.PathfindInProgress ? 1 : 0)}\t正在等待: {manager.NumQueuedPathfindRequests}");
+            if (renderPathTask != null)
+                ImGui.TextUnformatted($"渲染算路执行中: {(renderPathFlyMode ? "空间" : "地面")} / {(renderStraightPathMode ? "StraightPath" : "普通")}");
+            ImGui.TextUnformatted($"已缓存渲染路径: {renderedPaths.Count}");
+            ImGui.Checkbox("显示角点扫描/推出调试", ref showCornerPushDebug);
 
             ImGui.Checkbox("允许移动", ref movementExecutor.MovementAllowed);
             
@@ -133,6 +168,30 @@ internal class DebugNavmeshManager : IDisposable
                 ImGui.SameLine(0, ImGui.GetStyle().ItemSpacing.X * ImGuiHelpers.GlobalScale);
                 if (ImGui.Button("停止寻路"))
                     movementExecutor.Stop();
+            }
+
+            using (ImRaii.Disabled(player == null || target == Vector3.Zero || renderPathTask != null))
+            {
+                if (ImGui.Button("发起寻路(渲染)"))
+                    StartRenderedPathQuery(player!.Position, target, false, false);
+
+                ImGui.SameLine();
+                if (ImGui.Button("发起直线路径(渲染)"))
+                    StartRenderedPathQuery(player!.Position, target, false, true);
+
+                ImGui.SameLine();
+                if (ImGui.Button("发起空间寻路(渲染)"))
+                    StartRenderedPathQuery(player!.Position, target, true, false);
+            }
+
+            ImGui.SameLine();
+            using (ImRaii.Disabled(renderedPaths.Count == 0 && renderPathTask == null))
+            {
+                if (ImGui.Button("清除渲染结果"))
+                {
+                    CancelRenderPathTask();
+                    renderedPaths.Clear();
+                }
             }
             
             ImGui.NewLine();
@@ -192,11 +251,241 @@ internal class DebugNavmeshManager : IDisposable
     private void ExportBitmap(Vector3 startingPos) =>
         manager.BuildBitmap(startingPos, "D:\\navmesh.bmp", 0.5f);
 
+    public void DrawRenderedPaths()
+    {
+        foreach (var renderedPath in renderedPaths)
+        {
+            DrawRenderedPath(renderedPath);
+            if (showCornerPushDebug)
+            {
+                DrawRenderedPathCornerDebug(renderedPath);
+                DrawRenderedPathFlightDebug(renderedPath);
+            }
+        }
+    }
+
     private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query)
     {
+        CancelRenderPathTask();
+        renderedPaths.Clear();
         drawNavmesh?.Dispose();
         drawNavmesh = null;
         debugVoxelMap?.Dispose();
         debugVoxelMap = null;
+    }
+
+    private void StartRenderedPathQuery(Vector3 from, Vector3 to, bool fly, bool straightPath)
+    {
+        CancelRenderPathTask();
+        renderPathFlyMode      = fly;
+        renderStraightPathMode = straightPath;
+        renderPathRequestStart = from;
+        renderPathCancelSource = new();
+        renderPathTask        = straightPath
+                                    ? manager.QueryStraightPathDetailed(from, to, fly, externalCancel: renderPathCancelSource.Token)
+                                    : manager.QueryPathDetailed(from, to, fly, externalCancel: renderPathCancelSource.Token);
+    }
+
+    private void TryCollectRenderedPathResult()
+    {
+        if (renderPathTask is not { IsCompleted: true })
+            return;
+
+        try
+        {
+            var result = renderPathTask.Result;
+            if (result.Succeeded)
+            {
+                var renderedPath = renderStraightPathMode
+                                       ? new RenderedPath(renderPathRequestStart, result, 0xFF00BCD4u, 0xFF0097A7u, 0xFF1E88E5u, 0xFFE53935u, "StraightPath")
+                                       : new RenderedPath
+                                       (
+                                           renderPathRequestStart,
+                                           result,
+                                           renderPathFlyMode ? 0xFF2ECC71u : 0xFFF39C12u,
+                                           renderPathFlyMode ? 0xFF27AE60u : 0xFFD35400u,
+                                           0xFF3498DBu,
+                                           0xFFE74C3Cu,
+                                           renderPathFlyMode ? "Flight" : "Ground"
+                                       );
+                renderedPaths.Add(renderedPath);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Plugin.DuoLog(ex, "渲染算路失败");
+        }
+        finally
+        {
+            renderPathTask.Dispose();
+            renderPathTask         = null;
+            renderPathCancelSource?.Dispose();
+            renderPathCancelSource = null;
+        }
+    }
+
+    private void CancelRenderPathTask()
+    {
+        renderPathCancelSource?.Cancel();
+
+        if (renderPathTask is { IsCompleted: true })
+        {
+            renderPathTask.Dispose();
+            renderPathTask = null;
+        }
+
+        renderPathCancelSource?.Dispose();
+        renderPathCancelSource = null;
+    }
+
+    private void DrawRenderedPath(RenderedPath renderedPath)
+    {
+        List<Vector3> points = [];
+        var firstSegment = renderedPath.Result.Segments.FirstOrDefault();
+        var actualStart = firstSegment?.StartPosition
+                       ?? (renderedPath.Result.Waypoints.Count > 0 ? renderedPath.Result.Waypoints[0] : renderedPath.Result.FinalDestination);
+        var initialWaypointIndex = firstSegment?.GroundCorridor?.InitialWaypointIndex ?? 0;
+
+        DrawConsumedPrefix(firstSegment, actualStart, initialWaypointIndex);
+
+        points.Add(initialWaypointIndex > 0 ? renderedPath.RequestStart : actualStart);
+
+        var firstWaypointSkipped = false;
+        foreach (var segment in renderedPath.Result.Segments)
+        {
+            var waypointStart = !firstWaypointSkipped ? Math.Clamp(initialWaypointIndex, 0, segment.Waypoints.Count) : 0;
+            firstWaypointSkipped = true;
+
+            for (var i = waypointStart; i < segment.Waypoints.Count; ++i)
+            {
+                var waypoint = segment.Waypoints[i];
+                if (Vector3.DistanceSquared(points[^1], waypoint) > DuplicateRenderedPointDistanceSq)
+                    points.Add(waypoint);
+            }
+        }
+
+        if (Vector3.DistanceSquared(points[^1], renderedPath.Result.FinalDestination) > DuplicateRenderedPointDistanceSq)
+            points.Add(renderedPath.Result.FinalDestination);
+
+        for (var i = 1; i < points.Count; ++i)
+        {
+            dd.DrawWorldLine(points[i - 1], points[i], renderedPath.LineColor, 2);
+            dd.DrawWorldPointFilled(points[i], 3, renderedPath.PointColor);
+        }
+
+        dd.DrawWorldPointFilled(renderedPath.RequestStart, 4, renderedPath.StartColor);
+        dd.DrawWorldPointFilled(actualStart, 4, PathActualStartColor);
+        dd.DrawWorldPointFilled(renderedPath.Result.FinalDestination, 4, renderedPath.EndColor);
+
+        if (Vector3.DistanceSquared(renderedPath.RequestStart, actualStart) > DuplicateRenderedPointDistanceSq)
+            dd.DrawWorldLine(renderedPath.RequestStart, actualStart, PathRequestedStartLinkColor, 2);
+    }
+
+    private void DrawRenderedPathCornerDebug(RenderedPath renderedPath)
+    {
+        foreach (var segment in renderedPath.Result.Segments)
+        {
+            if (segment.GroundCorridor == null)
+                continue;
+
+            for (var cornerIndex = 0; cornerIndex < segment.GroundCorridor.Corners.Count; ++cornerIndex)
+            {
+                var corner = segment.GroundCorridor.Corners[cornerIndex];
+                if (corner.Debug is not { } debug)
+                    continue;
+
+                foreach (var sample in debug.Samples)
+                    dd.DrawWorldLine(sample.Start, sample.Endpoint, ColorForClearance(sample.Clearance, debug.MaxClearance), 1);
+
+                dd.DrawWorldLine(debug.OriginalPosition, debug.ScanOrigin, PathCornerScanColor, 1);
+                dd.DrawWorldLine(debug.ScanOrigin, debug.InteriorDirectionEndpoint, PathCornerInteriorColor, 2);
+                dd.DrawWorldLine(debug.ScanOrigin, debug.PreferredDirectionEndpoint, PathCornerPreferredColor, 2);
+                dd.DrawWorldLine(debug.ScanOrigin, debug.WallPressureEndpoint, PathCornerPressureColor, 2);
+
+                if (debug.PushApplied)
+                    dd.DrawWorldLine(debug.OriginalPosition, debug.AdjustedPosition, PathCornerMoveColor, 3);
+
+                var pointColor = debug.InitiallyConsumed ? PathCornerSkippedColor : debug.PushApplied ? PathCornerAdjustedColor : renderedPath.PointColor;
+                if (cornerIndex == segment.GroundCorridor.InitialCornerIndex)
+                    dd.DrawWorldPointFilled(debug.AdjustedPosition, 6, 0x33FFFFFFu);
+
+                dd.DrawWorldPointFilled(debug.OriginalPosition, 3, debug.InitiallyConsumed ? PathCornerSkippedColor : PathCornerOriginalColor);
+                dd.DrawWorldPointFilled(debug.ScanOrigin, 3, PathCornerScanOriginColor);
+                dd.DrawWorldPointFilled(debug.AdjustedPosition, 4, pointColor);
+
+                var labelAnchor = debug.AdjustedPosition + new Vector3(0, 0.12f, 0);
+                dd.DrawWorldText
+                (
+                    labelAnchor,
+                    $"idx={debug.StraightPathIndex} skip={(debug.InitiallyConsumed ? 1 : 0)} exec={(debug.IsExecutionStart ? 1 : 0)} push={debug.PushDistance:F2} raw={debug.RawPushDistance:F2} cap={debug.DynamicPushMaxDistance:F2} w={debug.DynamicPushWidth:F2} sc={debug.DynamicPushScale:F2} min={debug.MinClearance:F2} avg={debug.AverageClearance:F2} corner={debug.CornerStrength:F2} L={debug.LeftClearance:F2}@{debug.LeftPolyRef:X} R={debug.RightClearance:F2}@{debug.RightPolyRef:X} bal={(debug.StraightBalanceSatisfied ? 1 : 0)} low={(debug.StraightLowClearanceCase ? 1 : 0)} re={(debug.Rescanned ? 1 : 0)} in={(debug.UsedInteriorDirection ? 1 : 0)} cand={debug.LocalPolyCount} scan={debug.ScanPolyRef:X} pref={debug.PreferredPolyRef:X}",
+                    0xFFFFFFFFu
+                );
+            }
+        }
+    }
+
+    private void DrawRenderedPathFlightDebug(RenderedPath renderedPath)
+    {
+        foreach (var segment in renderedPath.Result.Segments)
+        {
+            if (segment.FlightPathDebug == null)
+                continue;
+
+            foreach (var debug in segment.FlightPathDebug.Waypoints)
+            {
+                foreach (var sample in debug.Samples)
+                    dd.DrawWorldLine(sample.Start, sample.Endpoint, ColorForClearance(sample.Clearance, debug.MaxClearance), 1);
+
+                if (Vector3.DistanceSquared(debug.OriginalPosition, debug.HorizontalBiasEndpoint) > DuplicateRenderedPointDistanceSq)
+                    dd.DrawWorldLine(debug.OriginalPosition, debug.HorizontalBiasEndpoint, PathFlightHorizontalColor, 2);
+                if (Vector3.DistanceSquared(debug.OriginalPosition, debug.VerticalBiasEndpoint) > DuplicateRenderedPointDistanceSq)
+                    dd.DrawWorldLine(debug.OriginalPosition, debug.VerticalBiasEndpoint, PathFlightVerticalColor, 2);
+                if (Vector3.DistanceSquared(debug.OriginalPosition, debug.CombinedBiasEndpoint) > DuplicateRenderedPointDistanceSq)
+                    dd.DrawWorldLine(debug.OriginalPosition, debug.CombinedBiasEndpoint, PathFlightCombinedColor, 1);
+                if (debug.PushApplied)
+                    dd.DrawWorldLine(debug.OriginalPosition, debug.AdjustedPosition, PathCornerMoveColor, 3);
+
+                dd.DrawWorldPointFilled(debug.OriginalPosition, 3, PathFlightOriginalColor);
+                dd.DrawWorldPointFilled(debug.AdjustedPosition, 4, debug.PushApplied ? PathCornerAdjustedColor : renderedPath.PointColor);
+
+                dd.DrawWorldText
+                (
+                    debug.AdjustedPosition + new Vector3(0, 0.12f, 0),
+                    $"idx={debug.PathIndex} push={debug.PushDistance:F2} h={debug.HorizontalPushDistance:F2} v={debug.VerticalPushDistance:F2} hi={debug.HorizontalImbalance:F2} vi={debug.VerticalImbalance:F2} F={debug.ForwardClearance:F2} B={debug.BackwardClearance:F2} L={debug.LeftClearance:F2} R={debug.RightClearance:F2} FL={debug.ForwardLeftClearance:F2} FR={debug.ForwardRightClearance:F2} BL={debug.BackwardLeftClearance:F2} BR={debug.BackwardRightClearance:F2} U={debug.UpClearance:F2} D={debug.DownClearance:F2} vm={debug.VerticalMode} sel={debug.SelectedAdjustmentKind} gd={(debug.GoalDescentApproach ? 1 : 0)} dt={(debug.DownhillTunnelTrend ? 1 : 0)} ct={(debug.ConstrainedTunnelDescent ? 1 : 0)} td={(debug.TunnelDescentAssist ? 1 : 0)} cu={(debug.HeightCatchUpRequested ? 1 : 0)} ad={(debug.AllowDownwardPush ? 1 : 0)} raise={(debug.FinalRaiseApplied ? 1 : 0)} hm={debug.HeightMatchTarget:F2} pm={debug.PreferredMinHeight:F2} baseY={debug.BaseAdjustedPosition.Y:F2} vox={debug.OriginalVoxel:X}->{debug.AdjustedVoxel:X}",
+                    0xFFFFFFFFu
+                );
+            }
+        }
+    }
+
+    private void DrawConsumedPrefix(PostprocessedPathSegment? firstSegment, Vector3 actualStart, int initialWaypointIndex)
+    {
+        if (firstSegment == null || initialWaypointIndex <= 0 || firstSegment.Waypoints.Count == 0)
+            return;
+
+        List<Vector3> prefix = [actualStart];
+        for (var i = 0; i < Math.Min(initialWaypointIndex, firstSegment.Waypoints.Count); ++i)
+        {
+            var waypoint = firstSegment.Waypoints[i];
+            if (Vector3.DistanceSquared(prefix[^1], waypoint) > DuplicateRenderedPointDistanceSq)
+                prefix.Add(waypoint);
+        }
+
+        for (var i = 1; i < prefix.Count; ++i)
+        {
+            dd.DrawWorldLine(prefix[i - 1], prefix[i], PathConsumedPrefixColor, 1);
+            dd.DrawWorldPointFilled(prefix[i], 2, PathConsumedPrefixColor);
+        }
+    }
+
+    private static uint ColorForClearance(float clearance, float maxClearance)
+    {
+        var normalized = maxClearance > 0.0001f ? Math.Clamp(clearance / maxClearance, 0f, 1f) : 0f;
+        var red        = (byte)(255 * (1f - normalized));
+        var green      = (byte)(255 * normalized);
+        return 0x66000000u | red | ((uint)green << 8);
     }
 }

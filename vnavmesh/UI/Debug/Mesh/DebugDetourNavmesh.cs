@@ -1,4 +1,5 @@
 using System.Numerics;
+using Dalamud.Bindings.ImGui;
 using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Bootstrap;
@@ -29,6 +30,8 @@ public class DebugDetourNavmesh : DebugRecast
     private DebugDrawer     _dd;
     private PerTile[]       _perTile;
     private List<long>      _path;
+    private float           _closedListRenderHorizontalDistance = 50f;
+    private float           _closedListRenderVerticalDistance   = 10f;
 
     private static Vector4 _colAreaNull      = new(0.00f, 0.00f, 0.00f, 0.25f);
     private static Vector4 _colAreaGround    = new(0.00f, 0.75f, 1.00f, 0.50f);
@@ -87,6 +90,10 @@ public class DebugDetourNavmesh : DebugRecast
         ref readonly var param = ref _navmesh.GetParams();
         _tree.LeafNode($"原点：{param.orig}");
         _tree.LeafNode($"区块大小：{param.tileWidth:f3}x{param.tileHeight:f3} (每区块最多 {param.maxPolys} 个多边形)");
+        ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
+        ImGui.SliderFloat("ClosedList 水平渲染距离###closedListRenderHorizontalDistance", ref _closedListRenderHorizontalDistance, 2f, 500f, "%.0f");
+        ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
+        ImGui.SliderFloat("ClosedList 垂直渲染距离###closedListRenderVerticalDistance", ref _closedListRenderVerticalDistance, 1f, 100f, "%.0f");
 
         using var nt = _tree.Node($"区块 (最多 {param.maxTiles} 个)###tiles");
         if (nt.SelectedOrHovered)
@@ -354,11 +361,15 @@ public class DebugDetourNavmesh : DebugRecast
 
     private void VisualizeWithClosedList()
     {
+        var playerPosition        = Service.ObjectTable.LocalPlayer?.Position;
+        var maxHorizontalDistance = _closedListRenderHorizontalDistance;
+        var maxVerticalDistance   = _closedListRenderVerticalDistance;
+
         for (var i = 0; i < _perTile.Length; ++i)
         {
             var tile = _navmesh.GetTile(i);
             if (tile.data != null)
-                VisualizeDetailPolygons(tile, false);
+                VisualizeDetailPolygons(tile, false, playerPosition, maxHorizontalDistance, maxVerticalDistance);
         }
     }
 
@@ -444,7 +455,14 @@ public class DebugDetourNavmesh : DebugRecast
         // TODO: ...
     }
 
-    private void VisualizeDetailPolygons(DtMeshTile tile, bool colorByArea)
+    private void VisualizeDetailPolygons
+    (
+        DtMeshTile tile,
+        bool       colorByArea,
+        Vector3?   playerPosition        = null,
+        float      maxHorizontalDistance = float.PositiveInfinity,
+        float      maxVerticalDistance   = float.PositiveInfinity
+    )
     {
         if (_dd.EffectMesh == null)
             return;
@@ -452,13 +470,19 @@ public class DebugDetourNavmesh : DebugRecast
         _dd.EffectMesh.Bind(_dd.RenderContext, false, false);
         visu.Bind(_dd.RenderContext);
         for (var i = 0; i < tile.data.header.detailMeshCount; ++i)
-            VisualizeDetailSubmeshWithEdges(tile, visu, tile.data.polys[i], colorByArea, false);
+        {
+            var poly = tile.data.polys[i];
+            if (ShouldVisualizeDetailSubmesh(tile, poly, playerPosition, maxHorizontalDistance, maxVerticalDistance))
+                VisualizeDetailSubmeshWithEdges(tile, visu, poly, colorByArea, false);
+        }
 
-        // all vertices
-        for (var i = 0; i < tile.data.header.vertCount; ++i)
-            _dd.DrawWorldPointFilled(GetVertex(tile, i), 3, 0xff00ff00);
-        for (var i = 0; i < tile.data.header.detailVertCount; ++i)
-            _dd.DrawWorldPointFilled(GetDetailVertex(tile, i), 2, 0xff0000ff);
+        if (playerPosition == null)
+        {
+            for (var i = 0; i < tile.data.header.vertCount; ++i)
+                _dd.DrawWorldPointFilled(GetVertex(tile, i), 3, 0xff00ff00);
+            for (var i = 0; i < tile.data.header.detailVertCount; ++i)
+                _dd.DrawWorldPointFilled(GetDetailVertex(tile, i), 2, 0xff0000ff);
+        }
     }
 
     private void VisualizeDetailSubmesh(DtMeshTile tile, int index, bool colorByArea)
@@ -507,6 +531,121 @@ public class DebugDetourNavmesh : DebugRecast
             _dd.DrawWorldLine(v2, v3, color, (GetDetailTriEdgeFlags(flags, 1) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
             _dd.DrawWorldLine(v3, v1, color, (GetDetailTriEdgeFlags(flags, 2) & DtDetailTriEdgeFlags.DT_DETAIL_EDGE_BOUNDARY) != 0 ? 2 : 1);
         }
+    }
+
+    private bool ShouldVisualizeDetailSubmesh(DtMeshTile tile, DtPoly poly, Vector3? playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    {
+        if (playerPosition == null)
+            return true;
+
+        ref var sub = ref tile.data.detailMeshes[poly.index];
+        for (var i = 0; i < sub.triCount; ++i)
+        {
+            var offset = (sub.triBase + i) * 4;
+            var v1     = GetDetailVertex(tile, poly, tile.data.detailTris[offset]);
+            var v2     = GetDetailVertex(tile, poly, tile.data.detailTris[offset + 1]);
+            var v3     = GetDetailVertex(tile, poly, tile.data.detailTris[offset + 2]);
+            if (IsTriangleWithinClosedListRenderDistance(playerPosition.Value, v1, v2, v3, maxHorizontalDistance, maxVerticalDistance))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsTriangleWithinClosedListRenderDistance
+    (
+        Vector3 playerPosition,
+        Vector3 v1,
+        Vector3 v2,
+        Vector3 v3,
+        float   maxHorizontalDistance,
+        float   maxVerticalDistance
+    )
+    {
+        if (IsVertexWithinClosedListRenderDistance(playerPosition, v1, maxHorizontalDistance, maxVerticalDistance) ||
+            IsVertexWithinClosedListRenderDistance(playerPosition, v2, maxHorizontalDistance, maxVerticalDistance) ||
+            IsVertexWithinClosedListRenderDistance(playerPosition, v3, maxHorizontalDistance, maxVerticalDistance))
+            return true;
+
+        var minY = MathF.Min(v1.Y, MathF.Min(v2.Y, v3.Y));
+        var maxY = MathF.Max(v1.Y, MathF.Max(v2.Y, v3.Y));
+        if (playerPosition.Y < minY - maxVerticalDistance || playerPosition.Y > maxY + maxVerticalDistance)
+            return false;
+
+        var playerXZ = new Vector2(playerPosition.X, playerPosition.Z);
+        var v1XZ     = new Vector2(v1.X, v1.Z);
+        var v2XZ     = new Vector2(v2.X, v2.Z);
+        var v3XZ     = new Vector2(v3.X, v3.Z);
+        var closest  = ClosestPointOnTriangleXZ(playerXZ, v1XZ, v2XZ, v3XZ);
+        return Vector2.DistanceSquared(playerXZ, closest) <= maxHorizontalDistance * maxHorizontalDistance;
+    }
+
+    private static bool IsVertexWithinClosedListRenderDistance(Vector3 playerPosition, Vector3 vertex, float maxHorizontalDistance, float maxVerticalDistance)
+    {
+        var horizontalDelta = new Vector2(playerPosition.X - vertex.X, playerPosition.Z - vertex.Z);
+        var verticalDelta   = MathF.Abs(playerPosition.Y - vertex.Y);
+        return horizontalDelta.LengthSquared() <= maxHorizontalDistance * maxHorizontalDistance && verticalDelta <= maxVerticalDistance;
+    }
+
+    private static Vector2 ClosestPointOnTriangleXZ(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
+    {
+        if (TryProjectPointInsideTriangleXZ(point, a, b, c, out var projected))
+            return projected;
+
+        var ab = ClosestPointOnSegmentXZ(point, a, b);
+        var bc = ClosestPointOnSegmentXZ(point, b, c);
+        var ca = ClosestPointOnSegmentXZ(point, c, a);
+
+        var abDist = Vector2.DistanceSquared(point, ab);
+        var bcDist = Vector2.DistanceSquared(point, bc);
+        var caDist = Vector2.DistanceSquared(point, ca);
+
+        if (abDist <= bcDist && abDist <= caDist)
+            return ab;
+        return bcDist <= caDist ? bc : ca;
+    }
+
+    private static bool TryProjectPointInsideTriangleXZ(Vector2 point, Vector2 a, Vector2 b, Vector2 c, out Vector2 projected)
+    {
+        var v0  = b - a;
+        var v1  = c - a;
+        var v2  = point - a;
+        var d00 = Vector2.Dot(v0, v0);
+        var d01 = Vector2.Dot(v0, v1);
+        var d11 = Vector2.Dot(v1, v1);
+        var d20 = Vector2.Dot(v2, v0);
+        var d21 = Vector2.Dot(v2, v1);
+        var den = d00 * d11 - d01 * d01;
+
+        if (MathF.Abs(den) <= float.Epsilon)
+        {
+            projected = default;
+            return false;
+        }
+
+        var v = (d11 * d20 - d01 * d21) / den;
+        var w = (d00 * d21 - d01 * d20) / den;
+        var u = 1 - v - w;
+
+        if (u < 0 || v < 0 || w < 0)
+        {
+            projected = default;
+            return false;
+        }
+
+        projected = u * a + v * b + w * c;
+        return true;
+    }
+
+    private static Vector2 ClosestPointOnSegmentXZ(Vector2 point, Vector2 a, Vector2 b)
+    {
+        var ab = b - a;
+        var lengthSq = ab.LengthSquared();
+        if (lengthSq <= float.Epsilon)
+            return a;
+
+        var progress = Math.Clamp(Vector2.Dot(point - a, ab) / lengthSq, 0f, 1f);
+        return a + progress * ab;
     }
 
     private void VisualizeTriangle(Vector3 v1, Vector3 v2, Vector3 v3, uint color, int thickness)

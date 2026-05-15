@@ -4,6 +4,7 @@ using DotRecast.Detour;
 using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Utilities;
+using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Planning;
 
@@ -124,10 +125,10 @@ internal sealed class NavmeshGroundQuery
         var startRef     = selected.StartRef;
         var lastPoly     = selected.LastPoly;
         var resultStatus = selected.ResultStatus;
-        var result = BuildGroundPlannerResult(to, range, resultStatus, selected.FinalDestination, [BuildGroundMeshCorridorSegment(selected)]);
+        var result = BuildGroundPlannerResult(to, range, resultStatus, selected.FinalDestination, [BuildGroundMeshCorridorSegment(selected, from)]);
 
         if (resultStatus == PathfindStatus.Partial &&
-            TryRepairGroundGapByTileBoundaryBridge(selected, to, endRef, requestedEndPos, range, cancel, out var repairedResult, out var repairedLastPoly))
+            TryRepairGroundGapByTileBoundaryBridge(selected, from, to, endRef, requestedEndPos, range, cancel, out var repairedResult, out var repairedLastPoly))
         {
             result   = repairedResult;
             lastPoly = repairedLastPoly;
@@ -213,7 +214,8 @@ internal sealed class NavmeshGroundQuery
             false
         );
 
-        if (selection.Selected == null || selection.Selected.Value.ResultStatus == PathfindStatus.Partial)
+        if (!selection.LockedByRequested &&
+            (selection.Selected == null || selection.Selected.Value.ResultStatus == PathfindStatus.Partial))
         {
             var expandedSelection = EvaluateBestStartPathCandidate
             (
@@ -273,7 +275,7 @@ internal sealed class NavmeshGroundQuery
         List<string>       candidateLogs       = [];
         var                requestedFailed     = false;
 
-        var evaluations = EvaluateStartPathCandidates(candidateBatch, requestedTarget, endRef, requestedEndPos, range, cancel);
+        var evaluations = EvaluateStartPathCandidates(candidateBatch, from, requestedTarget, endRef, requestedEndPos, range, cancel);
 
         foreach (var evaluation in evaluations)
         {
@@ -293,15 +295,23 @@ internal sealed class NavmeshGroundQuery
                 best = pathCandidate;
         }
 
+        var lockedByRequested = false;
+        if (requestedSuccessful is { } requestedCandidate && ShouldLockRequestedStartCandidate(requestedCandidate))
+        {
+            best              = requestedCandidate;
+            lockedByRequested = true;
+        }
+
         if (candidateLogs.Count > 0)
             Service.Log.Debug($"[算路] {(expandedSearch ? "起点扩搜候选评估" : "起点候选评估")}：{string.Join(" | ", candidateLogs)}");
 
-        return new(best, requestedSuccessful, requestedFailed, false, candidates.Count, candidateBatch.Length);
+        return new(best, requestedSuccessful, requestedFailed, lockedByRequested, candidates.Count, candidateBatch.Length);
     }
 
     private StartCandidateEvaluation[] EvaluateStartPathCandidates
     (
         IReadOnlyList<MeshPolyCandidate> candidates,
+        Vector3                          requestedStart,
         Vector3                          requestedTarget,
         long                             endRef,
         RcVec3f                          requestedEndPos,
@@ -322,7 +332,7 @@ internal sealed class NavmeshGroundQuery
                 0,
                 candidates.Count,
                 new ParallelOptions { CancellationToken = cancel, MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, candidates.Count) },
-                i => result[i] = EvaluateStartPathCandidate(candidates[i], requestedTarget, endRef, requestedEndPos, filter, range)
+                i => result[i] = EvaluateStartPathCandidate(candidates[i], requestedStart, requestedTarget, endRef, requestedEndPos, filter, range)
             );
         }
         else
@@ -330,7 +340,7 @@ internal sealed class NavmeshGroundQuery
             for (var i = 0; i < candidates.Count; ++i)
             {
                 cancel.ThrowIfCancellationRequested();
-                result[i] = EvaluateStartPathCandidate(candidates[i], requestedTarget, endRef, requestedEndPos, filter, range);
+                result[i] = EvaluateStartPathCandidate(candidates[i], requestedStart, requestedTarget, endRef, requestedEndPos, filter, range);
             }
         }
 
@@ -340,6 +350,7 @@ internal sealed class NavmeshGroundQuery
     private StartCandidateEvaluation EvaluateStartPathCandidate
     (
         MeshPolyCandidate candidate,
+        Vector3           requestedStart,
         Vector3           requestedTarget,
         long              endRef,
         RcVec3f           requestedEndPos,
@@ -373,6 +384,7 @@ internal sealed class NavmeshGroundQuery
         (
             candidateQuery,
             candidate,
+            requestedStart,
             corridor,
             status,
             requestedEndPos,
@@ -521,7 +533,7 @@ internal sealed class NavmeshGroundQuery
     {
         Service.Log.Debug
         (
-            $"[算路] 已选起点多边形 {selected.StartRef:X}，投影点 = {selected.StartPoint:f3}，结果 = {selected.ResultStatus}，requested = {(selected.IsRequestedStart ? 1 : 0)}，overPoly = {(selected.IsPointOverPoly ? 1 : 0)}，supportHits = {selected.SupportProbeHits}"
+            $"[算路] 已选起点多边形 {selected.StartRef:X}，投影点 = {selected.StartCandidate.ProjectedPoint:f3}，输出起点 = {selected.StartPoint:f3}，结果 = {selected.ResultStatus}，requested = {(selected.IsRequestedStart ? 1 : 0)}，overPoly = {(selected.IsPointOverPoly ? 1 : 0)}，supportHits = {selected.SupportProbeHits}"
         );
 
         if (selected.StartRef == requestedStartRef)
@@ -569,6 +581,7 @@ internal sealed class NavmeshGroundQuery
     private bool TryRepairGroundGapByTileBoundaryBridge
     (
         MeshPathCandidate partialCandidate,
+        Vector3           requestedStart,
         Vector3           requestedTarget,
         long              endRef,
         RcVec3f           requestedEndPos,
@@ -607,7 +620,7 @@ internal sealed class NavmeshGroundQuery
             return false;
 
         repairedLastPoly = endRef;
-        List<PlannerPathSegment> segments = [BuildGroundMeshCorridorSegment(partialCandidate)];
+        List<PlannerPathSegment> segments = [BuildGroundMeshCorridorSegment(partialCandidate, requestedStart)];
         if (Vector3.DistanceSquared(partialCandidate.FinalDestination, bridgePoint) > 0.000001f)
             segments.Add(BuildGroundDiscreteSegment(partialCandidate.FinalDestination, bridgePoint));
 
@@ -622,18 +635,20 @@ internal sealed class NavmeshGroundQuery
     private MeshPathCandidate BuildMeshPathCandidate
     (
         MeshPolyCandidate startCandidate,
+        Vector3           requestedStart,
         List<long>        corridor,
         DtStatus          status,
         RcVec3f           requestedEndPos,
         Vector3           requestedTarget,
         long              endRef,
         float             range
-    ) => BuildMeshPathCandidate(query.MeshQuery, startCandidate, corridor, status, requestedEndPos, requestedTarget, endRef, range);
+    ) => BuildMeshPathCandidate(query.MeshQuery, startCandidate, requestedStart, corridor, status, requestedEndPos, requestedTarget, endRef, range);
 
     private static MeshPathCandidate BuildMeshPathCandidate
     (
         DtNavMeshQuery    query,
         MeshPolyCandidate startCandidate,
+        Vector3           requestedStart,
         List<long>        corridor,
         DtStatus          status,
         RcVec3f           requestedEndPos,
@@ -650,20 +665,35 @@ internal sealed class NavmeshGroundQuery
         {
             var closestStatus = query.ClosestPointOnPoly(lastPoly, requestedEndPos, out var projectedEndPos, out _);
             if (closestStatus.Failed())
-                return new(startCandidate, status, PathfindStatus.Failed, startCandidate.ProjectedPoint, corridor, GroundQueryMode.Classic, float.MaxValue, int.MaxValue, 0, 0);
+                return new
+                (
+                    startCandidate,
+                    status,
+                    PathfindStatus.Failed,
+                    startCandidate.ProjectedPoint,
+                    startCandidate.ProjectedPoint,
+                    corridor,
+                    GroundQueryMode.Classic,
+                    float.MaxValue,
+                    int.MaxValue,
+                    0,
+                    0
+                );
 
             finalDestination = projectedEndPos.RecastToSystem();
             resultStatus = range > 0 && Vector3.Distance(finalDestination, requestedTarget) <= range ? PathfindStatus.ReachedWithinRange : PathfindStatus.Partial;
         }
         else finalDestination = requestedEndPos.RecastToSystem();
 
-        var pathLength = EstimatePathLength(query, startCandidate.ProjectedPoint.SystemToRecast(), finalDestination.SystemToRecast(), corridor);
+        var startPoint = ResolvePreferredOffMeshStartPoint(query, requestedStart, startCandidate, corridor, finalDestination);
+        var pathLength = EstimatePathLength(query, startPoint.SystemToRecast(), finalDestination.SystemToRecast(), corridor);
         CountPathSemantics(query.GetAttachedNavMesh(), corridor, out var weightedLinkPenalty, out var offMeshTransitionCount, out var areaCrossingCount);
         return new
         (
             startCandidate,
             status,
             resultStatus,
+            startPoint,
             finalDestination,
             corridor,
             GroundQueryMode.Classic,
@@ -674,15 +704,91 @@ internal sealed class NavmeshGroundQuery
         );
     }
 
+    private static Vector3 ResolvePreferredOffMeshStartPoint
+    (
+        DtNavMeshQuery      query,
+        Vector3             requestedStart,
+        MeshPolyCandidate   startCandidate,
+        IReadOnlyList<long> corridor,
+        Vector3             finalDestination
+    )
+    {
+        if (startCandidate.IsPointOverPoly || corridor.Count == 0)
+            return startCandidate.ProjectedPoint;
+
+        query.GetAttachedNavMesh().GetTileAndPolyByRefUnsafe(startCandidate.PolyRef, out var tile, out var poly);
+        if (poly.GetPolyType() != DtPolyTypes.DT_POLYTYPE_GROUND || poly.vertCount < 3)
+            return startCandidate.ProjectedPoint;
+
+        var lookaheadPoint = ResolveOffMeshLookaheadPoint(query, startCandidate.ProjectedPoint, finalDestination, corridor);
+        var desiredDelta   = new Vector2(lookaheadPoint.X - requestedStart.X, lookaheadPoint.Z - requestedStart.Z);
+        if (desiredDelta.LengthSquared() <= OFF_MESH_DIRECTION_MIN_DISTANCE_SQ)
+            return startCandidate.ProjectedPoint;
+
+        var desiredDirection = Vector2.Normalize(desiredDelta);
+        var projectedPoint   = startCandidate.ProjectedPoint;
+        var bestPoint        = projectedPoint;
+        var bestAlignment    = DirectionalAlignmentXZ(requestedStart, projectedPoint, desiredDirection);
+
+        for (var i = 0; i < poly.vertCount; ++i)
+        {
+            var vertex    = NavmeshBitmap.GetVertex(tile, poly.verts[i]);
+            var alignment = DirectionalAlignmentXZ(requestedStart, vertex, desiredDirection);
+            if (alignment <= bestAlignment + OFF_MESH_VERTEX_ALIGNMENT_IMPROVEMENT_MIN)
+                continue;
+
+            if (alignment > bestAlignment + 0.0001f ||
+                Vector3.DistanceSquared(vertex, projectedPoint) < Vector3.DistanceSquared(bestPoint, projectedPoint))
+            {
+                bestPoint     = vertex;
+                bestAlignment = alignment;
+            }
+        }
+
+        return bestPoint;
+    }
+
+    private static Vector3 ResolveOffMeshLookaheadPoint
+    (
+        DtNavMeshQuery      query,
+        Vector3             startPoint,
+        Vector3             finalDestination,
+        IReadOnlyList<long> corridor
+    )
+    {
+        if (TryFindStraightPath
+            (query, startPoint.SystemToRecast(), finalDestination.SystemToRecast(), corridor, DtStraightPathOptions.DT_STRAIGHTPATH_AREA_CROSSINGS, out var straightPath, out var count))
+        {
+            for (var i = 0; i < count; ++i)
+            {
+                var point = straightPath[i].pos.RecastToSystem();
+                if (Vector3.DistanceSquared(point, startPoint) > OFF_MESH_LOOKAHEAD_POINT_MIN_DISTANCE_SQ)
+                    return point;
+            }
+        }
+
+        if (corridor.Count > 1)
+            return query.GetAttachedNavMesh().GetPolyCenter(corridor[1]).RecastToSystem();
+
+        return finalDestination;
+    }
+
+    private static float DirectionalAlignmentXZ(Vector3 origin, Vector3 point, Vector2 desiredDirection)
+    {
+        var delta = new Vector2(point.X - origin.X, point.Z - origin.Z);
+        if (delta.LengthSquared() <= OFF_MESH_DIRECTION_MIN_DISTANCE_SQ)
+            return -1f;
+
+        delta = Vector2.Normalize(delta);
+        return Vector2.Dot(delta, desiredDirection);
+    }
+
     private static float EstimatePathLength(DtNavMeshQuery query, RcVec3f startPos, RcVec3f endPos, List<long> corridor)
     {
         if (corridor.Count == 0)
             return float.MaxValue;
 
-        var straightPath = new DtStraightPath[256];
-        var status       = query.FindStraightPath(startPos, endPos, [.. corridor], corridor.Count, straightPath, out var count, straightPath.Length, 0);
-
-        if (status.Succeeded() && count > 0)
+        if (TryFindStraightPath(query, startPos, endPos, corridor, 0, out var straightPath, out var count))
         {
             var total    = 0f;
             var previous = startPos;
@@ -709,6 +815,27 @@ internal sealed class NavmeshGroundQuery
         }
 
         return fallback;
+    }
+
+    private static bool TryFindStraightPath
+    (
+        DtNavMeshQuery       query,
+        RcVec3f              startPos,
+        RcVec3f              endPos,
+        IReadOnlyList<long>  corridor,
+        int                  straightPathOptions,
+        out DtStraightPath[] straightPath,
+        out int              count
+    )
+    {
+        straightPath = new DtStraightPath[256];
+        count        = 0;
+
+        if (corridor.Count == 0)
+            return false;
+
+        var status = query.FindStraightPath(startPos, endPos, [.. corridor], corridor.Count, straightPath, out count, straightPath.Length, straightPathOptions);
+        return status.Succeeded() && count > 0;
     }
 
     private static void CountPathSemantics
@@ -813,6 +940,13 @@ internal sealed class NavmeshGroundQuery
         return candidate.StartRef < currentBest.StartRef;
     }
 
+    private static bool ShouldLockRequestedStartCandidate(MeshPathCandidate candidate) =>
+        candidate.IsRequestedStart &&
+        (
+            !candidate.IsPointOverPoly ||
+            candidate.ResultStatus is PathfindStatus.Complete or PathfindStatus.ReachedWithinRange
+        );
+
     private static PlannerResult BuildGroundPlannerResult
     (
         Vector3                           requestedTarget,
@@ -831,7 +965,7 @@ internal sealed class NavmeshGroundQuery
             Segments             = segments
         };
 
-    private static PlannerPathSegment BuildGroundMeshCorridorSegment(MeshPathCandidate candidate) =>
+    private static PlannerPathSegment BuildGroundMeshCorridorSegment(MeshPathCandidate candidate, Vector3 traversalStartPosition) =>
         new()
         {
             MovementMode         = MovementMode.Ground,
@@ -839,6 +973,7 @@ internal sealed class NavmeshGroundQuery
             AllowVerticalControl = false,
             ReachabilitySource   = PathReachabilitySource.Mesh,
             GeometryKind         = PlannerSegmentGeometryKind.MeshCorridor,
+            TraversalStartPosition = traversalStartPosition,
             StartPosition        = candidate.StartPoint,
             EndPosition          = candidate.FinalDestination,
             Corridor             = [.. candidate.Corridor]
@@ -852,6 +987,7 @@ internal sealed class NavmeshGroundQuery
             AllowVerticalControl = false,
             ReachabilitySource   = PathReachabilitySource.Mesh,
             GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+            TraversalStartPosition = startPosition,
             StartPosition        = startPosition,
             EndPosition          = points.Length > 0 ? points[^1] : startPosition,
             Points               = [.. points]
@@ -1017,6 +1153,7 @@ internal sealed class NavmeshGroundQuery
         MeshPolyCandidate StartCandidate,
         DtStatus          QueryStatus,
         PathfindStatus    ResultStatus,
+        Vector3           StartPoint,
         Vector3           FinalDestination,
         List<long>        Corridor,
         GroundQueryMode   QueryMode,
@@ -1027,7 +1164,6 @@ internal sealed class NavmeshGroundQuery
     )
     {
         public long    StartRef         => StartCandidate.PolyRef;
-        public Vector3 StartPoint       => StartCandidate.ProjectedPoint;
         public long    LastPoly         => Corridor.Count > 0 ? Corridor[^1] : 0;
         public bool    IsRequestedStart => StartCandidate.IsRequestedStart;
         public bool    IsPointOverPoly  => StartCandidate.IsPointOverPoly;
@@ -1127,6 +1263,9 @@ internal sealed class NavmeshGroundQuery
     private const float END_POLY_CANDIDATE_ABOVE_TOLERANCE                    = 0.25f;
     private const float TILE_BOUNDARY_MAX_BRIDGE_DISTANCE                     = 60.0f;
     private const float TILE_BOUNDARY_MAX_VERTICAL_DELTA                      = 5.0f;
+    private const float OFF_MESH_DIRECTION_MIN_DISTANCE_SQ                    = 0.0001f;
+    private const float OFF_MESH_LOOKAHEAD_POINT_MIN_DISTANCE_SQ              = 0.01f;
+    private const float OFF_MESH_VERTEX_ALIGNMENT_IMPROVEMENT_MIN             = 0.05f;
     private const int   MAX_PATH_POLYS                                        = 4096;
 
     #endregion
