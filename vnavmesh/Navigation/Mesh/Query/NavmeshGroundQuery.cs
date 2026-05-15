@@ -632,18 +632,6 @@ internal sealed class NavmeshGroundQuery
         return true;
     }
 
-    private MeshPathCandidate BuildMeshPathCandidate
-    (
-        MeshPolyCandidate startCandidate,
-        Vector3           requestedStart,
-        List<long>        corridor,
-        DtStatus          status,
-        RcVec3f           requestedEndPos,
-        Vector3           requestedTarget,
-        long              endRef,
-        float             range
-    ) => BuildMeshPathCandidate(query.MeshQuery, startCandidate, requestedStart, corridor, status, requestedEndPos, requestedTarget, endRef, range);
-
     private static MeshPathCandidate BuildMeshPathCandidate
     (
         DtNavMeshQuery    query,
