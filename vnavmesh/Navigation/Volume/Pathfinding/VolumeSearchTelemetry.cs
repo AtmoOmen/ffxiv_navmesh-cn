@@ -2,13 +2,12 @@ namespace vnavmesh.Navigation.Volume.Pathfinding;
 
 internal readonly record struct VolumeSearchTelemetry
 (
-    int                    VisitedNodes,
-    int                    GeneratedNodes,
-    int                    LineOfSightChecks,
-    int                    LineOfSightHits,
-    int                    PeakOpenListSize,
+    int                     VisitedNodes,
+    int                     GeneratedNodes,
+    int                     LineOfSightChecks,
+    int                     LineOfSightHits,
+    int                     PeakOpenListSize,
     VolumeSearchTermination Termination,
-    bool                   SearchRaycastEnabled,
-    int                    SearchAttempts,
-    float                  HeuristicWeight
+    int                     SearchAttempts,
+    float                   HeuristicWeight
 );

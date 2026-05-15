@@ -4,8 +4,6 @@ using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Movement.Drivers;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navigation.Mesh.Runtime;
-using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Planning;
 
@@ -15,81 +13,17 @@ internal sealed class PathPostprocessor
     Func<IDtQueryFilter> getGroundFilter
 )
 {
-    private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
-    private const float COLLINEAR_WAYPOINT_TOLERANCE   = 0.01f;
-    private const int   MAX_SMOOTH_PATH_POINTS         = 102400;
-    private const int   WALL_SCAN_DIRECTION_COUNT      = 24;
-    private const float WALL_SCAN_RADIUS               = 2.2f;
-    private const float WALL_PUSH_TARGET_CLEARANCE     = 0.90f;
-    private const float WALL_PUSH_BASE_MAX_DISTANCE    = 0.75f;
-    private const float WALL_PUSH_MIN_DISTANCE         = 0.02f;
-    private const float WALL_PUSH_MIN_ASYMMETRY        = 0.05f;
-    private const float WALL_PUSH_CLEARANCE_FRACTION   = 0.65f;
-    private const float WALL_PUSH_DYNAMIC_WIDTH_NARROW = 0.70f;
-    private const float WALL_PUSH_DYNAMIC_WIDTH_WIDE   = 2.00f;
-    private const float WALL_PUSH_DYNAMIC_SCALE_MIN    = 0.30f;
-    private const float WALL_PUSH_DYNAMIC_SCALE_MAX    = 1.90f;
-    private const float WALL_PUSH_DYNAMIC_MAX_DISTANCE_WIDE = 1.35f;
-    private const float WALL_SCAN_MIN_VECTOR_SQ        = 0.0001f;
-    private const float WALL_SCAN_ORIGIN_INSET_MIN     = 0.05f;
-    private const float WALL_SCAN_ORIGIN_INSET_MAX     = 0.45f;
-    private const float WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_SCALE = 0.12f;
-    private const float WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_MAX   = 0.12f;
-    private const float WALL_STARTPOINT_SCAN_ORIGIN_SCALE        = 0.45f;
-    private const float WALL_STARTPOINT_SCAN_ORIGIN_MIN          = 0.35f;
-    private const float WALL_STARTPOINT_SCAN_ORIGIN_MAX          = 0.90f;
-    private const float WALL_SCAN_ORIGIN_REPROJECT_MAX_DISTANCE  = 0.85f;
-    private const float WALL_ADJUSTED_POINT_REPROJECT_MAX_DISTANCE = 0.35f;
-    private const float WALL_ADJUSTED_POINT_DIRECT_ACCEPT_PROGRESS_EPSILON = 0.02f;
-    private const float WALL_PUSH_FORWARD_REJECTION    = 0.10f;
-    private const float WALL_PUSH_MIN_CORNER_STRENGTH  = 0.05f;
-    private const float WALL_PUSH_MIN_WALL_PRESSURE    = 0.03f;
-    private const float WALL_STRAIGHT_PUSH_MAX_CORNER_STRENGTH = 0.20f;
-    private const float WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE = 0.10f;
-    private const float WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO    = 0.10f;
-    private const float WALL_STRAIGHT_LOW_CLEARANCE_AVG_THRESHOLD = 0.55f;
-    private const float WALL_STRAIGHT_LOW_CLEARANCE_MIN_THRESHOLD = 0.20f;
-    private const float WALL_STRAIGHT_LOW_CLEARANCE_PUSH_SCALE    = 0.55f;
-    private const float WALL_STRAIGHT_LOW_CLEARANCE_MIN_SIDE_GAP  = 0.04f;
-    private const float WALL_STRAIGHT_RESCAN_AVG_CLEARANCE_THRESHOLD = 0.65f;
-    private const float WALL_STRAIGHT_RESCAN_FORWARD_DISTANCE        = 0.16f;
-    private const float WALL_STRAIGHT_RESCAN_LATERAL_SCALE           = 0.22f;
-    private const float WALL_STRAIGHT_RESCAN_LATERAL_MIN             = 0.08f;
-    private const float WALL_STRAIGHT_RESCAN_LATERAL_MAX             = 0.30f;
-    private const float WALL_STRAIGHT_RESCAN_IMPROVEMENT_THRESHOLD   = 0.04f;
-    private const float WALL_STRAIGHT_RESCAN_MIN_CLEARANCE_IMPROVEMENT_THRESHOLD = 0.03f;
-    private const float WALL_STRAIGHT_RESCAN_ONE_SIDE_COLLAPSE_THRESHOLD = 0.05f;
-    private const float WALL_STRAIGHT_RESCAN_ONE_SIDE_OPEN_THRESHOLD     = 0.85f;
-    private const float WALL_STRAIGHT_RESCAN_EDGE_MIN_CLEARANCE_THRESHOLD = 0.28f;
-    private const float WALL_STRAIGHT_RESCAN_EDGE_IMBALANCE_THRESHOLD     = 0.18f;
-    private const float WALL_STRAIGHT_INTERIOR_PUSH_SCALE            = 0.90f;
-    private const float WALL_STRAIGHT_PREFERRED_PUSH_SCALE           = 0.30f;
-    private const float WALL_STRAIGHT_PRESSURE_PUSH_SCALE            = 0.20f;
-    private const float WALL_STRAIGHT_MAX_FORWARD_PUSH               = 0.20f;
-    private const float WALL_ENDPOINT_ADJACENT_BALANCE_DISTANCE_SCALE = 0.60f;
-    private const float WALL_ENDPOINT_ADJACENT_BALANCE_RATIO_SCALE    = 0.75f;
-    private const float WALL_START_ADJACENT_PRESSURE_PUSH_SCALE       = 0.90f;
-    private const float WALL_START_ADJACENT_RESCAN_AVG_CLEARANCE_THRESHOLD = 0.55f;
-    private const float WALL_START_ADJACENT_RESCAN_FORWARD_SCALE           = 0.60f;
-    private const float WALL_START_ADJACENT_RESCAN_FORWARD_MIN             = 0.45f;
-    private const float WALL_START_ADJACENT_RESCAN_FORWARD_MAX             = 1.25f;
-    private const float WALL_START_ADJACENT_RESCAN_LATERAL_SCALE           = 0.45f;
-    private const float WALL_START_ADJACENT_RESCAN_LATERAL_MIN             = 0.12f;
-    private const float WALL_START_ADJACENT_RESCAN_LATERAL_MAX             = 0.55f;
-    private const float FLIGHT_DESCENT_PRESERVE_MIN_DROP                   = 1.00f;
-    private const float FLIGHT_DESCENT_PRESERVE_NEAR_VERTICAL_HORIZONTAL   = 1.20f;
-    private const float FLIGHT_DESCENT_PRESERVE_MAX_SLOPE                  = 0.90f;
-
-    private DtNavMeshQuery MeshQuery => getMeshQuery();
+    private DtNavMeshQuery MeshQuery    => getMeshQuery();
     private IDtQueryFilter GroundFilter => getGroundFilter();
 
-    public PostprocessedPath Process(PlannerResult result, bool useStringPulling, CancellationToken cancel)
+    public PostprocessedPath Process(PlannerResult result, CancellationToken cancel)
     {
         cancel.ThrowIfCancellationRequested();
 
         List<PostprocessedPathSegment> segments = new(result.Segments.Count);
 
-        foreach (var segment in result.Segments) segments.Add(BuildSegment(segment, useStringPulling, cancel));
+        foreach (var segment in result.Segments)
+            segments.Add(BuildSegment(segment, cancel));
 
         return new()
         {
@@ -109,7 +43,7 @@ internal sealed class PathPostprocessor
         List<PostprocessedPathSegment> segments = new(result.Segments.Count);
 
         foreach (var segment in result.Segments)
-            segments.Add(BuildStraightPathSegment(segment, cancel, straightPathOptions));
+            segments.Add(BuildStraightPathSegment(segment, straightPathOptions, cancel));
 
         return new()
         {
@@ -122,16 +56,16 @@ internal sealed class PathPostprocessor
         };
     }
 
-    private PostprocessedPathSegment BuildSegment(PlannerPathSegment segment, bool useStringPulling, CancellationToken cancel)
+    private PostprocessedPathSegment BuildSegment(PlannerPathSegment segment, CancellationToken cancel)
     {
         cancel.ThrowIfCancellationRequested();
 
-        var groundCorridor = segment.MovementMode == MovementMode.Ground && segment.GeometryKind == PlannerSegmentGeometryKind.MeshCorridor
+        var groundCorridor = segment is { MovementMode: MovementMode.Ground, GeometryKind: PlannerSegmentGeometryKind.MeshCorridor }
                                  ? BuildGroundCorridor(segment)
                                  : segment.GroundCorridor;
         var (waypoints, flightPathDebug) = segment.GeometryKind switch
         {
-            PlannerSegmentGeometryKind.MeshCorridor   => (BuildMeshWaypoints(segment, groundCorridor, useStringPulling), segment.FlightPathDebug),
+            PlannerSegmentGeometryKind.MeshCorridor   => (BuildMeshWaypoints(segment, groundCorridor), segment.FlightPathDebug),
             PlannerSegmentGeometryKind.DiscretePoints => BuildDiscreteWaypoints(segment),
             _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
         };
@@ -151,18 +85,18 @@ internal sealed class PathPostprocessor
         };
     }
 
-    private PostprocessedPathSegment BuildStraightPathSegment(PlannerPathSegment segment, CancellationToken cancel, int straightPathOptions)
+    private PostprocessedPathSegment BuildStraightPathSegment(PlannerPathSegment segment, int straightPathOptions, CancellationToken cancel)
     {
         cancel.ThrowIfCancellationRequested();
 
-        var groundCorridor = segment.MovementMode == MovementMode.Ground && segment.GeometryKind == PlannerSegmentGeometryKind.MeshCorridor
+        var groundCorridor = segment is { MovementMode: MovementMode.Ground, GeometryKind: PlannerSegmentGeometryKind.MeshCorridor }
                                  ? BuildGroundCorridor(segment, straightPathOptions)
                                  : segment.GroundCorridor;
         var (waypoints, flightPathDebug) = segment.GeometryKind switch
         {
-            PlannerSegmentGeometryKind.MeshCorridor   => (BuildRawStraightPathWaypoints(segment, [.. segment.Corridor], straightPathOptions), segment.FlightPathDebug),
+            PlannerSegmentGeometryKind.MeshCorridor => (BuildRawStraightPathWaypoints(segment, [.. segment.Corridor], straightPathOptions), segment.FlightPathDebug),
             PlannerSegmentGeometryKind.DiscretePoints => BuildRawDiscreteWaypoints(segment),
-            _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
+            _ => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
         };
 
         return new()
@@ -180,23 +114,12 @@ internal sealed class PathPostprocessor
         };
     }
 
-    private List<Vector3> BuildMeshWaypoints(PlannerPathSegment segment, GroundCorridorPayload? groundCorridor, bool useStringPulling)
+    private List<Vector3> BuildMeshWaypoints(PlannerPathSegment segment, GroundCorridorPayload? groundCorridor)
     {
         if (segment.Corridor.Count == 0)
             return [];
 
-        if (groundCorridor != null)
-        {
-            return useStringPulling
-                       ? [.. groundCorridor.Corners.Select(c => c.Position)]
-                       : DeduplicateWaypoints
-                           (segment.Corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
-        }
-
-        if (useStringPulling)
-            return BuildStraightPathWaypoints(segment, [.. segment.Corridor]);
-
-        return DeduplicateWaypoints(segment.Corridor.Select(r => MeshQuery.GetAttachedNavMesh().GetPolyCenter(r).RecastToSystem()).Append(segment.EndPosition));
+        return groundCorridor != null ? [.. groundCorridor.Corners.Select(c => c.Position)] : BuildStraightPathWaypoints(segment, [.. segment.Corridor]);
     }
 
     private List<Vector3> BuildStraightPathWaypoints(PlannerPathSegment segment, long[] corridor)
@@ -279,15 +202,15 @@ internal sealed class PathPostprocessor
     private List<Vector3> BuildAdjustedStraightPathPositions
     (
         PlannerPathSegment           segment,
-        DtStraightPath[]              straightPath,
-        int                           straightPathCount,
-        long[]                        corridor,
-        out GroundPathCornerDebug?[]  debugInfos,
-        out int                       initialWaypointIndex
+        DtStraightPath[]             straightPath,
+        int                          straightPathCount,
+        long[]                       corridor,
+        out GroundPathCornerDebug?[] debugInfos,
+        out int                      initialWaypointIndex
     )
     {
         List<Vector3> result = new(straightPathCount);
-        debugInfos = new GroundPathCornerDebug?[straightPathCount];
+        debugInfos           = new GroundPathCornerDebug?[straightPathCount];
         initialWaypointIndex = ResolveInitialWaypointIndex(segment, straightPath, straightPathCount);
 
         for (var i = 0; i < straightPathCount; ++i)
@@ -311,13 +234,13 @@ internal sealed class PathPostprocessor
 
     private Vector3 AdjustStraightPathPosition
     (
-        DtStraightPath[]             straightPath,
-        int                          straightPathCount,
-        long[]                       corridor,
-        int                          index,
-        int                          initialWaypointIndex,
-        Vector3                      traversalStartPosition,
-        out GroundPathCornerDebug?   debugInfo
+        DtStraightPath[]           straightPath,
+        int                        straightPathCount,
+        long[]                     corridor,
+        int                        index,
+        int                        initialWaypointIndex,
+        Vector3                    traversalStartPosition,
+        out GroundPathCornerDebug? debugInfo
     )
     {
         debugInfo = null;
@@ -329,11 +252,11 @@ internal sealed class PathPostprocessor
         if ((flags & DtStraightPathFlags.DT_STRAIGHTPATH_OFFMESH_CONNECTION) != 0)
             return point;
 
-        var isStartPoint       = index == 0;
-        var isEndPoint         = index == straightPathCount - 1;
-        var hasExecutionStart  = initialWaypointIndex >= 0 && initialWaypointIndex < straightPathCount;
-        var isExecutionStart   = hasExecutionStart && index == initialWaypointIndex;
-        var isInitiallyConsumed = hasExecutionStart && index < initialWaypointIndex;
+        var isStartPoint        = index == 0;
+        var isEndPoint          = index == straightPathCount - 1;
+        var hasExecutionStart   = initialWaypointIndex >= 0 && initialWaypointIndex < straightPathCount;
+        var isExecutionStart    = hasExecutionStart         && index                == initialWaypointIndex;
+        var isInitiallyConsumed = hasExecutionStart         && index                < initialWaypointIndex;
         if (isEndPoint || (flags & DtStraightPathFlags.DT_STRAIGHTPATH_END) != 0)
             return point;
 
@@ -345,7 +268,7 @@ internal sealed class PathPostprocessor
             return point;
 
         var localPolyRefs = CollectLocalPolyRefs(straightPath, straightPathCount, corridor, index);
-        var next = straightPath[index + 1].pos.RecastToSystem();
+        var next          = straightPath[index + 1].pos.RecastToSystem();
         var previous = isExecutionStart
                            ? initialWaypointIndex == 0
                                  ? point - (next - point)
@@ -354,17 +277,17 @@ internal sealed class PathPostprocessor
                                ? point - (next - point)
                                : straightPath[index - 1].pos.RecastToSystem();
         var incoming = new Vector2(point.X - previous.X, point.Z - previous.Z);
-        var outgoing = new Vector2(next.X - point.X, next.Z - point.Z);
+        var outgoing = new Vector2(next.X  - point.X,    next.Z  - point.Z);
         if (incoming.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ || outgoing.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
             return point;
 
         incoming = Vector2.Normalize(incoming);
         outgoing = Vector2.Normalize(outgoing);
 
-        var isStartAdjacent = hasExecutionStart && index >= initialWaypointIndex && index <= initialWaypointIndex + 1;
-        var isEndAdjacent   = index >= straightPathCount - 2;
+        var isStartAdjacent  = hasExecutionStart && index >= initialWaypointIndex && index <= initialWaypointIndex + 1;
+        var isEndAdjacent    = index >= straightPathCount - 2;
         var endpointAdjacent = isStartAdjacent || isEndAdjacent;
-        var cornerStrength = Math.Clamp((1f - Vector2.Dot(incoming, outgoing)) * 0.5f, 0f, 1f);
+        var cornerStrength   = Math.Clamp((1f - Vector2.Dot(incoming, outgoing)) * 0.5f, 0f, 1f);
 
         var bisector = incoming + outgoing;
         if (!isStartAdjacent && !isEndAdjacent && bisector.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
@@ -386,12 +309,14 @@ internal sealed class PathPostprocessor
         polyRef = ResolveScanPolyRef(localPolyRefs, polyRef, scanOrigin, WALL_SCAN_ORIGIN_REPROJECT_MAX_DISTANCE, out scanOrigin);
 
         var sample = SampleScanClearances(localPolyRefs, polyRef, scanOrigin, preferredDirectionBias);
+
         if (isStartAdjacent &&
             ShouldRescanStartAdjacent(sample.AverageClearance, sample.MinClearance, sample.WallPressure))
         {
             var recenteredOrigin = RecenterStartAdjacentScanOrigin(point, next, polyRef, outgoing, sample.WallPressure, sample.AverageClearance);
             var rescannedPolyRef = ResolveScanPolyRef(localPolyRefs, polyRef, recenteredOrigin, WALL_SCAN_ORIGIN_REPROJECT_MAX_DISTANCE, out recenteredOrigin);
             var rescannedSample  = SampleScanClearances(localPolyRefs, rescannedPolyRef, recenteredOrigin, preferredDirectionBias);
+
             if (rescannedSample.AverageClearance > sample.AverageClearance + 0.05f ||
                 rescannedSample.MinClearance     > sample.MinClearance     + 0.01f)
             {
@@ -401,13 +326,14 @@ internal sealed class PathPostprocessor
             }
         }
 
-        var minClearance     = sample.MinClearance;
-        var maxClearance     = sample.MaxClearance;
-        var totalClearance   = sample.TotalClearance;
-        var averageClearance = sample.AverageClearance;
+        var minClearance       = sample.MinClearance;
+        var maxClearance       = sample.MaxClearance;
+        var totalClearance     = sample.TotalClearance;
+        var averageClearance   = sample.AverageClearance;
         var preferredDirection = sample.PreferredDirection;
         var wallPressure       = sample.WallPressure;
         var samples            = sample.Samples;
+
         if (isInitiallyConsumed)
         {
             debugInfo = BuildDebugInfo
@@ -596,6 +522,7 @@ internal sealed class PathPostprocessor
 
         wallPressure = Vector2.Normalize(wallPressure);
         var lateralPush = preferredDirection + wallPressure * 1.35f;
+
         if (lateralPush.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
         {
             debugInfo = BuildDebugInfo
@@ -635,6 +562,7 @@ internal sealed class PathPostprocessor
         lateralPush = Vector2.Normalize(lateralPush);
         var forwardComponent = Vector2.Dot(lateralPush, outgoing);
         lateralPush -= outgoing * MathF.Max(0f, forwardComponent - WALL_PUSH_FORWARD_REJECTION);
+
         if (lateralPush.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
         {
             debugInfo = BuildDebugInfo
@@ -673,6 +601,7 @@ internal sealed class PathPostprocessor
 
         lateralPush = Vector2.Normalize(lateralPush);
         var asymmetry = (maxClearance - minClearance) / MathF.Max(maxClearance, 0.001f);
+
         if (asymmetry < WALL_PUSH_MIN_ASYMMETRY)
         {
             debugInfo = BuildDebugInfo
@@ -710,6 +639,7 @@ internal sealed class PathPostprocessor
         }
 
         var wallPressureMagnitude = WALL_SCAN_RADIUS - averageClearance;
+
         if (wallPressureMagnitude < WALL_PUSH_MIN_WALL_PRESSURE)
         {
             debugInfo = BuildDebugInfo
@@ -751,9 +681,10 @@ internal sealed class PathPostprocessor
         var dynamicPushScale       = ComputeDynamicPushScale(lateralWidth);
         var dynamicPushMaxDistance = ComputeDynamicPushMaxDistance(lateralWidth);
         var rawPushDistance        = (WALL_PUSH_TARGET_CLEARANCE - minClearance) * Math.Clamp(asymmetry * (0.6f + cornerStrength), 0f, 1.5f);
-        var desiredPush            = rawPushDistance * dynamicPushScale;
-        var maxPushByClearance = clearanceAlongPush * WALL_PUSH_CLEARANCE_FRACTION * dynamicPushScale;
-        var pushDistance       = MathF.Min(dynamicPushMaxDistance, MathF.Min(desiredPush, maxPushByClearance));
+        var desiredPush            = rawPushDistance                             * dynamicPushScale;
+        var maxPushByClearance     = clearanceAlongPush                          * WALL_PUSH_CLEARANCE_FRACTION * dynamicPushScale;
+        var pushDistance           = MathF.Min(dynamicPushMaxDistance, MathF.Min(desiredPush, maxPushByClearance));
+
         if (pushDistance < WALL_PUSH_MIN_DISTANCE)
         {
             debugInfo = BuildDebugInfo
@@ -829,7 +760,7 @@ internal sealed class PathPostprocessor
         return candidate;
     }
 
-    private int ResolveInitialWaypointIndex(PlannerPathSegment segment, DtStraightPath[] straightPath, int straightPathCount)
+    private static int ResolveInitialWaypointIndex(PlannerPathSegment segment, DtStraightPath[] straightPath, int straightPathCount)
     {
         if (segment.MovementMode != MovementMode.Ground || segment.SegmentKind != MovementSegmentKind.GroundTraverse || straightPathCount <= 0)
             return 0;
@@ -855,7 +786,7 @@ internal sealed class PathPostprocessor
     private long[] CollectLocalPolyRefs(DtStraightPath[] straightPath, int straightPathCount, long[] corridor, int index)
     {
         HashSet<long> uniqueRefs = [];
-        List<long> refs = [];
+        List<long>    refs       = [];
 
         void TryAdd(long candidateRef)
         {
@@ -920,20 +851,20 @@ internal sealed class PathPostprocessor
         var delta = isStartAdjacent
                         ? new Vector2(next.X - point.X, next.Z - point.Z)
                         : isEndAdjacent
-                            ? new Vector2(previous.X - point.X, previous.Z - point.Z)
+                            ? new Vector2(previous.X                   - point.X, previous.Z                   - point.Z)
                             : new Vector2((previous.X + next.X) * 0.5f - point.X, (previous.Z + next.Z) * 0.5f - point.Z);
         var lengthSq = delta.LengthSquared();
         if (lengthSq <= WALL_SCAN_MIN_VECTOR_SQ)
             return point;
 
-        var length      = MathF.Sqrt(lengthSq);
+        var length = MathF.Sqrt(lengthSq);
         var endpointAdjacent = isStartAdjacent || isEndAdjacent;
-        var insetScale  = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_SCALE : endpointAdjacent ? WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_SCALE : 0.35f;
-        var insetMin    = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_MIN : WALL_SCAN_ORIGIN_INSET_MIN;
-        var insetMax    = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_MAX : endpointAdjacent ? WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_MAX : WALL_SCAN_ORIGIN_INSET_MAX;
-        var inset       = Math.Clamp(length * insetScale, insetMin, insetMax);
+        var insetScale = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_SCALE : endpointAdjacent ? WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_SCALE : 0.35f;
+        var insetMin = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_MIN : WALL_SCAN_ORIGIN_INSET_MIN;
+        var insetMax = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_MAX : endpointAdjacent ? WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_MAX : WALL_SCAN_ORIGIN_INSET_MAX;
+        var inset = Math.Clamp(length * insetScale, insetMin, insetMax);
         var insetFactor = MathF.Min(1f, inset / length);
-        var origin      = point + new Vector3(delta.X * insetFactor, 0, delta.Y * insetFactor);
+        var origin = point + new Vector3(delta.X * insetFactor, 0, delta.Y * insetFactor);
 
         if (MeshQuery.GetPolyHeight(polyRef, origin.SystemToRecast(), out var height).Succeeded())
             origin.Y = height;
@@ -941,7 +872,8 @@ internal sealed class PathPostprocessor
         return origin;
     }
 
-    private long ResolveScanPolyRef(long[] localPolyRefs, long fallbackPolyRef, Vector3 preferredPosition, float maxHorizontalDistance, out Vector3 projectedPosition)
+    private long ResolveScanPolyRef
+        (long[] localPolyRefs, long fallbackPolyRef, Vector3 preferredPosition, float maxHorizontalDistance, out Vector3 projectedPosition)
     {
         projectedPosition = preferredPosition;
         LocalPolyProjection? bestProjection = null;
@@ -976,10 +908,11 @@ internal sealed class PathPostprocessor
                 return directCandidate;
 
             var normalizedPush = Vector2.Normalize(pushDirection);
-            var directDelta = new Vector2(directCandidate.X - originalPoint.X, directCandidate.Z - originalPoint.Z);
+            var directDelta    = new Vector2(directCandidate.X - originalPoint.X, directCandidate.Z - originalPoint.Z);
             var directProgress = Vector2.Dot(directDelta, normalizedPush);
 
             LocalPolyProjection? directBestProjectionCandidate = null;
+
             foreach (var candidateRef in localPolyRefs)
             {
                 if (!TryProjectToPoly(candidateRef, candidate, out var projection))
@@ -988,14 +921,15 @@ internal sealed class PathPostprocessor
                 if (projection.HorizontalDistanceSq > WALL_ADJUSTED_POINT_REPROJECT_MAX_DISTANCE * WALL_ADJUSTED_POINT_REPROJECT_MAX_DISTANCE)
                     continue;
 
-                if (directBestProjectionCandidate == null || IsBetterAdjustedProjection(projection, directBestProjectionCandidate.Value, preferredPolyRef, originalPoint, normalizedPush))
+                if (directBestProjectionCandidate == null ||
+                    IsBetterAdjustedProjection(projection, directBestProjectionCandidate.Value, preferredPolyRef, originalPoint, normalizedPush))
                     directBestProjectionCandidate = projection;
             }
 
             if (directBestProjectionCandidate is not { } directBestProjection)
                 return directCandidate;
 
-            var projectedDelta = new Vector2(directBestProjection.ProjectedPoint.X - originalPoint.X, directBestProjection.ProjectedPoint.Z - originalPoint.Z);
+            var projectedDelta    = new Vector2(directBestProjection.ProjectedPoint.X - originalPoint.X, directBestProjection.ProjectedPoint.Z - originalPoint.Z);
             var projectedProgress = Vector2.Dot(projectedDelta, normalizedPush);
             if (projectedProgress > directProgress + WALL_ADJUSTED_POINT_DIRECT_ACCEPT_PROGRESS_EPSILON)
                 return directBestProjection.ProjectedPoint;
@@ -1025,8 +959,8 @@ internal sealed class PathPostprocessor
         if (MeshQuery.ClosestPointOnPoly(polyRef, position.SystemToRecast(), out var closest, out var isOverPoly).Succeeded())
         {
             var projectedPoint       = closest.RecastToSystem();
-            var horizontalDeltaX     = projectedPoint.X - position.X;
-            var horizontalDeltaZ     = projectedPoint.Z - position.Z;
+            var horizontalDeltaX     = projectedPoint.X                    - position.X;
+            var horizontalDeltaZ     = projectedPoint.Z                    - position.Z;
             var horizontalDistanceSq = horizontalDeltaX * horizontalDeltaX + horizontalDeltaZ * horizontalDeltaZ;
             projection = new(polyRef, projectedPoint, isOverPoly, horizontalDistanceSq, MathF.Abs(projectedPoint.Y - position.Y));
             return true;
@@ -1068,16 +1002,16 @@ internal sealed class PathPostprocessor
         if (pushDirection.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ)
         {
             pushDirection = Vector2.Normalize(pushDirection);
-            var candidateDelta = new Vector2(candidate.ProjectedPoint.X - originalPoint.X, candidate.ProjectedPoint.Z - originalPoint.Z);
-            var currentDelta   = new Vector2(currentBest.ProjectedPoint.X - originalPoint.X, currentBest.ProjectedPoint.Z - originalPoint.Z);
+            var candidateDelta    = new Vector2(candidate.ProjectedPoint.X   - originalPoint.X, candidate.ProjectedPoint.Z   - originalPoint.Z);
+            var currentDelta      = new Vector2(currentBest.ProjectedPoint.X - originalPoint.X, currentBest.ProjectedPoint.Z - originalPoint.Z);
             var candidateProgress = Vector2.Dot(candidateDelta, pushDirection);
-            var currentProgress   = Vector2.Dot(currentDelta, pushDirection);
+            var currentProgress   = Vector2.Dot(currentDelta,   pushDirection);
 
             if (MathF.Abs(candidateProgress - currentProgress) > 0.02f)
                 return candidateProgress > currentProgress;
 
             var candidateOffAxis = candidateDelta - pushDirection * candidateProgress;
-            var currentOffAxis   = currentDelta - pushDirection * currentProgress;
+            var currentOffAxis   = currentDelta   - pushDirection * currentProgress;
             if (MathF.Abs(candidateOffAxis.LengthSquared() - currentOffAxis.LengthSquared()) > 0.0001f)
                 return candidateOffAxis.LengthSquared() < currentOffAxis.LengthSquared();
         }
@@ -1096,26 +1030,28 @@ internal sealed class PathPostprocessor
 
     private ScanSampleResult SampleScanClearances(long[] localPolyRefs, long fallbackPolyRef, Vector3 scanOrigin, Vector2 preferredDirectionBias)
     {
-        var minClearance   = float.MaxValue;
-        var maxClearance   = 0f;
-        var totalClearance = 0f;
-        var preferredDirection = preferredDirectionBias;
-        var preferredDirectionScore = float.MinValue;
-        var preferredPolyRef = fallbackPolyRef;
-        var wallPressure = Vector2.Zero;
-        List<GroundPathCornerDebugSample> samples = new(WALL_SCAN_DIRECTION_COUNT);
+        var                               minClearance            = float.MaxValue;
+        var                               maxClearance            = 0f;
+        var                               totalClearance          = 0f;
+        var                               preferredDirection      = preferredDirectionBias;
+        var                               preferredDirectionScore = float.MinValue;
+        var                               preferredPolyRef        = fallbackPolyRef;
+        var                               wallPressure            = Vector2.Zero;
+        List<GroundPathCornerDebugSample> samples                 = new(WALL_SCAN_DIRECTION_COUNT);
 
         for (var sampleIndex = 0; sampleIndex < WALL_SCAN_DIRECTION_COUNT; ++sampleIndex)
         {
             var angle     = MathF.Tau * sampleIndex / WALL_SCAN_DIRECTION_COUNT;
             var direction = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
-            var clearance = MeasureRaycastClearance(localPolyRefs, fallbackPolyRef, scanOrigin, direction, WALL_SCAN_RADIUS, out var samplePolyRef, out var sampleStart);
-            minClearance = MathF.Min(minClearance, clearance);
-            maxClearance = MathF.Max(maxClearance, clearance);
+            var clearance = MeasureRaycastClearance
+                (localPolyRefs, fallbackPolyRef, scanOrigin, direction, WALL_SCAN_RADIUS, out var samplePolyRef, out var sampleStart);
+            minClearance   =  MathF.Min(minClearance, clearance);
+            maxClearance   =  MathF.Max(maxClearance, clearance);
             totalClearance += clearance;
-            wallPressure -= direction * (WALL_SCAN_RADIUS - clearance);
+            wallPressure   -= direction * (WALL_SCAN_RADIUS - clearance);
 
             var directionScore = clearance + Vector2.Dot(direction, preferredDirectionBias) * 0.35f;
+
             if (directionScore > preferredDirectionScore)
             {
                 preferredDirectionScore = directionScore;
@@ -1135,15 +1071,16 @@ internal sealed class PathPostprocessor
             );
         }
 
-        return new(minClearance, maxClearance, totalClearance, totalClearance / WALL_SCAN_DIRECTION_COUNT, preferredDirection, preferredPolyRef, wallPressure, samples);
+        return new
+            (minClearance, maxClearance, totalClearance, totalClearance / WALL_SCAN_DIRECTION_COUNT, preferredDirection, preferredPolyRef, wallPressure, samples);
     }
 
-    private bool ShouldRescanStartAdjacent(float averageClearance, float minClearance, Vector2 wallPressure) =>
-        averageClearance < WALL_START_ADJACENT_RESCAN_AVG_CLEARANCE_THRESHOLD &&
-        minClearance <= 0.01f &&
+    private static bool ShouldRescanStartAdjacent(float averageClearance, float minClearance, Vector2 wallPressure) =>
+        averageClearance             < WALL_START_ADJACENT_RESCAN_AVG_CLEARANCE_THRESHOLD &&
+        minClearance                 <= 0.01f                                             &&
         wallPressure.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ;
 
-    private bool ShouldRescanNearStraight(float leftClearance, float rightClearance, float averageClearance)
+    private static bool ShouldRescanNearStraight(float leftClearance, float rightClearance, float averageClearance)
     {
         if (leftClearance + rightClearance <= WALL_SCAN_MIN_VECTOR_SQ)
             return true;
@@ -1154,7 +1091,7 @@ internal sealed class PathPostprocessor
             farClearance  >= WALL_STRAIGHT_RESCAN_ONE_SIDE_OPEN_THRESHOLD)
             return true;
 
-        if (nearClearance <= WALL_STRAIGHT_RESCAN_EDGE_MIN_CLEARANCE_THRESHOLD &&
+        if (nearClearance                <= WALL_STRAIGHT_RESCAN_EDGE_MIN_CLEARANCE_THRESHOLD &&
             farClearance - nearClearance >= WALL_STRAIGHT_RESCAN_EDGE_IMBALANCE_THRESHOLD)
             return true;
 
@@ -1181,10 +1118,7 @@ internal sealed class PathPostprocessor
 
         var lateralEscape = Vector2.Normalize(wallPressure);
         lateralEscape -= outgoing * Vector2.Dot(lateralEscape, outgoing);
-        if (lateralEscape.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ)
-            lateralEscape = Vector2.Normalize(lateralEscape);
-        else
-            lateralEscape = Vector2.Zero;
+        lateralEscape =  lateralEscape.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ ? Vector2.Normalize(lateralEscape) : Vector2.Zero;
 
         var lateralInset = Math.Clamp
         (
@@ -1193,7 +1127,8 @@ internal sealed class PathPostprocessor
             WALL_START_ADJACENT_RESCAN_LATERAL_MAX
         );
 
-        var origin = point + new Vector3(outgoing.X * forwardInset, 0, outgoing.Y * forwardInset) +
+        var origin = point                                                                          +
+                     new Vector3(outgoing.X      * forwardInset, 0, outgoing.Y      * forwardInset) +
                      new Vector3(lateralEscape.X * lateralInset, 0, lateralEscape.Y * lateralInset);
 
         if (MeshQuery.GetPolyHeight(polyRef, origin.SystemToRecast(), out var height).Succeeded())
@@ -1202,7 +1137,7 @@ internal sealed class PathPostprocessor
         return origin;
     }
 
-    private Vector3 RecenterNearStraightScanOrigin
+    private static Vector3 RecenterNearStraightScanOrigin
     (
         Vector3 scanOrigin,
         Vector2 pathDirection,
@@ -1210,7 +1145,7 @@ internal sealed class PathPostprocessor
         float   averageClearance
     )
     {
-        var forwardInset = WALL_STRAIGHT_RESCAN_FORWARD_DISTANCE;
+        var forwardInset  = WALL_STRAIGHT_RESCAN_FORWARD_DISTANCE;
         var lateralEscape = BuildPathLateralDirection(lateralBias, pathDirection, Vector2.Zero);
 
         var lateralInset = Math.Clamp
@@ -1220,12 +1155,12 @@ internal sealed class PathPostprocessor
             WALL_STRAIGHT_RESCAN_LATERAL_MAX
         );
 
-        return scanOrigin +
+        return scanOrigin                                                                     +
                new Vector3(pathDirection.X * forwardInset, 0, pathDirection.Y * forwardInset) +
                new Vector3(lateralEscape.X * lateralInset, 0, lateralEscape.Y * lateralInset);
     }
 
-    private long ResolveStraightPathPolyRef(DtStraightPath[] straightPath, long[] corridor, int index)
+    private static long ResolveStraightPathPolyRef(DtStraightPath[] straightPath, long[] corridor, int index)
     {
         var polyRef = straightPath[index].refs;
         if (polyRef != 0)
@@ -1244,7 +1179,7 @@ internal sealed class PathPostprocessor
         return corridor[corridorIndex];
     }
 
-    private Vector2 BuildPathLateralDirection(Vector2 direction, Vector2 pathDirection, Vector2 preferredSide)
+    private static Vector2 BuildPathLateralDirection(Vector2 direction, Vector2 pathDirection, Vector2 preferredSide)
     {
         if (direction.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ || pathDirection.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
             return Vector2.Zero;
@@ -1262,11 +1197,11 @@ internal sealed class PathPostprocessor
 
     private bool TryBuildInteriorDirection
     (
-        long[]  localPolyRefs,
-        Vector3 point,
-        Vector3 scanOrigin,
-        Vector2 pathDirection,
-        Vector2 preferredSide,
+        long[]      localPolyRefs,
+        Vector3     point,
+        Vector3     scanOrigin,
+        Vector2     pathDirection,
+        Vector2     preferredSide,
         out Vector2 interiorDirection
     )
     {
@@ -1274,10 +1209,10 @@ internal sealed class PathPostprocessor
         if (pathDirection.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
             return false;
 
-        var navmesh = MeshQuery.GetAttachedNavMesh();
+        var navmesh     = MeshQuery.GetAttachedNavMesh();
         var accumulated = Vector2.Zero;
 
-        AccumulateFromOrigin(point, 1.0f);
+        AccumulateFromOrigin(point,      1.0f);
         AccumulateFromOrigin(scanOrigin, 0.75f);
 
         if (accumulated.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
@@ -1313,24 +1248,24 @@ internal sealed class PathPostprocessor
         }
     }
 
-    private float ComputeDynamicPushWidthT(float lateralWidth)
+    private static float ComputeDynamicPushWidthT(float lateralWidth)
     {
         return Math.Clamp
-               (
-                   (lateralWidth - WALL_PUSH_DYNAMIC_WIDTH_NARROW) /
-                   MathF.Max(0.001f, WALL_PUSH_DYNAMIC_WIDTH_WIDE - WALL_PUSH_DYNAMIC_WIDTH_NARROW),
-                   0f,
-                   1f
-               );
+        (
+            (lateralWidth - WALL_PUSH_DYNAMIC_WIDTH_NARROW) /
+            MathF.Max(0.001f, WALL_PUSH_DYNAMIC_WIDTH_WIDE - WALL_PUSH_DYNAMIC_WIDTH_NARROW),
+            0f,
+            1f
+        );
     }
 
-    private float ComputeDynamicPushScale(float lateralWidth)
+    private static float ComputeDynamicPushScale(float lateralWidth)
     {
         var widthT = ComputeDynamicPushWidthT(lateralWidth);
         return WALL_PUSH_DYNAMIC_SCALE_MIN + (WALL_PUSH_DYNAMIC_SCALE_MAX - WALL_PUSH_DYNAMIC_SCALE_MIN) * widthT;
     }
 
-    private float ComputeDynamicPushMaxDistance(float lateralWidth)
+    private static float ComputeDynamicPushMaxDistance(float lateralWidth)
     {
         var widthT = ComputeDynamicPushWidthT(lateralWidth);
         return WALL_PUSH_BASE_MAX_DISTANCE + (WALL_PUSH_DYNAMIC_MAX_DISTANCE_WIDE - WALL_PUSH_BASE_MAX_DISTANCE) * widthT;
@@ -1344,17 +1279,18 @@ internal sealed class PathPostprocessor
 
     private float MeasureRaycastClearance
     (
-        long[]  localPolyRefs,
-        long    fallbackPolyRef,
-        Vector3 start,
-        Vector2 direction,
-        float   maxDistance,
-        out long bestPolyRef,
+        long[]      localPolyRefs,
+        long        fallbackPolyRef,
+        Vector3     start,
+        Vector2     direction,
+        float       maxDistance,
+        out long    bestPolyRef,
         out Vector3 bestProjectedStart
     )
     {
         var bestPolyRefLocal        = 0L;
         var bestProjectedStartLocal = start;
+
         if (direction.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
         {
             bestPolyRef        = bestPolyRefLocal;
@@ -1364,7 +1300,7 @@ internal sealed class PathPostprocessor
 
         direction = Vector2.Normalize(direction);
 
-        var end = new Vector3(start.X + direction.X * maxDistance, start.Y, start.Z + direction.Y * maxDistance);
+        var end           = new Vector3(start.X + direction.X * maxDistance, start.Y, start.Z + direction.Y * maxDistance);
         var bestClearance = 0f;
         var hasCandidate  = false;
 
@@ -1386,12 +1322,13 @@ internal sealed class PathPostprocessor
                 return;
 
             var clearance = t == float.MaxValue ? maxDistance : Math.Clamp(t, 0f, 1f) * maxDistance;
+
             if (!hasCandidate || clearance > bestClearance)
             {
-                bestClearance          = clearance;
-                bestPolyRefLocal       = candidateRef;
+                bestClearance           = clearance;
+                bestPolyRefLocal        = candidateRef;
                 bestProjectedStartLocal = projectedStart;
-                hasCandidate           = true;
+                hasCandidate            = true;
             }
         }
 
@@ -1449,37 +1386,37 @@ internal sealed class PathPostprocessor
         float                                      cornerStrength
     )
         => BuildDebugInfo
-           (
-               straightPathIndex,
-               initiallyConsumed,
-               isExecutionStart,
-               scanPolyRef,
-               localPolyCount,
-               preferredPolyRef,
-               leftPolyRef,
-               rightPolyRef,
-               rescanned,
-               usedInteriorDirection,
-               0f,
-               1f,
-               0f,
-               0f,
-               leftClearance,
-               rightClearance,
-               straightBalanceSatisfied,
-               straightLowClearanceCase,
-               point,
-               scanOrigin,
-               adjustedPoint,
-               interiorDirection,
-               preferredDirection,
-               wallPressure,
-               samples,
-               minClearance,
-               maxClearance,
-               averageClearance,
-               cornerStrength
-           );
+        (
+            straightPathIndex,
+            initiallyConsumed,
+            isExecutionStart,
+            scanPolyRef,
+            localPolyCount,
+            preferredPolyRef,
+            leftPolyRef,
+            rightPolyRef,
+            rescanned,
+            usedInteriorDirection,
+            0f,
+            1f,
+            0f,
+            0f,
+            leftClearance,
+            rightClearance,
+            straightBalanceSatisfied,
+            straightLowClearanceCase,
+            point,
+            scanOrigin,
+            adjustedPoint,
+            interiorDirection,
+            preferredDirection,
+            wallPressure,
+            samples,
+            minClearance,
+            maxClearance,
+            averageClearance,
+            cornerStrength
+        );
 
     private GroundPathCornerDebug BuildDebugInfo
     (
@@ -1513,39 +1450,39 @@ internal sealed class PathPostprocessor
         float                                      cornerStrength
     )
         => BuildDebugInfo
-           (
-               straightPathIndex,
-               initiallyConsumed,
-               isExecutionStart,
-               scanPolyRef,
-               localPolyCount,
-               preferredPolyRef,
-               leftPolyRef,
-               rightPolyRef,
-               rescanned,
-               usedInteriorDirection,
-               dynamicPushWidth,
-               dynamicPushScale,
-               rawPushDistance,
-               0f,
-               leftClearance,
-               rightClearance,
-               straightBalanceSatisfied,
-               straightLowClearanceCase,
-               point,
-               scanOrigin,
-               adjustedPoint,
-               interiorDirection,
-               preferredDirection,
-               wallPressure,
-               samples,
-               minClearance,
-               maxClearance,
-               averageClearance,
-               cornerStrength
-           );
+        (
+            straightPathIndex,
+            initiallyConsumed,
+            isExecutionStart,
+            scanPolyRef,
+            localPolyCount,
+            preferredPolyRef,
+            leftPolyRef,
+            rightPolyRef,
+            rescanned,
+            usedInteriorDirection,
+            dynamicPushWidth,
+            dynamicPushScale,
+            rawPushDistance,
+            0f,
+            leftClearance,
+            rightClearance,
+            straightBalanceSatisfied,
+            straightLowClearanceCase,
+            point,
+            scanOrigin,
+            adjustedPoint,
+            interiorDirection,
+            preferredDirection,
+            wallPressure,
+            samples,
+            minClearance,
+            maxClearance,
+            averageClearance,
+            cornerStrength
+        );
 
-    private GroundPathCornerDebug BuildDebugInfo
+    private static GroundPathCornerDebug BuildDebugInfo
     (
         int                                        straightPathIndex,
         bool                                       initiallyConsumed,
@@ -1578,9 +1515,9 @@ internal sealed class PathPostprocessor
         float                                      cornerStrength
     )
     {
-        var interiorEndpoint  = scanOrigin + new Vector3(interiorDirection.X * WALL_SCAN_RADIUS, 0, interiorDirection.Y * WALL_SCAN_RADIUS);
+        var interiorEndpoint  = scanOrigin + new Vector3(interiorDirection.X  * WALL_SCAN_RADIUS, 0, interiorDirection.Y  * WALL_SCAN_RADIUS);
         var preferredEndpoint = scanOrigin + new Vector3(preferredDirection.X * WALL_SCAN_RADIUS, 0, preferredDirection.Y * WALL_SCAN_RADIUS);
-        var pressureEndpoint  = scanOrigin + new Vector3(wallPressure.X * WALL_SCAN_RADIUS, 0, wallPressure.Y * WALL_SCAN_RADIUS);
+        var pressureEndpoint  = scanOrigin + new Vector3(wallPressure.X       * WALL_SCAN_RADIUS, 0, wallPressure.Y       * WALL_SCAN_RADIUS);
         return new
         (
             straightPathIndex,
@@ -1643,19 +1580,18 @@ internal sealed class PathPostprocessor
         if (cornerStrength > WALL_STRAIGHT_PUSH_MAX_CORNER_STRENGTH || travelDirection.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
             return false;
 
-        var pathDirection = Vector2.Normalize(travelDirection);
-        var leftNormal    = new Vector2(-pathDirection.Y, pathDirection.X);
-        var rightNormal   = -leftNormal;
-        var debugSamples  = samples;
-        var preferredPolyRef = polyRef;
-        var leftPolyRef   = 0L;
-        var rightPolyRef  = 0L;
-        var rescanned     = false;
-        var straightScanOrigin = scanOrigin;
-        var leftClearance = MeasureRaycastClearance(localPolyRefs, polyRef, straightScanOrigin, leftNormal, WALL_SCAN_RADIUS, out leftPolyRef);
-        var rightClearance = MeasureRaycastClearance(localPolyRefs, polyRef, straightScanOrigin, rightNormal, WALL_SCAN_RADIUS, out rightPolyRef);
-        var lateralPreference = rightClearance >= leftClearance ? rightNormal : leftNormal;
+        var pathDirection        = Vector2.Normalize(travelDirection);
+        var leftNormal           = new Vector2(-pathDirection.Y, pathDirection.X);
+        var rightNormal          = -leftNormal;
+        var debugSamples         = samples;
+        var preferredPolyRef     = polyRef;
+        var rescanned            = false;
+        var straightScanOrigin   = scanOrigin;
+        var leftClearance        = MeasureRaycastClearance(localPolyRefs, polyRef, straightScanOrigin, leftNormal,  WALL_SCAN_RADIUS, out var leftPolyRef);
+        var rightClearance       = MeasureRaycastClearance(localPolyRefs, polyRef, straightScanOrigin, rightNormal, WALL_SCAN_RADIUS, out var rightPolyRef);
+        var lateralPreference    = rightClearance >= leftClearance ? rightNormal : leftNormal;
         var hasInteriorDirection = TryBuildInteriorDirection(localPolyRefs, point, straightScanOrigin, pathDirection, lateralPreference, out var interiorDirection);
+
         if (ShouldRescanNearStraight(leftClearance, rightClearance, averageClearance))
         {
             var pressureBias = BuildPathLateralDirection(wallPressure, pathDirection, lateralPreference);
@@ -1664,36 +1600,42 @@ internal sealed class PathPostprocessor
                                  : pressureBias.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ
                                      ? pressureBias
                                      : lateralPreference;
-            var rescannedOrigin = RecenterNearStraightScanOrigin(straightScanOrigin, pathDirection, rescanBias, averageClearance);
+            var rescannedOrigin  = RecenterNearStraightScanOrigin(straightScanOrigin, pathDirection, rescanBias, averageClearance);
             var rescannedPolyRef = ResolveScanPolyRef(localPolyRefs, polyRef, rescannedOrigin, WALL_SCAN_ORIGIN_REPROJECT_MAX_DISTANCE, out rescannedOrigin);
-            var rescannedLeftClearance  = MeasureRaycastClearance(localPolyRefs, rescannedPolyRef, rescannedOrigin, leftNormal, WALL_SCAN_RADIUS, out var rescannedLeftPolyRef);
-            var rescannedRightClearance = MeasureRaycastClearance(localPolyRefs, rescannedPolyRef, rescannedOrigin, rightNormal, WALL_SCAN_RADIUS, out var rescannedRightPolyRef);
+            var rescannedLeftClearance = MeasureRaycastClearance
+                (localPolyRefs, rescannedPolyRef, rescannedOrigin, leftNormal, WALL_SCAN_RADIUS, out var rescannedLeftPolyRef);
+            var rescannedRightClearance = MeasureRaycastClearance
+                (localPolyRefs, rescannedPolyRef, rescannedOrigin, rightNormal, WALL_SCAN_RADIUS, out var rescannedRightPolyRef);
+
             if (rescannedLeftClearance + rescannedRightClearance > leftClearance + rightClearance + WALL_STRAIGHT_RESCAN_IMPROVEMENT_THRESHOLD ||
-                MathF.Min(rescannedLeftClearance, rescannedRightClearance) > MathF.Min(leftClearance, rightClearance) + WALL_STRAIGHT_RESCAN_MIN_CLEARANCE_IMPROVEMENT_THRESHOLD)
+                MathF.Min
+                    (rescannedLeftClearance, rescannedRightClearance) >
+                MathF.Min(leftClearance, rightClearance) + WALL_STRAIGHT_RESCAN_MIN_CLEARANCE_IMPROVEMENT_THRESHOLD)
             {
-                straightScanOrigin = rescannedOrigin;
-                scanOrigin         = rescannedOrigin;
-                polyRef            = rescannedPolyRef;
-                leftClearance      = rescannedLeftClearance;
-                rightClearance     = rescannedRightClearance;
-                leftPolyRef        = rescannedLeftPolyRef;
-                rightPolyRef       = rescannedRightPolyRef;
-                lateralPreference  = rightClearance >= leftClearance ? rightNormal : leftNormal;
+                straightScanOrigin   = rescannedOrigin;
+                scanOrigin           = rescannedOrigin;
+                polyRef              = rescannedPolyRef;
+                leftClearance        = rescannedLeftClearance;
+                rightClearance       = rescannedRightClearance;
+                leftPolyRef          = rescannedLeftPolyRef;
+                rightPolyRef         = rescannedRightPolyRef;
+                lateralPreference    = rightClearance >= leftClearance ? rightNormal : leftNormal;
                 hasInteriorDirection = TryBuildInteriorDirection(localPolyRefs, point, straightScanOrigin, pathDirection, lateralPreference, out interiorDirection);
-                rescanned          = true;
+                rescanned            = true;
 
                 var rescannedSample = SampleScanClearances(localPolyRefs, polyRef, straightScanOrigin, hasInteriorDirection ? interiorDirection : lateralPreference);
-                minClearance        = rescannedSample.MinClearance;
-                maxClearance        = rescannedSample.MaxClearance;
-                averageClearance    = rescannedSample.AverageClearance;
-                preferredDirection  = rescannedSample.PreferredDirection;
-                preferredPolyRef    = rescannedSample.PreferredPolyRef;
-                wallPressure        = rescannedSample.WallPressure;
-                debugSamples        = rescannedSample.Samples;
+                minClearance       = rescannedSample.MinClearance;
+                maxClearance       = rescannedSample.MaxClearance;
+                averageClearance   = rescannedSample.AverageClearance;
+                preferredDirection = rescannedSample.PreferredDirection;
+                preferredPolyRef   = rescannedSample.PreferredPolyRef;
+                wallPressure       = rescannedSample.WallPressure;
+                debugSamples       = rescannedSample.Samples;
             }
         }
 
-        var sideTotal      = leftClearance + rightClearance;
+        var sideTotal = leftClearance + rightClearance;
+
         if (sideTotal <= WALL_SCAN_MIN_VECTOR_SQ)
         {
             debugInfo = BuildDebugInfo
@@ -1730,22 +1672,23 @@ internal sealed class PathPostprocessor
         var sideBalance         = rightClearance - leftClearance;
         var sideBalanceDistance = MathF.Abs(sideBalance);
         var sideBalanceRatio    = sideBalanceDistance / sideTotal;
-        var minBalanceDistance  = endpointAdjacent
-                                      ? WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE * WALL_ENDPOINT_ADJACENT_BALANCE_DISTANCE_SCALE
-                                      : WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE;
-        var minBalanceRatio     = endpointAdjacent
-                                      ? WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO * WALL_ENDPOINT_ADJACENT_BALANCE_RATIO_SCALE
-                                      : WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO;
-        var nearClearance = MathF.Min(leftClearance, rightClearance);
-        var farClearance  = MathF.Max(leftClearance, rightClearance);
-        var lateralDirection = sideBalance > 0 ? rightNormal : leftNormal;
-        var balancedEnough = sideBalanceDistance >= minBalanceDistance && sideBalanceRatio >= minBalanceRatio;
+        var minBalanceDistance = endpointAdjacent
+                                     ? WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE * WALL_ENDPOINT_ADJACENT_BALANCE_DISTANCE_SCALE
+                                     : WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE;
+        var minBalanceRatio = endpointAdjacent
+                                  ? WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO * WALL_ENDPOINT_ADJACENT_BALANCE_RATIO_SCALE
+                                  : WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO;
+        var nearClearance    = MathF.Min(leftClearance, rightClearance);
+        var farClearance     = MathF.Max(leftClearance, rightClearance);
+        var lateralDirection = sideBalance         > 0 ? rightNormal : leftNormal;
+        var balancedEnough   = sideBalanceDistance >= minBalanceDistance && sideBalanceRatio >= minBalanceRatio;
         var lowClearanceCase = false;
+
         if (!balancedEnough)
         {
             lowClearanceCase =
-                averageClearance < WALL_STRAIGHT_LOW_CLEARANCE_AVG_THRESHOLD &&
-                minClearance     < WALL_STRAIGHT_LOW_CLEARANCE_MIN_THRESHOLD &&
+                averageClearance             < WALL_STRAIGHT_LOW_CLEARANCE_AVG_THRESHOLD &&
+                minClearance                 < WALL_STRAIGHT_LOW_CLEARANCE_MIN_THRESHOLD &&
                 farClearance - nearClearance >= WALL_STRAIGHT_LOW_CLEARANCE_MIN_SIDE_GAP;
             if (!lowClearanceCase)
                 return false;
@@ -1773,8 +1716,8 @@ internal sealed class PathPostprocessor
         var rawPushDistance        = MathF.Max(sideBalanceDistance * 0.5f, WALL_PUSH_TARGET_CLEARANCE - nearClearance);
         if (!balancedEnough)
             rawPushDistance = MathF.Max(rawPushDistance * WALL_STRAIGHT_LOW_CLEARANCE_PUSH_SCALE, WALL_PUSH_TARGET_CLEARANCE - nearClearance);
-        var desiredPush         = rawPushDistance * dynamicPushScale;
-        var maxPushByClearance = farClearance * WALL_PUSH_CLEARANCE_FRACTION * dynamicPushScale;
+        var desiredPush        = rawPushDistance * dynamicPushScale;
+        var maxPushByClearance = farClearance    * WALL_PUSH_CLEARANCE_FRACTION * dynamicPushScale;
         var pushDistance       = MathF.Min(dynamicPushMaxDistance, MathF.Min(desiredPush, maxPushByClearance));
         if (pushDistance < WALL_PUSH_MIN_DISTANCE)
             return false;
@@ -1843,8 +1786,8 @@ internal sealed class PathPostprocessor
         if (wallPressure.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
             return false;
 
-        var pressureEscape = Vector2.Normalize(wallPressure);
-        var escapeDirection = preferredDirection + pressureEscape * 1.25f;
+        var pressureEscape    = Vector2.Normalize(wallPressure);
+        var escapeDirection   = preferredDirection + pressureEscape * 1.25f;
         var backwardComponent = Vector2.Dot(escapeDirection, -outgoing);
         if (backwardComponent > 0)
             escapeDirection += outgoing * backwardComponent;
@@ -1857,14 +1800,14 @@ internal sealed class PathPostprocessor
         if (clearanceAlongPush < WALL_PUSH_MIN_DISTANCE)
             return false;
 
-        var pressureMagnitude   = MathF.Max(0f, WALL_SCAN_RADIUS - averageClearance);
-        var lateralWidth        = maxClearance + minClearance;
-        var dynamicPushScale    = ComputeDynamicPushScale(lateralWidth);
+        var pressureMagnitude      = MathF.Max(0f, WALL_SCAN_RADIUS - averageClearance);
+        var lateralWidth           = maxClearance + minClearance;
+        var dynamicPushScale       = ComputeDynamicPushScale(lateralWidth);
         var dynamicPushMaxDistance = ComputeDynamicPushMaxDistance(lateralWidth);
-        var rawPushDistance     = MathF.Max(WALL_PUSH_TARGET_CLEARANCE - minClearance, pressureMagnitude * WALL_START_ADJACENT_PRESSURE_PUSH_SCALE);
-        var desiredPush         = rawPushDistance * dynamicPushScale;
-        var maxPushByClearance  = clearanceAlongPush * WALL_PUSH_CLEARANCE_FRACTION * dynamicPushScale;
-        var pushDistance        = MathF.Min(dynamicPushMaxDistance, MathF.Min(desiredPush, maxPushByClearance));
+        var rawPushDistance        = MathF.Max(WALL_PUSH_TARGET_CLEARANCE - minClearance, pressureMagnitude * WALL_START_ADJACENT_PRESSURE_PUSH_SCALE);
+        var desiredPush            = rawPushDistance    * dynamicPushScale;
+        var maxPushByClearance     = clearanceAlongPush * WALL_PUSH_CLEARANCE_FRACTION * dynamicPushScale;
+        var pushDistance           = MathF.Min(dynamicPushMaxDistance, MathF.Min(desiredPush, maxPushByClearance));
         if (pushDistance < WALL_PUSH_MIN_DISTANCE)
             return false;
 
@@ -1988,9 +1931,9 @@ internal sealed class PathPostprocessor
         if (segment.MovementMode != MovementMode.Flight)
             return (DeduplicateWaypoints(segment.Points), segment.FlightPathDebug);
 
-        var rawDebugLookup = segment.FlightPathDebug?.Waypoints.ToDictionary(d => d.PathIndex);
-        List<Vector3> deduplicated = [];
-        List<int> deduplicatedSourceIndices = [];
+        var           rawDebugLookup            = segment.FlightPathDebug?.Waypoints.ToDictionary(d => d.PathIndex);
+        List<Vector3> deduplicated              = [];
+        List<int>     deduplicatedSourceIndices = [];
 
         for (var i = 0; i < segment.Points.Count; ++i)
         {
@@ -2016,8 +1959,8 @@ internal sealed class PathPostprocessor
         if (points.Count <= 2)
             return ([.. points], RemapFlightDebugLookup(debugLookup, Enumerable.Range(0, points.Count)));
 
-        List<Vector3> simplified = [points[0]];
-        List<int> retainedIndices = [0];
+        List<Vector3> simplified      = [points[0]];
+        List<int>     retainedIndices = [0];
 
         for (var i = 1; i < points.Count - 1; i++)
         {
@@ -2045,8 +1988,8 @@ internal sealed class PathPostprocessor
         if (source == null || source.Count == 0)
             return null;
 
-        Dictionary<int, FlightPathWaypointDebug> remapped = [];
-        var nextPathIndex = 0;
+        Dictionary<int, FlightPathWaypointDebug> remapped      = [];
+        var                                      nextPathIndex = 0;
 
         foreach (var sourceIndex in retainedIndices)
         {
@@ -2111,8 +2054,8 @@ internal sealed class PathPostprocessor
 
     private static float HorizontalDistanceXZ(Vector3 left, Vector3 right)
     {
-        var dx = left.X - right.X;
-        var dz = left.Z - right.Z;
+        var dx = left.X           - right.X;
+        var dz = left.Z           - right.Z;
         return MathF.Sqrt(dx * dx + dz * dz);
     }
 
@@ -2128,4 +2071,72 @@ internal sealed class PathPostprocessor
 
         return result;
     }
+
+    #region 常量
+
+        private const float DUPLICATE_WAYPOINT_DISTANCE_SQ                           = 0.000001f;
+    private const float COLLINEAR_WAYPOINT_TOLERANCE                             = 0.01f;
+    private const int   MAX_SMOOTH_PATH_POINTS                                   = 102400;
+    private const int   WALL_SCAN_DIRECTION_COUNT                                = 24;
+    private const float WALL_SCAN_RADIUS                                         = 2.2f;
+    private const float WALL_PUSH_TARGET_CLEARANCE                               = 0.90f;
+    private const float WALL_PUSH_BASE_MAX_DISTANCE                              = 0.75f;
+    private const float WALL_PUSH_MIN_DISTANCE                                   = 0.02f;
+    private const float WALL_PUSH_MIN_ASYMMETRY                                  = 0.05f;
+    private const float WALL_PUSH_CLEARANCE_FRACTION                             = 0.65f;
+    private const float WALL_PUSH_DYNAMIC_WIDTH_NARROW                           = 0.70f;
+    private const float WALL_PUSH_DYNAMIC_WIDTH_WIDE                             = 2.00f;
+    private const float WALL_PUSH_DYNAMIC_SCALE_MIN                              = 0.30f;
+    private const float WALL_PUSH_DYNAMIC_SCALE_MAX                              = 1.90f;
+    private const float WALL_PUSH_DYNAMIC_MAX_DISTANCE_WIDE                      = 1.35f;
+    private const float WALL_SCAN_MIN_VECTOR_SQ                                  = 0.0001f;
+    private const float WALL_SCAN_ORIGIN_INSET_MIN                               = 0.05f;
+    private const float WALL_SCAN_ORIGIN_INSET_MAX                               = 0.45f;
+    private const float WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_SCALE                 = 0.12f;
+    private const float WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_MAX                   = 0.12f;
+    private const float WALL_STARTPOINT_SCAN_ORIGIN_SCALE                        = 0.45f;
+    private const float WALL_STARTPOINT_SCAN_ORIGIN_MIN                          = 0.35f;
+    private const float WALL_STARTPOINT_SCAN_ORIGIN_MAX                          = 0.90f;
+    private const float WALL_SCAN_ORIGIN_REPROJECT_MAX_DISTANCE                  = 0.85f;
+    private const float WALL_ADJUSTED_POINT_REPROJECT_MAX_DISTANCE               = 0.35f;
+    private const float WALL_ADJUSTED_POINT_DIRECT_ACCEPT_PROGRESS_EPSILON       = 0.02f;
+    private const float WALL_PUSH_FORWARD_REJECTION                              = 0.10f;
+    private const float WALL_PUSH_MIN_CORNER_STRENGTH                            = 0.05f;
+    private const float WALL_PUSH_MIN_WALL_PRESSURE                              = 0.03f;
+    private const float WALL_STRAIGHT_PUSH_MAX_CORNER_STRENGTH                   = 0.20f;
+    private const float WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE                  = 0.10f;
+    private const float WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO                     = 0.10f;
+    private const float WALL_STRAIGHT_LOW_CLEARANCE_AVG_THRESHOLD                = 0.55f;
+    private const float WALL_STRAIGHT_LOW_CLEARANCE_MIN_THRESHOLD                = 0.20f;
+    private const float WALL_STRAIGHT_LOW_CLEARANCE_PUSH_SCALE                   = 0.55f;
+    private const float WALL_STRAIGHT_LOW_CLEARANCE_MIN_SIDE_GAP                 = 0.04f;
+    private const float WALL_STRAIGHT_RESCAN_AVG_CLEARANCE_THRESHOLD             = 0.65f;
+    private const float WALL_STRAIGHT_RESCAN_FORWARD_DISTANCE                    = 0.16f;
+    private const float WALL_STRAIGHT_RESCAN_LATERAL_SCALE                       = 0.22f;
+    private const float WALL_STRAIGHT_RESCAN_LATERAL_MIN                         = 0.08f;
+    private const float WALL_STRAIGHT_RESCAN_LATERAL_MAX                         = 0.30f;
+    private const float WALL_STRAIGHT_RESCAN_IMPROVEMENT_THRESHOLD               = 0.04f;
+    private const float WALL_STRAIGHT_RESCAN_MIN_CLEARANCE_IMPROVEMENT_THRESHOLD = 0.03f;
+    private const float WALL_STRAIGHT_RESCAN_ONE_SIDE_COLLAPSE_THRESHOLD         = 0.05f;
+    private const float WALL_STRAIGHT_RESCAN_ONE_SIDE_OPEN_THRESHOLD             = 0.85f;
+    private const float WALL_STRAIGHT_RESCAN_EDGE_MIN_CLEARANCE_THRESHOLD        = 0.28f;
+    private const float WALL_STRAIGHT_RESCAN_EDGE_IMBALANCE_THRESHOLD            = 0.18f;
+    private const float WALL_STRAIGHT_INTERIOR_PUSH_SCALE                        = 0.90f;
+    private const float WALL_STRAIGHT_PREFERRED_PUSH_SCALE                       = 0.30f;
+    private const float WALL_STRAIGHT_PRESSURE_PUSH_SCALE                        = 0.20f;
+    private const float WALL_ENDPOINT_ADJACENT_BALANCE_DISTANCE_SCALE            = 0.60f;
+    private const float WALL_ENDPOINT_ADJACENT_BALANCE_RATIO_SCALE               = 0.75f;
+    private const float WALL_START_ADJACENT_PRESSURE_PUSH_SCALE                  = 0.90f;
+    private const float WALL_START_ADJACENT_RESCAN_AVG_CLEARANCE_THRESHOLD       = 0.55f;
+    private const float WALL_START_ADJACENT_RESCAN_FORWARD_SCALE                 = 0.60f;
+    private const float WALL_START_ADJACENT_RESCAN_FORWARD_MIN                   = 0.45f;
+    private const float WALL_START_ADJACENT_RESCAN_FORWARD_MAX                   = 1.25f;
+    private const float WALL_START_ADJACENT_RESCAN_LATERAL_SCALE                 = 0.45f;
+    private const float WALL_START_ADJACENT_RESCAN_LATERAL_MIN                   = 0.12f;
+    private const float WALL_START_ADJACENT_RESCAN_LATERAL_MAX                   = 0.55f;
+    private const float FLIGHT_DESCENT_PRESERVE_MIN_DROP                         = 1.00f;
+    private const float FLIGHT_DESCENT_PRESERVE_NEAR_VERTICAL_HORIZONTAL         = 1.20f;
+    private const float FLIGHT_DESCENT_PRESERVE_MAX_SLOPE                        = 0.90f;
+
+    #endregion
 }

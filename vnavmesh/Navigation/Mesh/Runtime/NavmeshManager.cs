@@ -156,9 +156,9 @@ public sealed class NavmeshManager : IDisposable
                                      Log($"执行算路。起点: {from:f3} 终点: {to:f3}");
 
                                      var plannerResult = flying
-                                                             ? Query.PlanVolumePathDetailed(from, to, true, combined.Token)
-                                                             : Query.PlanMeshPathDetailed(from, to, true, range, combined.Token);
-                                     return Query.Postprocess(plannerResult, true, combined.Token);
+                                                             ? Query.PlanVolumePathDetailed(from, to, combined.Token)
+                                                             : Query.PlanMeshPathDetailed(from, to, range, combined.Token);
+                                     return Query.Postprocess(plannerResult, combined.Token);
                                  },
                                  combined.Token
                              );
@@ -205,8 +205,8 @@ public sealed class NavmeshManager : IDisposable
                                      Log($"执行 straight path 查询。起点: {from:f3} 终点: {to:f3}");
 
                                      var plannerResult = flying
-                                                             ? Query.PlanVolumePathDetailed(from, to, true, combined.Token)
-                                                             : Query.PlanMeshPathDetailed(from, to, true, range, combined.Token);
+                                                             ? Query.PlanVolumePathDetailed(from, to, combined.Token)
+                                                             : Query.PlanMeshPathDetailed(from, to, range, combined.Token);
                                      return Query.PostprocessStraightPath(plannerResult, combined.Token, straightPathOptions);
                                  },
                                  combined.Token

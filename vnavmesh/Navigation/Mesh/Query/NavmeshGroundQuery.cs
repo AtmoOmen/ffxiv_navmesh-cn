@@ -37,7 +37,7 @@ internal sealed class NavmeshGroundQuery
             GeneratedJumpLinksAccepted  = query.NavmeshData.GeneratedEdgeJumpLinkCount
         };
 
-    internal PlannerResult PlanMeshPathDetailed(Vector3 from, Vector3 to, bool useRaycast, float range, CancellationToken cancel)
+    internal PlannerResult PlanMeshPathDetailed(Vector3 from, Vector3 to, float range, CancellationToken cancel)
     {
         Interlocked.Increment(ref groundQueryCount);
         var                    requestedStartRef   = query.FindNearestMeshPoly(from);
@@ -688,6 +688,7 @@ internal sealed class NavmeshGroundQuery
         var startPoint = ResolvePreferredOffMeshStartPoint(query, requestedStart, startCandidate, corridor, finalDestination);
         var pathLength = EstimatePathLength(query, startPoint.SystemToRecast(), finalDestination.SystemToRecast(), corridor);
         CountPathSemantics(query.GetAttachedNavMesh(), corridor, out var weightedLinkPenalty, out var offMeshTransitionCount, out var areaCrossingCount);
+        
         return new
         (
             startCandidate,
@@ -1079,20 +1080,13 @@ internal sealed class NavmeshGroundQuery
         _                                 => 3
     };
 
-    private static float HorizontalDistanceXZ(Vector3 left, Vector3 right)
-    {
-        var dx = left.X           - right.X;
-        var dz = left.Z           - right.Z;
-        return MathF.Sqrt(dx * dx + dz * dz);
-    }
-
+    
     private enum GroundQueryMode
     {
         AnyAngle,
         Classic
     }
-
-
+    
     private readonly record struct StartCandidateEvaluation
     (
         MeshPathCandidate? PathCandidate,
