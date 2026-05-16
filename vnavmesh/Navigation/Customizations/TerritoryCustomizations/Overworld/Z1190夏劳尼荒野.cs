@@ -10,7 +10,7 @@ public class Z1190夏劳尼荒野 : NavmeshCustomization
     public override int Version => 1;
 
     public Z1190夏劳尼荒野() =>
-        ApplyNormalPrecisionSettings();
+        ApplyAgentRadiusOneSettings();
 
     public override void CustomizeScene(SceneExtractor scene)
     {

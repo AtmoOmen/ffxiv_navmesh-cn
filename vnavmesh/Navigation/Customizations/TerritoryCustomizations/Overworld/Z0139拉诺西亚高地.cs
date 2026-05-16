@@ -15,7 +15,7 @@ public class Z0139拉诺西亚高地 : NavmeshCustomization
     public override int Version => 3;
 
     public Z0139拉诺西亚高地() =>
-        ApplyNormalPrecisionSettings();
+        ApplyAgentRadiusOneSettings();
 
     public override void CustomizeScene(SceneExtractor scene)
     {

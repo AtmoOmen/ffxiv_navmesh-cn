@@ -10,7 +10,7 @@ public class Z1187奥阔帕恰山 : NavmeshCustomization
     public override int Version => 2;
 
     public Z1187奥阔帕恰山() =>
-        ApplyNormalPrecisionSettings();
+        ApplyAgentRadiusOneSettings();
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {

@@ -10,7 +10,7 @@ internal class Z0613红玉海 : NavmeshCustomization
     public override int Version => 1;
 
     public Z0613红玉海() =>
-        ApplyNormalPrecisionSettings();
+        ApplyAgentRadiusOneSettings();
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {

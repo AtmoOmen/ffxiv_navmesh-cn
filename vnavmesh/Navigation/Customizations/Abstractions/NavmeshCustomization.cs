@@ -100,48 +100,12 @@ public class NavmeshCustomization
         profile.ApplyTo(settings);
         CustomizeBuildSettings(definition, settings);
     }
-
-    /// <summary>
-    ///     <see cref="NavmeshSettings.CellSize" /> = 0.125f <br />
-    ///     <see cref="NavmeshSettings.CellHeight" /> = 0.0625f <br />
-    ///     <see cref="NavmeshSettings.AgentRadius" /> = 0.3f <br />
-    ///     <see cref="NavmeshSettings.AgentHeight" /> = 0.9f <br />
-    /// </summary>
-    protected void ApplyExtremeHighPrecisionSettings()
-    {
-        Settings.CellSize    = 0.125f;
-        Settings.CellHeight  = 0.0625f;
-        Settings.AgentRadius = 0.3f;
-        Settings.AgentHeight = 0.9f;
-    }
     
     /// <summary>
-    ///     <see cref="NavmeshSettings.CellSize" /> = 0.25f <br />
-    ///     <see cref="NavmeshSettings.CellHeight" /> = 0.125f <br />
-    ///     <see cref="NavmeshSettings.AgentRadius" /> = 0.5f <br />
-    ///     <see cref="NavmeshSettings.AgentHeight" /> = 1.5f <br />
-    /// </summary>
-    protected void ApplyHighPrecisionSettings()
-    {
-        Settings.CellSize    = 0.25f;
-        Settings.CellHeight  = 0.125f;
-        Settings.AgentRadius = 0.5f;
-        Settings.AgentHeight = 1.5f;
-    }
-    
-    /// <summary>
-    ///     <see cref="NavmeshSettings.CellSize" /> = 0.5f <br />
-    ///     <see cref="NavmeshSettings.CellHeight" /> = 0.25f <br />
     ///     <see cref="NavmeshSettings.AgentRadius" /> = 1f <br />
-    ///     <see cref="NavmeshSettings.AgentHeight" /> = 3f <br />
     /// </summary>
-    protected void ApplyNormalPrecisionSettings()
-    {
-        Settings.CellSize    = 0.5f;
-        Settings.CellHeight  = 0.25f;
+    protected void ApplyAgentRadiusOneSettings() =>
         Settings.AgentRadius = 1f;
-        Settings.AgentHeight = 3f;
-    }
 
     #endregion
 

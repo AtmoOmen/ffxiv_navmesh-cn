@@ -12,7 +12,7 @@ internal class Z0155库尔札斯中央高地 : NavmeshCustomization
     public override int Version => 8;
 
     public Z0155库尔札斯中央高地() =>
-        ApplyNormalPrecisionSettings();
+        ApplyAgentRadiusOneSettings();
 
     public override void CustomizeScene(SceneExtractor scene)
     {

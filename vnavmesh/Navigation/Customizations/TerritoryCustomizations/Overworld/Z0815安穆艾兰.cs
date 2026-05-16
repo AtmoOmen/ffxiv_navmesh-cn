@@ -13,7 +13,7 @@ public class Z0815安穆艾兰 : NavmeshCustomization
 
     public Z0815安穆艾兰()
     {
-        ApplyNormalPrecisionSettings();
+        ApplyAgentRadiusOneSettings();
         Settings.Filtering -= NavmeshFilter.LedgeSpans;
     }
 

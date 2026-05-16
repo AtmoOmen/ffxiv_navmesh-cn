@@ -11,11 +11,11 @@ namespace vnavmesh.Navigation.Mesh.Build;
 public class NavmeshSettings
 {
     public float         CellSize         = 0.25f;
-    public float         CellHeight       = 0.125f;
-    public float         AgentHeight      = 1.5f;
+    public float         CellHeight       = 0.25f;
+    public float         AgentHeight      = 2f;
     public float         AgentRadius      = 0.5f;
-    public float         AgentMaxClimb    = 0.7f;
-    public float         AgentMaxSlopeDeg = 45f;
+    public float         AgentMaxClimb    = 0.5f;
+    public float         AgentMaxSlopeDeg = 55f;
     public NavmeshFilter Filtering        = NavmeshFilter.LowHangingObstacles | NavmeshFilter.LedgeSpans | NavmeshFilter.WalkableLowHeightSpans;
     public float         RegionMinSize    = 8;
     public float         RegionMergeSize  = 20;

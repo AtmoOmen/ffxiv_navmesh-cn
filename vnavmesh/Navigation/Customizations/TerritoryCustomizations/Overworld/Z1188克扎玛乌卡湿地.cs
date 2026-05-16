@@ -10,7 +10,7 @@ internal class Z1188克扎玛乌卡湿地 : NavmeshCustomization
     public override int Version => 1;
 
     public Z1188克扎玛乌卡湿地() =>
-        ApplyNormalPrecisionSettings();
+        ApplyAgentRadiusOneSettings();
 
     public override void CustomizeScene(SceneExtractor scene)
     {
