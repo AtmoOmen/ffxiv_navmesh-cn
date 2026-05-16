@@ -153,6 +153,9 @@ internal sealed class NavmeshGroundQuery
             Interlocked.Increment(ref endReplacementCount);
 
         return true;
+        
+        static string DescribeEndCandidate(MeshEndCandidate candidate) =>
+            $"{candidate.PolyRef:X}: requested = {(candidate.IsRequestedEnd ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，水平偏移 {MathF.Sqrt(candidate.HorizontalDistanceSq):f3}，高差 {candidate.VerticalDelta:f3}";
     }
 
     private List<MeshEndCandidate> CollectEndCandidates(Vector3 requestedTarget, long requestedEndRef)
@@ -222,10 +225,7 @@ internal sealed class NavmeshGroundQuery
 
         return left.PolyRef.CompareTo(right.PolyRef);
     }
-
-    private static string DescribeEndCandidate(MeshEndCandidate candidate) =>
-        $"{candidate.PolyRef:X}: requested = {(candidate.IsRequestedEnd ? 1 : 0)}，overPoly = {(candidate.IsPointOverPoly ? 1 : 0)}，水平偏移 {MathF.Sqrt(candidate.HorizontalDistanceSq):f3}，高差 {candidate.VerticalDelta:f3}";
-
+    
     private bool TryClosestPointOnPolyWithFlags(Vector3 point, long poly, out Vector3 closestPoint, out bool isOverPoly)
     {
         if (query.MeshQuery.ClosestPointOnPoly(poly, point.SystemToRecast(), out var closest, out isOverPoly).Succeeded())
