@@ -33,6 +33,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         ref bool                         lastPickEscapeDown,
         ref CustomizationEditorWorkspace workspace,
         ref Selection                    selection,
+        ref Selection?                   pendingLeftPanelFocusSelection,
         ref string                       statusText,
         DebugGameCollision               collision,
         DebugDrawer                      dd,
@@ -50,6 +51,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 HandleWorldSelection
                 (
                     ref selection,
+                    ref pendingLeftPanelFocusSelection,
                     ref lastWorldSelectMouseDown,
                     ref currentPickPoint,
                     ref statusText,
@@ -79,7 +81,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
 
         DrawPreviewInstancesOverlay(selection, previewBuilder, dd);
-        DrawInstancePatchOverlay(workspace, selection, previewBuilder, dd);
+        DrawInstancePatchOverlay(workspace, selection, previewBuilder, collision, dd);
 
         if (pendingPickPoint is { } pending)
         {
@@ -90,6 +92,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         foreach (var insertion in workspace.Draft.ColliderInsertions.Where(static x => x.Enabled))
         {
+            var bounds = CustomizationEditorSpatial.CreateBounds(insertion.Min, insertion.Max);
+            if (!collision.IsBoundsWithinEditorRenderDistance(bounds))
+                continue;
+
             var selected = selection is { Kind: SelectionKind.ColliderInsertion, Index: var selectedIndex and >= 0 } &&
                            selectedIndex < workspace.Draft.ColliderInsertions.Count                                  &&
                            ReferenceEquals(workspace.Draft.ColliderInsertions[selectedIndex], insertion);
@@ -105,10 +111,20 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
 
         foreach (var link in workspace.Draft.MeshLinks.Where(static x => x.Enabled))
+        {
+            if (!collision.IsSegmentWithinEditorRenderDistance(link.Start, link.End))
+                continue;
+
             dd.DrawWorldLine(link.Start, link.End, 0xFFAAFF00, 2);
+        }
 
         foreach (var link in workspace.Draft.OffMeshConnections.Where(static x => x.Enabled))
+        {
+            if (!collision.IsSegmentWithinEditorRenderDistance(link.Start, link.End))
+                continue;
+
             dd.DrawWorldArc(link.Start, link.End, 0.15f, 3f, 3f, 0xFFFF8800, 2);
+        }
     }
 
     private static void HandlePicking
@@ -182,6 +198,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
     private static void HandleWorldSelection
     (
         ref Selection                    selection,
+        ref Selection?                   pendingLeftPanelFocusSelection,
         ref bool                         lastWorldSelectMouseDown,
         ref Vector3?                     currentPickPoint,
         ref string                       statusText,
@@ -210,16 +227,23 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (!clicked)
             return;
 
-        if (TrySelectColliderInsertion(ref selection, rayOrigin, rayDirection, ref workspace, ref statusText))
+        if (TrySelectColliderInsertion(ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, ref statusText))
             return;
 
-        if (hasHit && TrySelectPreviewInstance(ref selection, hit.Object, previewBuilder, ref statusText))
+        if (hasHit && TrySelectPreviewInstance(ref selection, ref pendingLeftPanelFocusSelection, hit.Object, previewBuilder, ref statusText))
             return;
 
         statusText = "未选中可编辑对象";
     }
 
-    private static bool TrySelectPreviewInstance(ref Selection selection, Collider* collider, CustomizationPreviewBuilder previewBuilder, ref string statusText)
+    private static bool TrySelectPreviewInstance
+    (
+        ref Selection               selection,
+        ref Selection?              pendingLeftPanelFocusSelection,
+        Collider*                   collider,
+        CustomizationPreviewBuilder previewBuilder,
+        ref string                  statusText
+    )
     {
         if (collider == null || previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return false;
@@ -238,8 +262,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     continue;
                 }
 
-                selection  = new(SelectionKind.PreviewInstance, instanceIndex, Key: key);
-                statusText = $"已选预览实例: {key} #{instanceIndex}";
+                selection                      = new(SelectionKind.PreviewInstance, instanceIndex, Key: key);
+                pendingLeftPanelFocusSelection = selection;
+                statusText                     = $"已选预览实例: {key} #{instanceIndex}";
                 return true;
             }
         }
@@ -248,7 +273,14 @@ internal static unsafe class CustomizationEditorWorldOverlay
     }
 
     private static bool TrySelectColliderInsertion
-        (ref Selection selection, Vector3 rayOrigin, Vector3 rayDirection, ref CustomizationEditorWorkspace workspace, ref string statusText)
+    (
+        ref Selection                    selection,
+        ref Selection?                   pendingLeftPanelFocusSelection,
+        Vector3                          rayOrigin,
+        Vector3                          rayDirection,
+        ref CustomizationEditorWorkspace workspace,
+        ref string                       statusText
+    )
     {
         Selection? bestSelection = null;
         var        bestDistance  = float.MaxValue;
@@ -273,8 +305,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (bestSelection == null)
             return false;
 
-        selection  = bestSelection;
-        statusText = $"已选碰撞插入: {workspace.Draft.ColliderInsertions[selection.Index].Kind}";
+        selection                      = bestSelection;
+        pendingLeftPanelFocusSelection = selection;
+        statusText                     = $"已选碰撞插入: {workspace.Draft.ColliderInsertions[selection.Index].Kind}";
         return true;
     }
 
@@ -379,6 +412,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         CustomizationEditorWorkspace workspace,
         Selection                    selection,
         CustomizationPreviewBuilder  previewBuilder,
+        DebugGameCollision           collision,
         DebugDrawer                  dd
     )
     {
@@ -414,7 +448,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 case DraftSceneInstancePatchKind.Transform:
                     overlay.HasTransform = true;
                     overlay.Transform    = patch.WorldTransform.ToRuntime();
-                    overlay.Bounds       = CalculateTransformedBounds(mesh.LocalBounds, overlay.Transform);
+                    overlay.Bounds       = CustomizationEditorSpatial.CalculateTransformedBounds(mesh.LocalBounds, overlay.Transform);
                     break;
                 case DraftSceneInstancePatchKind.SetFlags:
                     overlay.HasFlags        = true;
@@ -428,6 +462,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         foreach (var overlay in overlays.Values)
         {
+            if (!collision.IsBoundsWithinEditorRenderDistance(overlay.Bounds))
+                continue;
+
             var color = overlay.IsSelected
                             ? 0xFFFFD94A
                             : overlay.HasRemove
@@ -439,7 +476,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             if (overlay.HasRemove)
             {
-                overlay.Bounds = CalculateTransformedBounds(overlay.Mesh.LocalBounds, overlay.Transform);
+                overlay.Bounds = CustomizationEditorSpatial.CalculateTransformedBounds(overlay.Mesh.LocalBounds, overlay.Transform);
             }
 
             dd.DrawWorldAABB(overlay.Bounds, color, thickness);
@@ -541,24 +578,6 @@ internal static unsafe class CustomizationEditorWorldOverlay
         instance = mesh.Instances[patch.InstanceIndex];
         return true;
     }
-
-    private static FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB CalculateTransformedBounds
-    (
-        FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB localBounds,
-        Matrix4x3 transform
-    )
-    {
-        var localCenter = (localBounds.Min + localBounds.Max) * 0.5f;
-        var localExtent = (localBounds.Max - localBounds.Min) * 0.5f;
-        var axisX       = transform.Row0;
-        var axisY       = transform.Row1;
-        var axisZ       = transform.Row2;
-        var center      = axisX      * localCenter.X + axisY      * localCenter.Y + axisZ      * localCenter.Z + transform.Row3;
-        var extent      = Abs(axisX) * localExtent.X + Abs(axisY) * localExtent.Y + Abs(axisZ) * localExtent.Z;
-        return new() { Min = center - extent, Max = center + extent };
-    }
-
-    private static Vector3 Abs(Vector3 value) => new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
 
     private static void DrawMeshPreview(SceneExtractor.MeshPart part, Matrix4x3 transform, DebugDrawer dd, uint color = 0xFF00FFAA, int thickness = 1)
     {

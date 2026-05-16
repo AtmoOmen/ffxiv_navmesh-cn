@@ -486,6 +486,7 @@ internal static class CustomizationEditorInspector
         var changed = false;
         changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
         changed |= CustomizationEditorWidgets.DrawString("Mesh Key", ref item.MeshKey);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
 
         if (ImGui.Button("删除这一项"))
         {
@@ -506,6 +507,7 @@ internal static class CustomizationEditorInspector
         var changed = false;
         changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
         changed |= CustomizationEditorWidgets.DrawString("Mesh Key", ref item.MeshKey);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
         changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
         changed |= CustomizationEditorWidgets.DrawInt("Instance Index", ref item.InstanceIndex);
         changed |= CustomizationEditorWidgets.DrawUInt64("Instance ID", ref item.InstanceId);
@@ -532,6 +534,7 @@ internal static class CustomizationEditorInspector
         var changed = false;
         changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
         changed |= CustomizationEditorWidgets.DrawString("Mesh Key", ref item.MeshKey);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
         changed |= CustomizationEditorWidgets.DrawInt("Part Index", ref item.PartIndex);
         changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
         changed |= CustomizationEditorWidgets.DrawInt("Vertex Index",    ref item.VertexIndex);
@@ -563,6 +566,7 @@ internal static class CustomizationEditorInspector
 
         var changed = false;
         changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
         changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
         changed |= CustomizationEditorWidgets.DrawBoundsEditor("几何", ref item.Min, ref item.Max);
         changed |= CustomizationEditorWidgets.DrawFlags("Set Flags",   ref item.ForceSetPrimFlags);
@@ -586,6 +590,7 @@ internal static class CustomizationEditorInspector
 
         var changed = false;
         changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
         changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
         changed |= CustomizationEditorWidgets.DrawVector3("Start", ref item.Start);
         changed |= CustomizationEditorWidgets.DrawVector3("End",   ref item.End);
@@ -609,6 +614,7 @@ internal static class CustomizationEditorInspector
 
         var changed = false;
         changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
         changed |= CustomizationEditorWidgets.DrawVector3("Start", ref item.Start);
         changed |= CustomizationEditorWidgets.DrawVector3("End",   ref item.End);
         changed |= CustomizationEditorWidgets.DrawFloat("Radius", ref item.Radius, 0.05f, 0.01f, 10f);

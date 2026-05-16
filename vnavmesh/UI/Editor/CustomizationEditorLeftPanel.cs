@@ -3,6 +3,7 @@ using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Navigation.Customizations.Editor;
 using vnavmesh.Navigation.Scene;
+using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Editor.Types;
 
@@ -20,45 +21,82 @@ internal static class CustomizationEditorLeftPanel
     (
         ref CustomizationEditorWorkspace workspace,
         ref Selection                    selection,
+        ref Selection?                   pendingFocusSelection,
         CustomizationPreviewBuilder      previewBuilder,
+        DebugGameCollision               collision,
         DebugDrawer                      dd,
         AddMeshRemovalDelegate           onAddMeshRemoval,
         AddInstancePatchDelegate         onAddInstancePatch,
         AddPartPatchDelegate             onAddPartPatch
     )
     {
+        var focusSelection = pendingFocusSelection;
+        var focusConsumed  = false;
+
         if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, Extractor: not null })
         {
+            if (ShouldAutoOpenPreviewRoot(focusSelection))
+                ImGui.SetNextItemOpen(true);
+
             if (ImGui.TreeNodeEx("预览对象", ImGuiTreeNodeFlags.DefaultOpen))
             {
                 ImGui.TextDisabled("左键选择, 右键加入草稿补丁");
-                DrawPreviewMeshes(workspace, previewBuilder.Extractor, ref selection, dd, onAddMeshRemoval, onAddInstancePatch, onAddPartPatch);
+                DrawPreviewMeshes
+                (
+                    workspace,
+                    previewBuilder.Extractor,
+                    ref selection,
+                    focusSelection,
+                    ref focusConsumed,
+                    collision,
+                    dd,
+                    onAddMeshRemoval,
+                    onAddInstancePatch,
+                    onAddPartPatch
+                );
                 ImGui.TreePop();
             }
         }
 
+        if (ShouldAutoOpenDraftRoot(focusSelection))
+            ImGui.SetNextItemOpen(true);
+
         if (ImGui.TreeNodeEx("草稿与设置", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            DrawDraftTree(ref selection, workspace);
+            DrawDraftTree(ref selection, focusSelection, ref focusConsumed, workspace, previewBuilder, collision);
             ImGui.TreePop();
         }
+
+        if (focusConsumed)
+            pendingFocusSelection = null;
     }
 
     private static void DrawPreviewMeshes
     (
         CustomizationEditorWorkspace workspace,
-        SceneExtractor           extractor,
-        ref Selection            selection,
-        DebugDrawer              dd,
-        AddMeshRemovalDelegate   onAddMeshRemoval,
-        AddInstancePatchDelegate onAddInstancePatch,
-        AddPartPatchDelegate     onAddPartPatch
+        SceneExtractor               extractor,
+        ref Selection                selection,
+        Selection?                   focusSelection,
+        ref bool                     focusConsumed,
+        DebugGameCollision           collision,
+        DebugDrawer                  dd,
+        AddMeshRemovalDelegate       onAddMeshRemoval,
+        AddInstancePatchDelegate     onAddInstancePatch,
+        AddPartPatchDelegate         onAddPartPatch
     )
     {
         foreach (var (key, mesh) in extractor.Meshes.OrderBy(static x => x.Key, StringComparer.Ordinal))
         {
-            var meshLabel    = $"{key} [{mesh.Parts.Count} parts, {mesh.Instances.Count} inst]";
+            var focusedPreviewInstance = TryGetFocusedPreviewInstance(focusSelection, key, out var focusedInstanceIndex);
+            var visibleInstanceIndices = GetVisiblePreviewInstanceIndices(mesh, collision, focusedPreviewInstance, focusedInstanceIndex);
+            if (visibleInstanceIndices.Count == 0)
+                continue;
+
+            var meshLabel    = $"{key} [{mesh.Parts.Count} parts, {visibleInstanceIndices.Count}/{mesh.Instances.Count} inst]";
             var meshSelected = selection is { Kind: SelectionKind.PreviewMesh, Key: var meshKey } && meshKey == key;
+            if (focusedPreviewInstance)
+                ImGui.SetNextItemOpen(true);
+
             var meshOpen     = ImGui.TreeNodeEx(meshLabel, meshSelected ? ImGuiTreeNodeFlags.Selected : ImGuiTreeNodeFlags.None);
 
             if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
@@ -71,8 +109,8 @@ internal static class CustomizationEditorLeftPanel
                 ImGui.EndPopup();
             }
 
-            if (ImGui.IsItemHovered())
-                dd.DrawWorldAABB(mesh.LocalBounds, 0xFF00FFFF);
+            if (ImGui.IsItemHovered() && TryGetVisibleMeshBounds(mesh, visibleInstanceIndices, out var visibleMeshBounds))
+                dd.DrawWorldAABB(visibleMeshBounds, 0xFF00FFFF);
 
             if (!meshOpen)
                 continue;
@@ -103,8 +141,8 @@ internal static class CustomizationEditorLeftPanel
                         ImGui.EndPopup();
                     }
 
-                    if (ImGui.IsItemHovered() && mesh.Instances.Count > 0)
-                        DrawMeshPreview(part, mesh.Instances[0].WorldTransform, dd);
+                    if (ImGui.IsItemHovered() && visibleInstanceIndices.Count > 0)
+                        DrawMeshPreview(part, mesh.Instances[visibleInstanceIndices[0]].WorldTransform, dd);
 
                     if (partOpen)
                     {
@@ -185,12 +223,14 @@ internal static class CustomizationEditorLeftPanel
                 ImGui.TreePop();
             }
 
+            if (focusedPreviewInstance)
+                ImGui.SetNextItemOpen(true);
+
             if (ImGui.TreeNodeEx($"实例##inst_{key}"))
             {
-                var instanceIndex = 0;
-
-                foreach (var instance in mesh.Instances)
+                foreach (var instanceIndex in visibleInstanceIndices)
                 {
+                    var instance = mesh.Instances[instanceIndex];
                     var patchTag = BuildInstancePatchTag(workspace, key, instanceIndex, instance.Id);
                     var instanceLabel = $"[{instanceIndex}] {instance.Id:X} {instance.WorldBounds.Min:f1}-{instance.WorldBounds.Max:f1}{patchTag}";
                     var instanceSelected = selection is { Kind: SelectionKind.PreviewInstance, Key: var instanceKey, Index: var selectedIndex } &&
@@ -216,7 +256,11 @@ internal static class CustomizationEditorLeftPanel
                     if (ImGui.IsItemHovered())
                         dd.DrawWorldAABB(instance.WorldBounds, 0xFFFFAA00);
 
-                    ++instanceIndex;
+                    if (focusedPreviewInstance && instanceIndex == focusedInstanceIndex && !focusConsumed)
+                    {
+                        ImGui.SetScrollHereY();
+                        focusConsumed = true;
+                    }
                 }
 
                 ImGui.TreePop();
@@ -266,7 +310,15 @@ internal static class CustomizationEditorLeftPanel
         );
     }
 
-    private static void DrawDraftTree(ref Selection selection, CustomizationEditorWorkspace workspace)
+    private static void DrawDraftTree
+    (
+        ref Selection               selection,
+        Selection?                  focusSelection,
+        ref bool                    focusConsumed,
+        CustomizationEditorWorkspace workspace,
+        CustomizationPreviewBuilder previewBuilder,
+        DebugGameCollision          collision
+    )
     {
         if (ImGui.Selectable("工作区", selection.Kind == SelectionKind.Workspace))
             selection = new(SelectionKind.Workspace);
@@ -279,67 +331,403 @@ internal static class CustomizationEditorLeftPanel
         if (ImGui.Selectable("诊断", selection.Kind == SelectionKind.Diagnostics))
             selection = new(SelectionKind.Diagnostics);
 
+        if (ShouldAutoOpenGeometrySection(focusSelection))
+            ImGui.SetNextItemOpen(true);
+
         if (ImGui.TreeNodeEx("场景几何", ImGuiTreeNodeFlags.DefaultOpen))
         {
             DrawDraftItems
             (
                 "mesh 删除",
-                workspace.Draft.MeshRemovals,
+                BuildMeshRemovalEntries(workspace, previewBuilder, collision),
                 SelectionKind.MeshRemoval,
                 ref selection,
-                static item => $"{item.MeshKey} {(item.Enabled ? "" : "(off)")}"
+                focusSelection,
+                ref focusConsumed
             );
             DrawDraftItems
             (
                 "实例补丁",
-                workspace.Draft.InstancePatches,
+                BuildInstancePatchEntries(workspace, previewBuilder, collision),
                 SelectionKind.InstancePatch,
                 ref selection,
-                static item => $"{item.MeshKey} #{item.InstanceIndex} {item.Kind}"
+                focusSelection,
+                ref focusConsumed
             );
             DrawDraftItems
-                ("顶点 / 三角补丁", workspace.Draft.PartPatches, SelectionKind.PartPatch, ref selection, static item => $"{item.MeshKey} p{item.PartIndex} {item.Kind}");
+            (
+                "顶点 / 三角补丁",
+                BuildPartPatchEntries(workspace, previewBuilder, collision),
+                SelectionKind.PartPatch,
+                ref selection,
+                focusSelection,
+                ref focusConsumed
+            );
             DrawDraftItems
             (
                 "碰撞插入",
-                workspace.Draft.ColliderInsertions,
+                BuildColliderInsertionEntries(workspace, collision),
                 SelectionKind.ColliderInsertion,
                 ref selection,
-                static item => $"{item.Kind} {item.Min:f1} -> {item.Max:f1}"
+                focusSelection,
+                ref focusConsumed
             );
             ImGui.TreePop();
         }
+
+        if (ShouldAutoOpenConnectivitySection(focusSelection))
+            ImGui.SetNextItemOpen(true);
 
         if (ImGui.TreeNodeEx("连通规则", ImGuiTreeNodeFlags.DefaultOpen))
         {
             DrawDraftItems
-                ("mesh link", workspace.Draft.MeshLinks, SelectionKind.MeshLink, ref selection, static item => $"{item.Kind} {item.Start:f1} -> {item.End:f1}");
+            (
+                "mesh link",
+                BuildMeshLinkEntries(workspace, collision),
+                SelectionKind.MeshLink,
+                ref selection,
+                focusSelection,
+                ref focusConsumed
+            );
             DrawDraftItems
             (
                 "off-mesh 连接",
-                workspace.Draft.OffMeshConnections,
+                BuildOffMeshConnectionEntries(workspace, collision),
                 SelectionKind.OffMeshConnection,
                 ref selection,
-                static item => $"{item.Kind} {item.Start:f1} -> {item.End:f1}"
+                focusSelection,
+                ref focusConsumed
             );
             ImGui.TreePop();
         }
     }
 
-    private static void DrawDraftItems<T>(string title, List<T> items, SelectionKind kind, ref Selection selection, Func<T, string> itemLabel)
+    private static void DrawDraftItems
+    (
+        string                   title,
+        List<DraftListEntry>     items,
+        SelectionKind            kind,
+        ref Selection            selection,
+        Selection?               focusSelection,
+        ref bool                 focusConsumed
+    )
     {
         if (!ImGui.TreeNodeEx($"{title} ({items.Count})", ImGuiTreeNodeFlags.DefaultOpen))
             return;
 
-        for (var i = 0; i < items.Count; ++i)
+        foreach (var item in items)
         {
-            var label = $"[{i}] {itemLabel(items[i])}";
-            if (ImGui.Selectable(label, selection.Kind == kind && selection.Index == i))
-                selection = new(kind, i);
+            if (!item.IsInRange)
+                ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+
+            var label = $"[{item.Index}] {item.Label}";
+            if (ImGui.Selectable(label, selection.Kind == kind && selection.Index == item.Index))
+                selection = new(kind, item.Index);
+
+            if (!item.IsInRange)
+                ImGui.PopStyleColor();
+
+            if (!focusConsumed && focusSelection is { Kind: var focusKind, Index: var focusIndex } && focusKind == kind && focusIndex == item.Index)
+            {
+                ImGui.SetScrollHereY();
+                focusConsumed = true;
+            }
         }
 
         ImGui.TreePop();
     }
+
+    private static List<DraftListEntry> BuildMeshRemovalEntries
+        (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
+    {
+        List<DraftListEntry> entries = [];
+        for (var i = 0; i < workspace.Draft.MeshRemovals.Count; ++i)
+        {
+            var item = workspace.Draft.MeshRemovals[i];
+            var info = DescribeMeshRemoval(previewBuilder, collision, item);
+            entries.Add(CreateDraftEntry(i, FormatMeshRemovalLabel(item), item.Note, info));
+        }
+
+        SortDraftEntries(entries);
+        return entries;
+    }
+
+    private static List<DraftListEntry> BuildInstancePatchEntries
+        (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
+    {
+        List<DraftListEntry> entries = [];
+        for (var i = 0; i < workspace.Draft.InstancePatches.Count; ++i)
+        {
+            var item = workspace.Draft.InstancePatches[i];
+            var info = DescribeInstancePatch(previewBuilder, collision, item);
+            entries.Add(CreateDraftEntry(i, FormatInstancePatchLabel(item), item.Note, info));
+        }
+
+        SortDraftEntries(entries);
+        return entries;
+    }
+
+    private static List<DraftListEntry> BuildPartPatchEntries
+        (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
+    {
+        List<DraftListEntry> entries = [];
+        for (var i = 0; i < workspace.Draft.PartPatches.Count; ++i)
+        {
+            var item = workspace.Draft.PartPatches[i];
+            var info = DescribePartPatch(previewBuilder, collision, item);
+            entries.Add(CreateDraftEntry(i, $"{item.MeshKey} p{item.PartIndex} {item.Kind}", item.Note, info));
+        }
+
+        SortDraftEntries(entries);
+        return entries;
+    }
+
+    private static List<DraftListEntry> BuildColliderInsertionEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
+    {
+        List<DraftListEntry> entries = [];
+        for (var i = 0; i < workspace.Draft.ColliderInsertions.Count; ++i)
+        {
+            var item  = workspace.Draft.ColliderInsertions[i];
+            var info  = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Min, item.Max));
+            entries.Add(CreateDraftEntry(i, $"{item.Kind} {item.Min:f1} -> {item.Max:f1}", item.Note, info));
+        }
+
+        SortDraftEntries(entries);
+        return entries;
+    }
+
+    private static List<DraftListEntry> BuildMeshLinkEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
+    {
+        List<DraftListEntry> entries = [];
+        for (var i = 0; i < workspace.Draft.MeshLinks.Count; ++i)
+        {
+            var item = workspace.Draft.MeshLinks[i];
+            var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Start, item.End));
+            entries.Add(CreateDraftEntry(i, $"{item.Kind} {item.Start:f1} -> {item.End:f1}", item.Note, info));
+        }
+
+        SortDraftEntries(entries);
+        return entries;
+    }
+
+    private static List<DraftListEntry> BuildOffMeshConnectionEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
+    {
+        List<DraftListEntry> entries = [];
+        for (var i = 0; i < workspace.Draft.OffMeshConnections.Count; ++i)
+        {
+            var item = workspace.Draft.OffMeshConnections[i];
+            var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Start, item.End));
+            entries.Add(CreateDraftEntry(i, $"{item.Kind} {item.Start:f1} -> {item.End:f1}", item.Note, info));
+        }
+
+        SortDraftEntries(entries);
+        return entries;
+    }
+
+    private static DraftDistanceInfo DescribeMeshRemoval
+        (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftSceneMeshRemoval item)
+    {
+        if (previewBuilder.Extractor == null ||
+            !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
+            !TryGetNearestInstanceBounds(mesh, collision, out var bounds))
+        {
+            return DraftDistanceInfo.Unknown;
+        }
+
+        return DescribeBounds(collision, bounds);
+    }
+
+    private static DraftDistanceInfo DescribeInstancePatch
+        (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftSceneInstancePatch item)
+    {
+        if (previewBuilder.Extractor == null ||
+            !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
+            !TryGetInstancePatchBounds(mesh, item, out var bounds))
+        {
+            return DraftDistanceInfo.Unknown;
+        }
+
+        return DescribeBounds(collision, bounds);
+    }
+
+    private static DraftDistanceInfo DescribePartPatch
+        (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftScenePartPatch item)
+    {
+        if (previewBuilder.Extractor == null ||
+            !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
+            !TryGetNearestInstanceBounds(mesh, collision, out var bounds))
+        {
+            return DraftDistanceInfo.Unknown;
+        }
+
+        return DescribeBounds(collision, bounds);
+    }
+
+    private static DraftDistanceInfo DescribeBounds(DebugGameCollision collision, AABB bounds) =>
+        collision.HasRenderDistanceReferencePosition
+            ? new(collision.GetHorizontalDistanceToBounds(bounds), collision.IsBoundsWithinEditorRenderDistance(bounds))
+            : DraftDistanceInfo.Unknown;
+
+    private static DraftListEntry CreateDraftEntry(int index, string label, string note, DraftDistanceInfo info) =>
+        new(index, AppendNote(label, note), info.Distance, info.IsInRange);
+
+    private static void SortDraftEntries(List<DraftListEntry> entries) =>
+        entries.Sort
+        (
+            static (a, b) =>
+            {
+                if (a.Distance == null && b.Distance == null)
+                    return a.Index.CompareTo(b.Index);
+                if (a.Distance == null)
+                    return 1;
+                if (b.Distance == null)
+                    return -1;
+
+                var cmp = a.Distance.Value.CompareTo(b.Distance.Value);
+                return cmp != 0 ? cmp : a.Index.CompareTo(b.Index);
+            }
+        );
+
+    private static string AppendNote(string label, string note) =>
+        string.IsNullOrWhiteSpace(note) ? label : $"{label} - {note.Trim()}";
+
+    private static string FormatMeshRemovalLabel(DraftSceneMeshRemoval item) =>
+        item.Enabled ? item.MeshKey : $"{item.MeshKey} (off)";
+
+    private static string FormatInstancePatchLabel(DraftSceneInstancePatch item) =>
+        item.Kind == DraftSceneInstancePatchKind.ClearInstances
+            ? $"{item.MeshKey} {item.Kind}"
+            : $"{item.MeshKey} #{item.InstanceIndex} {item.Kind}";
+
+    private static bool TryGetNearestInstanceBounds(SceneExtractor.Mesh mesh, DebugGameCollision collision, out AABB bounds)
+    {
+        if (mesh.Instances.Count == 0)
+        {
+            bounds = default;
+            return false;
+        }
+
+        bounds = mesh.Instances[0].WorldBounds;
+        if (!collision.HasRenderDistanceReferencePosition)
+            return true;
+
+        var bestDistance = collision.GetHorizontalDistanceToBounds(bounds);
+        for (var i = 1; i < mesh.Instances.Count; ++i)
+        {
+            var candidate = mesh.Instances[i].WorldBounds;
+            var distance  = collision.GetHorizontalDistanceToBounds(candidate);
+            if (distance >= bestDistance)
+                continue;
+
+            bestDistance = distance;
+            bounds       = candidate;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetInstancePatchBounds(SceneExtractor.Mesh mesh, DraftSceneInstancePatch patch, out AABB bounds)
+    {
+        if (patch.Kind == DraftSceneInstancePatchKind.ClearInstances)
+        {
+            bounds = default;
+            return CustomizationEditorSpatial.TryUnionBounds(mesh.Instances.Select(static x => x.WorldBounds), out bounds);
+        }
+
+        if (patch.Kind == DraftSceneInstancePatchKind.Transform)
+        {
+            bounds = CustomizationEditorSpatial.CalculateTransformedBounds(mesh.LocalBounds, patch.WorldTransform.ToRuntime());
+            return true;
+        }
+
+        if (TryResolveInstance(mesh, patch, out var instance))
+        {
+            bounds = instance.WorldBounds;
+            return true;
+        }
+
+        bounds = default;
+        return false;
+    }
+
+    private static bool TryResolveInstance(SceneExtractor.Mesh mesh, DraftSceneInstancePatch patch, out SceneExtractor.MeshInstance instance)
+    {
+        if (patch.InstanceId != 0)
+        {
+            instance = mesh.Instances.FirstOrDefault(x => x.Id == patch.InstanceId)!;
+            if (instance != null)
+                return true;
+        }
+
+        if (patch.InstanceIndex >= 0 && patch.InstanceIndex < mesh.Instances.Count)
+        {
+            instance = mesh.Instances[patch.InstanceIndex];
+            return true;
+        }
+
+        instance = null!;
+        return false;
+    }
+
+    private static List<int> GetVisiblePreviewInstanceIndices(SceneExtractor.Mesh mesh, DebugGameCollision collision, bool forceFocused, int focusedInstanceIndex)
+    {
+        List<int> visibleIndices = [];
+
+        for (var i = 0; i < mesh.Instances.Count; ++i)
+        {
+            var visible = collision.IsBoundsWithinEditorRenderDistance(mesh.Instances[i].WorldBounds);
+            if (visible || forceFocused && i == focusedInstanceIndex)
+                visibleIndices.Add(i);
+        }
+
+        return visibleIndices;
+    }
+
+    private static bool TryGetVisibleMeshBounds(SceneExtractor.Mesh mesh, List<int> visibleInstanceIndices, out AABB bounds)
+    {
+        if (visibleInstanceIndices.Count == 0)
+        {
+            bounds = default;
+            return false;
+        }
+
+        bounds = mesh.Instances[visibleInstanceIndices[0]].WorldBounds;
+        for (var i = 1; i < visibleInstanceIndices.Count; ++i)
+        {
+            var candidate = mesh.Instances[visibleInstanceIndices[i]].WorldBounds;
+            bounds.Min = Vector3.Min(bounds.Min, candidate.Min);
+            bounds.Max = Vector3.Max(bounds.Max, candidate.Max);
+        }
+
+        return true;
+    }
+
+    private static bool TryGetFocusedPreviewInstance(Selection? focusSelection, string meshKey, out int focusedInstanceIndex)
+    {
+        if (focusSelection is { Kind: SelectionKind.PreviewInstance, Key: not null, Index: >= 0 } && focusSelection.Key == meshKey)
+        {
+            focusedInstanceIndex = focusSelection.Index;
+            return true;
+        }
+
+        focusedInstanceIndex = -1;
+        return false;
+    }
+
+    private static bool ShouldAutoOpenPreviewRoot(Selection? focusSelection) =>
+        focusSelection?.Kind == SelectionKind.PreviewInstance;
+
+    private static bool ShouldAutoOpenDraftRoot(Selection? focusSelection) =>
+        focusSelection != null && IsDraftSelectionKind(focusSelection.Kind);
+
+    private static bool ShouldAutoOpenGeometrySection(Selection? focusSelection) =>
+        focusSelection is { Kind: SelectionKind.MeshRemoval or SelectionKind.InstancePatch or SelectionKind.PartPatch or SelectionKind.ColliderInsertion };
+
+    private static bool ShouldAutoOpenConnectivitySection(Selection? focusSelection) =>
+        focusSelection is { Kind: SelectionKind.MeshLink or SelectionKind.OffMeshConnection };
+
+    private static bool IsDraftSelectionKind(SelectionKind kind) =>
+        kind is SelectionKind.MeshRemoval or SelectionKind.InstancePatch or SelectionKind.PartPatch or SelectionKind.ColliderInsertion or SelectionKind.MeshLink or SelectionKind.OffMeshConnection;
 
     private static string BuildInstancePatchTag(CustomizationEditorWorkspace workspace, string meshKey, int instanceIndex, ulong instanceId)
     {
@@ -376,5 +764,12 @@ internal static class CustomizationEditorLeftPanel
         }
 
         return tags.Count == 0 ? string.Empty : $" [{string.Join(", ", tags)}]";
+    }
+
+    private readonly record struct DraftListEntry(int Index, string Label, float? Distance, bool IsInRange);
+
+    private readonly record struct DraftDistanceInfo(float? Distance, bool IsInRange)
+    {
+        public static DraftDistanceInfo Unknown => new(null, true);
     }
 }

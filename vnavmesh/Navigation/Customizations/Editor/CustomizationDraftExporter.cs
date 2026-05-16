@@ -284,12 +284,17 @@ internal static class CustomizationDraftExporter
         Line(sb, 1, "{");
 
         foreach (var removal in draft.MeshRemovals.Where(static x => x.Enabled && !string.IsNullOrWhiteSpace(x.MeshKey)))
+        {
+            AppendNoteComment(sb, 2, removal.Note);
             Line(sb, 2, $"scene.Meshes.Remove(\"{Escape(removal.MeshKey)}\");");
+        }
 
         AppendMeshPatchGroups(sb, draft);
 
         foreach (var insertion in draft.ColliderInsertions.Where(static x => x.Enabled))
+        {
             AppendColliderInsertion(sb, insertion);
+        }
 
         Line(sb, 1, "}");
         Line(sb);
@@ -375,6 +380,7 @@ internal static class CustomizationDraftExporter
             var kind  = FormatEnum(link.Kind, "NavmeshOffMeshKind");
             var traversalProfile = FormatTraversalProfile(link.TraversalProfile);
 
+            AppendNoteComment(sb, 2, link.Note);
             Line(sb, 2, "config.AddOffMeshConnection");
             Line(sb, 2, "(");
             Line(sb, 3, $"{FormatVector(link.Start)},");
@@ -412,6 +418,7 @@ internal static class CustomizationDraftExporter
                 _                            => "LinkPoints"
             };
             var traversalProfile = FormatTraversalProfile(link.TraversalProfile);
+            AppendNoteComment(sb, 2, link.Note);
             Line
             (
                 sb,
@@ -426,6 +433,7 @@ internal static class CustomizationDraftExporter
 
     private static void AppendPartPatch(StringBuilder sb, DraftScenePartPatch patch, string meshVariable, int indent)
     {
+        AppendNoteComment(sb, indent, patch.Note);
         Line(sb, indent,     $"if ({patch.PartIndex} < {meshVariable}.Parts.Count)");
         Line(sb, indent,     "{");
         Line(sb, indent + 1, $"var part = {meshVariable}.Parts[{patch.PartIndex}];");
@@ -466,6 +474,7 @@ internal static class CustomizationDraftExporter
 
     private static void AppendInstancePatch(StringBuilder sb, DraftSceneInstancePatch patch, string meshVariable, int patchIndex, int indent)
     {
+        AppendNoteComment(sb, indent, patch.Note);
         switch (patch.Kind)
         {
             case DraftSceneInstancePatchKind.ClearInstances:
@@ -505,6 +514,7 @@ internal static class CustomizationDraftExporter
         var forceSetFlags   = FormatPrimitiveFlags(insertion.ForceSetPrimFlags);
         var forceClearFlags = FormatPrimitiveFlags(insertion.ForceClearPrimFlags);
 
+        AppendNoteComment(sb, 2, insertion.Note);
         Line(sb, 2, "scene." + call);
         Line(sb, 2, "(");
         Line(sb, 3, "new AABB");
@@ -740,6 +750,21 @@ internal static class CustomizationDraftExporter
 
     private static string NormalizeLineEndings(string value) =>
         value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
+
+    private static void AppendNoteComment(StringBuilder sb, int indent, string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note))
+            return;
+
+        foreach (var line in NormalizeLineEndings(note).Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0)
+                continue;
+
+            Line(sb, indent, $"// {trimmed}");
+        }
+    }
 
     private static void Line(StringBuilder sb, int indent = 0, string text = "")
     {

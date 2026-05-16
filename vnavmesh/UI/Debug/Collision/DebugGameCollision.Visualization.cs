@@ -12,6 +12,38 @@ namespace vnavmesh.UI.Debug.Collision;
 
 public unsafe partial class DebugGameCollision
 {
+    public bool HasRenderDistanceReferencePosition =>
+        Service.ObjectTable.LocalPlayer != null;
+
+    public bool IsBoundsWithinEditorRenderDistance(AABB bounds)
+    {
+        var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
+        return playerPosition == null || IsBoundsWithinRenderDistance(bounds.Min, bounds.Max, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance);
+    }
+
+    public bool IsSegmentWithinEditorRenderDistance(Vector3 start, Vector3 end)
+    {
+        var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
+        if (playerPosition == null)
+            return true;
+
+        var bounds = new AABB { Min = Vector3.Min(start, end), Max = Vector3.Max(start, end) };
+        return IsBoundsWithinRenderDistance(bounds.Min, bounds.Max, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance);
+    }
+
+    public float GetHorizontalDistanceToBounds(AABB bounds)
+    {
+        var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
+        if (playerPosition == null)
+            return 0f;
+
+        var closestX = Math.Clamp(playerPosition.Value.X, bounds.Min.X, bounds.Max.X);
+        var closestZ = Math.Clamp(playerPosition.Value.Z, bounds.Min.Z, bounds.Max.Z);
+        var dx       = playerPosition.Value.X - closestX;
+        var dz       = playerPosition.Value.Z - closestZ;
+        return MathF.Sqrt(dx * dx + dz * dz);
+    }
+
     public void VisualizeCollider(Collider* coll, BitMask filterId, BitMask filterMask)
     {
         if (coll == null)

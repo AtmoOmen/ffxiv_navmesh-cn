@@ -37,6 +37,7 @@ public sealed class DraftSceneMeshRemoval
 {
     public bool   Enabled = true;
     public string MeshKey = "";
+    public string Note    = "";
 }
 
 public sealed class DraftSceneInstancePatch
@@ -44,6 +45,7 @@ public sealed class DraftSceneInstancePatch
     public bool                       Enabled = true;
     public DraftSceneInstancePatchKind Kind;
     public string                     MeshKey = "";
+    public string                     Note    = "";
     public ulong                      InstanceId;
     public int                        InstanceIndex = -1;
     public DraftMatrix4x3             WorldTransform = DraftMatrix4x3.Identity;
@@ -56,6 +58,7 @@ public sealed class DraftScenePartPatch
     public bool                      Enabled = true;
     public DraftScenePartPatchKind   Kind;
     public string                    MeshKey = "";
+    public string                    Note    = "";
     public int                       PartIndex;
     public int                       VertexIndex;
     public int                       PrimitiveIndex;
@@ -73,6 +76,7 @@ public sealed class DraftSceneColliderInsertion
 {
     public bool                         Enabled = true;
     public DraftSceneColliderInsertionKind Kind;
+    public string                       Note    = "";
     public Vector3                      Min;
     public Vector3                      Max;
     public SceneExtractor.PrimitiveFlags ForceSetPrimFlags;
@@ -83,6 +87,7 @@ public sealed class DraftMeshLinkPatch
 {
     public bool                               Enabled = true;
     public DraftMeshLinkKind                  Kind;
+    public string                             Note    = "";
     public Vector3                            Start;
     public Vector3                            End;
     public bool                               Bidirectional;
@@ -92,6 +97,7 @@ public sealed class DraftMeshLinkPatch
 public sealed class DraftOffMeshConnectionPatch
 {
     public bool                            Enabled = true;
+    public string                          Note    = "";
     public Vector3                         Start;
     public Vector3                         End;
     public float                           Radius = 0.5f;

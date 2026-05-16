@@ -52,6 +52,7 @@ internal sealed class CustomizationEditorView
     private readonly Stack<CustomizationDraft>       undo            = new();
     private readonly Stack<CustomizationDraft>       redo            = new();
     private          Selection                       selection       = new(SelectionKind.Workspace);
+    private          Selection?                      pendingLeftPanelFocusSelection;
     private          PickKind                        pickKind        = PickKind.None;
     private          Vector3?                        pendingPickPoint;
     private          Vector3?                        currentPickPoint;
@@ -115,7 +116,9 @@ internal sealed class CustomizationEditorView
                 (
                     ref workspace,
                     ref selection,
+                    ref pendingLeftPanelFocusSelection,
                     previewBuilder,
+                    collision,
                     dd,
                     AddMeshRemovalFromPreview,
                     AddInstancePatchFromPreview,
@@ -195,6 +198,7 @@ internal sealed class CustomizationEditorView
                 ref lastPickEscapeDown,
                 ref workspace,
                 ref selection,
+                ref pendingLeftPanelFocusSelection,
                 ref statusText,
                 collision,
                 dd,
@@ -240,6 +244,7 @@ internal sealed class CustomizationEditorView
         redo.Clear();
         
         selection                = new(SelectionKind.Workspace);
+        pendingLeftPanelFocusSelection = null;
         pendingPickPoint         = null;
         pickKind                 = PickKind.None;
         lastPickMouseDown        = CustomizationEditorWorldOverlay.TakeKeyPress(0x01, ref lastPickMouseDown);
@@ -399,6 +404,7 @@ internal sealed class CustomizationEditorView
             undo.Clear();
             redo.Clear();
             selection = new(SelectionKind.Workspace);
+            pendingLeftPanelFocusSelection = null;
             pickKind = PickKind.None;
             pendingPickPoint = null;
             currentPickPoint = null;
@@ -438,6 +444,7 @@ internal sealed class CustomizationEditorView
         undo.Clear();
         redo.Clear();
         selection     = new(SelectionKind.Workspace);
+        pendingLeftPanelFocusSelection = null;
         previewDirty  = true;
         previewBuilder.Clear();
     }
@@ -748,6 +755,7 @@ internal sealed class CustomizationEditorView
         workspace.Draft  = undo.Pop();
         historySnapshot  = workspace.Draft.Clone();
         selection        = new(SelectionKind.Workspace);
+        pendingLeftPanelFocusSelection = null;
         previewDirty     = true;
         historySuspended = false;
         SaveWorkspace();
@@ -763,6 +771,7 @@ internal sealed class CustomizationEditorView
         workspace.Draft  = redo.Pop();
         historySnapshot  = workspace.Draft.Clone();
         selection        = new(SelectionKind.Workspace);
+        pendingLeftPanelFocusSelection = null;
         previewDirty     = true;
         historySuspended = false;
         SaveWorkspace();
