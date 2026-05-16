@@ -24,8 +24,6 @@ public class NavmeshQuery
 
     internal NavmeshGroundQuery.GroundAreaCostFilter GroundAreaFilter { get; } = new();
 
-    internal NavmeshGroundQuery.GroundAreaCostFilter GroundAreaFilterIgnoringUnreachable { get; } = new(false);
-
     internal NavmeshGroundQuery GroundQuery { get; }
 
     internal NavmeshFlightQuery FlightQuery { get; }

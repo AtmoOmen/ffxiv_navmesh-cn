@@ -214,12 +214,9 @@ internal class DebugNavmeshManager : IDisposable
                     var diagnostics = manager.Query.GetGroundDiagnostics();
                     var partialRate = diagnostics.GroundQueries > 0 ? diagnostics.PartialQueries / (double)diagnostics.GroundQueries : 0;
                     tree.LeafNode($"总查询次数：{diagnostics.GroundQueries}");
+                    tree.LeafNode($"失败次数：{diagnostics.FailedQueries}");
                     tree.LeafNode($"Partial 次数：{diagnostics.PartialQueries}，占比 {partialRate:P1}");
-                    tree.LeafNode($"疑似接缝截断：{diagnostics.SuspectedTileSeamCutoffs}");
-                    tree.LeafNode($"any-angle 选中：{diagnostics.AnyAnglePreferred}");
-                    tree.LeafNode($"普通 A* 回退：{diagnostics.ClassicFallbacks}");
-                    tree.LeafNode($"起点重选：{diagnostics.StartReplacements}");
-                    tree.LeafNode($"终点重选：{diagnostics.EndReplacements}");
+                    tree.LeafNode($"容差命中次数：{diagnostics.ReachedWithinRangeQueries}");
                     tree.LeafNode($"自动向下攀爬链接：{diagnostics.GeneratedClimbLinksAccepted}");
                     tree.LeafNode($"自动边缘跳跃链接：{diagnostics.GeneratedJumpLinksAccepted}");
                 }
