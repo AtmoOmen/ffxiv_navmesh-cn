@@ -12,7 +12,7 @@ namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.FieldOperat
 [CustomizationTerritory(1252)]
 internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
 {
-    public override int Version => 1;
+    public override int Version => 2;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -29,34 +29,53 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
                     RecalculateMeshBounds(mesh0);
                 }
             }
-        }
 
-        if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b1/collision/o6b1_a5_stc02.pcb", out var mesh1))
-        {
-            if (221 < mesh1.Parts.Count)
+            if (221 < mesh0.Parts.Count)
             {
-                var part = mesh1.Parts[221];
+                var part = mesh0.Parts[221];
 
                 if (16 < part.Vertices.Count)
                 {
                     part.Vertices[16] = new(57.903984f, -2.2888169E-05f, 9.997324f);
                     part.LocalBounds  = CalculateLocalBounds(part.Vertices);
-                    RecalculateMeshBounds(mesh1);
+                    RecalculateMeshBounds(mesh0);
                 }
             }
         }
 
-        if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b1/collision/o6b1_a2_deb04.pcb", out var mesh2))
+        if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b1/collision/o6b1_a2_deb04.pcb", out var mesh1))
         {
-            if (ResolveInstance(mesh2, 0xAA71A500000000ul, 246) is { } inst)
+            if (ResolveInstance(mesh1, 0xAA71A500000000ul, 246) is { } instance0)
             {
-                inst.WorldTransform.Row0 = new(-0.9668053f, 8.452079E-08f, -0.2130441f);
-                inst.WorldTransform.Row1 = new(0f, 0f, 0f);
-                inst.WorldTransform.Row2 = new(0.2130441f, 6.792364E-08f, -0.9668053f);
-                inst.WorldTransform.Row3 = new(-392.812f, 2.6f, -589.9389f);
-                inst.WorldBounds         = TransformBounds(inst.WorldTransform, mesh2.LocalBounds);
+                instance0.WorldTransform = new()
+                {
+                    Row0 = new(-0.9668053f, 8.452079E-08f, -0.2130441f),
+                    Row1 = new(0f, 0f, 0f),
+                    Row2 = new(0.2130441f, 6.792364E-08f, -0.9668053f),
+                    Row3 = new(-392.812f, 2.6f, -589.9389f)
+                };
+                instance0.WorldBounds = TransformBounds(instance0.WorldTransform, mesh1.LocalBounds);
             }
         }
+
+        scene.InsertAABoxCollider
+        (
+            new AABB
+            {
+                Min = new(-300.31873f, -2.6500006f, -572.4582f),
+                Max = new(-271.1427f, 5.6499996f, -549.54425f)
+            },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
+        scene.InsertAABoxCollider
+        (
+            new AABB
+            {
+                Min = new(-466.953f, -2.95f, -577.3929f),
+                Max = new(-422.05298f, 2.95f, -575.09283f)
+            },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
     }
 
     public override void CustomizeSettings(DtNavMeshCreateParams config)
@@ -215,17 +234,31 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
             NavmeshPolyFlags.GeneratedClimbDown | NavmeshPolyFlags.ManualOffMesh,
             NavmeshOffMeshKind.GeneratedEdgeJump
         );
+        config.AddOffMeshConnection
+        (
+            new(-492.6668f, 3.4977572f, -596.6317f),
+            new(-495.37308f, 2.9727447f, -597.62134f),
+            0.5f,
+            false,
+            0,
+            NavmeshArea.ManualOffMesh,
+            NavmeshPolyFlags.ManualOffMesh,
+            NavmeshOffMeshKind.ManualOffMesh
+        );
     }
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
-        LinkPoints(mesh, new(831.99677f, 81.74532f, -523.0471f),       new(851.94464f, 95.71663f, -395.07745f));
-        LinkPoints(mesh, new(-278.95834f, 3.4371157f, -590.45953f),    new(-401.257f, 3.8000011f, -589.865f));
-        LinkPoints(mesh, new(-174.0232f, 6.247839f, -598.4698f),       new(-277.58643f, 3.8000011f, -590.52466f));
-        LinkPoints(mesh, new(-453.93646f, -9.536743E-07f, -590.4037f), new(-461.58704f, 3.4977517f, -591.0587f));
-        LinkPoints(mesh, new(-510.286f, 3.791191f, -605.326f),         new(-492.67465f, 3.4225364f, -596.591f));
-        LinkPoints(mesh, new(-425.0869f, 3.1132517f, -594.5297f),      new(-426.41736f, 3.7999992f, -594.3617f));
-        LinkPoints(mesh, new(-405.04636f, 5.000005f, -590.0774f),      new(-423.07913f, 3f, -594.1107f));
+        LinkPoints(mesh, new(831.99677f, 81.74532f, -523.0471f),      new(851.94464f, 95.71663f, -395.07745f));
+        LinkPoints(mesh, new(-278.95834f, 3.4371157f, -590.45953f),   new(-401.257f, 3.8000011f, -589.865f));
+        LinkPoints(mesh, new(-174.0232f, 6.247839f, -598.4698f),      new(-277.58643f, 3.8000011f, -590.52466f));
+        LinkPoints(mesh, new(-510.286f, 3.791191f, -605.326f),        new(-492.67465f, 3.4225364f, -596.591f));
+        LinkPoints(mesh, new(-425.0869f, 3.1132517f, -594.5297f),     new(-426.41736f, 3.7999992f, -594.3617f));
+        LinkPoints(mesh, new(-405.04636f, 5.000005f, -590.0774f),     new(-423.07913f, 3f, -594.1107f),          true);
+        LinkPoints(mesh, new(-437.25473f, 0f, -592.455f),             new(-453.648f, 0f, -590.415f),             true);
+        LinkPoints(mesh, new(-453.55493f, 9.536743E-07f, -589.9885f), new(-461.67087f, 3.4977527f, -590.97705f), true);
+        LinkClientPath(mesh, new(-461.95148f, 3.4977527f, -591.0292f), new(-492.27936f, 3.4977572f, -596.4955f));
+        LinkPoints(mesh, new(-465.40982f, 2.999997f, -589.96594f), new(-492.25882f, 3.4977572f, -596.485f));
     }
 
     private static SceneExtractor.MeshInstance? ResolveInstance(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)
@@ -236,6 +269,9 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
 
     private static int ResolveInstanceIndex(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)
     {
+        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))
+            return instanceIndex;
+
         if (instanceId != 0)
         {
             for (var i = 0; i < mesh.Instances.Count; ++i)
@@ -243,7 +279,7 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
                     return i;
         }
 
-        return instanceIndex >= 0 && instanceIndex < mesh.Instances.Count ? instanceIndex : -1;
+        return -1;
     }
 
     private static void RecalculateMeshBounds(SceneExtractor.Mesh mesh)
