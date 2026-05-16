@@ -1,6 +1,8 @@
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using DotRecast.Recast;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Common.Navigation.Mesh.Build;
 
@@ -16,38 +18,38 @@ public sealed class NavmeshBuildSettings
         Interiors              = 1 << 3
     }
 
-    public float       CellSize         = 0.25f;
-    public float       CellHeight       = 0.125f;
-    public float       AgentHeight      = 2.0f;
-    public float       AgentRadius      = 0.5f;
-    public float       AgentMaxClimb    = 0.5f;
-    public float       AgentMaxSlopeDeg = 55f;
-    public Filter      Filtering        = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
-    public float       RegionMinSize    = 8;
-    public float       RegionMergeSize  = 20;
-    public RcPartition Partitioning     = RcPartition.WATERSHED;
-    public float       PolyMaxEdgeLen;
-    public float       PolyMaxSimplificationError = 1.1f;
-    public int         PolyMaxVerts               = 6;
-    public float       DetailSampleDist           = 6f;
-    public float       DetailMaxSampleError       = 1f;
-    public bool        FastBuild                  = true;
-    public bool        GenerateEdgeClimbLinks;
-    public bool        GenerateEdgeJumpLinks;
-    public float       GroundTolerance     = 0.3f;
-    public float       ClimbDownDistance   = 0.4f;
-    public float       ClimbDownMaxHeight  = 3.2f;
-    public float       ClimbDownMinHeight  = 1.5f;
-    public float       EdgeJumpEndDistance = 2f;
-    public float       EdgeJumpHeight      = 1.8f;
-    public float       EdgeJumpMaxDrop     = 500f;
-    public float       EdgeJumpMinDrop     = 1.5f;
-    public float       GroundTileSize      = 64f;
-    public int         GroundTileCountMax  = 32;
-    public int[]       VolumeTiles         = [8, 8];
-    public int         BuildMaxCores       = 1;
-    public bool        Flyable;
-    public int         CustomizationVersion;
+    public float                               CellSize         = 0.25f;
+    public float                               CellHeight       = 0.125f;
+    public float                               AgentHeight      = 2.0f;
+    public float                               AgentRadius      = 0.5f;
+    public float                               AgentMaxClimb    = 0.5f;
+    public float                               AgentMaxSlopeDeg = 55f;
+    public Filter                              Filtering        = Filter.LowHangingObstacles | Filter.LedgeSpans | Filter.WalkableLowHeightSpans;
+    public float                               RegionMinSize    = 8;
+    public float                               RegionMergeSize  = 20;
+    public RcPartition                         Partitioning     = RcPartition.WATERSHED;
+    public float                               PolyMaxEdgeLen;
+    public float                               PolyMaxSimplificationError = 1.1f;
+    public int                                 PolyMaxVerts               = 6;
+    public float                               DetailSampleDist           = 6f;
+    public float                               DetailMaxSampleError       = 1f;
+    public bool                                FastBuild                  = true;
+    public bool                                GenerateEdgeClimbLinks;
+    public bool                                GenerateEdgeJumpLinks;
+    public float                               GroundTolerance     = 0.3f;
+    public float                               ClimbDownDistance   = 0.4f;
+    public float                               ClimbDownMaxHeight  = 3.2f;
+    public float                               ClimbDownMinHeight  = 1.5f;
+    public float                               EdgeJumpEndDistance = 2f;
+    public float                               EdgeJumpHeight      = 1.8f;
+    public float                               EdgeJumpMaxDrop     = 500f;
+    public float                               EdgeJumpMinDrop     = 1.5f;
+    public float                               GroundTileSize      = 64f;
+    public int                                 GroundTileCountMax  = 32;
+    public int[]                               VolumeTiles         = [8, 8];
+    public int                                 BuildMaxCores       = 1;
+    public bool                                Flyable;
+    public int                                 CustomizationVersion;
     public List<NavmeshBuildOffMeshConnection> OffMeshConnections = [];
 
     public string BuildSignature()
@@ -85,20 +87,37 @@ public sealed class NavmeshBuildSettings
         appendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
         return sb.ToString();
 
-        void appendFloat(string key, float value) => sb.Append(key).Append('=').Append(value.ToString("R", CultureInfo.InvariantCulture)).Append(';');
-        void appendInt(string key, int value) => sb.Append(key).Append('=').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
-        void appendBool(string key, bool value) => sb.Append(key).Append('=').Append(value ? '1' : '0').Append(';');
-        void appendText(string key, string value) => sb.Append(key).Append('=').Append(value).Append(';');
+        void appendFloat(string key, float value)
+        {
+            sb.Append(key).Append('=').Append(value.ToString("R", CultureInfo.InvariantCulture)).Append(';');
+        }
+
+        void appendInt(string key, int value)
+        {
+            sb.Append(key).Append('=').Append(value.ToString(CultureInfo.InvariantCulture)).Append(';');
+        }
+
+        void appendBool(string key, bool value)
+        {
+            sb.Append(key).Append('=').Append(value ? '1' : '0').Append(';');
+        }
+
+        void appendText(string key, string value)
+        {
+            sb.Append(key).Append('=').Append(value).Append(';');
+        }
     }
 }
 
 public readonly record struct NavmeshBuildOffMeshConnection
 (
-    System.Numerics.Vector3 Start,
-    System.Numerics.Vector3 End,
-    float                   Radius,
-    bool                    Bidirectional,
-    int                     UserId,
-    int                     Area,
-    int                     Flags
+    Vector3                      Start,
+    Vector3                      End,
+    float                        Radius,
+    bool                         Bidirectional,
+    int                          UserId,
+    int                          Area,
+    int                          Flags,
+    int                          Kind,
+    NavmeshLinkTraversalProfile? TraversalProfile = null
 );

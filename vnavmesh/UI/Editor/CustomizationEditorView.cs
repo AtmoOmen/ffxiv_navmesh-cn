@@ -12,6 +12,7 @@ using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Editor;
+using vnavmesh.Navigation.Customizations.Extensions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
@@ -332,6 +333,7 @@ internal sealed class CustomizationEditorView
         cancel.ThrowIfCancellationRequested();
 
         var settings = baseCustomization.GetBuildSettings(scene).ToBuildSettings(baseCustomization.IsFlyingSupported(scene), baseCustomization.Version);
+        settings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(baseCustomization));
         var customizedScene = await Task.Run(() =>
         {
             var extractor = new SceneExtractor(scene);
@@ -343,6 +345,7 @@ internal sealed class CustomizationEditorView
         var buildSignature = Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(customizedScene, settings);
         var navmesh = await manager.BuildExternalNavmesh($"editor-seed-{territoryID}-{Guid.NewGuid():N}", customizedScene, settings, baseCustomization.Version, buildSignature, cancel);
         cancel.ThrowIfCancellationRequested();
+        navmesh.RegisterBuildTimeOffMeshConnections(settings.OffMeshConnections);
         baseCustomization.CustomizeMesh(navmesh, [.. scene.FestivalLayers]);
         CustomizationDraftSeedBuilder.CopyMeshLinksFromNavmesh(draft, navmesh);
 
@@ -534,7 +537,7 @@ internal sealed class CustomizationEditorView
         ApplyDraftChange
         (() =>
             {
-                workspace.Draft.MeshLinks.Add(new() { Kind = kind, Start = a, End = b });
+                workspace.Draft.MeshLinks.Add(new() { Kind = kind, Start = a, End = b, Bidirectional = false });
                 selection = new(SelectionKind.MeshLink, workspace.Draft.MeshLinks.Count - 1);
                 statusText = kind switch
                 {

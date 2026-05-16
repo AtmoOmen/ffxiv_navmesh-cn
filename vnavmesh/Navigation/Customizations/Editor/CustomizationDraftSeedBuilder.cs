@@ -1,11 +1,10 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using DotRecast.Core.Numerics;
-using DotRecast.Detour;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Attributes;
+using vnavmesh.Navigation.Customizations.Extensions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Scene;
 
@@ -51,7 +50,17 @@ internal static class CustomizationDraftSeedBuilder
                 _                             => DraftMeshLinkKind.Drop
             };
 
-            draft.MeshLinks.Add(new() { Kind = kind, Start = link.Start, End = link.End });
+            draft.MeshLinks.Add
+            (
+                new()
+                {
+                    Kind             = kind,
+                    Start            = link.Start,
+                    End              = link.End,
+                    Bidirectional    = link.Bidirectional,
+                    TraversalProfile = link.TraversalProfile
+                }
+            );
         }
     }
 
@@ -308,59 +317,26 @@ internal static class CustomizationDraftSeedBuilder
 
     private static void CopyOffMeshConnections(CustomizationDraft draft, NavmeshCustomization customization)
     {
-        var config = new DtNavMeshCreateParams
+        var connections = OffMeshConnectionMetadataRegistry.Collect(customization);
+        foreach (var connection in connections)
         {
-            bmin = new RcVec3f(-1_000_000f, -1_000_000f, -1_000_000f),
-            bmax = new RcVec3f(1_000_000f, 1_000_000f, 1_000_000f)
-        };
-
-        customization.CustomizeSettings(config);
-
-        if (config.offMeshConCount <= 0 ||
-            config.offMeshConVerts == null ||
-            config.offMeshConRad == null ||
-            config.offMeshConFlags == null ||
-            config.offMeshConAreas == null ||
-            config.offMeshConDir == null ||
-            config.offMeshConUserID == null)
-            return;
-
-        for (var i = 0; i < config.offMeshConCount; ++i)
-        {
-            var start = new Vector3(config.offMeshConVerts[i * 6], config.offMeshConVerts[i * 6 + 1], config.offMeshConVerts[i * 6 + 2]);
-            var end   = new Vector3(config.offMeshConVerts[i * 6 + 3], config.offMeshConVerts[i * 6 + 4], config.offMeshConVerts[i * 6 + 5]);
-            var area  = (NavmeshArea)config.offMeshConAreas[i];
-            var flags = (NavmeshPolyFlags)config.offMeshConFlags[i];
-            var kind   = ResolveOffMeshKind(area, flags);
-
             draft.OffMeshConnections.Add
             (
                 new()
                 {
-                    Start         = start,
-                    End           = end,
-                    Radius        = config.offMeshConRad[i],
-                    Bidirectional = config.offMeshConDir[i] != 0,
-                    UserId        = config.offMeshConUserID[i],
-                    Area          = area,
-                    Flags         = flags,
-                    Kind          = kind
+                    Start            = connection.Start,
+                    End              = connection.End,
+                    Radius           = connection.Radius,
+                    Bidirectional    = connection.Bidirectional,
+                    UserId           = connection.UserId,
+                    Area             = (NavmeshArea)connection.Area,
+                    Flags            = (NavmeshPolyFlags)connection.Flags,
+                    Kind             = (NavmeshOffMeshKind)connection.Kind,
+                    TraversalProfile = connection.TraversalProfile
                 }
             );
         }
     }
-
-    private static NavmeshOffMeshKind ResolveOffMeshKind(NavmeshArea area, NavmeshPolyFlags flags) =>
-        area switch
-        {
-            NavmeshArea.Teleport    => NavmeshOffMeshKind.Teleport,
-            NavmeshArea.ClientPath  => NavmeshOffMeshKind.ClientPath,
-            NavmeshArea.GeneratedClimbDown => NavmeshOffMeshKind.GeneratedClimbDown,
-            NavmeshArea.GeneratedEdgeJump   => NavmeshOffMeshKind.GeneratedEdgeJump,
-            _ when flags.HasFlag(NavmeshPolyFlags.Teleport)   => NavmeshOffMeshKind.Teleport,
-            _ when flags.HasFlag(NavmeshPolyFlags.ClientPath) => NavmeshOffMeshKind.ClientPath,
-            _ => NavmeshOffMeshKind.ManualOffMesh
-        };
 
     private static bool TransformsEqual(Matrix4x3 left, Matrix4x3 right) =>
         left.Row0 == right.Row0 && left.Row1 == right.Row1 && left.Row2 == right.Row2 && left.Row3 == right.Row3;

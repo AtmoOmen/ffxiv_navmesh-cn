@@ -14,8 +14,8 @@ internal class Z0442启动之章1 : NavmeshCustomization
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
         // 喷气
-        LinkPoints(mesh, new(3.2f, -7.3f, 20.3f), new(2.6f, -4.2f, 3.0f));
-        LinkPoints(mesh, new(2.6f, -4.2f, 3.0f),  new(-4.6f, -3.4f, -1.9f));
+        LinkPoints(mesh, new(3.2f, -7.3f, 20.3f), new(2.6f, -4.2f, 3.0f), true);
+        LinkPoints(mesh, new(2.6f, -4.2f, 3.0f),  new(-4.6f, -3.4f, -1.9f), true);
     }
     
      public override void CustomizeSettings(DtNavMeshCreateParams config)

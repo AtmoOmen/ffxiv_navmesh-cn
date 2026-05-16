@@ -139,7 +139,8 @@ internal static class CustomizationDraftApplier
                 connection.UserId,
                 connection.Area,
                 connection.Flags,
-                connection.Kind
+                connection.Kind,
+                connection.TraversalProfile
             );
         }
     }

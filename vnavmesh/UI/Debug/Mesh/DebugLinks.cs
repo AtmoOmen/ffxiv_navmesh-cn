@@ -47,7 +47,13 @@ public class DebugLinks
     }
 
     private static string DescribeLink(NavmeshLink link) =>
-        $"{link.Kind}: {link.Start} -> {link.End}，双向 = {(link.Bidirectional ? "是" : "否")}，UserId = {link.UserId}";
+        $"{link.Kind}: {link.Start} -> {link.End}，双向 = {(link.Bidirectional ? "是" : "否")}，UserId = {link.UserId}，代价 = {DescribeTraversal(link)}";
+
+    private static string DescribeTraversal(NavmeshLink link)
+    {
+        var profile = NavmeshLinkTraversalProfiles.Resolve(link.Kind, link.TraversalProfile);
+        return $"距离系数 {profile.DistanceScale:f2}, 固定代价 {profile.FixedPenalty:f2}";
+    }
 
     private static uint LinkColor(NavmeshOffMeshKind kind) => kind switch
     {

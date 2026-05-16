@@ -4,6 +4,7 @@ using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Movement.Drivers;
 using vnavmesh.Movement.Planning;
+using vnavmesh.Navigation.Mesh.Query;
 
 namespace vnavmesh.Navigation.Planning;
 
@@ -173,6 +174,13 @@ internal sealed class PathPostprocessor
             var position  = adjustedPositions[i];
             var area      = ResolveArea(corridor, rawCorner.refs);
             var linkKind  = ResolveLinkKind(area, rawCorner.flags);
+            var traversalProfile = ResolveTraversalProfile(rawCorner.refs, linkKind);
+            if (linkKind is { } resolvedKind && debugInfos[i] is { } debugInfo)
+                debugInfos[i] = debugInfo with
+                {
+                    TraversalProfile = traversalProfile,
+                    TraversalCost    = NavmeshLinkTraversalProfiles.EstimateCost(position, ResolveLinkEndPosition(adjustedPositions, i), resolvedKind, traversalProfile)
+                };
             var corner = new GroundPathCorner
             (
                 position,
@@ -1885,7 +1893,7 @@ internal sealed class PathPostprocessor
         float   VerticalDistanceAbs
     );
 
-    private static IReadOnlyList<GroundLinkMarker> BuildGroundLinkMarkers(IReadOnlyList<GroundPathCorner> corners)
+    private IReadOnlyList<GroundLinkMarker> BuildGroundLinkMarkers(IReadOnlyList<GroundPathCorner> corners)
     {
         List<GroundLinkMarker> markers = [];
 
@@ -1894,7 +1902,19 @@ internal sealed class PathPostprocessor
             if (corners[i].LinkKind is not { } kind)
                 continue;
 
-            markers.Add(new(i, corners[i].Position, corners[i].PolyRef, kind));
+            var traversalProfile = ResolveTraversalProfile(corners[i].PolyRef, kind);
+            markers.Add
+            (
+                new
+                (
+                    i,
+                    corners[i].Position,
+                    corners[i].PolyRef,
+                    kind,
+                    traversalProfile,
+                    NavmeshLinkTraversalProfiles.EstimateCost(corners[i].Position, ResolveLinkEndPosition(corners, i), kind, traversalProfile)
+                )
+            );
         }
 
         return markers;
@@ -1922,6 +1942,24 @@ internal sealed class PathPostprocessor
             _                              => null
         };
     }
+
+    private NavmeshLinkTraversalProfile? ResolveTraversalProfile(long polyRef, NavmeshOffMeshKind? kind)
+    {
+        if (kind == null)
+            return null;
+
+        return MeshQuery.GetAttachedNavMesh() != null &&
+               GroundFilter is NavmeshGroundQuery.GroundAreaCostFilter { } groundFilter &&
+               groundFilter.TryGetRegisteredTraversalProfile(polyRef, out var traversalProfile)
+            ? traversalProfile
+            : null;
+    }
+
+    private static Vector3 ResolveLinkEndPosition(IReadOnlyList<GroundPathCorner> corners, int index) =>
+        index + 1 < corners.Count ? corners[index + 1].Position : corners[index].Position;
+
+    private static Vector3 ResolveLinkEndPosition(IReadOnlyList<Vector3> positions, int index) =>
+        index + 1 < positions.Count ? positions[index + 1] : positions[index];
 
     private static (List<Vector3> Waypoints, FlightPathDebugPayload? Debug) BuildRawDiscreteWaypoints(PlannerPathSegment segment)
         => ([.. segment.Points], segment.FlightPathDebug);

@@ -213,7 +213,10 @@ internal sealed class NavmeshGroundQuery
     {
         var buffer = new long[MAX_PATH_POLYS];
         corridor = [];
-        var status = query.FindPath(startRef, endRef, startPos, endPos, filter, buffer, out var count, buffer.Length);
+        var option = filter is GroundAreaCostFilter groundFilter && groundFilter.RequiresZeroHeuristic
+            ? DtFindPathOption.ZeroScale
+            : DtFindPathOption.NoOption;
+        var status = query.FindPath(startRef, endRef, startPos, endPos, filter, buffer, out var count, buffer.Length, option);
         corridor   = [.. buffer.AsSpan(0, count).ToArray()];
         return status;
     }
@@ -268,25 +271,13 @@ internal sealed class NavmeshGroundQuery
 
     internal sealed class GroundAreaCostFilter
     (
+        Navmesh navmeshData,
         bool excludeUnreachable = true
     ) : IDtQueryFilter
     {
-        private readonly DtQueryDefaultFilter filter = new
-            ((int)NavmeshPolyFlags.AllTraversable, excludeUnreachable ? (int)NavmeshPolyFlags.Unreachable : 0, CreateAreaCosts());
+        private readonly DtQueryDefaultFilter filter = new((int)NavmeshPolyFlags.AllTraversable, excludeUnreachable ? (int)NavmeshPolyFlags.Unreachable : 0, CreatePassCosts());
 
-        private static float[] CreateAreaCosts()
-        {
-            var costs = new float[DT_MAX_AREAS];
-            Array.Fill(costs, 1f);
-            costs[(int)NavmeshArea.Null]               = float.MaxValue;
-            costs[(int)NavmeshArea.Ground]             = 1.0f;
-            costs[(int)NavmeshArea.GeneratedClimbDown] = 1.8f;
-            costs[(int)NavmeshArea.GeneratedEdgeJump]  = 2.6f;
-            costs[(int)NavmeshArea.ManualOffMesh]      = 1.35f;
-            costs[(int)NavmeshArea.Teleport]           = 1.15f;
-            costs[(int)NavmeshArea.ClientPath]         = 3.0f;
-            return costs;
-        }
+        public bool RequiresZeroHeuristic => navmeshData.HasHeuristicSensitiveOffMeshLinks;
 
         public float GetCost
         (
@@ -302,8 +293,44 @@ internal sealed class NavmeshGroundQuery
             DtMeshTile nextTile,
             DtPoly     nextPoly
         )
-            => filter.GetCost(pa, pb, prevRef, prevTile, prevPoly, curRef, curTile, curPoly, nextRef, nextTile, nextPoly);
+        {
+            var area = (NavmeshArea)curPoly.GetArea();
+            if (area == NavmeshArea.Null)
+                return float.MaxValue;
+
+            if (area == NavmeshArea.Ground)
+                return Vector3.Distance(pa.RecastToSystem(), pb.RecastToSystem());
+
+            var kind = NavmeshLinkTraversalProfiles.ResolveKind(area);
+            if (kind == null)
+                return Vector3.Distance(pa.RecastToSystem(), pb.RecastToSystem());
+
+            var traversalProfile = navmeshData.TryGetOffMeshLink(curRef, out var link)
+                ? link.TraversalProfile
+                : null;
+            return NavmeshLinkTraversalProfiles.EstimateCost(pa.RecastToSystem(), pb.RecastToSystem(), kind.Value, traversalProfile);
+        }
 
         public bool PassFilter(long refs, DtMeshTile tile, DtPoly poly) => filter.PassFilter(refs, tile, poly);
+
+        public bool TryGetRegisteredTraversalProfile(long polyRef, out NavmeshLinkTraversalProfile? traversalProfile)
+        {
+            if (navmeshData.TryGetOffMeshLink(polyRef, out var link))
+            {
+                traversalProfile = link.TraversalProfile;
+                return true;
+            }
+
+            traversalProfile = null;
+            return false;
+        }
+
+        private static float[] CreatePassCosts()
+        {
+            var costs = new float[DT_MAX_AREAS];
+            Array.Fill(costs, 1f);
+            costs[(int)NavmeshArea.Null] = float.MaxValue;
+            return costs;
+        }
     }
 }

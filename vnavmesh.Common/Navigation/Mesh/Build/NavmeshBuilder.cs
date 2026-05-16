@@ -950,7 +950,8 @@ public class NavmeshBuilder
                 connection.UserId,
                 (NavmeshArea)connection.Area,
                 (NavmeshPolyFlags)connection.Flags,
-                NavmeshOffMeshKind.ManualOffMesh
+                (NavmeshOffMeshKind)connection.Kind,
+                connection.TraversalProfile
             );
     }
 

@@ -23,6 +23,7 @@ using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations;
 using vnavmesh.Navigation.Customizations.Abstractions;
+using vnavmesh.Navigation.Customizations.Extensions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Planning;
@@ -409,7 +410,7 @@ public sealed class NavmeshManager : IDisposable
         var buildSnapshot = await CreateBuildSnapshot(scene, customization, cancel);
         var cache         = new FileInfo(Path.Combine(cacheDirectory.FullName, $"{cacheKey}.navmesh"));
 
-        if (allowLoadFromCache && TryLoadFromCache(cache, customization, buildSnapshot.BuildSignature, layers, totalTimer, out var cachedResult))
+        if (allowLoadFromCache && TryLoadFromCache(cache, customization, buildSnapshot.Settings, buildSnapshot.BuildSignature, layers, totalTimer, out var cachedResult))
             return cachedResult;
 
         cancel.ThrowIfCancellationRequested();
@@ -427,6 +428,7 @@ public sealed class NavmeshManager : IDisposable
             var (mesh, cacheTelemetry, _) = Navmesh.Deserialize(reader, customization.Version, buildSnapshot.BuildSignature);
             LogCacheSegment("外置构建读取", cacheTelemetry.Mesh);
             LogCacheSegment("外置构建读取", cacheTelemetry.Volume);
+            mesh.RegisterBuildTimeOffMeshConnections(buildSnapshot.Settings.OffMeshConnections);
             customization.CustomizeMesh(mesh, layers);
             runtimeMesh = mesh with { CustomizationApplied = true };
         }
@@ -447,6 +449,7 @@ public sealed class NavmeshManager : IDisposable
     (
         FileInfo               cache,
         NavmeshCustomization   customization,
+        NavmeshBuildSettings   buildSettings,
         string                 buildSignature,
         List<uint>             layers,
         StopWatchTimer         totalTimer,
@@ -473,6 +476,7 @@ public sealed class NavmeshManager : IDisposable
             LogCacheSegment("读取", cacheTelemetry.Mesh);
             LogCacheSegment("读取", cacheTelemetry.Volume);
 
+            mesh.RegisterBuildTimeOffMeshConnections(buildSettings.OffMeshConnections);
             if (!mesh.CustomizationApplied)
                 customization.CustomizeMesh(mesh, layers);
 
@@ -503,6 +507,7 @@ public sealed class NavmeshManager : IDisposable
 
                 var buildScene    = extractor.ToBuildScene();
                 var buildSettings = settings.ToBuildSettings(flyable, customization.Version);
+                buildSettings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(customization));
                 return new BuildSnapshot(buildScene, buildSettings, NavmeshBuilder.ComputeBuildSignature(buildScene, buildSettings));
             },
             cancel

@@ -589,6 +589,7 @@ internal static class CustomizationEditorInspector
         changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
         changed |= CustomizationEditorWidgets.DrawVector3("Start", ref item.Start);
         changed |= CustomizationEditorWidgets.DrawVector3("End",   ref item.End);
+        changed |= CustomizationEditorWidgets.DrawBool("Bidirectional", ref item.Bidirectional);
 
         if (ImGui.Button("删除这一项"))
         {

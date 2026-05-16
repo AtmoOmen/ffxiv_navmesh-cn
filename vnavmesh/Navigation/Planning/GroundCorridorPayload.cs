@@ -19,7 +19,9 @@ internal readonly record struct GroundLinkMarker
     int                CornerIndex,
     Vector3            Position,
     long               PolyRef,
-    NavmeshOffMeshKind Kind
+    NavmeshOffMeshKind Kind,
+    NavmeshLinkTraversalProfile? TraversalProfile = null,
+    float               EstimatedTraversalCost = 0f
 );
 
 internal readonly record struct GroundPathCornerDebugSample
@@ -61,7 +63,9 @@ internal readonly record struct GroundPathCornerDebug
     float                                       MaxClearance,
     float                                       AverageClearance,
     float                                       CornerStrength,
-    IReadOnlyList<GroundPathCornerDebugSample>  Samples
+    IReadOnlyList<GroundPathCornerDebugSample>  Samples,
+    NavmeshLinkTraversalProfile?                TraversalProfile = null,
+    float                                       TraversalCost = 0f
 )
 {
     public bool PushApplied => PushDistance > 0.0001f;

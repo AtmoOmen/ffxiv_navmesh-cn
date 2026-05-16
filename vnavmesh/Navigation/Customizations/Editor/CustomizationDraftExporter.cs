@@ -373,6 +373,7 @@ internal static class CustomizationDraftExporter
             var area  = FormatEnum(link.Area, "NavmeshArea");
             var flags = FormatNavmeshPolyFlags(link.Flags);
             var kind  = FormatEnum(link.Kind, "NavmeshOffMeshKind");
+            var traversalProfile = FormatTraversalProfile(link.TraversalProfile);
 
             Line(sb, 2, "config.AddOffMeshConnection");
             Line(sb, 2, "(");
@@ -383,7 +384,8 @@ internal static class CustomizationDraftExporter
             Line(sb, 3, $"{FormatInt(link.UserId)},");
             Line(sb, 3, $"{area},");
             Line(sb, 3, $"{flags},");
-            Line(sb, 3, kind);
+            Line(sb, 3, $"{kind},");
+            Line(sb, 3, traversalProfile);
             Line(sb, 2, ");");
         }
 
@@ -409,7 +411,13 @@ internal static class CustomizationDraftExporter
                 DraftMeshLinkKind.ClientPath => "LinkClientPath",
                 _                            => "LinkPoints"
             };
-            Line(sb, 2, $"{call}(mesh, {FormatVector(link.Start)}, {FormatVector(link.End)});");
+            var traversalProfile = FormatTraversalProfile(link.TraversalProfile);
+            Line
+            (
+                sb,
+                2,
+                $"{call}(mesh, {FormatVector(link.Start)}, {FormatVector(link.End)}, {FormatBool(link.Bidirectional)}, {traversalProfile});"
+            );
         }
 
         Line(sb, 1, "}");
@@ -683,6 +691,11 @@ internal static class CustomizationDraftExporter
 
     private static string FormatIntArray(int[] value) =>
         $"new[] {{ {string.Join(", ", value.Select(static x => x.ToString(CultureInfo.InvariantCulture)))} }}";
+
+    private static string FormatTraversalProfile(NavmeshLinkTraversalProfile? profile) =>
+        profile is { } value
+            ? $"new NavmeshLinkTraversalProfile({FormatFloat(value.DistanceScale)}, {FormatFloat(value.FixedPenalty)})"
+            : "null";
 
     private static string FormatRcPartition(RcPartition value) => FormatEnum(value, "RcPartition");
 

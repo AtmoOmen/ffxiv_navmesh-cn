@@ -1,7 +1,8 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Bootstrap;
+using vnavmesh.Common.Navigation.Mesh.Build;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Navigation.Customizations.Extensions;
@@ -12,31 +13,50 @@ public static class CreateParamsExtensions
     {
         public void AddOffMeshConnection
         (
-            Vector3 ptA,
-            Vector3 ptB,
-            float   radius        = 0.5f,
-            bool    bidirectional = false,
-            int     userID        = 0
+            Vector3                      ptA,
+            Vector3                      ptB,
+            float                        radius            = 0.5f,
+            bool                         bidirectional     = false,
+            int                          userID            = 0,
+            NavmeshLinkTraversalProfile? traversalProfile  = null
         ) =>
             config.AddOffMeshConnection
-                (ptA, ptB, radius, bidirectional, userID, NavmeshArea.ManualOffMesh, NavmeshPolyFlags.ManualOffMesh, NavmeshOffMeshKind.ManualOffMesh);
+            (
+                ptA,
+                ptB,
+                radius,
+                bidirectional,
+                userID,
+                NavmeshArea.ManualOffMesh,
+                NavmeshPolyFlags.ManualOffMesh,
+                NavmeshOffMeshKind.ManualOffMesh,
+                traversalProfile
+            );
 
         public void AddOffMeshConnection
         (
-            Vector3            ptA,
-            Vector3            ptB,
-            float              radius,
-            bool               bidirectional,
-            int                userID,
-            NavmeshArea        area,
-            NavmeshPolyFlags   flags,
-            NavmeshOffMeshKind kind
+            Vector3                      ptA,
+            Vector3                      ptB,
+            float                        radius,
+            bool                         bidirectional,
+            int                          userID,
+            NavmeshArea                  area,
+            NavmeshPolyFlags             flags,
+            NavmeshOffMeshKind           kind,
+            NavmeshLinkTraversalProfile? traversalProfile = null
         )
         {
+            OffMeshConnectionMetadataRegistry.Record(config, ptA, ptB, radius, bidirectional, userID, area, flags, kind, traversalProfile);
 
-            var aInside = IsInsideTile(ptA);
-            if (!aInside)
+            if (!DtOffMeshConnectionTileClassifier.ShouldStoreConnection(config, ptA, ptB))
+            {
+                Service.Log.Warning
+                (
+                    $"[NavmeshBuilder] 离网连接被当前瓦片忽略: 类型 = {kind}, 区域 = {area}, 标记 = {flags}, 起点 = {ptA:f3}, 终点 = {ptB:f3}, " +
+                    $"区块范围 = ({config.bmin.X:f3}, {config.bmin.Y:f3}, {config.bmin.Z:f3}) -> ({config.bmax.X:f3}, {config.bmax.Y:f3}, {config.bmax.Z:f3})"
+                );
                 return;
+            }
 
             Extend(ref config.offMeshConVerts, 6);
             config.offMeshConVerts[^6] = ptA.X;
@@ -63,13 +83,10 @@ public static class CreateParamsExtensions
             Extend(ref config.offMeshConUserID, 1);
             config.offMeshConUserID[^1] = userID;
 
-            Service.Log.Debug($"[NavmeshBuilder] 已加入离网连接: 类型 = {kind}, 区域 = {area}, 标记 = {flags}, 起点 = {ptA:f3}, 终点 = {ptB:f3}, 双向 = {bidirectional}");
-            return;
-
-            bool IsInsideTile(Vector3 p)
-            {
-                return p.X >= config.bmin.X && p.Y >= config.bmin.Y && p.Z >= config.bmin.Z && p.X <= config.bmax.X && p.Y <= config.bmax.Y && p.Z <= config.bmax.Z;
-            }
+            Service.Log.Debug
+            (
+                $"[NavmeshBuilder] 已加入离网连接: 类型 = {kind}, 区域 = {area}, 标记 = {flags}, 起点 = {ptA:f3}, 终点 = {ptB:f3}, 双向 = {bidirectional}"
+            );
         }
     }
 

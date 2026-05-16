@@ -22,7 +22,7 @@ public class NavmeshQuery
 
     internal IDtQueryFilter AllTraversableFilter { get; } = new DtQueryDefaultFilter();
 
-    internal NavmeshGroundQuery.GroundAreaCostFilter GroundAreaFilter { get; } = new();
+    internal NavmeshGroundQuery.GroundAreaCostFilter GroundAreaFilter { get; }
 
     internal NavmeshGroundQuery GroundQuery { get; }
 
@@ -59,6 +59,7 @@ public class NavmeshQuery
     {
         this.NavmeshData = navmesh;
         this.ConfigData  = config;
+        GroundAreaFilter = new(navmesh);
         postprocessor    = new(() => MeshQuery, () => GroundAreaFilter);
         GroundQuery      = new(this);
         FlightQuery      = new(this, GroundQuery);

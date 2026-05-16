@@ -84,13 +84,13 @@ public sealed class CustomizationDraftCustomization
             switch (link.Kind)
             {
                 case DraftMeshLinkKind.Points:
-                    LinkPoints(mesh, link.Start, link.End);
+                    LinkPoints(mesh, link.Start, link.End, link.Bidirectional, link.TraversalProfile);
                     break;
                 case DraftMeshLinkKind.Drop:
                     LinkDrop(mesh, link.Start, link.End);
                     break;
                 case DraftMeshLinkKind.ClientPath:
-                    LinkClientPath(mesh, link.Start, link.End);
+                    LinkClientPath(mesh, link.Start, link.End, link.Bidirectional, link.TraversalProfile);
                     break;
             }
         }

@@ -47,13 +47,27 @@ public class NavmeshCustomization
 
     protected NavmeshSettings Settings = new();
 
-    protected static void LinkPoints(Navmesh meshData, Vector3 startPos, Vector3 endPos) =>
-        LinkPoints(meshData, startPos, endPos, NavmeshArea.Teleport, NavmeshPolyFlags.Teleport, NavmeshOffMeshKind.Teleport);
+    protected static void LinkPoints
+    (
+        Navmesh                      meshData,
+        Vector3                      startPos,
+        Vector3                      endPos,
+        bool                         bidirectional = false,
+        NavmeshLinkTraversalProfile? traversalProfile = null
+    ) =>
+        LinkPoints(meshData, startPos, endPos, NavmeshArea.Teleport, NavmeshPolyFlags.Teleport, NavmeshOffMeshKind.Teleport, bidirectional, traversalProfile);
 
-    protected static void LinkClientPath(Navmesh meshData, Vector3 startPos, Vector3 endPos) =>
-        LinkPoints(meshData, startPos, endPos, NavmeshArea.ClientPath, NavmeshPolyFlags.ClientPath, NavmeshOffMeshKind.ClientPath);
+    protected static void LinkClientPath
+    (
+        Navmesh                      meshData,
+        Vector3                      startPos,
+        Vector3                      endPos,
+        bool                         bidirectional = false,
+        NavmeshLinkTraversalProfile? traversalProfile = null
+    ) =>
+        LinkPoints(meshData, startPos, endPos, NavmeshArea.ClientPath, NavmeshPolyFlags.ClientPath, NavmeshOffMeshKind.ClientPath, bidirectional, traversalProfile);
 
-    protected static void LinkDrop(Navmesh meshData, Vector3 edgePos, Vector3 landingHint)
+    protected static void LinkDrop(Navmesh meshData, Vector3 edgePos, Vector3 landingHint, NavmeshLinkTraversalProfile? traversalProfile = null)
     {
         var mesh = meshData.Mesh;
         var (startRef, startTile, startPoly, projectedStart) = ResolvePointPoly(mesh, edgePos);
@@ -71,7 +85,9 @@ public class NavmeshCustomization
             projectedEnd,
             NavmeshArea.ManualOffMesh,
             NavmeshPolyFlags.ManualOffMesh,
-            NavmeshOffMeshKind.ManualOffMesh
+            NavmeshOffMeshKind.ManualOffMesh,
+            false,
+            traversalProfile
         );
     }
 
@@ -198,13 +214,15 @@ public class NavmeshCustomization
         Vector3            endPos,
         NavmeshArea        area,
         NavmeshPolyFlags   flags,
-        NavmeshOffMeshKind kind
+        NavmeshOffMeshKind kind,
+        bool               bidirectional = false,
+        NavmeshLinkTraversalProfile? traversalProfile = null
     )
     {
         var mesh = meshData.Mesh;
         var (startRef, startTile, startPoly, projectedStart) = ResolvePointPoly(mesh, startPos);
         var (endRef, endTile, endPoly, projectedEnd)         = ResolvePointPoly(mesh, endPos);
-        LinkResolvedPoints(meshData, startRef, startTile, startPoly, endRef, endTile, endPoly, projectedStart, projectedEnd, area, flags, kind);
+        LinkResolvedPoints(meshData, startRef, startTile, startPoly, endRef, endTile, endPoly, projectedStart, projectedEnd, area, flags, kind, bidirectional, traversalProfile);
     }
 
     private static void LinkResolvedPoints
@@ -220,11 +238,11 @@ public class NavmeshCustomization
         RcVec3f            projectedEnd,
         NavmeshArea        area,
         NavmeshPolyFlags   flags,
-        NavmeshOffMeshKind kind
+        NavmeshOffMeshKind kind,
+        bool               bidirectional = false,
+        NavmeshLinkTraversalProfile? traversalProfile = null
     )
     {
-        meshData.Links.Add(new(projectedStart.RecastToSystem(), projectedEnd.RecastToSystem(), kind, false, 0));
-
         var mesh        = meshData.Mesh;
         var polyIndex   = startTile.data.header.polyCount;
         var vertexIndex = startTile.data.header.vertCount;
@@ -258,6 +276,7 @@ public class NavmeshCustomization
         {
             poly   = polyIndex,
             rad    = 0.1f,
+            flags  = bidirectional ? DT_OFFMESH_CON_BIDIR : 0,
             side   = DtNavMeshBuilder.ClassifyOffMeshPoint(projectedEnd, startTile.data.header.bmin, startTile.data.header.bmax),
             userId = 0,
             pos =
@@ -269,6 +288,12 @@ public class NavmeshCustomization
         startTile.data.offMeshCons[^1] = offMeshConnection;
 
         var offMeshRef = EncodePolyId(DecodePolyIdSalt(startRef), startTile.index, polyIndex);
+        meshData.RegisterOffMeshLink
+        (
+            offMeshRef,
+            new(projectedStart.RecastToSystem(), projectedEnd.RecastToSystem(), kind, bidirectional, 0, traversalProfile),
+            includeInVisualization: true
+        );
         var idx        = AllocLink(startTile);
         var link       = startTile.links[idx];
         link.refs             = startRef;
@@ -296,15 +321,18 @@ public class NavmeshCustomization
         link.next             = offMeshPoly.firstLink;
         offMeshPoly.firstLink = idx;
 
-        var reverseSide = offMeshConnection.side == 0xff ? (byte)0xff : (byte)DtUtils.OppositeTile(offMeshConnection.side);
-        idx               = AllocLink(endTile);
-        link              = endTile.links[idx];
-        link.refs         = offMeshRef;
-        link.edge         = 0xff;
-        link.side         = reverseSide;
-        link.bmin         = link.bmax = 0;
-        link.next         = endPoly.firstLink;
-        endPoly.firstLink = idx;
+        if (bidirectional)
+        {
+            var reverseSide = offMeshConnection.side == 0xff ? (byte)0xff : (byte)DtUtils.OppositeTile(offMeshConnection.side);
+            idx               = AllocLink(endTile);
+            link              = endTile.links[idx];
+            link.refs         = offMeshRef;
+            link.edge         = 0xff;
+            link.side         = reverseSide;
+            link.bmin         = link.bmax = 0;
+            link.next         = endPoly.firstLink;
+            endPoly.firstLink = idx;
+        }
     }
 
     private static (long PolyRef, DtMeshTile Tile, DtPoly Poly, RcVec3f ProjectedPoint) ResolveDropLandingPoly

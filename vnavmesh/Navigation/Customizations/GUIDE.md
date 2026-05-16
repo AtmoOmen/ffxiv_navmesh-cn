@@ -221,6 +221,9 @@ using vnavmesh.Common.Navigation.Mesh.Runtime;
 public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
 {
     LinkPoints(mesh, new(起点X, 起点Y, 起点Z), new(终点X, 终点Y, 终点Z));
+
+    // 双向连接
+    LinkPoints(mesh, new(起点X, 起点Y, 起点Z), new(终点X, 终点Y, 终点Z), bidirectional: true);
 }
 ```
 
@@ -245,6 +248,7 @@ public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
 
 ```csharp
 LinkClientPath(mesh, new(x1, y1, z1), new(x2, y2, z2));
+LinkClientPath(mesh, new(x1, y1, z1), new(x2, y2, z2), bidirectional: true);
 ```
 
 ### 构建时 off-mesh 连接

@@ -1,6 +1,6 @@
 using System.Numerics;
 using DotRecast.Detour;
-using DotRecast.Core.Numerics;
+using vnavmesh.Common.Diagnostics;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Common.Navigation.Mesh.Build;
@@ -11,19 +11,27 @@ internal static class DtNavMeshCreateParamsExtensions
 {
     public static void AddOffMeshConnection
     (
-        this DtNavMeshCreateParams config,
-        Vector3                    ptA,
-        Vector3                    ptB,
-        float                      radius,
-        bool                       bidirectional,
-        int                        userID,
-        NavmeshArea                area,
-        NavmeshPolyFlags           flags,
-        NavmeshOffMeshKind         _
+        this DtNavMeshCreateParams      config,
+        Vector3                        ptA,
+        Vector3                        ptB,
+        float                          radius,
+        bool                           bidirectional,
+        int                            userID,
+        NavmeshArea                    area,
+        NavmeshPolyFlags               flags,
+        NavmeshOffMeshKind             kind,
+        NavmeshLinkTraversalProfile?   _ = null
     )
     {
-        if (!IsInsideTile(ptA))
+        if (!DtOffMeshConnectionTileClassifier.ShouldStoreConnection(config, ptA, ptB))
+        {
+            NavmeshBuildLog.Information
+            (
+                $"[NavmeshBuilder] 离网连接被当前瓦片忽略: 类型 = {kind}, 区域 = {area}, 标记 = {flags}, 起点 = {ptA}, 终点 = {ptB}, " +
+                $"区块范围 = ({config.bmin.X}, {config.bmin.Y}, {config.bmin.Z}) -> ({config.bmax.X}, {config.bmax.Y}, {config.bmax.Z})"
+            );
             return;
+        }
 
         Extend(ref config.offMeshConVerts, 6);
         var verts = config.offMeshConVerts!;
@@ -55,14 +63,6 @@ internal static class DtNavMeshCreateParamsExtensions
         Extend(ref config.offMeshConUserID, 1);
         var userIds = config.offMeshConUserID!;
         userIds[^1] = userID;
-        return;
-
-        bool IsInsideTile(Vector3 p)
-        {
-            RcVec3f rp = new(p.X, p.Y, p.Z);
-            return rp.X >= config.bmin.X && rp.Y >= config.bmin.Y && rp.Z >= config.bmin.Z &&
-                   rp.X <= config.bmax.X && rp.Y <= config.bmax.Y && rp.Z <= config.bmax.Z;
-        }
     }
 
     private static void Extend<T>(ref T[]? arr, int add)

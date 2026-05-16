@@ -97,6 +97,56 @@ public enum NavmeshOffMeshKind
 }
 
 /// <summary>
+///     单条离网连接的穿越代价配置。
+/// </summary>
+/// <param name="DistanceScale">几何距离缩放系数。</param>
+/// <param name="FixedPenalty">固定附加代价。</param>
+public readonly record struct NavmeshLinkTraversalProfile
+(
+    float DistanceScale,
+    float FixedPenalty
+);
+
+public static class NavmeshLinkTraversalProfiles
+{
+    public static readonly NavmeshLinkTraversalProfile Ground             = new(1f, 0f);
+    public static readonly NavmeshLinkTraversalProfile GeneratedClimbDown = new(1f, 1.5f);
+    public static readonly NavmeshLinkTraversalProfile GeneratedEdgeJump  = new(1f, 3f);
+    public static readonly NavmeshLinkTraversalProfile ManualOffMesh      = new(1f, 0.5f);
+    public static readonly NavmeshLinkTraversalProfile Teleport           = new(0f, 1f);
+    public static readonly NavmeshLinkTraversalProfile ClientPath         = new(0f, 3f);
+
+    public static NavmeshLinkTraversalProfile Resolve(NavmeshOffMeshKind kind, NavmeshLinkTraversalProfile? overrideProfile = null) =>
+        overrideProfile ?? kind switch
+        {
+            NavmeshOffMeshKind.GeneratedClimbDown => GeneratedClimbDown,
+            NavmeshOffMeshKind.GeneratedEdgeJump  => GeneratedEdgeJump,
+            NavmeshOffMeshKind.ManualOffMesh      => ManualOffMesh,
+            NavmeshOffMeshKind.Teleport           => Teleport,
+            NavmeshOffMeshKind.ClientPath         => ClientPath,
+            _                                     => Ground
+        };
+
+    public static NavmeshOffMeshKind? ResolveKind(NavmeshArea area) =>
+        area switch
+        {
+            NavmeshArea.GeneratedClimbDown => NavmeshOffMeshKind.GeneratedClimbDown,
+            NavmeshArea.GeneratedEdgeJump  => NavmeshOffMeshKind.GeneratedEdgeJump,
+            NavmeshArea.ManualOffMesh      => NavmeshOffMeshKind.ManualOffMesh,
+            NavmeshArea.Teleport           => NavmeshOffMeshKind.Teleport,
+            NavmeshArea.ClientPath         => NavmeshOffMeshKind.ClientPath,
+            _                              => null
+        };
+
+    public static float EstimateCost(Vector3 start, Vector3 end, NavmeshOffMeshKind kind, NavmeshLinkTraversalProfile? overrideProfile = null)
+    {
+        var profile  = Resolve(kind, overrideProfile);
+        var distance = Vector3.Distance(start, end);
+        return distance * profile.DistanceScale + profile.FixedPenalty;
+    }
+}
+
+/// <summary>
 ///     导航网格中的一条离网连接，定义两个空间点之间的非行走移动关系。
 /// </summary>
 /// <param name="Start">连接起点坐标。</param>
@@ -110,7 +160,8 @@ public readonly record struct NavmeshLink
     Vector3            End,
     NavmeshOffMeshKind Kind,
     bool               Bidirectional,
-    int                UserId
+    int                UserId,
+    NavmeshLinkTraversalProfile? TraversalProfile = null
 );
 
 /// <summary>

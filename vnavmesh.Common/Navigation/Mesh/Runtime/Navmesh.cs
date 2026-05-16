@@ -1,10 +1,12 @@
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Collections.Generic;
 using DotRecast.Core;
 using DotRecast.Core.Compression;
 using DotRecast.Detour;
 using DotRecast.Detour.Io;
+using vnavmesh.Common.Navigation.Mesh.Build;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
 
@@ -49,9 +51,43 @@ public record class Navmesh
 
     public int GeneratedClimbDownLinkCount { get; set; }
     public int GeneratedEdgeJumpLinkCount  { get; set; }
+    public bool HasHeuristicSensitiveOffMeshLinks
+    {
+        get
+        {
+            foreach (var link in _offMeshLinksByPolyRef.Values)
+            {
+                var profile = NavmeshLinkTraversalProfiles.Resolve(link.Kind, link.TraversalProfile);
+                if (profile.DistanceScale == 0f)
+                    return true;
+            }
+
+            EnsureMeshMaterialized();
+            if (_mesh == null)
+                return false;
+
+            for (var tileIndex = 0; tileIndex < _mesh.GetMaxTiles(); ++tileIndex)
+            {
+                var tile = _mesh.GetTile(tileIndex);
+                if (tile?.data?.header == null)
+                    continue;
+
+                for (var polyIndex = tile.data.header.offMeshBase; polyIndex < tile.data.header.polyCount; ++polyIndex)
+                {
+                    var area = (NavmeshArea)tile.data.polys[polyIndex].GetArea();
+                    if (area is NavmeshArea.Teleport or NavmeshArea.ClientPath)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
     public readonly List<NavmeshLink>
         Links = []; // not serialized! actual links are added directly to the DtNavMesh, this field exists for visualization purposes
+
+    private readonly Dictionary<long, NavmeshLink> _offMeshLinksByPolyRef = [];
 
     // throws an exception on failure
     public static DeserializeResult Deserialize(BinaryReader reader, int expectedCustomizationVersion, string expectedBuildSignature)
@@ -768,6 +804,41 @@ public record class Navmesh
     public void DeferMeshMutation(Action<DtNavMesh> mutator) =>
         _deferredMeshMutator += mutator;
 
+    public void RegisterOffMeshLink(long polyRef, NavmeshLink link, bool includeInVisualization = false)
+    {
+        _offMeshLinksByPolyRef[polyRef] = link;
+        if (includeInVisualization)
+            Links.Add(link);
+    }
+
+    public bool TryGetOffMeshLink(long polyRef, out NavmeshLink link) =>
+        _offMeshLinksByPolyRef.TryGetValue(polyRef, out link);
+
+    public void RegisterBuildTimeOffMeshConnections(IEnumerable<NavmeshBuildOffMeshConnection> connections)
+    {
+        EnsureMeshMaterialized();
+
+        foreach (var connection in connections)
+        {
+            if (!TryFindMatchingOffMeshPolyRef(connection, out var polyRef))
+                continue;
+
+            RegisterOffMeshLink
+            (
+                polyRef,
+                new
+                (
+                    connection.Start,
+                    connection.End,
+                    (NavmeshOffMeshKind)connection.Kind,
+                    connection.Bidirectional,
+                    connection.UserId,
+                    connection.TraversalProfile
+                )
+            );
+        }
+    }
+
     internal void EnsureMeshMaterialized()
     {
         if (_mesh != null && _deferredMeshMutator == null)
@@ -805,10 +876,55 @@ public record class Navmesh
         _deferredMeshExpectedBytes = 0;
         _deferredMeshMutator       = null;
         Volume?.ReleaseRetainedState();
+        _offMeshLinksByPolyRef.Clear();
         Links.Clear();
         Links.TrimExcess();
         _mesh?.Release();
         _mesh = null;
+    }
+
+    private bool TryFindMatchingOffMeshPolyRef(NavmeshBuildOffMeshConnection connection, out long polyRef)
+    {
+        if (_mesh == null)
+            throw new InvalidOperationException("地面导航网格尚未就绪");
+
+        for (var tileIndex = 0; tileIndex < _mesh.GetMaxTiles(); ++tileIndex)
+        {
+            var tile = _mesh.GetTile(tileIndex);
+            if (tile?.data?.header == null || tile.data.offMeshCons == null)
+                continue;
+
+            for (var connectionIndex = 0; connectionIndex < tile.data.header.offMeshConCount; ++connectionIndex)
+            {
+                var offMeshConnection = tile.data.offMeshCons[connectionIndex];
+                var poly             = tile.data.polys[offMeshConnection.poly];
+                if (poly == null)
+                    continue;
+
+                if ((NavmeshArea)poly.GetArea() != (NavmeshArea)connection.Area ||
+                    poly.flags                   != connection.Flags             ||
+                    offMeshConnection.userId     != connection.UserId            ||
+                    (offMeshConnection.flags != 0) != connection.Bidirectional)
+                    continue;
+
+                if (!ApproximatelyEquals(offMeshConnection.pos[0], connection.Start) || !ApproximatelyEquals(offMeshConnection.pos[1], connection.End))
+                    continue;
+
+                polyRef = DtDetour.EncodePolyId(tile.salt, tile.index, offMeshConnection.poly);
+                return true;
+            }
+        }
+
+        polyRef = 0;
+        return false;
+    }
+
+    private static bool ApproximatelyEquals(DotRecast.Core.Numerics.RcVec3f actual, Vector3 expected)
+    {
+        var dx = MathF.Abs(actual.X - expected.X);
+        var dy = MathF.Abs(actual.Y - expected.Y);
+        var dz = MathF.Abs(actual.Z - expected.Z);
+        return dx <= 0.05f && dy <= 0.05f && dz <= 0.05f;
     }
 
     private static readonly byte[] s_subtreeMaskByPackedState  = BuildSubtreeMaskByPackedState();

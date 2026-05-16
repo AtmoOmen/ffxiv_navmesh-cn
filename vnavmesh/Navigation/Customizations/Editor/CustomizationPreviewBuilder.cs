@@ -9,6 +9,7 @@ using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations.Abstractions;
+using vnavmesh.Navigation.Customizations.Extensions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
@@ -305,6 +306,7 @@ internal class CustomizationPreviewBuilder
         var flyable        = customization.IsFlyingSupported(scene);
         var buildScene     = extractor.ToBuildScene();
         var buildSettings  = settings.ToBuildSettings(flyable, customization.Version);
+        buildSettings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(customization));
         var buildSignature = vnavmesh.Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(buildScene, buildSettings);
         var cacheKey       = $"editor-preview-{scene.TerritoryID}-{requestGeneration:X8}-{Guid.NewGuid():N}";
 
@@ -329,6 +331,7 @@ internal class CustomizationPreviewBuilder
         Volatile.Write(ref buildProgress, -1f);
         manager.ExternalBuildProgress = -1f;
 
+        navmesh.RegisterBuildTimeOffMeshConnections(buildSettings.OffMeshConnections);
         customization.CustomizeMesh(navmesh, [.. scene.FestivalLayers]);
         var query = new NavmeshQuery(navmesh, config);
 
