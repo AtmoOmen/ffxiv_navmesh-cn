@@ -195,8 +195,13 @@ public class VoxelPathfind
 
         if (!EnableLongRangeGlobalFallback)
         {
-            Service.Log.Debug("[算路] 飞行体素已禁用长距离全局回退，停留在 L1 走廊搜索结果用于调试");
-            return [];
+            Service.Log.Debug
+            (
+                longRangePath.Count > 0
+                    ? $"[算路] 飞行体素已禁用长距离全局回退，返回当前长距离代理/接力结果用于调试：路径点 = {longRangePath.Count}，终止 = {lastTermination}"
+                    : "[算路] 飞行体素已禁用长距离全局回退，且当前长距离代理/接力未产出有效路径"
+            );
+            return longRangePath.Count > 0 ? RefineSimplifiedPath(longRangePath, cancel) : [];
         }
 
         if (l1DistanceField is not { Count: > 0 })
