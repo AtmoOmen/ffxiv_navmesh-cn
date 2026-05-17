@@ -2,7 +2,6 @@ using System.Numerics;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Bootstrap;
 using vnavmesh.Configuration;
-using vnavmesh.Integration.Status;
 using vnavmesh.Integration.Windowing;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
@@ -13,8 +12,8 @@ namespace vnavmesh.Integration.Ipc;
 
 internal class IPCProvider : IDisposable
 {
-    private readonly Config       _config;
-    private readonly List<Action> _disposeActions = [];
+    private readonly Config       config;
+    private readonly List<Action> disposeActions = [];
 
     public IPCProvider
     (
@@ -22,11 +21,10 @@ internal class IPCProvider : IDisposable
         NavmeshManager       navmeshManager,
         MovementPlanExecutor movementExecutor,
         AsyncMoveRequest     move,
-        WindowProvider       windowProvider,
-        DTRProvider          dtr
+        WindowProvider       windowProvider
     )
     {
-        _config = config;
+        this.config = config;
         RegisterFunc("Nav.IsReady",               () => navmeshManager.Navmesh != null);
         RegisterFunc("Nav.BuildProgress",         () => navmeshManager.LoadTaskProgress);
         RegisterFunc("Nav.Reload",                () => navmeshManager.Reload(true));
@@ -41,14 +39,14 @@ internal class IPCProvider : IDisposable
         RegisterAction("Nav.PathfindCancelAll", () => navmeshManager.Reload(true));
         RegisterFunc("Nav.PathfindInProgress", () => navmeshManager.PathfindInProgress);
         RegisterFunc("Nav.PathfindNumQueued",  () => navmeshManager.NumQueuedPathfindRequests);
-        RegisterFunc("Nav.IsAutoLoad",         () => _config.AutoLoadNavmesh);
+        RegisterFunc("Nav.IsAutoLoad",         () => this.config.AutoLoadNavmesh);
         RegisterAction
         (
             "Nav.SetAutoLoad",
             (bool v) =>
             {
-                _config.AutoLoadNavmesh = v;
-                _config.Save();
+                this.config.AutoLoadNavmesh = v;
+                this.config.Save();
             }
         );
         RegisterFunc("Nav.BuildBitmap", (Vector3 startingPos, string filename, float pixelSize) => navmeshManager.BuildBitmap(startingPos, filename, pixelSize));
@@ -90,14 +88,14 @@ internal class IPCProvider : IDisposable
         RegisterFunc("Path.ListWaypoints",      () => movementExecutor.Waypoints);
         RegisterFunc("Path.GetMovementAllowed", () => movementExecutor.MovementAllowed);
         RegisterAction("Path.SetMovementAllowed", (bool v) => movementExecutor.MovementAllowed = v);
-        RegisterFunc("Path.GetAlignCamera", () => _config.AlignCameraToMovement);
+        RegisterFunc("Path.GetAlignCamera", () => this.config.AlignCameraToMovement);
         RegisterAction
         (
             "Path.SetAlignCamera",
             (bool v) =>
             {
-                _config.AlignCameraToMovement = v;
-                _config.Save();
+                this.config.AlignCameraToMovement = v;
+                this.config.Save();
             }
         );
         RegisterFunc("Path.GetTolerance", () => movementExecutor.Tolerance);
@@ -110,21 +108,21 @@ internal class IPCProvider : IDisposable
         RegisterFunc("Window.IsOpen", () => windowProvider.IsOpen);
         RegisterAction("Window.SetOpen", (bool v) => windowProvider.IsOpen = v);
 
-        RegisterFunc("DTR.IsShown", () => _config.EnableDTR);
+        RegisterFunc("DTR.IsShown", () => this.config.EnableDTR);
         RegisterAction
         (
             "DTR.SetShown",
             (bool v) =>
             {
-                _config.EnableDTR = v;
-                _config.Save();
+                this.config.EnableDTR = v;
+                this.config.Save();
             }
         );
     }
 
     public void Dispose()
     {
-        foreach (var a in _disposeActions)
+        foreach (var a in disposeActions)
             a();
     }
 
@@ -132,62 +130,62 @@ internal class IPCProvider : IDisposable
     {
         var p = Service.PluginInterface.GetIpcProvider<TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
-        _disposeActions.Add(p.UnregisterFunc);
+        disposeActions.Add(p.UnregisterFunc);
     }
 
     private void RegisterFunc<TRet, T1>(string name, Func<T1, TRet> func)
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
-        _disposeActions.Add(p.UnregisterFunc);
+        disposeActions.Add(p.UnregisterFunc);
     }
 
     private void RegisterFunc<TRet, T1, T2>(string name, Func<T1, T2, TRet> func)
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
-        _disposeActions.Add(p.UnregisterFunc);
+        disposeActions.Add(p.UnregisterFunc);
     }
 
     private void RegisterFunc<TRet, T1, T2, T3>(string name, Func<T1, T2, T3, TRet> func)
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, T3, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
-        _disposeActions.Add(p.UnregisterFunc);
+        disposeActions.Add(p.UnregisterFunc);
     }
 
     private void RegisterFunc<TRet, T1, T2, T3, T4>(string name, Func<T1, T2, T3, T4, TRet> func)
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, T3, T4, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
-        _disposeActions.Add(p.UnregisterFunc);
+        disposeActions.Add(p.UnregisterFunc);
     }
 
     private void RegisterFunc<TRet, T1, T2, T3, T4, T5>(string name, Func<T1, T2, T3, T4, T5, TRet> func)
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, T3, T4, T5, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
-        _disposeActions.Add(p.UnregisterFunc);
+        disposeActions.Add(p.UnregisterFunc);
     }
 
     private void RegisterAction(string name, Action func)
     {
         var p = Service.PluginInterface.GetIpcProvider<object>("vnavmesh." + name);
         p.RegisterAction(func);
-        _disposeActions.Add(p.UnregisterAction);
+        disposeActions.Add(p.UnregisterAction);
     }
 
     private void RegisterAction<T1>(string name, Action<T1> func)
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, object>("vnavmesh." + name);
         p.RegisterAction(func);
-        _disposeActions.Add(p.UnregisterAction);
+        disposeActions.Add(p.UnregisterAction);
     }
 
     private void RegisterAction<T1, T2>(string name, Action<T1, T2> func)
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, object>("vnavmesh." + name);
         p.RegisterAction(func);
-        _disposeActions.Add(p.UnregisterAction);
+        disposeActions.Add(p.UnregisterAction);
     }
 }
