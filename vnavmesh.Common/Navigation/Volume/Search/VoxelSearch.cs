@@ -8,18 +8,32 @@ public static class VoxelSearch
     private const float UpwardVoxelPreferencePenaltyScale  = 12f;
     private const float UpwardVoxelPreferencePenaltyLinear = 4f;
     private const float DownwardVoxelPreferencePenalty     = 0.5f;
+    private const float BelowFloorVoxelBottomPenaltyScale  = 96f;
+    private const float BelowFloorVoxelBottomPenaltyLinear = 12f;
 
     public static Vector3 FindClosestVoxelPoint(VoxelMap volume, ulong index, Vector3 p, float eps = 0.1f) =>
         volume.ClampPointToVoxel(index, p, eps);
 
-    public static ulong FindNearestEmptyVoxel(VoxelMap volume, Vector3 center, Vector3 halfExtent)
+    public static ulong FindNearestEmptyVoxel
+    (
+        VoxelMap volume,
+        Vector3  center,
+        Vector3  halfExtent,
+        bool     preferNonBelow = false,
+        float?   minCandidateY  = null
+    )
     {
         var centerLeaf = volume.FindLeafVoxel(center);
-        if (centerLeaf.empty)
+        if (centerLeaf.empty && minCandidateY == null)
+        {
             return centerLeaf.voxel;
+        }
 
-        var minDist = float.MaxValue;
-        var nearestVoxel = VoxelMap.INVALID_VOXEL;
+        var minDist            = float.MaxValue;
+        var nearestVoxel       = VoxelMap.INVALID_VOXEL;
+        var preferredMinDist   = float.MaxValue;
+        var preferredVoxel     = VoxelMap.INVALID_VOXEL;
+        var belowFloorSlack    = MathF.Max(volume.Levels[^1].CellSize.Y * 0.5f, 0.25f);
 
         foreach (var v in volume.RootTile.EnumerateLeafVoxels(center - halfExtent, center + halfExtent))
         {
@@ -27,6 +41,9 @@ public static class VoxelSearch
                 continue;
 
             var p          = FindClosestVoxelPoint(volume, v.index, center, 0);
+            if (minCandidateY is { } minY && p.Y + float.Epsilon < minY)
+                continue;
+
             var d          = p - center;
             var dist       = d.LengthSquared();
             var upward     = MathF.Max(d.Y, 0f);
@@ -35,14 +52,28 @@ public static class VoxelSearch
             dist          += upward * UpwardVoxelPreferencePenaltyLinear;
             dist          += downward * DownwardVoxelPreferencePenalty;
 
+            if (minCandidateY is { } floorMinY)
+            {
+                var bounds            = volume.VoxelBounds(v.index, 0);
+                var bottomPenetration = MathF.Max(floorMinY - (bounds.min.Y + belowFloorSlack), 0f);
+                dist                 += bottomPenetration * bottomPenetration * BelowFloorVoxelBottomPenaltyScale;
+                dist                 += bottomPenetration * BelowFloorVoxelBottomPenaltyLinear;
+            }
+
+            if (p.Y + float.Epsilon >= center.Y && dist < preferredMinDist)
+            {
+                preferredMinDist = dist;
+                preferredVoxel   = v.index;
+            }
+
             if (dist < minDist)
             {
-                minDist = dist;
+                minDist      = dist;
                 nearestVoxel = v.index;
             }
         }
 
-        return nearestVoxel;
+        return preferNonBelow && preferredVoxel != VoxelMap.INVALID_VOXEL ? preferredVoxel : nearestVoxel;
     }
 
     public static IEnumerable<(ulong voxel, float t, bool empty)> EnumerateVoxelsInLine

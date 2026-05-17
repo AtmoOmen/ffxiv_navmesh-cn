@@ -333,7 +333,10 @@ public sealed class NavmeshManager : IDisposable
                 if (ff.TryLookup(scene.TerritoryID, out var points))
                 {
                     var pruneSeeds = points.ToArray();
-                    Navmesh.DeferMeshMutation(mesh => PruneMesh(mesh, pruneSeeds));
+                    if (EnableUnreachablePrune)
+                        Navmesh.DeferMeshMutation(mesh => PruneMesh(mesh, pruneSeeds));
+                    else
+                        Log($"已禁用不可达裁剪，跳过 {pruneSeeds.Length} 个种子点");
                 }
 
                 OnNavmeshChanged?.Invoke(Navmesh, Query);
@@ -962,43 +965,103 @@ public sealed class NavmeshManager : IDisposable
         var query      = new DtNavMeshQuery(mesh);
         var startPolys = CollectPruneSeedPolys(query, points).ToArray();
         Log($"裁剪起始多边形: {string.Join(", ", startPolys.Select(p => p.ToString("X")))}");
-        var reachablePolys = FindReachableMeshPolys(query, startPolys);
 
-        var pruneCount = 0;
-
-        for (var i = 0; i < mesh.GetMaxTiles(); i++)
+        if (startPolys.Length == 0)
         {
-            var t = mesh.GetTile(i);
-            if (t.data?.header == null)
+            Log("已跳过不可达裁剪：未能从种子点定位到任何起始多边形");
+            return;
+        }
+
+        var topology = BuildPruneTopology(mesh);
+        if (topology.TotalTraversablePolyCount == 0)
+        {
+            Log("已跳过不可达裁剪：导航网格中没有可裁剪的可通行多边形");
+            return;
+        }
+
+        HashSet<int> keptComponents = [];
+        foreach (var polyRef in startPolys)
+        {
+            if (topology.ComponentByPoly.TryGetValue(polyRef, out var componentIndex))
+                keptComponents.Add(componentIndex);
+        }
+
+        if (keptComponents.Count == 0)
+        {
+            Log("已跳过不可达裁剪：种子多边形未落入任何可通行连通块");
+            return;
+        }
+
+        var extraKeepThreshold = Math.Max
+        (
+            PRUNE_PRESERVE_COMPONENT_MIN_POLYS,
+            (int)MathF.Ceiling(topology.TotalTraversablePolyCount * PRUNE_PRESERVE_COMPONENT_MIN_RATIO)
+        );
+        List<int> additionallyPreservedComponents = [];
+
+        for (var componentIndex = 0; componentIndex < topology.Components.Count; ++componentIndex)
+        {
+            if (keptComponents.Contains(componentIndex))
                 continue;
 
-            var prBase = mesh.GetPolyRefBase(t);
+            var polyCount = topology.Components[componentIndex].PolyRefs.Count;
+            if (polyCount < extraKeepThreshold)
+                continue;
 
-            for (var j = 0; j < t.data.header.polyCount; j++)
+            keptComponents.Add(componentIndex);
+            additionallyPreservedComponents.Add(componentIndex);
+        }
+
+        var keptPolyCount = CountComponentPolys(topology.Components, keptComponents);
+        var keptRatio     = keptPolyCount / (float)topology.TotalTraversablePolyCount;
+
+        if (keptRatio < PRUNE_MIN_KEEP_RATIO)
+        {
+            Log
+            (
+                $"已跳过不可达裁剪：种子仅覆盖 {keptPolyCount}/{topology.TotalTraversablePolyCount} 个可通行多边形（{keptRatio:P1}），" +
+                $"连通块数 = {topology.Components.Count}，疑似被地形裂缝切成多个有效区域"
+            );
+            return;
+        }
+
+        HashSet<long> reachablePolys = [];
+        foreach (var componentIndex in keptComponents)
+        {
+            foreach (var polyRef in topology.Components[componentIndex].PolyRefs)
+                reachablePolys.Add(polyRef);
+        }
+
+        var pruneCount = 0;
+        foreach (var pref in topology.TraversablePolyRefs)
+        {
+            if (mesh.GetPolyFlags(pref, out var fl).Failed())
             {
-                var pref = prBase | (uint)j;
+                Log($"读取多边形标记失败: {pref:X}");
+                continue;
+            }
 
-                if (mesh.GetPolyFlags(pref, out var fl).Failed())
-                {
-                    Log($"读取多边形标记失败: {pref:X}");
-                    continue;
-                }
-
-                if (reachablePolys.Contains(pref))
-                {
-                    if (mesh.SetPolyFlags(pref, fl & ~(int)NavmeshPolyFlags.Unreachable).Failed())
-                        Log($"写入多边形标记失败: {pref:X}");
-                }
-                else
-                {
-                    pruneCount++;
-                    if (mesh.SetPolyFlags(pref, fl | (int)NavmeshPolyFlags.Unreachable).Failed())
-                        Log($"写入多边形标记失败: {pref:X}");
-                }
+            if (reachablePolys.Contains(pref))
+            {
+                if (mesh.SetPolyFlags(pref, fl & ~(int)NavmeshPolyFlags.Unreachable).Failed())
+                    Log($"写入多边形标记失败: {pref:X}");
+            }
+            else
+            {
+                pruneCount++;
+                if (mesh.SetPolyFlags(pref, fl | (int)NavmeshPolyFlags.Unreachable).Failed())
+                    Log($"写入多边形标记失败: {pref:X}");
             }
         }
 
-        Log($"已裁剪不可达多边形 {pruneCount} 个");
+        var extraComponentText = additionallyPreservedComponents.Count > 0
+            ? $"，额外保留大连通块 = {string.Join(", ", additionallyPreservedComponents.Select(i => $"{i}:{topology.Components[i].PolyRefs.Count}"))}"
+            : "";
+        Log
+        (
+            $"已裁剪不可达多边形 {pruneCount} 个，保留 {keptPolyCount}/{topology.TotalTraversablePolyCount} 个可通行多边形，" +
+            $"连通块数 = {topology.Components.Count}，种子命中连通块 = {keptComponents.Count - additionallyPreservedComponents.Count}{extraComponentText}"
+        );
     }
 
     private static HashSet<long> CollectPruneSeedPolys(DtNavMeshQuery query, IEnumerable<Vector3> points)
@@ -1100,8 +1163,98 @@ public sealed class NavmeshManager : IDisposable
         return result;
     }
 
+    private static PruneTopology BuildPruneTopology(DtNavMesh mesh)
+    {
+        var traversablePolyRefs = CollectTraversableMeshPolyRefs(mesh);
+        var traversablePolySet  = traversablePolyRefs.ToHashSet();
+        Dictionary<long, int> componentByPoly = new(traversablePolyRefs.Count);
+        List<PruneComponent> components = [];
+        List<long> queue = [];
+
+        foreach (var rootPolyRef in traversablePolyRefs)
+        {
+            if (componentByPoly.ContainsKey(rootPolyRef))
+                continue;
+
+            var componentIndex = components.Count;
+            List<long> componentPolyRefs = [];
+            queue.Add(rootPolyRef);
+
+            while (queue.Count > 0)
+            {
+                var currentPolyRef = queue[^1];
+                queue.RemoveAt(queue.Count - 1);
+
+                if (!componentByPoly.TryAdd(currentPolyRef, componentIndex))
+                    continue;
+
+                componentPolyRefs.Add(currentPolyRef);
+
+                mesh.GetTileAndPolyByRefUnsafe(currentPolyRef, out var currentTile, out var currentPoly);
+                for (var linkIndex = currentPoly.firstLink; linkIndex != DtDetour.DT_NULL_LINK; linkIndex = currentTile.links[linkIndex].next)
+                {
+                    var neighbourRef = currentTile.links[linkIndex].refs;
+                    if (neighbourRef != 0 && traversablePolySet.Contains(neighbourRef) && !componentByPoly.ContainsKey(neighbourRef))
+                        queue.Add(neighbourRef);
+                }
+            }
+
+            components.Add(new(componentPolyRefs));
+        }
+
+        return new(components, componentByPoly, traversablePolyRefs);
+    }
+
+    private static List<long> CollectTraversableMeshPolyRefs(DtNavMesh mesh)
+    {
+        List<long> result = [];
+
+        for (var tileIndex = 0; tileIndex < mesh.GetMaxTiles(); ++tileIndex)
+        {
+            var tile = mesh.GetTile(tileIndex);
+            if (tile.data?.header == null)
+                continue;
+
+            var polyRefBase = mesh.GetPolyRefBase(tile);
+            for (var polyIndex = 0; polyIndex < tile.data.header.polyCount; ++polyIndex)
+            {
+                var polyRef = polyRefBase | (uint)polyIndex;
+                if (mesh.GetPolyFlags(polyRef, out var flags).Failed())
+                {
+                    Log($"读取多边形标记失败: {polyRef:X}");
+                    continue;
+                }
+
+                if ((flags & (int)NavmeshPolyFlags.AllTraversable) != 0)
+                    result.Add(polyRef);
+            }
+        }
+
+        return result;
+    }
+
+    private static int CountComponentPolys(IReadOnlyList<PruneComponent> components, IEnumerable<int> componentIndices)
+    {
+        var count = 0;
+        foreach (var componentIndex in componentIndices)
+            count += components[componentIndex].PolyRefs.Count;
+        return count;
+    }
+
     private static string FormatHexNumbers<T>(IEnumerable<T> nums) where T : INumber<T> =>
         string.Join('.', nums.Select(n => n.ToString("X", CultureInfo.InvariantCulture)));
+
+    private sealed record PruneComponent(List<long> PolyRefs);
+
+    private sealed record PruneTopology
+    (
+        List<PruneComponent>  Components,
+        Dictionary<long, int> ComponentByPoly,
+        List<long>            TraversablePolyRefs
+    )
+    {
+        public int TotalTraversablePolyCount => TraversablePolyRefs.Count;
+    }
 
     private sealed record BuildNavmeshResult
     (
@@ -1122,6 +1275,10 @@ public sealed class NavmeshManager : IDisposable
     private const float PRUNE_SEED_HALF_EXTENT_Y           = 16.0f;
     private const float PRUNE_SEED_MAX_HORIZONTAL_DISTANCE = 8.0f;
     private const float PRUNE_SEED_MAX_VERTICAL_DISTANCE   = 12.0f;
+    private const float PRUNE_PRESERVE_COMPONENT_MIN_RATIO = 0.05f;
+    private const int   PRUNE_PRESERVE_COMPONENT_MIN_POLYS = 256;
+    private const float PRUNE_MIN_KEEP_RATIO               = 0.40f;
+    private static readonly bool EnableUnreachablePrune    = false;
 
     #endregion
 }

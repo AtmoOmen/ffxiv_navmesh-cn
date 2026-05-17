@@ -31,8 +31,10 @@ internal sealed class NavmeshFlightQuery
         var volumeQuery    = query.VolumeQuery!;
         var volume         = volumeQuery.Volume;
         var locateTimer    = StopWatchTimer.Create();
-        var startVoxel     = query.FindNearestVolumeVoxel(from);
-        var endVoxel       = query.FindNearestVolumeVoxel(to);
+        var startLocate    = query.FindNearestVolumeVoxelSurfaceAware(from);
+        var endLocate      = query.FindNearestVolumeVoxelSurfaceAware(to);
+        var startVoxel     = startLocate.Voxel;
+        var endVoxel       = endLocate.Voxel;
         var locateDuration = locateTimer.Value();
         Service.Log.Debug($"[算路] 飞行体素 {startVoxel:X} -> {endVoxel:X}");
 
@@ -44,29 +46,62 @@ internal sealed class NavmeshFlightQuery
 
         var requestedStartLeaf = volume.FindLeafVoxel(from);
         var requestedTargetLeaf = volume.FindLeafVoxel(to);
-        var safeStart = requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ? from : VoxelSearch.FindClosestVoxelPoint(volume, startVoxel, from);
-        var safeDestination = requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ? to : VoxelSearch.FindClosestVoxelPoint(volume, endVoxel, to);
+        var safeStart = !startLocate.UsedSurfaceAnchor && requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel
+                            ? from
+                            : startLocate.SafePoint;
+        var safeDestination = !endLocate.UsedSurfaceAnchor && requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel
+                                  ? to
+                                  : endLocate.SafePoint;
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
         var searchTimer = StopWatchTimer.Create();
         var voxelPath = volumeQuery.FindPath
             (startVoxel, endVoxel, safeStart, safeDestination, false, cancel);
         var telemetry = volumeQuery.LastTelemetry;
 
-        if (voxelPath.Count == 0)
-        {
-            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空");
-            return CreateFlightFailure(to);
-        }
-
         Service.Log.Debug
         (
             $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，搜索轮次 = {telemetry.SearchAttempts}，启发式权重 = {telemetry.HeuristicWeight:f2}，路径点 = {voxelPath.Count}，起点修正 = {(Vector3.DistanceSquared(safeStart, from) > 0.000001f ? "是" : "否")}，安全终点修正 = {(safeDestinationAdjusted ? "是" : "否")}"
         );
+        var flightDebug = volumeQuery.LastPathDebug;
+
+        if (voxelPath.Count == 0 && flightDebug is { CoarsePath.Count: > 0 })
+        {
+            Service.Log.Warning("[算路] 飞行体素调试：返回粗层 best-effort 叠加，不生成正式路线");
+            return new()
+            {
+                Status               = PathfindStatus.Partial,
+                RequestedMode        = MovementMode.Flight,
+                RequestedDestination = to,
+                FinalDestination     = to,
+                DestinationTolerance = 0,
+                Segments =
+                [
+                    new()
+                    {
+                        MovementMode           = MovementMode.Flight,
+                        SegmentKind            = MovementSegmentKind.FlightTraverse,
+                        AllowVerticalControl   = true,
+                        ReachabilitySource     = PathReachabilitySource.Volume,
+                        GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
+                        TraversalStartPosition = from,
+                        StartPosition          = from,
+                        EndPosition            = to,
+                        Points                 = [],
+                        FlightPathDebug        = flightDebug
+                    }
+                ]
+            };
+        }
+
+        if (voxelPath.Count == 0)
+        {
+            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空，终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，访问节点 = {telemetry.VisitedNodes}");
+            return CreateFlightFailure(to);
+        }
 
         List<Vector3> rawWaypoints = new(voxelPath.Count);
         foreach (var step in voxelPath)
             rawWaypoints.Add(step.p);
-        var flightDebug = volumeQuery.LastPathDebug;
 
         if (telemetry.Termination != VolumeSearchTermination.ReachedGoal)
         {
@@ -108,7 +143,7 @@ internal sealed class NavmeshFlightQuery
 
         var finalDestination    = safeDestination;
         var destinationAdjusted = safeDestinationAdjusted;
-        var landingPoint        = !requestedTargetLeaf.empty ? TryResolveFlightLandingPoint(to, safeDestination) : null;
+        var landingPoint        = TryResolveFlightLandingPoint(to, safeDestination);
         var completionTolerance = MathF.Max(query.ConfigData.PathTolerance, HorizontalDistanceXZ(to, safeDestination));
 
         if (landingPoint is { } resolvedLandingPoint)
@@ -168,8 +203,8 @@ internal sealed class NavmeshFlightQuery
             MathF.Max(landingLeafSize.X, landingLeafSize.Z)
         );
         var landingPoint = query.FindPointOnFloor
-                               (requestedTarget, landingSearchExtent.X) ??
-                           query.FindNearestPointOnMesh(requestedTarget, landingSearchExtent.X, landingSearchExtent.Y);
+                               (requestedTarget, landingSearchExtent.X, allowUnreachable: true) ??
+                           query.FindNearestPointOnMesh(requestedTarget, landingSearchExtent.X, landingSearchExtent.Y, allowUnreachable: true);
         if (landingPoint is not { } resolved)
             return null;
 
@@ -221,11 +256,12 @@ internal sealed class NavmeshFlightQuery
             transitionPoint.Z - leadDelta.Y  * approachHorizontal
         );
 
-        var approachVoxel = query.FindNearestVolumeVoxel(candidate, transitionTolerance, MathF.Max(toleranceFloor, verticalDrop));
+        var approachLocate = query.FindNearestVolumeVoxelSurfaceAware(candidate, transitionTolerance, MathF.Max(toleranceFloor, verticalDrop));
+        var approachVoxel = approachLocate.Voxel;
         if (approachVoxel == VoxelMap.INVALID_VOXEL)
             return candidate;
 
-        return VoxelSearch.FindClosestVoxelPoint(query.VolumeQuery!.Volume, approachVoxel, candidate);
+        return approachLocate.SafePoint;
     }
 
     private void TrimFlightWaypointsForGroundTransition(List<Vector3> flightWaypoints, Vector3 approachPoint)
@@ -351,4 +387,5 @@ internal sealed class NavmeshFlightQuery
         var dz = left.Z           - right.Z;
         return MathF.Sqrt(dx * dx + dz * dz);
     }
+
 }

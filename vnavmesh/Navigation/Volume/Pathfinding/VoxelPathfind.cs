@@ -22,6 +22,9 @@ public class VoxelPathfind
     private readonly List<VolumePathfindNode>                        nodes           = new(1024);
     private readonly Dictionary<ulong, int>                          nodeLookup      = new(1024);
     private readonly ConcurrentDictionary<ulong, byte>               voxelWallMaskCache = new(Environment.ProcessorCount, 4096);
+    private readonly ConcurrentDictionary<ulong, byte>               verifiedDownwardOpeningCache = new(Environment.ProcessorCount, 2048);
+    private readonly ConcurrentDictionary<ulong, byte>               verifiedTopEntryCache = new(Environment.ProcessorCount, 2048);
+    private readonly ConcurrentDictionary<ulong, ulong>              l1FaceConnectivityCache = new(Environment.ProcessorCount, 2048);
     private readonly List<int>                                       openList        = new(256);
     private readonly ConcurrentDictionary<VolumeVisibilityKey, bool> visibilityCache = new(Environment.ProcessorCount, 4096);
 
@@ -38,10 +41,24 @@ public class VoxelPathfind
     private int                       peakOpenListSize;
     private VolumeSearchTermination   lastTermination;
     private int                       lastSearchAttempts;
+    private bool                      debugReturnedLongRangeBestEffortPath;
+    private bool                      guidedCorridorEarlyAbortTriggered;
+    private int                       currentL1CorridorRadius;
     private HashSet<ulong>?           l1PathSet;
+    private HashSet<ushort>?          l0PathSet;
+    private Dictionary<ulong, int>?   l1CorridorDistance;
+    private Dictionary<ushort, int>?  l0CorridorDistance;
     private Dictionary<ulong, float>? l1DistanceField;
+    private Dictionary<ushort, float>? l0DistanceField;
     private FlightPathDebugPayload?   lastPathDebug;
+    private FlightLongRangeProxyDebug? pendingLongRangeProxyDebug;
     private GuidedSearchCorridor      guidedCorridor;
+    private LongRangeLateralBias      longRangeLateralBias;
+    private float                     guidedCorridorInitialGoalDistance;
+    private float                     guidedCorridorInitialAboveGoal;
+    private float                     guidedCorridorLastProgressDistance;
+    private float                     guidedCorridorLastProgressAboveGoal;
+    private int                       guidedCorridorLastProgressVisited;
 
     public VoxelMap Volume { get; }
 
@@ -81,9 +98,14 @@ public class VoxelPathfind
         CancellationToken cancel
     )
     {
-        l1PathSet       = null;
-        l1DistanceField = null;
-        lastPathDebug   = null;
+        l1PathSet          = null;
+        l0PathSet          = null;
+        l1CorridorDistance = null;
+        l0CorridorDistance = null;
+        l1DistanceField    = null;
+        l0DistanceField    = null;
+        lastPathDebug      = null;
+        pendingLongRangeProxyDebug = null;
 
         if (fromVoxel == toVoxel)
         {
@@ -122,14 +144,8 @@ public class VoxelPathfind
         {
             var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, RAYCAST_SEARCH_STEP_BUDGET, 1);
 
-            if (lastTermination == VolumeSearchTermination.StepBudgetReached)
-            {
-                Service.Log.Debug
-                (
-                    $"[算路] 飞行体素搜索触发降级重试：直线距离 = {Vector3.Distance(fromPos, toPos):f3}，首轮访问节点 = {visitedNodes}，LoS 检查 = {lineOfSightChecks}"
-                );
-                path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 2);
-            }
+            if (lastTermination != VolumeSearchTermination.ReachedGoal)
+                path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
 
             return RefineSimplifiedPath(path, cancel);
         }
@@ -161,44 +177,350 @@ public class VoxelPathfind
 
             Service.Log.Debug
             (
-                $"[算路] 飞行体素定向走廊搜索未达终点（{lastTermination}），回退 L1/全搜索"
+                guidedCorridorEarlyAbortTriggered
+                    ? $"[算路] 飞行体素定向走廊搜索提前回退（进展停滞），访问节点 = {visitedNodes}，最佳距离 = {NodeSpan[bestNodeIndex].HScore:f3}，当前高差余量 = {MathF.Max(NodeSpan[bestNodeIndex].Position.Y - goalPos.Y, 0f):f3}"
+                    : $"[算路] 飞行体素定向走廊搜索未达终点（{lastTermination}），回退侧向探测/全搜索"
             );
         }
 
-        var l1Path = SearchL1CoarsePath(fromVoxel, toVoxel);
-
-        if (l1Path is { Count: > 0 } pathSet)
+        var longRangePath = RunLongRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
+        if (debugReturnedLongRangeBestEffortPath)
         {
-            l1PathSet = pathSet;
-            var constrainedPath = RunSearchAttempt
-                (fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 1);
+            Service.Log.Debug("[算路] 飞行体素调试：best-effort 后直接停止，并返回粗路径调试叠加");
+            return [];
+        }
+
+        if (lastTermination == VolumeSearchTermination.ReachedGoal)
+            return RefineSimplifiedPath(longRangePath, cancel);
+
+        if (!EnableLongRangeGlobalFallback)
+        {
+            Service.Log.Debug("[算路] 飞行体素已禁用长距离全局回退，停留在 L1 走廊搜索结果用于调试");
+            return [];
+        }
+
+        if (l1DistanceField is not { Count: > 0 })
+            ComputeL1DistanceField(toVoxel, toPos);
+        var fallbackPath = RunSearchAttempt
+        (
+            fromVoxel,
+            toVoxel,
+            fromPos,
+            toPos,
+            returnIntermediatePoints,
+            cancel,
+            LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+            LONG_RANGE_LATERAL_EXPLORATION_ATTEMPTS + 2,
+            heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
+        );
+        return RefineSimplifiedPath(fallbackPath, cancel);
+    }
+
+    private List<(ulong voxel, Vector3 p)> RunLongRangeFallback
+    (
+        ulong             fromVoxel,
+        ulong             toVoxel,
+        Vector3           fromPos,
+        Vector3           toPos,
+        bool              returnIntermediatePoints,
+        CancellationToken cancel,
+        int               recursionDepth = 0
+    )
+    {
+        if (recursionDepth == 0)
+            pendingLongRangeProxyDebug = null;
+        var coarsePath = SearchL1BestEffortPath(fromVoxel, fromPos, toVoxel, toPos);
+        if (coarsePath.PathSet.Count == 0)
+        {
+            ClearL1AreaConstraint();
+            Service.Log.Debug("[算路] 飞行体素粗层 best-effort 搜索未产出有效路径");
+            return [];
+        }
+
+        Service.Log.Debug
+        (
+            $"[算路] 飞行体素粗层 best-effort 完成：到达终点 = {(coarsePath.ReachedGoal ? 1 : 0)}，粗路径单元 = {coarsePath.PathSet.Count}，扩展节点 = {coarsePath.ExpandedNodes}/{coarsePath.StepBudget}，最佳粗距离 = {coarsePath.BestDistance:f3}"
+        );
+
+        if (!EnableLongRangeGlobalFallback && DebugReturnLongRangeBestEffortPath)
+        {
+            ClearL1AreaConstraint();
+            debugReturnedLongRangeBestEffortPath = true;
+            lastTermination    = VolumeSearchTermination.SearchExhausted;
+            lastSearchAttempts = 1;
+            visitedNodes       = coarsePath.ExpandedNodes;
+            generatedNodes     = coarsePath.ExpandedNodes;
+            lineOfSightChecks  = 0;
+            lineOfSightHits    = 0;
+            peakOpenListSize   = 0;
+            heuristicWeight    = LONG_RANGE_HEURISTIC_WEIGHT;
+            lastPathDebug      = BuildCoarsePathDebugPayload(coarsePath.OrderedPath, fromPos, toPos, coarsePath.ReachedGoal);
+            return [];
+        }
+
+        var guidedCorridorRadius = ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance);
+        var proxyGoalVoxel       = coarsePath.OrderedPath[^1];
+        var proxyGoalPos         = ResolveSearchCandidatePosition(proxyGoalVoxel, ResolveVoxelCenter(proxyGoalVoxel));
+
+        BuildL1Corridor(coarsePath.PathSet, guidedCorridorRadius);
+        ComputeL1DistanceFieldFromCoarsePath(coarsePath.OrderedPath, 0f);
+
+        var proxyPath = RunSearchAttempt
+        (
+            fromVoxel,
+            proxyGoalVoxel,
+            fromPos,
+            proxyGoalPos,
+            returnIntermediatePoints,
+            cancel,
+            LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+            1,
+            heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
+        );
+
+        if (lastTermination == VolumeSearchTermination.ReachedGoal)
+        {
+            pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyPath[^1].p, toPos, FlightLongRangeTailKind.None);
+            Service.Log.Debug
+            (
+                $"[算路] 飞行体素粗层代理搜索完成：访问节点 = {visitedNodes}，粗路径单元 = {coarsePath.PathSet.Count}，引导半径 = {guidedCorridorRadius}，启发式权重 = {heuristicWeight:f2}"
+            );
+            ClearL1AreaConstraint();
+
+            if (proxyPath.Count == 0)
+                return proxyPath;
+
+            var proxyEndpoint = proxyPath[^1];
+            if (TryBuildDirectPath(proxyEndpoint.voxel, toVoxel, proxyEndpoint.p, toPos, out var directTail))
+            {
+                pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyEndpoint.p, toPos, FlightLongRangeTailKind.DirectToGoal);
+                Service.Log.Debug("[算路] 飞行体素粗层代理搜索后直连终点成功");
+                return MergePathSegments(proxyPath, directTail);
+            }
+
+            var tailPath = RunTailSearchFromProxy(proxyEndpoint.voxel, toVoxel, proxyEndpoint.p, toPos, returnIntermediatePoints, cancel, coarsePath.ReachedGoal, recursionDepth, out var usedLongRangeReentry);
+            if (lastTermination == VolumeSearchTermination.ReachedGoal)
+            {
+                if (!(usedLongRangeReentry && pendingLongRangeProxyDebug is not null))
+                    pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyEndpoint.p, toPos, FlightLongRangeTailKind.ShortRangeRelay);
+                Service.Log.Debug
+                (
+                    usedLongRangeReentry
+                        ? $"[算路] 飞行体素粗层代理搜索后二次粗搜接力完成：访问节点 = {visitedNodes}，路径点 = {tailPath.Count}"
+                        : $"[算路] 飞行体素粗层代理搜索后短程接力完成：访问节点 = {visitedNodes}，路径点 = {tailPath.Count}"
+                );
+                return MergePathSegments(proxyPath, tailPath);
+            }
+
+            if (!(usedLongRangeReentry && pendingLongRangeProxyDebug is not null))
+                pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyEndpoint.p, toPos, FlightLongRangeTailKind.ShortRangeRelayPartial);
+            Service.Log.Debug
+            (
+                usedLongRangeReentry
+                    ? $"[算路] 飞行体素粗层代理搜索后二次粗搜接力未达终点（{lastTermination}），访问节点 = {visitedNodes}"
+                    : $"[算路] 飞行体素粗层代理搜索后短程接力未达终点（{lastTermination}），访问节点 = {visitedNodes}"
+            );
+            return MergePathSegments(proxyPath, tailPath);
+        }
+
+        pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyPath.Count > 0 ? proxyPath[^1].p : fromPos, toPos, FlightLongRangeTailKind.None);
+        Service.Log.Debug
+        (
+            $"[算路] 飞行体素粗层代理搜索未达终点（{lastTermination}），粗路径单元 = {coarsePath.PathSet.Count}，引导半径 = {guidedCorridorRadius}，访问节点 = {visitedNodes}"
+        );
+        ClearL1AreaConstraint();
+        return proxyPath;
+    }
+
+    private List<(ulong voxel, Vector3 p)> RunTailSearchFromProxy
+    (
+        ulong             fromVoxel,
+        ulong             toVoxel,
+        Vector3           fromPos,
+        Vector3           toPos,
+        bool              returnIntermediatePoints,
+        CancellationToken cancel,
+        bool              coarseReachedGoal,
+        int               recursionDepth,
+        out bool          usedLongRangeReentry
+    )
+    {
+        usedLongRangeReentry = false;
+        ClearL1AreaConstraint();
+        l1DistanceField = null;
+        l0DistanceField = null;
+
+        if (TryBuildDirectPath(fromVoxel, toVoxel, fromPos, toPos, out var directPath))
+            return directPath;
+
+        var remainingDistance         = Vector3.Distance(fromPos, toPos);
+        var searchRaycast             = remainingDistance <= maxSearchRaycastDistance;
+        var allowLongRangeCoarseReentry = recursionDepth < LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH && !searchRaycast;
+        if (searchRaycast)
+        {
+            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, RAYCAST_SEARCH_STEP_BUDGET, 1);
+            if (lastTermination != VolumeSearchTermination.ReachedGoal)
+                path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
+            return path;
+        }
+
+        var allowProxyGuidedCorridor = coarseReachedGoal;
+        if (!allowProxyGuidedCorridor)
+        {
+            Service.Log.Debug
+            (
+                $"[算路] 飞行体素粗层未触达终点，代理尾段跳过定向走廊：剩余直线距离 = {remainingDistance:f3}，直接回退{(allowLongRangeCoarseReentry ? "二次粗搜" : "真实终点距离场全搜索")}"
+            );
+        }
+        else if (TryCreateGuidedCorridor(fromPos, toPos, out var corridor))
+        {
+            var corridorPath = RunSearchAttempt
+            (
+                fromVoxel,
+                toVoxel,
+                fromPos,
+                toPos,
+                returnIntermediatePoints,
+                cancel,
+                GUIDED_CORRIDOR_SEARCH_STEP_BUDGET,
+                1,
+                corridor,
+                GUIDED_CORRIDOR_HEURISTIC_WEIGHT
+            );
 
             if (lastTermination == VolumeSearchTermination.ReachedGoal)
             {
                 Service.Log.Debug
                 (
-                    $"[算路] 飞行体素 L1 约束搜索完成：访问节点 = {visitedNodes}，L1 路径单元 = {pathSet.Count}"
+                    $"[算路] 飞行体素粗层代理后定向走廊搜索完成：访问节点 = {visitedNodes}，走廊半径 = {corridor.HorizontalRadius:f3}，上抬余量 = {corridor.UpwardAllowance:f3}"
                 );
-                return RefineSimplifiedPath(constrainedPath, cancel);
+                return corridorPath;
             }
 
             Service.Log.Debug
             (
-                $"[算路] 飞行体素 L1 约束搜索未达终点（{lastTermination}），回退全搜索"
+                guidedCorridorEarlyAbortTriggered
+                    ? $"[算路] 飞行体素粗层代理后定向走廊提前回退（进展停滞），访问节点 = {visitedNodes}，最佳距离 = {NodeSpan[bestNodeIndex].HScore:f3}，当前高差余量 = {MathF.Max(NodeSpan[bestNodeIndex].Position.Y - goalPos.Y, 0f):f3}"
+                    : $"[算路] 飞行体素粗层代理后定向走廊未达终点（{lastTermination}），回退{(allowLongRangeCoarseReentry ? "二次粗搜" : "真实终点距离场全搜索")}"
             );
         }
-        else Service.Log.Debug("[算路] 飞行体素 L1 粗搜索未找到路径，回退到全搜索");
 
-        l1PathSet = null;
-        if (l1DistanceField is not { Count: > 0 })
-            ComputeL1DistanceField(toVoxel);
-        var fallbackPath = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, DEFAULT_MAX_SEARCH_STEPS, 1);
-        return RefineSimplifiedPath(fallbackPath, cancel);
+        if (allowLongRangeCoarseReentry)
+        {
+            usedLongRangeReentry = true;
+            Service.Log.Debug
+            (
+                $"[算路] 飞行体素粗层代理后触发二次粗搜：剩余直线距离 = {remainingDistance:f3}，递归深度 = {recursionDepth + 1}/{LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH}"
+            );
+
+            var reentryPath = RunLongRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, recursionDepth + 1);
+            if (lastTermination == VolumeSearchTermination.ReachedGoal)
+                return reentryPath;
+
+            if (reentryPath.Count > 0)
+            {
+                Service.Log.Debug($"[算路] 飞行体素粗层代理后二次粗搜未达终点（{lastTermination}），返回其最佳结果：路径点 = {reentryPath.Count}");
+                return reentryPath;
+            }
+
+            Service.Log.Debug("[算路] 飞行体素粗层代理后二次粗搜未产出有效路径，回退真实终点距离场全搜索");
+            usedLongRangeReentry = false;
+        }
+
+        ComputeL1DistanceField(toVoxel, toPos);
+        return RunSearchAttempt
+        (
+            fromVoxel,
+            toVoxel,
+            fromPos,
+            toPos,
+            returnIntermediatePoints,
+            cancel,
+            LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+            2,
+            heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
+        );
     }
 
-    public void Start(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
+    private List<(ulong voxel, Vector3 p)> RunShortRangeFallback
+    (
+        ulong             fromVoxel,
+        ulong             toVoxel,
+        Vector3           fromPos,
+        Vector3           toPos,
+        bool              returnIntermediatePoints,
+        CancellationToken cancel
+    )
+    {
+        var attempts = 2;
+        var useExploratoryHeuristic = ShouldUseShortRangeExploratoryHeuristic(fromPos, toPos);
+        var fallbackHeuristicWeight = useExploratoryHeuristic ? SHORT_RANGE_EXPLORATORY_HEURISTIC_WEIGHT : SHORT_RANGE_HEURISTIC_WEIGHT;
+
+        Service.Log.Debug
+        (
+            $"[算路] 飞行体素短距搜索进入拓扑回退：直线距离 = {Vector3.Distance(fromPos, toPos):f3}，首轮终止 = {lastTermination}，首轮访问节点 = {visitedNodes}，LoS 检查 = {lineOfSightChecks}，探索式启发 = {(useExploratoryHeuristic ? "是" : "否")}"
+        );
+
+        var l1Path = SearchL1CoarsePath(fromVoxel, fromPos, toVoxel, toPos);
+        if (l1Path is { Count: > 1 } pathSet)
+        {
+            BuildL1Corridor(pathSet, 0);
+            var constrainedPath = RunSearchAttempt
+            (
+                fromVoxel,
+                toVoxel,
+                fromPos,
+                toPos,
+                returnIntermediatePoints,
+                cancel,
+                DEFAULT_MAX_SEARCH_STEPS,
+                attempts++,
+                heuristicWeightOverride: fallbackHeuristicWeight
+            );
+
+            if (lastTermination == VolumeSearchTermination.ReachedGoal)
+            {
+                Service.Log.Debug
+                (
+                    $"[算路] 飞行体素短距 L1 约束搜索完成：访问节点 = {visitedNodes}，L1 路径单元 = {pathSet.Count}，启发式权重 = {heuristicWeight:f2}"
+                );
+                return constrainedPath;
+            }
+
+            Service.Log.Debug
+            (
+                $"[算路] 飞行体素短距 L1 约束搜索未达终点（{lastTermination}），回退 L1 距离场全搜索"
+            );
+            l1PathSet = null;
+            l0PathSet = null;
+        }
+        else if (l1Path is { Count: 1 })
+        {
+            Service.Log.Debug("[算路] 飞行体素短距起终点位于同一 L1 单元，跳过 L1 约束，直接使用距离场回退");
+        }
+        else Service.Log.Debug("[算路] 飞行体素短距 L1 粗搜索未找到路径，直接使用距离场回退");
+
+        if (l1DistanceField is not { Count: > 0 })
+            ComputeL1DistanceField(toVoxel, toPos);
+
+        return RunSearchAttempt
+        (
+            fromVoxel,
+            toVoxel,
+            fromPos,
+            toPos,
+            returnIntermediatePoints,
+            cancel,
+            DEFAULT_MAX_SEARCH_STEPS,
+            attempts,
+            heuristicWeightOverride: fallbackHeuristicWeight
+        );
+    }
+
+    private void Start(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos, LongRangeLateralBias lateralBias = default)
     {
         ResetSearchState();
+        longRangeLateralBias = lateralBias;
 
         if (fromVoxel == VoxelMap.INVALID_VOXEL || toVoxel == VoxelMap.INVALID_VOXEL)
         {
@@ -224,6 +546,11 @@ public class VoxelPathfind
         );
         nodeLookup[fromVoxel] = 0;
         generatedNodes        = 1;
+        guidedCorridorInitialGoalDistance = Vector3.Distance(fromPos, toPos);
+        guidedCorridorInitialAboveGoal    = MathF.Max(fromPos.Y - toPos.Y, 0f);
+        guidedCorridorLastProgressDistance = guidedCorridorInitialGoalDistance;
+        guidedCorridorLastProgressAboveGoal = guidedCorridorInitialAboveGoal;
+        guidedCorridorLastProgressVisited  = 0;
         AddToOpen(0);
     }
 
@@ -233,11 +560,82 @@ public class VoxelPathfind
         {
             if (!ExecuteStep())
                 return goalReached ? VolumeSearchTermination.ReachedGoal : VolumeSearchTermination.SearchExhausted;
+            if (ShouldAbortGuidedCorridorEarly())
+                return VolumeSearchTermination.SearchExhausted;
             if ((i & 0x3ff) == 0)
                 cancel.ThrowIfCancellationRequested();
         }
 
         return VolumeSearchTermination.StepBudgetReached;
+    }
+
+    private bool ShouldAbortGuidedCorridorEarly()
+    {
+        if (!useGuidedCorridor || goalReached || visitedNodes < GUIDED_CORRIDOR_EARLY_ABORT_MIN_VISITED || bestNodeIndex < 0 || bestNodeIndex >= nodes.Count)
+            return false;
+
+        var bestNode            = NodeSpan[bestNodeIndex];
+        var bestDistance        = bestNode.HScore;
+        var bestAboveGoal       = MathF.Max(bestNode.Position.Y - goalPos.Y, 0f);
+        var descendingCaseMinDrop = MathF.Max
+        (
+            l2Desc.CellSize.Y * GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_MIN_DROP_LEAF_CELLS,
+            GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_MIN_DROP_DISTANCE
+        );
+
+        if (guidedCorridorInitialAboveGoal >= descendingCaseMinDrop)
+        {
+            var verticalProgressThreshold = MathF.Max
+            (
+                l2Desc.CellSize.Y * GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_PROGRESS_LEAF_CELLS,
+                GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_PROGRESS_MIN_DISTANCE
+            );
+
+            if (guidedCorridorLastProgressAboveGoal - bestAboveGoal >= verticalProgressThreshold)
+            {
+                guidedCorridorLastProgressAboveGoal = bestAboveGoal;
+                guidedCorridorLastProgressDistance  = bestDistance;
+                guidedCorridorLastProgressVisited   = visitedNodes;
+                return false;
+            }
+
+            if (bestAboveGoal <= guidedCorridorInitialAboveGoal * GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_SUFFICIENT_PROGRESS_RATIO)
+                return false;
+
+            if (visitedNodes < GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_HARD_VISITED_THRESHOLD)
+                return false;
+
+            if (visitedNodes - guidedCorridorLastProgressVisited < GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_STALL_WINDOW)
+                return false;
+
+            guidedCorridorEarlyAbortTriggered = true;
+            return true;
+        }
+
+        var progressThreshold = MathF.Max
+        (
+            GUIDED_CORRIDOR_EARLY_ABORT_PROGRESS_MIN_DISTANCE,
+            guidedCorridorInitialGoalDistance * GUIDED_CORRIDOR_EARLY_ABORT_PROGRESS_RATIO
+        );
+
+        if (guidedCorridorLastProgressDistance - bestDistance >= progressThreshold)
+        {
+            guidedCorridorLastProgressDistance = bestDistance;
+            guidedCorridorLastProgressVisited  = visitedNodes;
+            return false;
+        }
+
+        if (bestDistance <= guidedCorridorInitialGoalDistance * GUIDED_CORRIDOR_EARLY_ABORT_SUFFICIENT_PROGRESS_RATIO)
+            return false;
+
+        if (visitedNodes < GUIDED_CORRIDOR_EARLY_ABORT_HARD_VISITED_THRESHOLD)
+            return false;
+
+        if (visitedNodes - guidedCorridorLastProgressVisited < GUIDED_CORRIDOR_EARLY_ABORT_STALL_WINDOW)
+            return false;
+
+        guidedCorridorEarlyAbortTriggered = true;
+        return true;
     }
 
     private List<(ulong voxel, Vector3 p)> RunSearchAttempt
@@ -251,10 +649,11 @@ public class VoxelPathfind
         int                   maxSteps,
         int                   attempts,
         GuidedSearchCorridor? corridor                = null,
-        float?                heuristicWeightOverride = null
+        float?                heuristicWeightOverride = null,
+        LongRangeLateralBias  lateralBias             = default
     )
     {
-        Start(fromVoxel, toVoxel, fromPos, toPos);
+        Start(fromVoxel, toVoxel, fromPos, toPos, lateralBias);
         useGuidedCorridor        = corridor.HasValue;
         guidedCorridor           = corridor.GetValueOrDefault();
         heuristicWeight          = heuristicWeightOverride ?? SHORT_RANGE_HEURISTIC_WEIGHT;
@@ -369,9 +768,19 @@ public class VoxelPathfind
         heuristicWeight          = 1;
         useGuidedCorridor        = false;
         guidedCorridor           = default;
+        longRangeLateralBias     = default;
+        debugReturnedLongRangeBestEffortPath = false;
+        guidedCorridorEarlyAbortTriggered = false;
+        currentL1CorridorRadius  = 0;
         lastTermination          = VolumeSearchTermination.SearchExhausted;
         lastSearchAttempts       = 0;
         lastPathDebug            = null;
+        pendingLongRangeProxyDebug = null;
+        guidedCorridorInitialAboveGoal    = 0;
+        guidedCorridorInitialGoalDistance = 0;
+        guidedCorridorLastProgressAboveGoal = 0;
+        guidedCorridorLastProgressDistance = 0;
+        guidedCorridorLastProgressVisited  = 0;
     }
 
     internal void ReleaseRetainedState()
@@ -382,8 +791,15 @@ public class VoxelPathfind
         nodes.TrimExcess();
         nodeLookup.TrimExcess();
         openList.TrimExcess();
-        l1PathSet       = null;
-        l1DistanceField = null;
+        l1PathSet          = null;
+        l0PathSet          = null;
+        l1CorridorDistance = null;
+        l0CorridorDistance = null;
+        l1DistanceField    = null;
+        l0DistanceField    = null;
+        verifiedDownwardOpeningCache.Clear();
+        verifiedTopEntryCache.Clear();
+        l1FaceConnectivityCache.Clear();
     }
 
     private bool TryBuildDirectPath(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos, out List<(ulong voxel, Vector3 p)> path)
@@ -407,6 +823,17 @@ public class VoxelPathfind
         lastSearchAttempts = 1;
         path               = [(toVoxel, toPos)];
         return true;
+    }
+
+    private bool ShouldUseShortRangeExploratoryHeuristic(Vector3 fromPos, Vector3 toPos)
+    {
+        var leafHorizontalSize = MathF.Max(l2Desc.CellSize.X, l2Desc.CellSize.Z);
+        var leafVerticalSize   = l2Desc.CellSize.Y;
+        var horizontalDistance = HorizontalDistanceXZ(fromPos, toPos);
+        var verticalDrop       = fromPos.Y - toPos.Y;
+        var minHorizontal      = MathF.Max(leafHorizontalSize * SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_LEAF_CELLS, SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_DISTANCE);
+        var minDrop            = MathF.Max(leafVerticalSize * SHORT_RANGE_EXPLORATION_MIN_DROP_LEAF_CELLS, SHORT_RANGE_EXPLORATION_MIN_DROP_DISTANCE);
+        return horizontalDistance >= minHorizontal && verticalDrop >= minDrop;
     }
 
     private List<(ulong voxel, Vector3 p)> SimplifyPath(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
@@ -445,7 +872,7 @@ public class VoxelPathfind
         PushInteriorWaypoints(refined, cancel, debugInfos);
         var finalPath = SimplifyPath(refined, cancel);
         finalPath = RestoreSteepDescentWaypoints(refined, finalPath);
-        lastPathDebug = BuildFlightPathDebugPayload(refined, debugInfos, finalPath);
+        lastPathDebug = BuildFlightPathDebugPayload(refined, debugInfos, finalPath, pendingLongRangeProxyDebug);
         return finalPath;
     }
 
@@ -545,6 +972,7 @@ public class VoxelPathfind
         var forwardLeft3    = Vector3.Normalize(forward3 - right3);
         var backwardRight3  = Vector3.Normalize(-forward3 + right3);
         var backwardLeft3   = Vector3.Normalize(-forward3 - right3);
+        var goalAdjacentRearBias = next.voxel == goalVoxel;
 
         var voxelSize          = GetVoxelSize(current.voxel);
         var leafHorizontalSize = MathF.Max(l2Desc.CellSize.X, l2Desc.CellSize.Z);
@@ -593,21 +1021,26 @@ public class VoxelPathfind
         var horizontalBias = Vector3.Zero;
         var horizontalTotalClearance = 0f;
         var maxHorizontalClearance = 0f;
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forward3,        forwardClearance,       FLIGHT_PUSH_FORWARD_WEIGHT);
+        var forwardWeight         = goalAdjacentRearBias ? FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_WEIGHT          : FLIGHT_PUSH_FORWARD_WEIGHT;
+        var backwardWeight        = goalAdjacentRearBias ? FLIGHT_PUSH_GOAL_ADJACENT_BACKWARD_WEIGHT         : FLIGHT_PUSH_BACKWARD_WEIGHT;
+        var forwardDiagonalWeight = goalAdjacentRearBias ? FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_DIAGONAL_WEIGHT : FLIGHT_PUSH_DIAGONAL_WEIGHT;
+        var backwardDiagonalWeight = goalAdjacentRearBias ? FLIGHT_PUSH_GOAL_ADJACENT_BACKWARD_DIAGONAL_WEIGHT : FLIGHT_PUSH_DIAGONAL_WEIGHT;
+
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forward3,        forwardClearance,       forwardWeight);
         maxHorizontalClearance = MathF.Max(maxHorizontalClearance, forwardClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -forward3,       backwardClearance,      FLIGHT_PUSH_BACKWARD_WEIGHT);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -forward3,       backwardClearance,      backwardWeight);
         maxHorizontalClearance = MathF.Max(maxHorizontalClearance, backwardClearance);
         AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, right3,          rightClearance,         1f);
         maxHorizontalClearance = MathF.Max(maxHorizontalClearance, rightClearance);
         AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -right3,         leftClearance,          1f);
         maxHorizontalClearance = MathF.Max(maxHorizontalClearance, leftClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardRight3,   forwardRightClearance,  FLIGHT_PUSH_DIAGONAL_WEIGHT);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardRight3,   forwardRightClearance,  forwardDiagonalWeight);
         maxHorizontalClearance = MathF.Max(maxHorizontalClearance, forwardRightClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardLeft3,    forwardLeftClearance,   FLIGHT_PUSH_DIAGONAL_WEIGHT);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardLeft3,    forwardLeftClearance,   forwardDiagonalWeight);
         maxHorizontalClearance = MathF.Max(maxHorizontalClearance, forwardLeftClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardRight3,  backwardRightClearance, FLIGHT_PUSH_DIAGONAL_WEIGHT);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardRight3,  backwardRightClearance, backwardDiagonalWeight);
         maxHorizontalClearance = MathF.Max(maxHorizontalClearance, backwardRightClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardLeft3,   backwardLeftClearance,  FLIGHT_PUSH_DIAGONAL_WEIGHT);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardLeft3,   backwardLeftClearance,  backwardDiagonalWeight);
         maxHorizontalClearance = MathF.Max(maxHorizontalClearance, backwardLeftClearance);
         var sweepSamples = BuildHorizontalSweepSamples
         (
@@ -616,6 +1049,7 @@ public class VoxelPathfind
             right3,
             horizontalScanDistance,
             horizontalSampleStep,
+            goalAdjacentRearBias,
             ref horizontalBias,
             ref horizontalTotalClearance,
             ref maxHorizontalClearance
@@ -632,7 +1066,8 @@ public class VoxelPathfind
             forwardLeftSample,
             backwardRightSample,
             backwardLeftSample,
-            sweepSamples
+            sweepSamples,
+            goalAdjacentRearBias
         );
 
         Vector3 horizontalOffset = default;
@@ -644,9 +1079,22 @@ public class VoxelPathfind
             horizontalImbalance >= FLIGHT_PUSH_MIN_HORIZONTAL_IMBALANCE &&
             TryNormalize(horizontalBiasFlat, out var horizontalPushDirection))
         {
+            if (goalAdjacentRearBias)
+            {
+                var forwardComponent = Vector2.Dot(horizontalPushDirection, normalizedHorizontalForward);
+                if (forwardComponent > FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT)
+                {
+                    var rearProjectedDirection = horizontalPushDirection - normalizedHorizontalForward * forwardComponent;
+                    if (!TryNormalize(rearProjectedDirection, out horizontalPushDirection))
+                        horizontalPushDirection = default;
+                }
+            }
+
             var desiredHorizontalPush = horizontalBiasMagnitude * FLIGHT_PUSH_HORIZONTAL_BIAS_SCALE;
             var horizontalPushDistance = MathF.Min(maxHorizontalPush, desiredHorizontalPush);
-            horizontalOffset = new Vector3(horizontalPushDirection.X * horizontalPushDistance, 0, horizontalPushDirection.Y * horizontalPushDistance);
+            if (horizontalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE &&
+                horizontalPushDirection.LengthSquared() > SCORE_EPSILON * SCORE_EPSILON)
+                horizontalOffset = new Vector3(horizontalPushDirection.X * horizontalPushDistance, 0, horizontalPushDirection.Y * horizontalPushDistance);
         }
 
         Vector3 verticalOffset = default;
@@ -776,7 +1224,7 @@ public class VoxelPathfind
                 adjustedResolved = adjusted;
                 selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelVerticalOnly;
             }
-            else if (TryAcceptDirectionalHorizontalCandidatesWithFixedVertical(previous, current, next, directionalHorizontalCandidates, maxHorizontalPush, verticalOffset, out adjusted))
+            else if (TryAcceptDirectionalHorizontalCandidatesWithFixedVertical(previous, current, next, directionalHorizontalCandidates, maxHorizontalPush, verticalOffset, forward3, goalAdjacentRearBias, out adjusted))
             {
                 adjustedResolved = adjusted;
                 selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelDirectionalFixedVertical;
@@ -813,7 +1261,7 @@ public class VoxelPathfind
                 adjustedResolved = adjusted;
                 selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardFixedVertical;
             }
-            else if (TryAcceptDirectionalHorizontalCandidatesWithFixedVertical(previous, current, next, directionalHorizontalCandidates, maxHorizontalPush, verticalOffset, out adjusted))
+            else if (TryAcceptDirectionalHorizontalCandidatesWithFixedVertical(previous, current, next, directionalHorizontalCandidates, maxHorizontalPush, verticalOffset, forward3, goalAdjacentRearBias, out adjusted))
             {
                 adjustedResolved = adjusted;
                 selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardDirectionalFixedVertical;
@@ -1100,6 +1548,8 @@ public class VoxelPathfind
         IReadOnlyList<FlightPushHorizontalCandidate> candidates,
         float                                    maxHorizontalPush,
         Vector3                                  verticalOffset,
+        Vector3                                  forward,
+        bool                                     goalAdjacentRearBias,
         out (ulong voxel, Vector3 p)             adjusted
     )
     {
@@ -1111,6 +1561,10 @@ public class VoxelPathfind
 
         foreach (var candidate in candidates)
         {
+            if (goalAdjacentRearBias &&
+                Vector3.Dot(candidate.Direction, forward) > FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT)
+                continue;
+
             var horizontalDistance = MathF.Min(maxHorizontalPush, candidate.Clearance * FLIGHT_PUSH_DIRECTIONAL_CLEARANCE_FRACTION);
             if (horizontalDistance <= FLIGHT_PUSH_MIN_DISTANCE)
                 continue;
@@ -1374,22 +1828,23 @@ public class VoxelPathfind
         FlightPushProbeResult              forwardLeftSample,
         FlightPushProbeResult              backwardRightSample,
         FlightPushProbeResult              backwardLeftSample,
-        IReadOnlyList<FlightPathDebugSample> sweepSamples
+        IReadOnlyList<FlightPathDebugSample> sweepSamples,
+        bool                               goalAdjacentRearBias
     )
     {
         List<FlightPushHorizontalCandidate> candidates = new(FLIGHT_PUSH_DIRECTIONAL_CANDIDATE_LIMIT);
 
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardSample);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardSample);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, rightSample);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, leftSample);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardRightSample);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardLeftSample);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardRightSample);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardLeftSample);
+        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardSample, goalAdjacentRearBias);
+        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardSample, goalAdjacentRearBias);
+        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, rightSample, goalAdjacentRearBias);
+        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, leftSample, goalAdjacentRearBias);
+        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardRightSample, goalAdjacentRearBias);
+        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardLeftSample, goalAdjacentRearBias);
+        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardRightSample, goalAdjacentRearBias);
+        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardLeftSample, goalAdjacentRearBias);
 
         foreach (var sample in sweepSamples)
-            TryAddDirectionalHorizontalCandidate(candidates, origin, forward, new(sample.Clearance, sample.Endpoint));
+            TryAddDirectionalHorizontalCandidate(candidates, origin, forward, new(sample.Clearance, sample.Endpoint), goalAdjacentRearBias);
 
         candidates.Sort(static (left, right) => right.Score.CompareTo(left.Score));
         if (candidates.Count > FLIGHT_PUSH_DIRECTIONAL_CANDIDATE_LIMIT)
@@ -1403,7 +1858,8 @@ public class VoxelPathfind
         List<FlightPushHorizontalCandidate> candidates,
         Vector3                             origin,
         Vector3                             forward,
-        FlightPushProbeResult               sample
+        FlightPushProbeResult               sample,
+        bool                                goalAdjacentRearBias
     )
     {
         if (sample.Clearance <= FLIGHT_PUSH_MIN_DISTANCE)
@@ -1414,8 +1870,17 @@ public class VoxelPathfind
         if (!TryNormalize(delta, out var direction))
             return;
 
-        var forwardAlignment = MathF.Max(0f, Vector3.Dot(direction, forward));
-        var score = sample.Clearance * (1f + forwardAlignment * FLIGHT_PUSH_DIRECTIONAL_FORWARD_BONUS);
+        var forwardDot = Vector3.Dot(direction, forward);
+        var scoreScale = goalAdjacentRearBias
+                             ? MathF.Max
+                               (
+                                   FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_MIN_SCALE,
+                                   1f -
+                                   MathF.Max(0f, forwardDot) * FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_FORWARD_PENALTY +
+                                   MathF.Max(0f, -forwardDot) * FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_BACKWARD_BONUS
+                               )
+                             : 1f + MathF.Max(0f, forwardDot) * FLIGHT_PUSH_DIRECTIONAL_FORWARD_BONUS;
+        var score = sample.Clearance * scoreScale;
 
         for (var i = 0; i < candidates.Count; ++i)
         {
@@ -1437,6 +1902,7 @@ public class VoxelPathfind
         Vector3                  right,
         float                    maxDistance,
         float                    stepDistance,
+        bool                     goalAdjacentRearBias,
         ref Vector3              horizontalBias,
         ref float                horizontalTotalClearance,
         ref float                maxHorizontalClearance
@@ -1461,7 +1927,14 @@ public class VoxelPathfind
 
             var forwardDot = Vector3.Dot(direction, forward);
             var weight = FLIGHT_PUSH_HORIZONTAL_SWEEP_WEIGHT;
-            if (forwardDot > 0f)
+            if (goalAdjacentRearBias)
+            {
+                if (forwardDot > FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT)
+                    weight *= MathF.Max(FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_FORWARD_MIN_SCALE, 1f - forwardDot * FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_FORWARD_PENALTY);
+                else
+                    weight += MathF.Max(0f, -forwardDot) * FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_BACKWARD_BONUS;
+            }
+            else if (forwardDot > 0f)
                 weight += forwardDot * FLIGHT_PUSH_HORIZONTAL_SWEEP_FORWARD_BONUS;
 
             AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, direction, sample.Clearance, weight);
@@ -1475,7 +1948,8 @@ public class VoxelPathfind
     (
         IReadOnlyList<(ulong voxel, Vector3 p)> refinedPath,
         IReadOnlyList<FlightPathWaypointDebug?> debugInfos,
-        IReadOnlyList<(ulong voxel, Vector3 p)> finalPath
+        IReadOnlyList<(ulong voxel, Vector3 p)> finalPath,
+        FlightLongRangeProxyDebug?              proxyDebug = null
     )
     {
         if (refinedPath.Count == 0 || debugInfos.Count == 0 || finalPath.Count == 0)
@@ -1501,12 +1975,14 @@ public class VoxelPathfind
             }
         }
 
-        if (remapped.Count == 0)
+        if (remapped.Count == 0 && proxyDebug == null)
             return null;
 
         return new()
         {
-            Waypoints = remapped
+            Waypoints  = remapped,
+            CoarsePath = [],
+            ProxyDebug = proxyDebug
         };
     }
 
@@ -1873,7 +2349,12 @@ public class VoxelPathfind
         int                   dz
     )
     {
-        if (l2Index != VoxelMap.INDEX_LEVEL_MASK)
+        var coarseOnlyLongRangeSearch = ShouldRestrictLongRangeSearchToCoarseLevels();
+
+        if (TryAddPreferredCoarseNeighbour(l0Index, l1Index, l0Coords, l1Coords, dx, dy, dz))
+            return;
+
+        if (!coarseOnlyLongRangeSearch && l2Index != VoxelMap.INDEX_LEVEL_MASK)
         {
             var l2Neighbour = (l2Coords.x + dx, l2Coords.y + dy, l2Coords.z + dz);
 
@@ -1897,7 +2378,7 @@ public class VoxelPathfind
                 neighbourVoxel = VoxelMap.EncodeIndex(l0Index, neighbourVoxel);
 
                 if (Volume.IsEmpty(neighbourVoxel)) AddNeighbourIfEmpty(neighbourVoxel);
-                else if (l2Index != VoxelMap.INDEX_LEVEL_MASK)
+                else if (!coarseOnlyLongRangeSearch && l2Index != VoxelMap.INDEX_LEVEL_MASK)
                 {
                     var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
                     var l2Y              = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
@@ -1905,7 +2386,8 @@ public class VoxelPathfind
                     var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(neighbourVoxel, l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
                     AddNeighbourIfEmpty(l2NeighbourVoxel);
                 }
-                else CollectBorder(neighbourVoxel, l2Desc, 2, dx, dy, dz);
+                else if (!coarseOnlyLongRangeSearch)
+                    CollectBorder(neighbourVoxel, l2Desc, 2, dx, dy, dz);
 
                 return;
             }
@@ -1931,7 +2413,7 @@ public class VoxelPathfind
             var l1NeighbourVoxel = VoxelMap.EncodeSubIndex(l0NeighbourVoxel, l1Desc.VoxelToIndex(l1X, l1Y, l1Z), 1);
 
             if (Volume.IsEmpty(l1NeighbourVoxel)) AddNeighbourIfEmpty(l1NeighbourVoxel);
-            else if (l2Index != VoxelMap.INDEX_LEVEL_MASK)
+            else if (!coarseOnlyLongRangeSearch && l2Index != VoxelMap.INDEX_LEVEL_MASK)
             {
                 var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
                 var l2Y              = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
@@ -1939,13 +2421,81 @@ public class VoxelPathfind
                 var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(l1NeighbourVoxel, l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
                 AddNeighbourIfEmpty(l2NeighbourVoxel);
             }
-            else CollectBorder(l1NeighbourVoxel, l2Desc, 2, dx, dy, dz);
+            else if (!coarseOnlyLongRangeSearch)
+                CollectBorder(l1NeighbourVoxel, l2Desc, 2, dx, dy, dz);
 
             return;
         }
 
-        CollectBorderWithSubdivisions(l0NeighbourVoxel, dx, dy, dz);
+        if (coarseOnlyLongRangeSearch) CollectBorderWithSubdivisionsL1Only(l0NeighbourVoxel, dx, dy, dz);
+        else CollectBorderWithSubdivisions(l0NeighbourVoxel, dx, dy, dz);
     }
+
+    private bool TryAddPreferredCoarseNeighbour
+    (
+        ushort                l0Index,
+        ushort                l1Index,
+        (int x, int y, int z) l0Coords,
+        (int x, int y, int z) l1Coords,
+        int                   dx,
+        int                   dy,
+        int                   dz
+    )
+    {
+        if (!ShouldPreferCoarseDescentNeighbour(dx, dy, dz))
+            return false;
+
+        if (l1Index != VoxelMap.INDEX_LEVEL_MASK)
+        {
+            var l1Neighbour = (l1Coords.x + dx, l1Coords.y + dy, l1Coords.z + dz);
+            if (l1Desc.InBounds(l1Neighbour))
+            {
+                var l1NeighbourVoxel = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(l1Neighbour));
+                l1NeighbourVoxel = VoxelMap.EncodeIndex(l0Index, l1NeighbourVoxel);
+                if (CanUsePreferredCoarseNeighbour(l1NeighbourVoxel, dy))
+                {
+                    AddNeighbourIfEmpty(l1NeighbourVoxel);
+                    return true;
+                }
+            }
+        }
+
+        var l0Neighbour = (l0Coords.x + dx, l0Coords.y + dy, l0Coords.z + dz);
+        if (!l0Desc.InBounds(l0Neighbour))
+            return false;
+
+        var l0NeighbourVoxel = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(l0Neighbour));
+        if (!CanUsePreferredCoarseNeighbour(l0NeighbourVoxel, dy))
+            return false;
+
+        AddNeighbourIfEmpty(l0NeighbourVoxel);
+        return true;
+    }
+
+    private bool ShouldPreferCoarseDescentNeighbour(int dx, int dy, int dz)
+    {
+        if (!longRangeLateralBias.Enabled || !longRangeLateralBias.PreferDescending || dy > 0)
+            return false;
+
+        if (dy < 0)
+            return true;
+
+        var horizontal = new Vector2(dx, dz);
+        if (!TryNormalize(horizontal, out var direction))
+            return false;
+
+        return Vector2.Dot(direction, longRangeLateralBias.Forward) >= LONG_RANGE_LATERAL_COARSE_PROMOTION_MIN_FORWARD_DOT;
+    }
+
+    private bool CanUsePreferredCoarseNeighbour(ulong voxel, int dy)
+    {
+        if (!Volume.IsEmpty(voxel))
+            return false;
+
+        return dy < 0 ? HasVerifiedTopEntry(voxel) : HasDownwardOpening(voxel);
+    }
+
+    private bool ShouldRestrictLongRangeSearchToCoarseLevels() => longRangeLateralBias.Enabled;
 
     private void CollectBorder(ulong voxel, VolumeLevel levelDesc, int level, int dx, int dy, int dz)
     {
@@ -1975,9 +2525,30 @@ public class VoxelPathfind
         }
     }
 
+    private void CollectBorderWithSubdivisionsL1Only(ulong voxel, int dx, int dy, int dz)
+    {
+        var (xMin, xMax) = dx == 0 ? (0, l1Desc.NumCellsX - 1) : dx > 0 ? (0, 0) : (l1Desc.NumCellsX - 1, l1Desc.NumCellsX - 1);
+        var (yMin, yMax) = dy == 0 ? (0, l1Desc.NumCellsY - 1) : dy > 0 ? (0, 0) : (l1Desc.NumCellsY - 1, l1Desc.NumCellsY - 1);
+        var (zMin, zMax) = dz == 0 ? (0, l1Desc.NumCellsZ - 1) : dz > 0 ? (0, 0) : (l1Desc.NumCellsZ - 1, l1Desc.NumCellsZ - 1);
+
+        for (var z = zMin; z <= zMax; ++z)
+        for (var x = xMin; x <= xMax; ++x)
+        for (var y = yMin; y <= yMax; ++y)
+        {
+            var l1Voxel = VoxelMap.EncodeSubIndex(voxel, l1Desc.VoxelToIndex(x, y, z), 1);
+            if (Volume.IsEmpty(l1Voxel))
+                AddNeighbourIfEmpty(l1Voxel);
+        }
+    }
+
     private void AddNeighbourIfEmpty(ulong voxel)
     {
-        if (l1PathSet is { } pathSet && !pathSet.Contains(ExtractL1Parent(voxel)))
+        if (l1CorridorDistance is { } corridorDistance)
+        {
+            if (!TryGetVoxelCorridorDistance(voxel, out var distance) || distance > currentL1CorridorRadius)
+                return;
+        }
+        else if (!IsVoxelInsidePathConstraint(voxel))
             return;
         if (Volume.IsEmpty(voxel))
             neighbourScratch.Add(voxel);
@@ -2200,6 +2771,7 @@ public class VoxelPathfind
         var nodeSpan = NodeSpan;
         return nodeSpan[parentIndex].GScore +
                CalculateEdgeCost(nodeSpan[parentIndex].Position, destination) +
+               CalculateLongRangeLateralTraversalPenalty(nodeSpan[parentIndex].Voxel, nodeSpan[parentIndex].Position, voxel, destination) +
                CalculateWallProximityPenalty(voxel, destination);
     }
 
@@ -2223,14 +2795,351 @@ public class VoxelPathfind
         return visible;
     }
 
-    private static ulong ExtractL1Parent(ulong voxel)
+    private static ushort ExtractL0Index(ulong voxel)
+    {
+        var temp = voxel;
+        return VoxelMap.DecodeIndex(ref temp);
+    }
+
+    private static bool TryExtractL1Parent(ulong voxel, out ulong l1Voxel)
+    {
+        var temp = voxel;
+        var l0   = VoxelMap.DecodeIndex(ref temp);
+        var l1   = VoxelMap.DecodeIndex(ref temp);
+        if (l1 == VoxelMap.INDEX_LEVEL_MASK)
+        {
+            l1Voxel = VoxelMap.INVALID_VOXEL;
+            return false;
+        }
+
+        l1Voxel = VoxelMap.EncodeIndex(l1);
+        l1Voxel = VoxelMap.EncodeIndex(l0, l1Voxel);
+        return true;
+    }
+
+    private bool HasTraversableL1FaceTransition(ulong currentL1, ulong neighbourL1, int dx, int dy, int dz)
+    {
+        var currentX   = dx > 0 ? l2Desc.NumCellsX - 1 : 0;
+        var currentY   = dy > 0 ? l2Desc.NumCellsY - 1 : 0;
+        var currentZ   = dz > 0 ? l2Desc.NumCellsZ - 1 : 0;
+        var neighbourX = dx > 0 ? 0 : l2Desc.NumCellsX - 1;
+        var neighbourY = dy > 0 ? 0 : l2Desc.NumCellsY - 1;
+        var neighbourZ = dz > 0 ? 0 : l2Desc.NumCellsZ - 1;
+
+        var xMin = dx == 0 ? 0 : currentX;
+        var xMax = dx == 0 ? l2Desc.NumCellsX - 1 : currentX;
+        var yMin = dy == 0 ? 0 : currentY;
+        var yMax = dy == 0 ? l2Desc.NumCellsY - 1 : currentY;
+        var zMin = dz == 0 ? 0 : currentZ;
+        var zMax = dz == 0 ? l2Desc.NumCellsZ - 1 : currentZ;
+
+        for (var z = zMin; z <= zMax; ++z)
+        for (var x = xMin; x <= xMax; ++x)
+        for (var y = yMin; y <= yMax; ++y)
+        {
+            var otherX = dx == 0 ? x : neighbourX;
+            var otherY = dy == 0 ? y : neighbourY;
+            var otherZ = dz == 0 ? z : neighbourZ;
+
+            var currentLeaf   = VoxelMap.EncodeSubIndex(currentL1,   l2Desc.VoxelToIndex(x,      y,      z),      2);
+            var neighbourLeaf = VoxelMap.EncodeSubIndex(neighbourL1, l2Desc.VoxelToIndex(otherX, otherY, otherZ), 2);
+            if (Volume.IsEmpty(currentLeaf) && Volume.IsEmpty(neighbourLeaf))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static int OppositeFace(int face) => face ^ 1;
+
+    private static ushort L1FaceBit(int face) => (ushort)(1 << face);
+
+    private static bool HasL1Face(ushort faceMask, int face) => (faceMask & L1FaceBit(face)) != 0;
+
+    private static bool CanTraverseMixedL1Cell(bool includeNonEmpty, ulong candidateL1, ulong goalL1)
+        => includeNonEmpty && candidateL1 == goalL1;
+
+    private static ushort GetPackedReachableL1Faces(ulong packedConnectivity, int face) => (ushort)((packedConnectivity >> (face * 6)) & L1AllFacesMask);
+
+    private static ulong SetPackedReachableL1Faces(ulong packedConnectivity, int face, ushort reachableFaces)
+    {
+        var shift = face * 6;
+        packedConnectivity &= ~((ulong)L1AllFacesMask << shift);
+        packedConnectivity |= (ulong)(reachableFaces & L1AllFacesMask) << shift;
+        return packedConnectivity;
+    }
+
+    private ushort GetReachableL1FacesFromEntry(ulong l1Voxel, int entryFace)
+    {
+        if (entryFace is < 0 or > 5)
+            return 0;
+        if (Volume.IsEmpty(l1Voxel))
+            return L1AllFacesMask;
+
+        var packedConnectivity = l1FaceConnectivityCache.GetOrAdd(l1Voxel, BuildPackedL1FaceConnectivity);
+        return GetPackedReachableL1Faces(packedConnectivity, entryFace);
+    }
+
+    private ushort GetReachableL1FacesFromPoint(ulong l1Voxel, ulong actualVoxel, Vector3 point)
+    {
+        if (Volume.IsEmpty(l1Voxel))
+            return L1AllFacesMask;
+        if (!TryResolveL1SeedIndex(l1Voxel, actualVoxel, point, out var seedIndex))
+            return 0;
+
+        return FloodFillL1ReachableFaces(l1Voxel, seedIndex);
+    }
+
+    private bool ArePointsConnectedWithinL1(ulong l1Voxel, ulong fromVoxel, Vector3 fromPoint, ulong toVoxel, Vector3 toPoint)
+    {
+        if (Volume.IsEmpty(l1Voxel))
+            return true;
+        if (!TryResolveL1SeedIndex(l1Voxel, fromVoxel, fromPoint, out var fromSeedIndex) ||
+            !TryResolveL1SeedIndex(l1Voxel, toVoxel,   toPoint,   out var toSeedIndex))
+            return false;
+        if (fromSeedIndex == toSeedIndex)
+            return true;
+
+        return FloodFillL1SeedConnectivity(l1Voxel, fromSeedIndex, toSeedIndex);
+    }
+
+    private ulong BuildPackedL1FaceConnectivity(ulong l1Voxel)
+    {
+        if (Volume.IsEmpty(l1Voxel))
+        {
+            ulong packed = 0;
+            for (var face = 0; face < 6; ++face)
+                packed = SetPackedReachableL1Faces(packed, face, L1AllFacesMask);
+            return packed;
+        }
+
+        var totalCellCount = l2Desc.NumCellsTotal;
+        var visited        = new bool[totalCellCount];
+        ulong packedConnectivity = 0;
+
+        for (ushort seedIndex = 0; seedIndex < totalCellCount; ++seedIndex)
+        {
+            if (visited[seedIndex])
+                continue;
+
+            var leafVoxel = VoxelMap.EncodeSubIndex(l1Voxel, seedIndex, 2);
+            if (!Volume.IsEmpty(leafVoxel))
+            {
+                visited[seedIndex] = true;
+                continue;
+            }
+
+            var reachableFaces = FloodFillL1Component(l1Voxel, seedIndex, visited, null, out _);
+            if (reachableFaces == 0)
+                continue;
+
+            for (var face = 0; face < 6; ++face)
+            {
+                if (!HasL1Face(reachableFaces, face))
+                    continue;
+
+                var combinedReachable = (ushort)(GetPackedReachableL1Faces(packedConnectivity, face) | reachableFaces);
+                packedConnectivity = SetPackedReachableL1Faces(packedConnectivity, face, combinedReachable);
+            }
+        }
+
+        return packedConnectivity;
+    }
+
+    private ushort FloodFillL1ReachableFaces(ulong l1Voxel, ushort seedIndex) => FloodFillL1Component(l1Voxel, seedIndex, null, null, out _);
+
+    private bool FloodFillL1SeedConnectivity(ulong l1Voxel, ushort fromSeedIndex, ushort toSeedIndex)
+    {
+        FloodFillL1Component(l1Voxel, fromSeedIndex, null, toSeedIndex, out var reachedTarget);
+        return reachedTarget;
+    }
+
+    private ushort FloodFillL1Component(ulong l1Voxel, ushort seedIndex, bool[]? visited, ushort? targetSeedIndex, out bool reachedTarget)
+    {
+        reachedTarget = false;
+        visited ??= new bool[l2Desc.NumCellsTotal];
+
+        if (visited[seedIndex])
+        {
+            reachedTarget = targetSeedIndex == seedIndex;
+            return 0;
+        }
+
+        var seedLeaf = VoxelMap.EncodeSubIndex(l1Voxel, seedIndex, 2);
+        if (!Volume.IsEmpty(seedLeaf))
+        {
+            visited[seedIndex] = true;
+            return 0;
+        }
+
+        Queue<ushort> frontier = new();
+        frontier.Enqueue(seedIndex);
+        visited[seedIndex] = true;
+
+        ushort reachableFaces = 0;
+        while (frontier.TryDequeue(out var currentIndex))
+        {
+            if (targetSeedIndex == currentIndex)
+                reachedTarget = true;
+
+            var (x, y, z) = l2Desc.IndexToVoxel(currentIndex);
+            if (y == 0)
+                reachableFaces |= L1FaceBit(L1FaceNegY);
+            if (y == l2Desc.NumCellsY - 1)
+                reachableFaces |= L1FaceBit(L1FacePosY);
+            if (x == 0)
+                reachableFaces |= L1FaceBit(L1FaceNegX);
+            if (x == l2Desc.NumCellsX - 1)
+                reachableFaces |= L1FaceBit(L1FacePosX);
+            if (z == 0)
+                reachableFaces |= L1FaceBit(L1FaceNegZ);
+            if (z == l2Desc.NumCellsZ - 1)
+                reachableFaces |= L1FaceBit(L1FacePosZ);
+
+            for (var dir = 0; dir < 6; ++dir)
+            {
+                var dx = dir == L1FaceNegX ? -1 : dir == L1FacePosX ? 1 : 0;
+                var dy = dir == L1FaceNegY ? -1 : dir == L1FacePosY ? 1 : 0;
+                var dz = dir == L1FaceNegZ ? -1 : dir == L1FacePosZ ? 1 : 0;
+                var nx = x + dx;
+                var ny = y + dy;
+                var nz = z + dz;
+                if (!l2Desc.InBounds(nx, ny, nz))
+                    continue;
+
+                var neighbourIndex = l2Desc.VoxelToIndex(nx, ny, nz);
+                if (visited[neighbourIndex])
+                    continue;
+
+                var neighbourLeaf = VoxelMap.EncodeSubIndex(l1Voxel, neighbourIndex, 2);
+                if (!Volume.IsEmpty(neighbourLeaf))
+                {
+                    visited[neighbourIndex] = true;
+                    continue;
+                }
+
+                visited[neighbourIndex] = true;
+                frontier.Enqueue(neighbourIndex);
+            }
+        }
+
+        return reachableFaces;
+    }
+
+    private bool TryResolveL1SeedIndex(ulong l1Voxel, ulong actualVoxel, Vector3 point, out ushort seedIndex)
+    {
+        seedIndex = 0;
+
+        if (TryExtractL2IndexWithinL1(actualVoxel, l1Voxel, out seedIndex))
+            return true;
+
+        seedIndex = ResolvePointL2IndexWithinL1(l1Voxel, point);
+        if (Volume.IsEmpty(VoxelMap.EncodeSubIndex(l1Voxel, seedIndex, 2)))
+            return true;
+
+        return TryFindNearestEmptyL1SeedIndex(l1Voxel, point, out seedIndex);
+    }
+
+    private static bool TryExtractL2IndexWithinL1(ulong voxel, ulong expectedL1, out ushort l2Index)
     {
         var temp    = voxel;
-        var l0      = VoxelMap.DecodeIndex(ref temp);
-        var l1      = VoxelMap.DecodeIndex(ref temp);
-        var l1Voxel = VoxelMap.EncodeIndex(l1);
-        l1Voxel = VoxelMap.EncodeIndex(l0, l1Voxel);
-        return l1Voxel;
+        var l0Index = VoxelMap.DecodeIndex(ref temp);
+        var l1Index = VoxelMap.DecodeIndex(ref temp);
+        l2Index     = VoxelMap.DecodeIndex(ref temp);
+        if (l2Index == VoxelMap.INDEX_LEVEL_MASK)
+            return false;
+
+        var l1Voxel = VoxelMap.EncodeIndex(l1Index);
+        l1Voxel = VoxelMap.EncodeIndex(l0Index, l1Voxel);
+        return l1Voxel == expectedL1;
+    }
+
+    private ushort ResolvePointL2IndexWithinL1(ulong l1Voxel, Vector3 point)
+    {
+        var bounds   = Volume.VoxelBounds(l1Voxel, 0);
+        var span     = bounds.max - bounds.min;
+        var clamped  = Vector3.Clamp(point, bounds.min, bounds.max - new Vector3(SCORE_EPSILON));
+        var relative = clamped - bounds.min;
+        var x        = span.X > SCORE_EPSILON ? Math.Clamp((int)(relative.X / span.X * l2Desc.NumCellsX), 0, l2Desc.NumCellsX - 1) : 0;
+        var y        = span.Y > SCORE_EPSILON ? Math.Clamp((int)(relative.Y / span.Y * l2Desc.NumCellsY), 0, l2Desc.NumCellsY - 1) : 0;
+        var z        = span.Z > SCORE_EPSILON ? Math.Clamp((int)(relative.Z / span.Z * l2Desc.NumCellsZ), 0, l2Desc.NumCellsZ - 1) : 0;
+        return l2Desc.VoxelToIndex(x, y, z);
+    }
+
+    private bool TryFindNearestEmptyL1SeedIndex(ulong l1Voxel, Vector3 point, out ushort seedIndex)
+    {
+        seedIndex = 0;
+        var bestDistance = float.MaxValue;
+        var found        = false;
+
+        for (ushort currentIndex = 0; currentIndex < l2Desc.NumCellsTotal; ++currentIndex)
+        {
+            var leafVoxel = VoxelMap.EncodeSubIndex(l1Voxel, currentIndex, 2);
+            if (!Volume.IsEmpty(leafVoxel))
+                continue;
+
+            var center           = ResolveVoxelCenter(leafVoxel);
+            var distanceSquared  = Vector3.DistanceSquared(center, point);
+            if (distanceSquared + SCORE_EPSILON >= bestDistance)
+                continue;
+
+            bestDistance = distanceSquared;
+            seedIndex    = currentIndex;
+            found        = true;
+        }
+
+        return found;
+    }
+
+    private ulong ResolveRepresentativeL1Voxel(ulong voxel, Vector3 referencePoint)
+    {
+        if (TryExtractL1Parent(voxel, out var l1Voxel))
+            return l1Voxel;
+
+        var l0Index = ExtractL0Index(voxel);
+        var bounds = Volume.VoxelBounds(voxel, 0);
+        var span = bounds.max - bounds.min;
+        var clamped = Vector3.Clamp(referencePoint, bounds.min, bounds.max - new Vector3(SCORE_EPSILON));
+        var relative = clamped - bounds.min;
+        var l1x = span.X > SCORE_EPSILON ? Math.Clamp((int)(relative.X / span.X * l1Desc.NumCellsX), 0, l1Desc.NumCellsX - 1) : 0;
+        var l1y = span.Y > SCORE_EPSILON ? Math.Clamp((int)(relative.Y / span.Y * l1Desc.NumCellsY), 0, l1Desc.NumCellsY - 1) : 0;
+        var l1z = span.Z > SCORE_EPSILON ? Math.Clamp((int)(relative.Z / span.Z * l1Desc.NumCellsZ), 0, l1Desc.NumCellsZ - 1) : 0;
+        return VoxelMap.EncodeIndex(l0Index, VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(l1x, l1y, l1z)));
+    }
+
+    private bool IsVoxelInsidePathConstraint(ulong voxel)
+    {
+        if (l1PathSet == null)
+            return true;
+
+        if (TryExtractL1Parent(voxel, out var l1Voxel))
+            return l1PathSet.Contains(l1Voxel);
+
+        return l0PathSet?.Contains(ExtractL0Index(voxel)) ?? false;
+    }
+
+    private bool TryGetVoxelCorridorDistance(ulong voxel, out int distance)
+    {
+        distance = int.MaxValue;
+        if (l1CorridorDistance == null)
+            return false;
+
+        if (TryExtractL1Parent(voxel, out var l1Voxel))
+            return l1CorridorDistance.TryGetValue(l1Voxel, out distance);
+
+        return l0CorridorDistance?.TryGetValue(ExtractL0Index(voxel), out distance) ?? false;
+    }
+
+    private bool TryGetVoxelL1DistanceFloor(ulong voxel, out float distance)
+    {
+        distance = float.MaxValue;
+        if (l1DistanceField == null)
+            return false;
+
+        if (TryExtractL1Parent(voxel, out var l1Voxel))
+            return l1DistanceField.TryGetValue(l1Voxel, out distance);
+
+        return l0DistanceField?.TryGetValue(ExtractL0Index(voxel), out distance) ?? false;
     }
 
     private bool TryCreateGuidedCorridor(Vector3 fromPos, Vector3 toPos, out GuidedSearchCorridor corridor)
@@ -2525,9 +3434,72 @@ public class VoxelPathfind
         return false;
     }
 
-    private void ComputeL1DistanceField(ulong goalVoxel)
+    private void VisitL1Neighbours(ulong voxel, Action<ulong> visitor)
     {
-        var goalL1 = ExtractL1Parent(goalVoxel);
+        var t     = voxel;
+        var l0Idx = VoxelMap.DecodeIndex(ref t);
+        var l1Idx = VoxelMap.DecodeIndex(ref t);
+        var l0c   = l0Desc.IndexToVoxel(l0Idx);
+        var l1c   = l1Desc.IndexToVoxel(l1Idx);
+
+        for (var dir = 0; dir < 6; dir++)
+        {
+            var dx = dir == 2 ? -1 : dir == 3 ? 1 : 0;
+            var dy = dir == 0 ? -1 : dir == 1 ? 1 : 0;
+            var dz = dir == 4 ? -1 : dir == 5 ? 1 : 0;
+
+            var nl1x = l1c.x + dx;
+            var nl1y = l1c.y + dy;
+            var nl1z = l1c.z + dz;
+            var nl0x = l0c.x;
+            var nl0y = l0c.y;
+            var nl0z = l0c.z;
+
+            if (nl1x < 0)
+            {
+                nl0x--;
+                nl1x = l1Desc.NumCellsX - 1;
+            }
+            else if (nl1x >= l1Desc.NumCellsX)
+            {
+                nl0x++;
+                nl1x = 0;
+            }
+
+            if (nl1y < 0)
+            {
+                nl0y--;
+                nl1y = l1Desc.NumCellsY - 1;
+            }
+            else if (nl1y >= l1Desc.NumCellsY)
+            {
+                nl0y++;
+                nl1y = 0;
+            }
+
+            if (nl1z < 0)
+            {
+                nl0z--;
+                nl1z = l1Desc.NumCellsZ - 1;
+            }
+            else if (nl1z >= l1Desc.NumCellsZ)
+            {
+                nl0z++;
+                nl1z = 0;
+            }
+
+            if (!l0Desc.InBounds(nl0x, nl0y, nl0z))
+                continue;
+
+            var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1x, nl1y, nl1z));
+            neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0x, nl0y, nl0z), neighbour);
+            visitor(neighbour);
+        }
+    }
+
+    private void ComputeL1DistanceField(ulong goalVoxel, Vector3 goalPoint)
+    {
+        var goalL1 = ResolveRepresentativeL1Voxel(goalVoxel, goalPoint);
         l1DistanceField = new() { [goalL1] = 0 };
         var frontier = new Queue<ulong>();
         frontier.Enqueue(goalL1);
@@ -2598,18 +3570,163 @@ public class VoxelPathfind
 
                 if (!Volume.IsEmpty(neighbour) || l1DistanceField.ContainsKey(neighbour))
                     continue;
+                if (!HasTraversableL1FaceTransition(current, neighbour, dx, dy, dz))
+                    continue;
 
                 var edgeCost = dx != 0 ? l1Desc.CellSize.X : dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
                 l1DistanceField[neighbour] = currentDist + edgeCost;
                 frontier.Enqueue(neighbour);
             }
         }
+
+        l0DistanceField = new();
+        foreach (var (l1Voxel, l1Dist) in l1DistanceField)
+        {
+            var l0Index = ExtractL0Index(l1Voxel);
+            if (!l0DistanceField.TryGetValue(l0Index, out var existing) || l1Dist < existing)
+                l0DistanceField[l0Index] = l1Dist;
+        }
     }
 
-    private HashSet<ulong>? SearchL1CoarsePath(ulong fromVoxel, ulong toVoxel)
+    private void ComputeL1DistanceFieldFromCoarsePath(IReadOnlyList<ulong> orderedPath, float terminalDistance)
     {
-        var fromL1 = ExtractL1Parent(fromVoxel);
-        var toL1   = ExtractL1Parent(toVoxel);
+        l1DistanceField = new();
+        if (orderedPath.Count == 0)
+        {
+            l0DistanceField = null;
+            return;
+        }
+
+        var remainingDistance = MathF.Max(terminalDistance, 0f);
+        var lastIndex         = orderedPath.Count - 1;
+        l1DistanceField[orderedPath[lastIndex]] = remainingDistance;
+
+        for (var i = lastIndex - 1; i >= 0; --i)
+        {
+            remainingDistance += CalculateL1TransitionCost(orderedPath[i], orderedPath[i + 1]);
+            var voxel = orderedPath[i];
+            if (!l1DistanceField.TryGetValue(voxel, out var existing) || remainingDistance < existing)
+                l1DistanceField[voxel] = remainingDistance;
+        }
+
+        var frontier = new PriorityQueue<ulong, float>();
+        foreach (var (seedVoxel, seedDistance) in l1DistanceField)
+            frontier.Enqueue(seedVoxel, seedDistance);
+
+        var expanded = 0;
+        while (frontier.TryDequeue(out var current, out var queuedDistance) && expanded < L1_DISTANCE_FIELD_BUDGET)
+        {
+            if (!l1DistanceField.TryGetValue(current, out var currentDistance) || queuedDistance > currentDistance + SCORE_EPSILON)
+                continue;
+            expanded++;
+
+            var t     = current;
+            var l0Idx = VoxelMap.DecodeIndex(ref t);
+            var l1Idx = VoxelMap.DecodeIndex(ref t);
+            var l0c   = l0Desc.IndexToVoxel(l0Idx);
+            var l1c   = l1Desc.IndexToVoxel(l1Idx);
+
+            for (var dir = 0; dir < 6; dir++)
+            {
+                var dx = dir == 2 ? -1 : dir == 3 ? 1 : 0;
+                var dy = dir == 0 ? -1 : dir == 1 ? 1 : 0;
+                var dz = dir == 4 ? -1 : dir == 5 ? 1 : 0;
+
+                var nl1x = l1c.x + dx;
+                var nl1y = l1c.y + dy;
+                var nl1z = l1c.z + dz;
+                var nl0x = l0c.x;
+                var nl0y = l0c.y;
+                var nl0z = l0c.z;
+
+                if (nl1x < 0)
+                {
+                    nl0x--;
+                    nl1x = l1Desc.NumCellsX - 1;
+                }
+                else if (nl1x >= l1Desc.NumCellsX)
+                {
+                    nl0x++;
+                    nl1x = 0;
+                }
+
+                if (nl1y < 0)
+                {
+                    nl0y--;
+                    nl1y = l1Desc.NumCellsY - 1;
+                }
+                else if (nl1y >= l1Desc.NumCellsY)
+                {
+                    nl0y++;
+                    nl1y = 0;
+                }
+
+                if (nl1z < 0)
+                {
+                    nl0z--;
+                    nl1z = l1Desc.NumCellsZ - 1;
+                }
+                else if (nl1z >= l1Desc.NumCellsZ)
+                {
+                    nl0z++;
+                    nl1z = 0;
+                }
+
+                if (!l0Desc.InBounds(nl0x, nl0y, nl0z))
+                    continue;
+
+                var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1x, nl1y, nl1z));
+                neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0x, nl0y, nl0z), neighbour);
+
+                if (!Volume.IsEmpty(neighbour))
+                    continue;
+                if (!HasTraversableL1FaceTransition(current, neighbour, dx, dy, dz))
+                    continue;
+
+                var edgeCost          = dx != 0 ? l1Desc.CellSize.X : dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
+                var neighbourDistance = currentDistance + edgeCost;
+                if (l1DistanceField.TryGetValue(neighbour, out var existingDistance) && existingDistance <= neighbourDistance + SCORE_EPSILON)
+                    continue;
+
+                l1DistanceField[neighbour] = neighbourDistance;
+                frontier.Enqueue(neighbour, neighbourDistance);
+            }
+        }
+
+        l0DistanceField = new();
+        foreach (var (l1Voxel, l1Dist) in l1DistanceField)
+        {
+            var l0Index = ExtractL0Index(l1Voxel);
+            if (!l0DistanceField.TryGetValue(l0Index, out var existing) || l1Dist < existing)
+                l0DistanceField[l0Index] = l1Dist;
+        }
+    }
+
+    private float CalculateL1TransitionCost(ulong fromL1, ulong toL1)
+    {
+        var fromTemp = fromL1;
+        var fromL0   = l0Desc.IndexToVoxel(VoxelMap.DecodeIndex(ref fromTemp));
+        var fromL1c  = l1Desc.IndexToVoxel(VoxelMap.DecodeIndex(ref fromTemp));
+        var toTemp   = toL1;
+        var toL0     = l0Desc.IndexToVoxel(VoxelMap.DecodeIndex(ref toTemp));
+        var toL1c    = l1Desc.IndexToVoxel(VoxelMap.DecodeIndex(ref toTemp));
+
+        var globalFromX = fromL0.x * l1Desc.NumCellsX + fromL1c.x;
+        var globalFromY = fromL0.y * l1Desc.NumCellsY + fromL1c.y;
+        var globalFromZ = fromL0.z * l1Desc.NumCellsZ + fromL1c.z;
+        var globalToX   = toL0.x   * l1Desc.NumCellsX + toL1c.x;
+        var globalToY   = toL0.y   * l1Desc.NumCellsY + toL1c.y;
+        var globalToZ   = toL0.z   * l1Desc.NumCellsZ + toL1c.z;
+
+        return MathF.Abs(globalFromX - globalToX) * l1Desc.CellSize.X +
+               MathF.Abs(globalFromY - globalToY) * l1Desc.CellSize.Y +
+               MathF.Abs(globalFromZ - globalToZ) * l1Desc.CellSize.Z;
+    }
+
+    private HashSet<ulong>? SearchL1CoarsePath(ulong fromVoxel, Vector3 fromPoint, ulong toVoxel, Vector3 toPoint)
+    {
+        var fromL1 = ResolveRepresentativeL1Voxel(fromVoxel, fromPoint);
+        var toL1   = ResolveRepresentativeL1Voxel(toVoxel, toPoint);
         if (fromL1 == toL1)
             return [fromL1];
 
@@ -2617,7 +3734,597 @@ public class VoxelPathfind
         if (result is { Count: > 0 })
             return result;
 
+        if (Volume.IsEmpty(toL1))
+            return result;
+
         return TrySearchL1Path(fromL1, toL1, true);
+    }
+
+    private L1BestEffortSearchResult SearchL1BestEffortPath(ulong fromVoxel, Vector3 fromPoint, ulong toVoxel, Vector3 toPoint)
+    {
+        var fromL1        = ResolveRepresentativeL1Voxel(fromVoxel, fromPoint);
+        var toL1          = ResolveRepresentativeL1Voxel(toVoxel, toPoint);
+        var strictResult  = TrySearchL1BestEffortPath(fromL1, toL1, fromVoxel, fromPoint, toVoxel, toPoint, false);
+        if (strictResult.ReachedGoal)
+            return strictResult;
+
+        if (Volume.IsEmpty(toL1))
+            return strictResult;
+
+        var relaxedResult = TrySearchL1BestEffortPath(fromL1, toL1, fromVoxel, fromPoint, toVoxel, toPoint, true);
+        return IsBetterL1BestEffortResult(relaxedResult, strictResult) ? relaxedResult : strictResult;
+    }
+
+    private void BuildL1Corridor(HashSet<ulong> pathSet, int corridorRadius)
+    {
+        currentL1CorridorRadius = corridorRadius;
+        l0PathSet = new();
+        foreach (var l1Voxel in pathSet)
+            l0PathSet.Add(ExtractL0Index(l1Voxel));
+
+        if (corridorRadius <= 0)
+        {
+            l1PathSet          = pathSet;
+            l1CorridorDistance = null;
+            l0CorridorDistance = null;
+            return;
+        }
+
+        l1PathSet = null;
+        var distances = new Dictionary<ulong, int>(pathSet.Count * 2);
+        var frontier = new Queue<ulong>();
+        foreach (var pathVoxel in pathSet)
+        {
+            if (!distances.TryAdd(pathVoxel, 0))
+                continue;
+
+            frontier.Enqueue(pathVoxel);
+        }
+
+        while (frontier.TryDequeue(out var current))
+        {
+            var currentDistance = distances[current];
+            if (currentDistance >= corridorRadius)
+                continue;
+
+            VisitL1Neighbours
+            (
+                current,
+                neighbour =>
+                {
+                    if (distances.ContainsKey(neighbour))
+                        return;
+
+                    distances[neighbour] = currentDistance + 1;
+                    frontier.Enqueue(neighbour);
+                }
+            );
+        }
+
+        l1CorridorDistance = distances;
+        l0CorridorDistance = new();
+        foreach (var (l1Voxel, distance) in distances)
+        {
+            var l0Index = ExtractL0Index(l1Voxel);
+            if (!l0CorridorDistance.TryGetValue(l0Index, out var existing) || distance < existing)
+                l0CorridorDistance[l0Index] = distance;
+        }
+    }
+
+    private HashSet<ulong> BuildL1LateralExplorationArea(ulong fromVoxel, Vector3 fromPos, Vector3 toPos, int attempt)
+    {
+        var startL1 = ResolveRepresentativeL1Voxel(fromVoxel, fromPos);
+        var horizontalDelta = new Vector2(toPos.X - fromPos.X, toPos.Z - fromPos.Z);
+        var horizontalDistance = horizontalDelta.Length();
+        var forward = horizontalDistance > SCORE_EPSILON ? horizontalDelta / horizontalDistance : Vector2.UnitX;
+        var right = new Vector2(-forward.Y, forward.X);
+        var l1Horizontal = MathF.Max(l1Desc.CellSize.X, l1Desc.CellSize.Z);
+        var l1Vertical = l1Desc.CellSize.Y;
+        var distanceInL1Cells = MathF.Max(1f, horizontalDistance / MathF.Max(l1Horizontal, SCORE_EPSILON));
+        var widthScale = LONG_RANGE_LATERAL_WIDTH_SCALE_BASE + LONG_RANGE_LATERAL_WIDTH_SCALE_STEP * attempt;
+        var growthScale = LONG_RANGE_LATERAL_GROWTH_SCALE_BASE + LONG_RANGE_LATERAL_GROWTH_SCALE_STEP * attempt;
+        var halfWidth = MathF.Max
+        (
+            l1Horizontal * (LONG_RANGE_LATERAL_MIN_HALF_WIDTH_L1_CELLS + attempt * LONG_RANGE_LATERAL_MIN_HALF_WIDTH_ATTEMPT_CELLS),
+            horizontalDistance * widthScale
+        );
+        var forwardLimit = MathF.Max
+        (
+            horizontalDistance * (1f + attempt * LONG_RANGE_LATERAL_FORWARD_ATTEMPT_SCALE) + l1Horizontal * LONG_RANGE_LATERAL_FORWARD_SLACK_L1_CELLS,
+            l1Horizontal * LONG_RANGE_LATERAL_MIN_FORWARD_L1_CELLS
+        );
+        var backwardLimit = MathF.Max
+        (
+            l1Horizontal * (LONG_RANGE_LATERAL_BACKWARD_SLACK_L1_CELLS + attempt * LONG_RANGE_LATERAL_BACKWARD_ATTEMPT_CELLS),
+            horizontalDistance * (LONG_RANGE_LATERAL_BACKWARD_SCALE + attempt * LONG_RANGE_LATERAL_BACKWARD_SCALE_STEP)
+        );
+        var downwardLimit = MathF.Max(MathF.Max(0f, fromPos.Y - toPos.Y) + l1Vertical * LONG_RANGE_LATERAL_DOWNWARD_SLACK_L1_CELLS, l1Vertical * LONG_RANGE_LATERAL_MIN_VERTICAL_L1_CELLS);
+        var upwardLimit = MathF.Max(MathF.Max(0f, toPos.Y - fromPos.Y) + l1Vertical * LONG_RANGE_LATERAL_UPWARD_SLACK_L1_CELLS, l1Vertical * LONG_RANGE_LATERAL_MIN_VERTICAL_L1_CELLS);
+        var maxCells = LONG_RANGE_LATERAL_AREA_BASE_CELLS +
+                       attempt * LONG_RANGE_LATERAL_AREA_STEP_CELLS +
+                       (int)(distanceInL1Cells * LONG_RANGE_LATERAL_AREA_DISTANCE_CELLS_SCALE);
+
+        HashSet<ulong> result = [startL1];
+        Queue<ulong> frontier = new();
+        frontier.Enqueue(startL1);
+
+        while (frontier.TryDequeue(out var current) && result.Count < maxCells)
+        {
+            VisitL1Neighbours
+            (
+                current,
+                neighbour =>
+                {
+                    if (result.Count >= maxCells || result.Contains(neighbour))
+                        return;
+
+                    if (!IsInsideL1LateralExplorationWindow(neighbour, fromPos, forward, right, halfWidth, growthScale, forwardLimit, backwardLimit, upwardLimit, downwardLimit))
+                        return;
+
+                    result.Add(neighbour);
+                    frontier.Enqueue(neighbour);
+                }
+            );
+        }
+
+        return result;
+    }
+
+    private void ApplyL1AreaConstraint(HashSet<ulong> area)
+    {
+        currentL1CorridorRadius = 0;
+        l1PathSet = area;
+        l1CorridorDistance = null;
+        l0CorridorDistance = null;
+        l0PathSet = new();
+        foreach (var l1Voxel in area)
+            l0PathSet.Add(ExtractL0Index(l1Voxel));
+    }
+
+    private void ClearL1AreaConstraint()
+    {
+        currentL1CorridorRadius = 0;
+        l1PathSet = null;
+        l0PathSet = null;
+        l1CorridorDistance = null;
+        l0CorridorDistance = null;
+    }
+
+    private bool IsInsideL1LateralExplorationWindow
+    (
+        ulong   l1Voxel,
+        Vector3 origin,
+        Vector2 forward,
+        Vector2 right,
+        float   baseHalfWidth,
+        float   forwardGrowth,
+        float   forwardLimit,
+        float   backwardLimit,
+        float   upwardLimit,
+        float   downwardLimit
+    )
+    {
+        var center = ResolveVoxelCenter(l1Voxel);
+        var relative = center - origin;
+        if (relative.Y > upwardLimit || relative.Y < -downwardLimit)
+            return false;
+
+        var horizontal = new Vector2(relative.X, relative.Z);
+        var forwardDistance = Vector2.Dot(horizontal, forward);
+        if (forwardDistance < -backwardLimit || forwardDistance > forwardLimit)
+            return false;
+
+        var lateralDistance = MathF.Abs(Vector2.Dot(horizontal, right));
+        var allowedHalfWidth = baseHalfWidth +
+                               MathF.Max(forwardDistance, 0f) * forwardGrowth +
+                               MathF.Sqrt(MathF.Max(forwardDistance, 0f)) * LONG_RANGE_LATERAL_FORWARD_SQRT_WIDTH_SCALE;
+        return lateralDistance <= allowedHalfWidth;
+    }
+
+    private float ResolveLongRangeHeuristicWeight(int corridorRadius)
+    {
+        var t = Math.Clamp((float)corridorRadius / LONG_RANGE_L1_CORRIDOR_RELAX_STEPS, 0f, 1f);
+        return LONG_RANGE_HEURISTIC_WEIGHT + (LONG_RANGE_L1_CORRIDOR_MAX_RADIUS_HEURISTIC_WEIGHT - LONG_RANGE_HEURISTIC_WEIGHT) * t;
+    }
+
+    private float ResolveLongRangeLateralHeuristicWeight(int attempt)
+    {
+        var t = Math.Clamp((float)attempt / (LONG_RANGE_LATERAL_EXPLORATION_ATTEMPTS - 1), 0f, 1f);
+        return LONG_RANGE_LATERAL_HEURISTIC_WEIGHT_BASE + (LONG_RANGE_LATERAL_HEURISTIC_WEIGHT_MIN - LONG_RANGE_LATERAL_HEURISTIC_WEIGHT_BASE) * t;
+    }
+
+    private LongRangeLateralBias BuildLongRangeLateralBias(Vector3 fromPos, Vector3 toPos, int attempt)
+    {
+        var horizontalDelta    = new Vector2(toPos.X - fromPos.X, toPos.Z - fromPos.Z);
+        var horizontalDistance = horizontalDelta.Length();
+        var forward            = TryNormalize(horizontalDelta, out var normalizedForward) ? normalizedForward : Vector2.UnitX;
+        var right              = new Vector2(-forward.Y, forward.X);
+        var verticalDrop       = MathF.Max(fromPos.Y - toPos.Y, 0f);
+        var leafVertical       = MathF.Max(l2Desc.CellSize.Y, SCORE_EPSILON);
+        var preferDescending   = verticalDrop >= leafVertical * LONG_RANGE_LATERAL_DESCENT_ENABLE_MIN_DROP_LEAF_CELLS;
+        var heightPriority     = 1f + Math.Clamp(verticalDrop / (leafVertical * LONG_RANGE_LATERAL_DESCENT_PRIORITY_DROP_LEAF_CELLS), 0f, LONG_RANGE_LATERAL_DESCENT_PRIORITY_MAX_BONUS);
+        var directionalPenalty = MathF.Max(LONG_RANGE_LATERAL_DIRECTIONAL_PENALTY_MIN, 1f - attempt * LONG_RANGE_LATERAL_DIRECTIONAL_PENALTY_ATTEMPT_STEP);
+        return new(true, fromPos, forward, right, horizontalDistance, preferDescending, heightPriority, directionalPenalty);
+    }
+
+    private int ResolveLongRangeL1BestEffortStepBudget(Vector3 fromPos, Vector3 toPos, bool includeNonEmpty)
+    {
+        var horizontalL1Cells = HorizontalDistanceXZ(fromPos, toPos) / MathF.Max(MathF.Max(l1Desc.CellSize.X, l1Desc.CellSize.Z), SCORE_EPSILON);
+        var verticalL1Cells   = MathF.Abs(fromPos.Y - toPos.Y) / MathF.Max(l1Desc.CellSize.Y, SCORE_EPSILON);
+        var estimatedCells    = horizontalL1Cells + verticalL1Cells * LONG_RANGE_L1_BEST_EFFORT_VERTICAL_DISTANCE_BUDGET_SCALE;
+        var distanceBudget    = (int)(estimatedCells * LONG_RANGE_L1_BEST_EFFORT_DISTANCE_BUDGET_PER_CELL);
+        var budget            = LONG_RANGE_L1_BEST_EFFORT_STEP_BUDGET + distanceBudget;
+
+        if (includeNonEmpty)
+            budget = (int)(budget * LONG_RANGE_L1_BEST_EFFORT_RELAXED_BUDGET_SCALE);
+
+        return Math.Clamp(budget, LONG_RANGE_L1_BEST_EFFORT_STEP_BUDGET, LONG_RANGE_L1_BEST_EFFORT_MAX_STEP_BUDGET);
+    }
+
+    private float ResolveLongRangeL1GoalCaptureDistanceThreshold(Vector3 fromPos, Vector3 toPos)
+    {
+        var maxL1Extent    = MathF.Max(l1Desc.CellSize.X, MathF.Max(l1Desc.CellSize.Y, l1Desc.CellSize.Z));
+        var directDistance = Vector3.Distance(fromPos, toPos);
+        return MathF.Max(maxL1Extent * LONG_RANGE_L1_GOAL_CAPTURE_DISTANCE_THRESHOLD_L1_CELLS, directDistance * LONG_RANGE_L1_GOAL_CAPTURE_DIRECT_DISTANCE_RATIO);
+    }
+
+    private int ResolveLongRangeL1GoalCaptureStepBudget(float bestDistance)
+    {
+        var maxL1Extent    = MathF.Max(l1Desc.CellSize.X, MathF.Max(l1Desc.CellSize.Y, l1Desc.CellSize.Z));
+        var estimatedCells = bestDistance / MathF.Max(maxL1Extent, SCORE_EPSILON);
+        var budget         = LONG_RANGE_L1_GOAL_CAPTURE_BASE_STEP_BUDGET + (int)(estimatedCells * LONG_RANGE_L1_GOAL_CAPTURE_BUDGET_PER_CELL);
+        return Math.Clamp(budget, LONG_RANGE_L1_GOAL_CAPTURE_BASE_STEP_BUDGET, LONG_RANGE_L1_GOAL_CAPTURE_MAX_STEP_BUDGET);
+    }
+
+    private int ResolveLongRangeGuidedFullSearchCorridorRadius(float bestDistance)
+    {
+        var maxL1Extent    = MathF.Max(l1Desc.CellSize.X, MathF.Max(l1Desc.CellSize.Y, l1Desc.CellSize.Z));
+        var gapCells       = bestDistance / MathF.Max(maxL1Extent, SCORE_EPSILON);
+        var dynamicRadius  = LONG_RANGE_L1_GUIDED_FULLSEARCH_BASE_CORRIDOR_RADIUS + (int)MathF.Ceiling(gapCells * LONG_RANGE_L1_GUIDED_FULLSEARCH_GAP_RADIUS_SCALE);
+        return Math.Clamp(dynamicRadius, LONG_RANGE_L1_GUIDED_FULLSEARCH_BASE_CORRIDOR_RADIUS, LONG_RANGE_L1_GUIDED_FULLSEARCH_MAX_CORRIDOR_RADIUS);
+    }
+
+    private L1BestEffortSearchResult TrySearchL1BestEffortPath
+    (
+        ulong   fromL1,
+        ulong   toL1,
+        ulong   fromVoxel,
+        Vector3 fromPoint,
+        ulong   toVoxel,
+        Vector3 toPoint,
+        bool    includeNonEmpty
+    )
+    {
+        var tGoal = toL1;
+        var gL0   = VoxelMap.DecodeIndex(ref tGoal);
+        var gL1   = VoxelMap.DecodeIndex(ref tGoal);
+        var gL0c  = l0Desc.IndexToVoxel(gL0);
+        var gL1c  = l1Desc.IndexToVoxel(gL1);
+        var rootMin = Volume.RootTile.BoundsMin;
+        var coarseBias = BuildLongRangeLateralBias(fromPoint, toPoint, 0);
+        var stepBudget = ResolveLongRangeL1BestEffortStepBudget(fromPoint, toPoint, includeNonEmpty);
+        var totalBudget = stepBudget;
+        var startReachableFaces = GetReachableL1FacesFromPoint(fromL1, fromVoxel, fromPoint);
+        var goalReachableFaces  = GetReachableL1FacesFromPoint(toL1,   toVoxel,   toPoint);
+        var directGoalConnected = fromL1 == toL1 && ArePointsConnectedWithinL1(fromL1, fromVoxel, fromPoint, toVoxel, toPoint);
+        var goalFacePenalty     = MathF.Min(l1Desc.CellSize.X, MathF.Min(l1Desc.CellSize.Y, l1Desc.CellSize.Z));
+
+        Vector3 CoarseCellCenter((int x, int y, int z) l0c, (int x, int y, int z) l1c)
+            => rootMin +
+               new Vector3(l0c.x * l0Desc.CellSize.X, l0c.y * l0Desc.CellSize.Y, l0c.z * l0Desc.CellSize.Z) +
+               new Vector3((l1c.x + 0.5f) * l1Desc.CellSize.X, (l1c.y + 0.5f) * l1Desc.CellSize.Y, (l1c.z + 0.5f) * l1Desc.CellSize.Z);
+
+        float H((int x, int y, int z) l0c, (int x, int y, int z) l1c)
+        {
+            var dx = (l0c.x - gL0c.x) * l0Desc.CellSize.X + (l1c.x - gL1c.x) * l1Desc.CellSize.X;
+            var dy = (l0c.y - gL0c.y) * l0Desc.CellSize.Y + (l1c.y - gL1c.y) * l1Desc.CellSize.Y;
+            var dz = (l0c.z - gL0c.z) * l0Desc.CellSize.Z + (l1c.z - gL1c.z) * l1Desc.CellSize.Z;
+            return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+        }
+
+        float StateHeuristic(L1TraversalState state)
+        {
+            var temp  = state.Voxel;
+            var l0Idx = VoxelMap.DecodeIndex(ref temp);
+            var l1Idx = VoxelMap.DecodeIndex(ref temp);
+            var l0c   = l0Desc.IndexToVoxel(l0Idx);
+            var l1c   = l1Desc.IndexToVoxel(l1Idx);
+            var position = state.Voxel == fromL1
+                               ? fromPoint
+                               : state.Voxel == toL1
+                                   ? toPoint
+                                   : CoarseCellCenter(l0c, l1c);
+            var baseH = coarseBias.Enabled
+                            ? ComputeLongRangeLateralHeuristic(position, state.Voxel, coarseBias, toPoint)
+                            : H(l0c, l1c);
+            if (state.Voxel != toL1)
+                return baseH;
+            if (state.EntryFace == L1FaceInside)
+                return directGoalConnected ? 0f : goalFacePenalty;
+
+            return HasL1Face(goalReachableFaces, state.EntryFace) ? 0f : goalFacePenalty;
+        }
+
+        var startState = new L1TraversalState(fromL1, L1FaceInside);
+        var gScore     = new Dictionary<L1TraversalState, float> { [startState] = 0 };
+        var cameFrom   = new Dictionary<L1TraversalState, L1TraversalState>();
+        var closed     = new HashSet<L1TraversalState>();
+        var openQ      = new PriorityQueue<L1TraversalState, float>();
+        openQ.Enqueue(startState, StateHeuristic(startState));
+
+        var bestState    = startState;
+        var bestDistance = StateHeuristic(startState);
+        var expanded     = 0;
+
+        bool TryRunSearchPhase(int phaseBudget, out L1BestEffortSearchResult result)
+        {
+            var phaseExpanded = 0;
+            while (openQ.TryDequeue(out var current, out _) && phaseExpanded < phaseBudget)
+            {
+                if (!closed.Add(current))
+                    continue;
+                expanded++;
+                phaseExpanded++;
+
+                var t     = current.Voxel;
+                var l0Idx = VoxelMap.DecodeIndex(ref t);
+                var l1Idx = VoxelMap.DecodeIndex(ref t);
+                var l0c   = l0Desc.IndexToVoxel(l0Idx);
+                var l1c   = l1Desc.IndexToVoxel(l1Idx);
+                var cg    = gScore[current];
+                var h     = StateHeuristic(current);
+                var currentPosition = current.Voxel == fromL1
+                                          ? fromPoint
+                                          : current.Voxel == toL1
+                                              ? toPoint
+                                              : CoarseCellCenter(l0c, l1c);
+
+                if (h + SCORE_EPSILON < bestDistance || MathF.Abs(h - bestDistance) <= SCORE_EPSILON && cg < gScore.GetValueOrDefault(bestState, float.MaxValue))
+                {
+                    bestState    = current;
+                    bestDistance = h;
+                }
+
+                var reachedGoal = current.Voxel == toL1 &&
+                                  (current.EntryFace == L1FaceInside
+                                       ? directGoalConnected
+                                       : HasL1Face(goalReachableFaces, current.EntryFace));
+
+                if (reachedGoal)
+                {
+                    var orderedPath = ReconstructL1OrderedPath(cameFrom, current);
+                    result = new(new HashSet<ulong>(orderedPath), orderedPath, true, expanded, 0f, totalBudget);
+                    return true;
+                }
+
+                var exitFaceMask = current.EntryFace == L1FaceInside
+                                       ? startReachableFaces
+                                       : GetReachableL1FacesFromEntry(current.Voxel, current.EntryFace);
+                if (exitFaceMask == 0)
+                    continue;
+
+                for (var dir = 0; dir < 6; dir++)
+                {
+                    if (!HasL1Face(exitFaceMask, dir))
+                        continue;
+
+                    var dx = dir == 2 ? -1 : dir == 3 ? 1 : 0;
+                    var dy = dir == 0 ? -1 : dir == 1 ? 1 : 0;
+                    var dz = dir == 4 ? -1 : dir == 5 ? 1 : 0;
+
+                    var nl1x = l1c.x + dx;
+                    var nl1y = l1c.y + dy;
+                    var nl1z = l1c.z + dz;
+                    var nl0x = l0c.x;
+                    var nl0y = l0c.y;
+                    var nl0z = l0c.z;
+
+                    if (nl1x < 0)
+                    {
+                        nl0x--;
+                        nl1x = l1Desc.NumCellsX - 1;
+                    }
+                    else if (nl1x >= l1Desc.NumCellsX)
+                    {
+                        nl0x++;
+                        nl1x = 0;
+                    }
+
+                    if (nl1y < 0)
+                    {
+                        nl0y--;
+                        nl1y = l1Desc.NumCellsY - 1;
+                    }
+                    else if (nl1y >= l1Desc.NumCellsY)
+                    {
+                        nl0y++;
+                        nl1y = 0;
+                    }
+
+                    if (nl1z < 0)
+                    {
+                        nl0z--;
+                        nl1z = l1Desc.NumCellsZ - 1;
+                    }
+                    else if (nl1z >= l1Desc.NumCellsZ)
+                    {
+                        nl0z++;
+                        nl1z = 0;
+                    }
+
+                    if (!l0Desc.InBounds(nl0x, nl0y, nl0z))
+                        continue;
+
+                    var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1x, nl1y, nl1z));
+                    neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0x, nl0y, nl0z), neighbour);
+
+                    var nextState = new L1TraversalState(neighbour, (byte)OppositeFace(dir));
+                    if (closed.Contains(nextState))
+                        continue;
+                    if (!HasTraversableL1FaceTransition(current.Voxel, neighbour, dx, dy, dz))
+                        continue;
+
+                    var isEmpty = Volume.IsEmpty(neighbour);
+                    if (!isEmpty && !CanTraverseMixedL1Cell(includeNonEmpty, neighbour, toL1))
+                        continue;
+                    if (!isEmpty)
+                    {
+                        var entryReachableFaces = GetReachableL1FacesFromEntry(neighbour, nextState.EntryFace);
+                        var canReachGoal        = neighbour == toL1 && HasL1Face(goalReachableFaces, nextState.EntryFace);
+                        if (entryReachableFaces == 0 && !canReachGoal)
+                            continue;
+                    }
+
+                    var neighbourPosition = neighbour == toL1
+                                                ? toPoint
+                                                : CoarseCellCenter((nl0x, nl0y, nl0z), (nl1x, nl1y, nl1z));
+                    var edgeCost          = dx != 0 ? l1Desc.CellSize.X : dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
+                    var mixedPenalty      = isEmpty ? 0f : edgeCost * LONG_RANGE_L1_BEST_EFFORT_MIXED_CELL_PENALTY_SCALE;
+                    var traversalPenalty  = coarseBias.Enabled
+                                                ? CalculateLongRangeLateralTraversalPenalty(current.Voxel, currentPosition, neighbour, neighbourPosition, coarseBias, toPoint)
+                                                : 0f;
+                    var tentativeG        = cg + edgeCost + mixedPenalty + traversalPenalty;
+
+                    if (gScore.TryGetValue(nextState, out var existingG) && tentativeG >= existingG)
+                        continue;
+
+                    gScore[nextState]   = tentativeG;
+                    cameFrom[nextState] = current;
+                    openQ.Enqueue(nextState, tentativeG + StateHeuristic(nextState));
+                }
+            }
+
+            result = default;
+            return false;
+        }
+
+        if (TryRunSearchPhase(stepBudget, out var phaseResult))
+            return phaseResult;
+
+        var goalCaptureThreshold = ResolveLongRangeL1GoalCaptureDistanceThreshold(fromPoint, toPoint);
+        if (expanded >= stepBudget && openQ.Count > 0 && bestDistance <= goalCaptureThreshold)
+        {
+            var extraBudget = ResolveLongRangeL1GoalCaptureStepBudget(bestDistance);
+            totalBudget += extraBudget;
+            Service.Log.Debug($"[算路] 飞行体素粗层 best-effort 触发近终点续搜：最佳粗距离 = {bestDistance:f3}，附加预算 = {extraBudget}");
+
+            if (TryRunSearchPhase(extraBudget, out phaseResult))
+            {
+                Service.Log.Debug($"[算路] 飞行体素粗层 best-effort 近终点续搜命中终点：总扩展节点 = {expanded}/{totalBudget}");
+                return phaseResult;
+            }
+
+            Service.Log.Debug($"[算路] 飞行体素粗层 best-effort 近终点续搜仍未达终点：总扩展节点 = {expanded}/{totalBudget}，最佳粗距离 = {bestDistance:f3}");
+        }
+
+        var bestOrderedPath = ReconstructL1OrderedPath(cameFrom, bestState);
+        return new(new HashSet<ulong>(bestOrderedPath), bestOrderedPath, false, expanded, bestDistance, totalBudget);
+    }
+
+    private static HashSet<ulong> ReconstructL1PathSet(Dictionary<ulong, ulong> cameFrom, ulong endNode)
+    {
+        HashSet<ulong> pathSet = [];
+        var node = endNode;
+
+        while (true)
+        {
+            pathSet.Add(node);
+            if (!cameFrom.TryGetValue(node, out var parent))
+                break;
+            node = parent;
+        }
+
+        return pathSet;
+    }
+
+    private static List<ulong> ReconstructL1OrderedPath(Dictionary<ulong, ulong> cameFrom, ulong endNode)
+    {
+        List<ulong> path = [];
+        var node = endNode;
+
+        while (true)
+        {
+            path.Add(node);
+            if (!cameFrom.TryGetValue(node, out var parent))
+                break;
+            node = parent;
+        }
+
+        path.Reverse();
+        return path;
+    }
+
+    private static List<ulong> ReconstructL1OrderedPath(Dictionary<L1TraversalState, L1TraversalState> cameFrom, L1TraversalState endState)
+    {
+        List<ulong> path = [];
+        var state = endState;
+
+        while (true)
+        {
+            if (path.Count == 0 || path[^1] != state.Voxel)
+                path.Add(state.Voxel);
+            if (!cameFrom.TryGetValue(state, out var parent))
+                break;
+            state = parent;
+        }
+
+        path.Reverse();
+        return path;
+    }
+
+    private static List<(ulong voxel, Vector3 p)> MergePathSegments(List<(ulong voxel, Vector3 p)> head, List<(ulong voxel, Vector3 p)> tail)
+    {
+        if (head.Count == 0)
+            return tail;
+        if (tail.Count == 0)
+            return head;
+
+        List<(ulong voxel, Vector3 p)> merged = new(head.Count + tail.Count);
+        merged.AddRange(head);
+
+        var tailStartIndex = head[^1].voxel == tail[0].voxel && Vector3.DistanceSquared(head[^1].p, tail[0].p) <= SCORE_EPSILON * SCORE_EPSILON ? 1 : 0;
+        for (var i = tailStartIndex; i < tail.Count; ++i)
+            merged.Add(tail[i]);
+
+        return merged;
+    }
+
+    private FlightPathDebugPayload BuildCoarsePathDebugPayload(IReadOnlyList<ulong> orderedPath, Vector3 fromPos, Vector3 toPos, bool reachedGoal)
+    {
+        List<FlightCoarsePathDebugNode> result = new(orderedPath.Count);
+        for (var i = 0; i < orderedPath.Count; ++i)
+        {
+            var voxel = orderedPath[i];
+            var point = i == 0
+                            ? fromPos
+                            : i == orderedPath.Count - 1 && reachedGoal
+                                ? toPos
+                                : ResolveVoxelCenter(voxel);
+            result.Add(new(i, voxel, point));
+        }
+
+        return new()
+        {
+            Waypoints  = [],
+            CoarsePath = result,
+            ProxyDebug = pendingLongRangeProxyDebug
+        };
+    }
+
+    private static bool IsBetterL1BestEffortResult(L1BestEffortSearchResult candidate, L1BestEffortSearchResult current)
+    {
+        if (candidate.ReachedGoal != current.ReachedGoal)
+            return candidate.ReachedGoal;
+
+        if (candidate.BestDistance + SCORE_EPSILON < current.BestDistance)
+            return true;
+        if (current.BestDistance + SCORE_EPSILON < candidate.BestDistance)
+            return false;
+
+        if (candidate.PathSet.Count != current.PathSet.Count)
+            return candidate.PathSet.Count > current.PathSet.Count;
+
+        return candidate.ExpandedNodes < current.ExpandedNodes;
     }
 
     private HashSet<ulong>? TrySearchL1Path(ulong fromL1, ulong toL1, bool includeNonEmpty)
@@ -2726,7 +4433,10 @@ public class VoxelPathfind
 
                 if (closed.Contains(neighbour))
                     continue;
-                if (!includeNonEmpty && !Volume.IsEmpty(neighbour))
+                if (!HasTraversableL1FaceTransition(current, neighbour, dx, dy, dz))
+                    continue;
+                var isEmpty = Volume.IsEmpty(neighbour);
+                if (!isEmpty && !CanTraverseMixedL1Cell(includeNonEmpty, neighbour, toL1))
                     continue;
 
                 var edgeCost   = dx != 0 ? l1Desc.CellSize.X : dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
@@ -2746,10 +4456,215 @@ public class VoxelPathfind
 
     private float HeuristicDistance(Vector3 position, ulong voxel)
     {
-        var h = Vector3.Distance(position, goalPos);
-        if (l1DistanceField is { Count: > 0 } df && df.TryGetValue(ExtractL1Parent(voxel), out var l1Dist))
+        var h = longRangeLateralBias.Enabled ? ComputeLongRangeLateralHeuristic(position, voxel) : Vector3.Distance(position, goalPos);
+        if (TryGetVoxelL1DistanceFloor(voxel, out var l1Dist))
             h = MathF.Max(h, l1Dist);
         return h;
+    }
+
+    private float ComputeLongRangeLateralHeuristic(Vector3 position, ulong voxel)
+        => ComputeLongRangeLateralHeuristic(position, voxel, longRangeLateralBias, goalPos);
+
+    private float ComputeLongRangeLateralHeuristic(Vector3 position, ulong voxel, LongRangeLateralBias bias, Vector3 goal)
+    {
+        var horizontalGoalDist  = HorizontalDistanceXZ(position, goal);
+        var aboveGoal           = MathF.Max(position.Y - goal.Y, 0f);
+        var belowGoal           = MathF.Max(goal.Y - position.Y, 0f);
+        var relativeFromStart   = position - bias.Start;
+        var horizontalFromStart = new Vector2(relativeFromStart.X, relativeFromStart.Z);
+        var forwardProgress     = Vector2.Dot(horizontalFromStart, bias.Forward);
+        var lateralOffset       = MathF.Abs(Vector2.Dot(horizontalFromStart, bias.Right));
+        var forwardRemaining    = MathF.Max(0f, bias.HorizontalDistance - forwardProgress);
+        var horizontalTerm      = horizontalGoalDist * LONG_RANGE_LATERAL_GOAL_DISTANCE_HEURISTIC_WEIGHT +
+                                  forwardRemaining * LONG_RANGE_LATERAL_FORWARD_REMAINING_HEURISTIC_WEIGHT +
+                                  lateralOffset * LONG_RANGE_LATERAL_SIDE_OFFSET_HEURISTIC_WEIGHT;
+
+        float verticalTerm;
+        if (bias.PreferDescending)
+        {
+            verticalTerm = aboveGoal * (LONG_RANGE_LATERAL_DESCENT_ABOVE_GOAL_HEURISTIC_WEIGHT * bias.HeightPriority) +
+                           belowGoal * LONG_RANGE_LATERAL_DESCENT_BELOW_GOAL_HEURISTIC_WEIGHT;
+        }
+        else
+        {
+            verticalTerm = belowGoal * LONG_RANGE_LATERAL_ASCENT_BELOW_GOAL_HEURISTIC_WEIGHT +
+                           aboveGoal * LONG_RANGE_LATERAL_ASCENT_ABOVE_GOAL_HEURISTIC_WEIGHT;
+        }
+
+        if (bias.PreferDescending &&
+            aboveGoal >= l2Desc.CellSize.Y * LONG_RANGE_LATERAL_DOWNWARD_OPENING_MIN_ABOVE_GOAL_LEAF_CELLS &&
+            HasDownwardOpening(voxel))
+        {
+            horizontalTerm *= LONG_RANGE_LATERAL_DOWNWARD_OPENING_HORIZONTAL_HEURISTIC_SCALE;
+            verticalTerm   *= LONG_RANGE_LATERAL_DOWNWARD_OPENING_VERTICAL_HEURISTIC_SCALE;
+        }
+
+        return horizontalTerm + verticalTerm;
+    }
+
+    private float CalculateLongRangeLateralTraversalPenalty(ulong parentVoxel, Vector3 parentPosition, ulong destinationVoxel, Vector3 destination)
+        => CalculateLongRangeLateralTraversalPenalty(parentVoxel, parentPosition, destinationVoxel, destination, longRangeLateralBias, goalPos);
+
+    private float CalculateLongRangeLateralTraversalPenalty
+    (
+        ulong               parentVoxel,
+        Vector3             parentPosition,
+        ulong               destinationVoxel,
+        Vector3             destination,
+        LongRangeLateralBias bias,
+        Vector3             goal
+    )
+    {
+        if (!bias.Enabled)
+            return 0f;
+
+        var step           = destination - parentPosition;
+        var horizontalStep = new Vector2(step.X, step.Z);
+        var horizontalStepLength = horizontalStep.Length();
+        var forwardStep    = Vector2.Dot(horizontalStep, bias.Forward);
+        var lateralStep    = MathF.Abs(Vector2.Dot(horizontalStep, bias.Right));
+        var penalty        = 0f;
+
+        if (forwardStep < -SCORE_EPSILON)
+            penalty += -forwardStep * LONG_RANGE_LATERAL_REVERSE_STEP_PENALTY * bias.DirectionalPenaltyScale;
+
+        if (bias.PreferDescending)
+        {
+            var climbStep          = MathF.Max(step.Y, 0f);
+            var descentStep        = MathF.Max(-step.Y, 0f);
+            var parentAboveGoal    = MathF.Max(parentPosition.Y - goal.Y, 0f);
+            var destinationAboveGoal = MathF.Max(destination.Y - goal.Y, 0f);
+            var descentTowardGoal  = MathF.Max(parentAboveGoal - destinationAboveGoal, 0f);
+            var progressRoom = MathF.Max(forwardStep, 0f) * LONG_RANGE_LATERAL_FORWARD_PROGRESS_CREDIT +
+                               descentStep * LONG_RANGE_LATERAL_DESCENT_PROGRESS_CREDIT;
+
+            if (climbStep > SCORE_EPSILON)
+                penalty += climbStep * LONG_RANGE_LATERAL_CLIMB_STEP_PENALTY * bias.HeightPriority;
+            if (lateralStep > progressRoom + SCORE_EPSILON)
+                penalty += (lateralStep - progressRoom) * LONG_RANGE_LATERAL_LATERAL_STALL_PENALTY * bias.DirectionalPenaltyScale;
+
+            if (parentAboveGoal >= l2Desc.CellSize.Y * LONG_RANGE_LATERAL_DOWNWARD_OPENING_MIN_ABOVE_GOAL_LEAF_CELLS)
+            {
+                var parentHasDownwardOpening      = HasDownwardOpening(parentVoxel);
+                var destinationHasDownwardOpening = HasDownwardOpening(destinationVoxel);
+
+                if (destinationHasDownwardOpening)
+                    penalty *= LONG_RANGE_LATERAL_DOWNWARD_OPENING_DESTINATION_PENALTY_SCALE;
+
+                if (parentHasDownwardOpening)
+                {
+                    var requiredDescent = MathF.Min
+                    (
+                        parentAboveGoal,
+                        l2Desc.CellSize.Y * LONG_RANGE_LATERAL_DOWNWARD_OPENING_REQUIRED_DESCENT_LEAF_CELLS
+                    );
+
+                    if (descentTowardGoal + SCORE_EPSILON < requiredDescent)
+                    {
+                        var missedDescent = requiredDescent - descentTowardGoal;
+                        penalty += horizontalStepLength * LONG_RANGE_LATERAL_DOWNWARD_OPENING_MISSED_DESCENT_PENALTY * bias.HeightPriority;
+                        penalty += missedDescent * LONG_RANGE_LATERAL_DOWNWARD_OPENING_VERTICAL_MISS_PENALTY * bias.HeightPriority;
+                    }
+                }
+            }
+        }
+        else
+        {
+            var progressRoom = MathF.Max(forwardStep, 0f) * LONG_RANGE_LATERAL_FORWARD_PROGRESS_CREDIT;
+            if (lateralStep > progressRoom + SCORE_EPSILON)
+                penalty += (lateralStep - progressRoom) * LONG_RANGE_LATERAL_LATERAL_STALL_PENALTY * LONG_RANGE_LATERAL_NON_DESCENT_STALL_SCALE;
+        }
+
+        return penalty;
+    }
+
+    private bool HasDownwardOpening(ulong voxel)
+    {
+        if (verifiedDownwardOpeningCache.TryGetValue(voxel, out var cached))
+            return cached == 1;
+
+        var open = HasVerifiedVerticalAccessThroughFace(voxel, throughLowerFace: true);
+        verifiedDownwardOpeningCache.TryAdd(voxel, open ? (byte)1 : (byte)2);
+        return open;
+    }
+
+    private bool HasVerifiedTopEntry(ulong voxel)
+    {
+        if (verifiedTopEntryCache.TryGetValue(voxel, out var cached))
+            return cached == 1;
+
+        var open = HasVerifiedVerticalAccessThroughFace(voxel, throughLowerFace: false);
+        verifiedTopEntryCache.TryAdd(voxel, open ? (byte)1 : (byte)2);
+        return open;
+    }
+
+    private bool HasVerifiedVerticalAccessThroughFace(ulong voxel, bool throughLowerFace)
+    {
+        var wallMask = GetVoxelWallMask(voxel);
+        if (throughLowerFace)
+        {
+            if ((wallMask & SearchWallNegY) != 0)
+                return false;
+        }
+        else if ((wallMask & SearchWallPosY) != 0)
+            return false;
+
+        var (min, max)  = Volume.VoxelBounds(voxel, 0);
+        var size        = max - min;
+        var rootMinY    = Volume.RootTile.BoundsMin.Y;
+        var rootMaxY    = Volume.RootTile.BoundsMax.Y;
+        var epsX        = MathF.Max(SCORE_EPSILON, MathF.Min(size.X * 0.18f, l2Desc.CellSize.X * 1.25f));
+        var epsY        = MathF.Max(SCORE_EPSILON, MathF.Min(size.Y * 0.18f, l2Desc.CellSize.Y * 1.25f));
+        var epsZ        = MathF.Max(SCORE_EPSILON, MathF.Min(size.Z * 0.18f, l2Desc.CellSize.Z * 1.25f));
+        var minX        = min.X + epsX;
+        var maxX        = max.X - epsX;
+        var minZ        = min.Z + epsZ;
+        var maxZ        = max.Z - epsZ;
+        var probeDepth  = MathF.Max(l2Desc.CellSize.Y * LONG_RANGE_LATERAL_VERTICAL_ACCESS_PROBE_LEAF_CELLS, size.Y * LONG_RANGE_LATERAL_VERTICAL_ACCESS_PROBE_HEIGHT_SCALE);
+        var insideY     = throughLowerFace
+                              ? min.Y + Math.Clamp(size.Y * 0.60f, epsY, MathF.Max(epsY, size.Y - epsY))
+                              : max.Y - Math.Clamp(size.Y * 0.25f, epsY, MathF.Max(epsY, size.Y - epsY));
+        var outsideY    = throughLowerFace
+                              ? MathF.Max(min.Y - probeDepth, rootMinY + epsY)
+                              : MathF.Min(max.Y + probeDepth, rootMaxY - epsY);
+
+        if (throughLowerFace)
+        {
+            if (outsideY >= insideY - SCORE_EPSILON)
+                return false;
+        }
+        else if (outsideY <= insideY + SCORE_EPSILON)
+            return false;
+
+        Span<Vector2> offsets = stackalloc Vector2[5];
+        offsets[0] = Vector2.Zero;
+        var offsetX = MathF.Max(0f, (maxX - minX) * 0.35f);
+        var offsetZ = MathF.Max(0f, (maxZ - minZ) * 0.35f);
+        offsets[1] = new(+offsetX, 0f);
+        offsets[2] = new(-offsetX, 0f);
+        offsets[3] = new(0f, +offsetZ);
+        offsets[4] = new(0f, -offsetZ);
+
+        var centerX = (minX + maxX) * 0.5f;
+        var centerZ = (minZ + maxZ) * 0.5f;
+
+        for (var i = 0; i < offsets.Length; ++i)
+        {
+            var x = Math.Clamp(centerX + offsets[i].X, minX, maxX);
+            var z = Math.Clamp(centerZ + offsets[i].Y, minZ, maxZ);
+            var inside = new Vector3(x, insideY,  z);
+            var outside = new Vector3(x, outsideY, z);
+            var from = throughLowerFace ? inside : outside;
+            var to   = throughLowerFace ? outside : inside;
+            var startLeaf = Volume.FindLeafVoxel(from);
+            var endLeaf   = Volume.FindLeafVoxel(to);
+            if (!startLeaf.empty || !endLeaf.empty)
+                continue;
+            if (VoxelSearch.LineOfSight(Volume, startLeaf.voxel, endLeaf.voxel, from, to))
+                return true;
+        }
+
+        return false;
     }
 
     private float TotalScore(float gScore, float hScore) => gScore + hScore * heuristicWeight;
@@ -2888,23 +4803,131 @@ public class VoxelPathfind
         float   EndpointSlack
     );
 
+    private readonly record struct LongRangeLateralBias
+    (
+        bool    Enabled,
+        Vector3 Start,
+        Vector2 Forward,
+        Vector2 Right,
+        float   HorizontalDistance,
+        bool    PreferDescending,
+        float   HeightPriority,
+        float   DirectionalPenaltyScale
+    );
+
+    private readonly record struct L1TraversalState(ulong Voxel, byte EntryFace);
+
+    private readonly record struct L1BestEffortSearchResult
+    (
+        HashSet<ulong> PathSet,
+        IReadOnlyList<ulong> OrderedPath,
+        bool           ReachedGoal,
+        int            ExpandedNodes,
+        float          BestDistance,
+        int            StepBudget
+    );
+
     private readonly record struct FlightPushProbeResult(float Clearance, Vector3 Endpoint);
     private readonly record struct FlightPushHorizontalCandidate(Vector3 Direction, float Clearance, float Score);
+    private static readonly bool EnableLongRangeGlobalFallback = false;
+    private static readonly bool DebugReturnLongRangeBestEffortPath = false;
 
     private const float SCORE_EPSILON                                = 0.00001f;
     private const int   DEFAULT_MAX_SEARCH_STEPS                     = 1_0000_0000;
     private const int   RAYCAST_SEARCH_STEP_BUDGET                   = 200000;
     private const int   GUIDED_CORRIDOR_SEARCH_STEP_BUDGET           = 2_000_000;
+    private const int   GUIDED_CORRIDOR_EARLY_ABORT_MIN_VISITED      = 80_000;
+    private const int   GUIDED_CORRIDOR_EARLY_ABORT_HARD_VISITED_THRESHOLD = 220_000;
+    private const int   GUIDED_CORRIDOR_EARLY_ABORT_STALL_WINDOW     = 120_000;
+    private const int   GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_HARD_VISITED_THRESHOLD = 120_000;
+    private const int   GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_STALL_WINDOW = 60_000;
     private const int   MAX_ANCESTOR_LOOK_BACK                       = 6;
     private const int   RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD         = 12;
     private const float MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS    = 96f;
     private const float SHORT_RANGE_HEURISTIC_WEIGHT                 = 1.05f;
-    private const float LONG_RANGE_HEURISTIC_WEIGHT                  = 1.45f;
+    private const float SHORT_RANGE_EXPLORATORY_HEURISTIC_WEIGHT     = 0.80f;
+    private const float LONG_RANGE_HEURISTIC_WEIGHT                  = 0.70f;
+    private const float LONG_RANGE_L1_CORRIDOR_MAX_RADIUS_HEURISTIC_WEIGHT = 0.30f;
+    private const float LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT  = 0.85f;
+    private const float LONG_RANGE_LATERAL_HEURISTIC_WEIGHT_BASE     = 0.22f;
+    private const float LONG_RANGE_LATERAL_HEURISTIC_WEIGHT_MIN      = 0.05f;
     private const float GUIDED_CORRIDOR_HEURISTIC_WEIGHT             = 1.90f;
     private const float LONG_RANGE_HEURISTIC_BLEND_DISTANCE          = 4f;
     private const float GOAL_VISIBILITY_PROBE_DISTANCE_IN_LEAF_CELLS = 48f;
     private const int   L1_A_STAR_MAX_EXPANSIONS                     = 200_000;
     private const int   L1_DISTANCE_FIELD_BUDGET                     = 500_000;
+    private const int   LONG_RANGE_L1_BEST_EFFORT_STEP_BUDGET        = 750_000;
+    private const int   LONG_RANGE_L1_BEST_EFFORT_MAX_STEP_BUDGET    = 2_500_000;
+    private const int   LONG_RANGE_L1_GOAL_CAPTURE_BASE_STEP_BUDGET  = 300_000;
+    private const int   LONG_RANGE_L1_GOAL_CAPTURE_MAX_STEP_BUDGET   = 1_200_000;
+    private const int   LONG_RANGE_L1_GUIDED_FULLSEARCH_BASE_CORRIDOR_RADIUS = 6;
+    private const int   LONG_RANGE_L1_GUIDED_FULLSEARCH_MAX_CORRIDOR_RADIUS  = 18;
+    private const int   LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH    = 1;
+    private const int   LONG_RANGE_L1_CORRIDOR_STEP_BUDGET           = 350_000;
+    private const int   LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET         = 1_500_000;
+    private const int   LONG_RANGE_L1_CORRIDOR_RELAX_STEPS           = 3;
+    private const int   LONG_RANGE_LATERAL_SEARCH_STEP_BUDGET        = 1_200_000;
+    private const int   LONG_RANGE_LATERAL_EXPLORATION_ATTEMPTS      = 4;
+    private const int   LONG_RANGE_LATERAL_AREA_BASE_CELLS           = 9000;
+    private const int   LONG_RANGE_LATERAL_AREA_STEP_CELLS           = 6000;
+    private const float LONG_RANGE_LATERAL_AREA_DISTANCE_CELLS_SCALE = 220f;
+    private const float LONG_RANGE_LATERAL_WIDTH_SCALE_BASE          = 0.90f;
+    private const float LONG_RANGE_LATERAL_WIDTH_SCALE_STEP          = 0.45f;
+    private const float LONG_RANGE_LATERAL_GROWTH_SCALE_BASE         = 0.30f;
+    private const float LONG_RANGE_LATERAL_GROWTH_SCALE_STEP         = 0.12f;
+    private const float LONG_RANGE_LATERAL_FORWARD_SQRT_WIDTH_SCALE  = 0.90f;
+    private const float LONG_RANGE_LATERAL_MIN_HALF_WIDTH_L1_CELLS   = 12f;
+    private const float LONG_RANGE_LATERAL_MIN_HALF_WIDTH_ATTEMPT_CELLS = 3f;
+    private const float LONG_RANGE_LATERAL_MIN_FORWARD_L1_CELLS      = 12f;
+    private const float LONG_RANGE_LATERAL_FORWARD_SLACK_L1_CELLS    = 6f;
+    private const float LONG_RANGE_LATERAL_FORWARD_ATTEMPT_SCALE     = 0.35f;
+    private const float LONG_RANGE_LATERAL_BACKWARD_SLACK_L1_CELLS   = 4f;
+    private const float LONG_RANGE_LATERAL_BACKWARD_SCALE            = 0.12f;
+    private const float LONG_RANGE_LATERAL_BACKWARD_SCALE_STEP       = 0.08f;
+    private const float LONG_RANGE_LATERAL_BACKWARD_ATTEMPT_CELLS    = 2f;
+    private const float LONG_RANGE_LATERAL_MIN_VERTICAL_L1_CELLS     = 6f;
+    private const float LONG_RANGE_LATERAL_UPWARD_SLACK_L1_CELLS     = 4f;
+    private const float LONG_RANGE_LATERAL_DOWNWARD_SLACK_L1_CELLS   = 8f;
+    private const float LONG_RANGE_LATERAL_DESCENT_ENABLE_MIN_DROP_LEAF_CELLS = 2f;
+    private const float LONG_RANGE_LATERAL_DESCENT_PRIORITY_DROP_LEAF_CELLS    = 18f;
+    private const float LONG_RANGE_LATERAL_DESCENT_PRIORITY_MAX_BONUS          = 1.40f;
+    private const float LONG_RANGE_LATERAL_DIRECTIONAL_PENALTY_ATTEMPT_STEP    = 0.18f;
+    private const float LONG_RANGE_LATERAL_DIRECTIONAL_PENALTY_MIN             = 0.50f;
+    private const float LONG_RANGE_LATERAL_GOAL_DISTANCE_HEURISTIC_WEIGHT      = 0.32f;
+    private const float LONG_RANGE_LATERAL_FORWARD_REMAINING_HEURISTIC_WEIGHT  = 0.70f;
+    private const float LONG_RANGE_LATERAL_SIDE_OFFSET_HEURISTIC_WEIGHT        = 0.16f;
+    private const float LONG_RANGE_LATERAL_DESCENT_ABOVE_GOAL_HEURISTIC_WEIGHT = 1.85f;
+    private const float LONG_RANGE_LATERAL_DESCENT_BELOW_GOAL_HEURISTIC_WEIGHT = 0.55f;
+    private const float LONG_RANGE_LATERAL_ASCENT_BELOW_GOAL_HEURISTIC_WEIGHT  = 1.35f;
+    private const float LONG_RANGE_LATERAL_ASCENT_ABOVE_GOAL_HEURISTIC_WEIGHT  = 0.65f;
+    private const float LONG_RANGE_LATERAL_CLIMB_STEP_PENALTY                  = 1.25f;
+    private const float LONG_RANGE_LATERAL_REVERSE_STEP_PENALTY                = 0.80f;
+    private const float LONG_RANGE_LATERAL_LATERAL_STALL_PENALTY               = 0.48f;
+    private const float LONG_RANGE_LATERAL_FORWARD_PROGRESS_CREDIT             = 0.70f;
+    private const float LONG_RANGE_LATERAL_DESCENT_PROGRESS_CREDIT             = 0.95f;
+    private const float LONG_RANGE_LATERAL_NON_DESCENT_STALL_SCALE             = 0.60f;
+    private const float LONG_RANGE_L1_BEST_EFFORT_MIXED_CELL_PENALTY_SCALE     = 8.00f;
+    private const float LONG_RANGE_L1_BEST_EFFORT_DISTANCE_BUDGET_PER_CELL     = 3200f;
+    private const float LONG_RANGE_L1_BEST_EFFORT_VERTICAL_DISTANCE_BUDGET_SCALE = 1.50f;
+    private const float LONG_RANGE_L1_BEST_EFFORT_RELAXED_BUDGET_SCALE         = 1.10f;
+    private const float LONG_RANGE_L1_GOAL_CAPTURE_DISTANCE_THRESHOLD_L1_CELLS = 18f;
+    private const float LONG_RANGE_L1_GOAL_CAPTURE_DIRECT_DISTANCE_RATIO        = 0.18f;
+    private const float LONG_RANGE_L1_GOAL_CAPTURE_BUDGET_PER_CELL             = 16000f;
+    private const float LONG_RANGE_L1_GUIDED_FULLSEARCH_GAP_RADIUS_SCALE       = 1.0f;
+    private const float LONG_RANGE_LATERAL_DOWNWARD_OPENING_MIN_ABOVE_GOAL_LEAF_CELLS = 1.5f;
+    private const float LONG_RANGE_LATERAL_DOWNWARD_OPENING_HORIZONTAL_HEURISTIC_SCALE = 0.82f;
+    private const float LONG_RANGE_LATERAL_DOWNWARD_OPENING_VERTICAL_HEURISTIC_SCALE   = 0.50f;
+    private const float LONG_RANGE_LATERAL_DOWNWARD_OPENING_DESTINATION_PENALTY_SCALE  = 0.72f;
+    private const float LONG_RANGE_LATERAL_DOWNWARD_OPENING_REQUIRED_DESCENT_LEAF_CELLS = 1.25f;
+    private const float LONG_RANGE_LATERAL_DOWNWARD_OPENING_MISSED_DESCENT_PENALTY      = 0.95f;
+    private const float LONG_RANGE_LATERAL_DOWNWARD_OPENING_VERTICAL_MISS_PENALTY        = 1.35f;
+    private const float LONG_RANGE_LATERAL_COARSE_PROMOTION_MIN_FORWARD_DOT              = -0.15f;
+    private const float LONG_RANGE_LATERAL_VERTICAL_ACCESS_PROBE_LEAF_CELLS              = 3.0f;
+    private const float LONG_RANGE_LATERAL_VERTICAL_ACCESS_PROBE_HEIGHT_SCALE             = 0.35f;
+    private const float SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_LEAF_CELLS = 8f;
+    private const float SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_DISTANCE   = 4f;
+    private const float SHORT_RANGE_EXPLORATION_MIN_DROP_LEAF_CELLS       = 4f;
+    private const float SHORT_RANGE_EXPLORATION_MIN_DROP_DISTANCE         = 2f;
     private const float GUIDED_CORRIDOR_MIN_HORIZONTAL_DISTANCE           = 4.00f;
     private const float GUIDED_CORRIDOR_HORIZONTAL_RADIUS_SCALE           = 0.18f;
     private const float GUIDED_CORRIDOR_HORIZONTAL_RADIUS_MAX_DISTANCE_SCALE = 0.35f;
@@ -2916,6 +4939,22 @@ public class VoxelPathfind
     private const float GUIDED_CORRIDOR_DOWNWARD_ALLOWANCE_MIN_LEAF_CELLS  = 4.00f;
     private const float GUIDED_CORRIDOR_ENDPOINT_SLACK_RADIUS_SCALE        = 0.65f;
     private const float GUIDED_CORRIDOR_ENDPOINT_SLACK_MIN_LEAF_CELLS      = 3.00f;
+    private const float GUIDED_CORRIDOR_EARLY_ABORT_PROGRESS_RATIO         = 0.04f;
+    private const float GUIDED_CORRIDOR_EARLY_ABORT_PROGRESS_MIN_DISTANCE  = 8.00f;
+    private const float GUIDED_CORRIDOR_EARLY_ABORT_SUFFICIENT_PROGRESS_RATIO = 0.55f;
+    private const float GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_MIN_DROP_LEAF_CELLS = 4.0f;
+    private const float GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_MIN_DROP_DISTANCE = 2.0f;
+    private const float GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_PROGRESS_LEAF_CELLS = 2.0f;
+    private const float GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_PROGRESS_MIN_DISTANCE = 1.0f;
+    private const float GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_SUFFICIENT_PROGRESS_RATIO = 0.72f;
+    private const byte  L1FaceNegY                                    = 0;
+    private const byte  L1FacePosY                                    = 1;
+    private const byte  L1FaceNegX                                    = 2;
+    private const byte  L1FacePosX                                    = 3;
+    private const byte  L1FaceNegZ                                    = 4;
+    private const byte  L1FacePosZ                                    = 5;
+    private const byte  L1FaceInside                                  = byte.MaxValue;
+    private const ushort L1AllFacesMask                               = 0x3f;
     private const byte  SearchWallNegX                               = 1 << 0;
     private const byte  SearchWallPosX                               = 1 << 1;
     private const byte  SearchWallNegY                               = 1 << 2;
@@ -2944,6 +4983,10 @@ public class VoxelPathfind
     private const float FLIGHT_PUSH_FORWARD_WEIGHT                   = 0.85f;
     private const float FLIGHT_PUSH_BACKWARD_WEIGHT                  = 0.55f;
     private const float FLIGHT_PUSH_DIAGONAL_WEIGHT                  = 1.05f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_WEIGHT     = 0.10f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_BACKWARD_WEIGHT    = 1.10f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_DIAGONAL_WEIGHT = 0.45f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_BACKWARD_DIAGONAL_WEIGHT = 1.20f;
     private const float FLIGHT_PUSH_MIN_DISTANCE                     = 0.02f;
     private const float FLIGHT_PUSH_VOXEL_INSET_RATIO                = 0.10f;
     private const float FLIGHT_PUSH_VOXEL_INSET_MIN                  = 0.01f;
@@ -2951,7 +4994,14 @@ public class VoxelPathfind
     private const int   FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT    = 24;
     private const float FLIGHT_PUSH_HORIZONTAL_SWEEP_WEIGHT          = 0.70f;
     private const float FLIGHT_PUSH_HORIZONTAL_SWEEP_FORWARD_BONUS   = 0.20f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_FORWARD_PENALTY = 0.90f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_FORWARD_MIN_SCALE = 0.12f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_BACKWARD_BONUS = 0.60f;
     private const float FLIGHT_PUSH_DIRECTIONAL_FORWARD_BONUS        = 0.85f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_FORWARD_PENALTY = 0.95f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_BACKWARD_BONUS = 0.70f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_MIN_SCALE = 0.10f;
+    private const float FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT = 0.05f;
     private const float FLIGHT_PUSH_DIRECTIONAL_CLEARANCE_FRACTION   = 0.85f;
     private const float FLIGHT_PUSH_DIRECTIONAL_DUPLICATE_DOT        = 0.96f;
     private const int   FLIGHT_PUSH_DIRECTIONAL_CANDIDATE_LIMIT      = 10;

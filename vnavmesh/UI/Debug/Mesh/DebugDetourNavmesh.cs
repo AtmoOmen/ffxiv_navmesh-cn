@@ -40,6 +40,7 @@ public class DebugDetourNavmesh : DebugRecast
     private static Vector4 _colAreaManual    = new(0.95f, 0.61f, 0.07f, 0.60f);
     private static Vector4 _colAreaTeleport   = new(0.91f, 0.30f, 0.24f, 0.60f);
     private static Vector4 _colAreaClientPath = new(0.65f, 0.36f, 0.95f, 0.60f);
+    private static Vector4 _colAreaUnreachable = new(0.50f, 0.50f, 0.50f, 0.65f);
     private static Vector4 _colClosedList     = new(1.00f, 0.75f, 1.00f, 0.50f);
 
     private enum InstanceID
@@ -52,6 +53,7 @@ public class DebugDetourNavmesh : DebugRecast
         AreaManual,
         AreaTeleport,
         AreaClientPath,
+        AreaUnreachable,
         ClosedList,
         Count
     }
@@ -126,7 +128,9 @@ public class DebugDetourNavmesh : DebugRecast
                         for (var j = 0; j < tile.data.header.polyCount; ++j)
                         {
                             var       p    = tile.data.polys[j];
-                            using var ntri = _tree.Node($"{p.index} (0x{p.index:X})：{p.vertCount} 个顶点，标志={p.flags:X}，面积类型={p.GetArea()}，多边形类型={p.GetPolyType()}");
+                            var       polyRef  = EncodePolyId(tile.salt, tile.index, p.index);
+                            var       flagText = TryGetPolyFlags(polyRef, out var polyFlags) ? $"{polyFlags:X}" : "<err>";
+                            using var ntri = _tree.Node($"{p.index} (0x{p.index:X})：{p.vertCount} 个顶点，标志={p.flags:X} / 实际标志={flagText}，面积类型={p.GetArea()}，多边形类型={p.GetPolyType()}");
                             if (ntri.SelectedOrHovered)
                                 VisualizeRoughPolygon(tile, p, true);
 
@@ -262,6 +266,7 @@ public class DebugDetourNavmesh : DebugRecast
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaManual));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaTeleport));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaClientPath));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaUnreachable));
             builder.AddInstance(new(Matrix4x3.Identity, _colClosedList));
 
             for (var i = 0; i < tile.data.header.vertCount; ++i)
@@ -316,6 +321,7 @@ public class DebugDetourNavmesh : DebugRecast
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaManual));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaTeleport));
             builder.AddInstance(new(Matrix4x3.Identity, _colAreaClientPath));
+            builder.AddInstance(new(Matrix4x3.Identity, _colAreaUnreachable));
             builder.AddInstance(new(Matrix4x3.Identity, _colClosedList));
 
             for (var i = 0; i < tile.data.header.vertCount; ++i)
@@ -369,7 +375,7 @@ public class DebugDetourNavmesh : DebugRecast
         {
             var tile = _navmesh.GetTile(i);
             if (tile.data != null)
-                VisualizeDetailPolygons(tile, false, playerPosition, maxHorizontalDistance, maxVerticalDistance);
+                VisualizeDetailPolygons(tile, true, playerPosition, maxHorizontalDistance, maxVerticalDistance);
         }
     }
 
@@ -408,9 +414,10 @@ public class DebugDetourNavmesh : DebugRecast
             if (poly.vertCount < 3)
                 return;
             // triangles
-            var instance = _query != null && _query.IsInClosedList(EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
+            var polyRef   = EncodePolyId(tile.salt, tile.index, poly.index);
+            var instance = _query != null && _query.IsInClosedList(polyRef) ? InstanceID.ClosedList :
                            !colorByArea ? InstanceID.Tile :
-                           InstanceForArea((NavmeshArea)poly.GetArea());
+                           InstanceForPoly(polyRef, (NavmeshArea)poly.GetArea());
             var mesh = visu.Meshes[poly.index] with { FirstInstance = (int)instance };
             visu.DrawManual(_dd.RenderContext, mesh);
 
@@ -507,9 +514,10 @@ public class DebugDetourNavmesh : DebugRecast
     private void VisualizeDetailSubmeshWithEdges(DtMeshTile tile, EffectMesh.Data visu, DtPoly poly, bool colorByArea, bool highlight)
     {
         // triangles
-        var instance = _query != null && _query.IsInClosedList(EncodePolyId(tile.salt, tile.index, poly.index)) ? InstanceID.ClosedList :
+        var polyRef   = EncodePolyId(tile.salt, tile.index, poly.index);
+        var instance = _query != null && _query.IsInClosedList(polyRef) ? InstanceID.ClosedList :
                        !colorByArea ? InstanceID.Tile :
-                       InstanceForArea((NavmeshArea)poly.GetArea());
+                       InstanceForPoly(polyRef, (NavmeshArea)poly.GetArea());
         var mesh = visu.Meshes[poly.index] with { FirstInstance = (int)instance };
         visu.DrawManual(_dd.RenderContext, mesh);
 
@@ -656,6 +664,16 @@ public class DebugDetourNavmesh : DebugRecast
     }
 
     private void VisualizeVertex(Vector3 v) => _dd.DrawWorldPoint(v, 5, 0xff0000ff, 2);
+
+    private InstanceID InstanceForPoly(long polyRef, NavmeshArea area)
+    {
+        if (TryGetPolyFlags(polyRef, out var flags) && (flags & (int)NavmeshPolyFlags.Unreachable) != 0)
+            return InstanceID.AreaUnreachable;
+
+        return InstanceForArea(area);
+    }
+
+    private bool TryGetPolyFlags(long polyRef, out int flags) => _navmesh.GetPolyFlags(polyRef, out flags).Succeeded();
 
     private static InstanceID InstanceForArea(NavmeshArea area) => area switch
     {

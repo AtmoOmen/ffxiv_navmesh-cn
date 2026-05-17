@@ -40,6 +40,13 @@ internal class DebugNavmeshManager : IDisposable
     private const uint  PathFlightHorizontalColor        = 0xFF42A5F5u;
     private const uint  PathFlightVerticalColor          = 0xFF26A69Au;
     private const uint  PathFlightCombinedColor          = 0xFFFFB300u;
+    private const uint  PathFlightCoarseLineColor        = 0xFF7CFC00u;
+    private const uint  PathFlightCoarsePointColor       = 0xFFB2FF59u;
+    private const uint  PathFlightCoarseBoxColor         = 0x442EE6A6u;
+    private const uint  PathFlightProxyPointColor        = 0xFF00E5FFu;
+    private const uint  PathFlightProxyLineColor         = 0xFF00BCD4u;
+    private const uint  PathFlightProxyTailDirectColor   = 0xFF00E676u;
+    private const uint  PathFlightProxyTailRelayColor    = 0xFFFFC107u;
 
     private sealed record RenderedPath(Vector3 RequestStart, PostprocessedPath Result, uint LineColor, uint PointColor, uint StartColor, uint EndColor, string Label);
 
@@ -227,7 +234,7 @@ internal class DebugNavmeshManager : IDisposable
 
             if (manager.Navmesh.Volume != null)
             {
-                debugVoxelMap ??= new(manager.Navmesh.Volume, manager.Query.VolumeQuery, tree, dd);
+                debugVoxelMap ??= new(manager.Navmesh.Volume, manager.Query.VolumeQuery, manager.Query, tree, dd);
                 debugVoxelMap.Draw();
             }
 
@@ -239,11 +246,33 @@ internal class DebugNavmeshManager : IDisposable
     private void DrawPosition(string tag, Vector3 position)
     {
         manager.Navmesh!.Mesh.CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
-        tree.LeafNode($"{tag}位置：{position:f3}，区块 (Tile)：{tileX}x{tileZ}，多边形 (Poly)：{manager.Query!.FindNearestMeshPoly(position):X}");
+        var nearestAll       = manager.Query!.FindNearestMeshPoly(position);
+        var nearestReachable = manager.Query.FindNearestMeshPoly(position, allowUnreachable: false);
+        var nearestPointAll  = manager.Query.FindNearestPointOnMesh(position);
+        var nearestPointReachable = manager.Query.FindNearestPointOnMesh(position, allowUnreachable: false);
+        var floorAll              = manager.Query.FindPointOnFloor(position);
+        var floorReachable        = manager.Query.FindPointOnFloor(position, allowUnreachable: false);
+
+        tree.LeafNode
+        (
+            $"{tag}位置：{position:f3}，区块 (Tile)：{tileX}x{tileZ}，最近多边形 All/Reachable：{FormatPolyRef(nearestAll)} / {FormatPolyRef(nearestReachable)}"
+        );
+        tree.LeafNode($"{tag}最近点 All：{FormatVector(nearestPointAll)}");
+        tree.LeafNode($"{tag}最近点 Reachable：{FormatVector(nearestPointReachable)}");
+        tree.LeafNode($"{tag}地板投影 All：{FormatVector(floorAll)}");
+        tree.LeafNode($"{tag}地板投影 Reachable：{FormatVector(floorReachable)}");
         var voxel = manager.Query.FindNearestVolumeVoxel(position);
         if (tree.LeafNode($"{tag}体素：{voxel:X}###{tag}voxel").SelectedOrHovered && voxel != VoxelMap.INVALID_VOXEL)
             debugVoxelMap?.VisualizeVoxel(voxel);
+        var voxelSurface = manager.Query.FindNearestVolumeVoxelSurfaceAware(position);
+        if (tree.LeafNode($"{tag}体素 Flight：{voxelSurface.Voxel:X}，地表锚定={(voxelSurface.UsedSurfaceAnchor ? "是" : "否")}，搜索点={voxelSurface.SearchPoint:f3}，安全点={voxelSurface.SafePoint:f3}###{tag}voxelFlight").SelectedOrHovered &&
+            voxelSurface.Voxel != VoxelMap.INVALID_VOXEL)
+            debugVoxelMap?.VisualizeVoxel(voxelSurface.Voxel);
     }
+
+    private static string FormatPolyRef(long polyRef) => polyRef != 0 ? polyRef.ToString("X") : "<none>";
+
+    private static string FormatVector(Vector3? value) => value is { } point ? point.ToString("f3") : "<none>";
 
     private void ExportBitmap(Vector3 startingPos) =>
         manager.BuildBitmap(startingPos, "D:\\navmesh.bmp", 0.5f);
@@ -340,44 +369,50 @@ internal class DebugNavmeshManager : IDisposable
 
     private void DrawRenderedPath(RenderedPath renderedPath)
     {
+        var coarseDebugOnly = HasCoarseOnlyFlightDebug(renderedPath.Result);
         List<Vector3> points = [];
         var firstSegment = renderedPath.Result.Segments.FirstOrDefault();
         var actualStart = firstSegment?.StartPosition
                        ?? (renderedPath.Result.Waypoints.Count > 0 ? renderedPath.Result.Waypoints[0] : renderedPath.Result.FinalDestination);
         var initialWaypointIndex = firstSegment?.GroundCorridor?.InitialWaypointIndex ?? 0;
 
-        DrawConsumedPrefix(firstSegment, actualStart, initialWaypointIndex);
+        if (!coarseDebugOnly)
+            DrawConsumedPrefix(firstSegment, actualStart, initialWaypointIndex);
 
-        points.Add(initialWaypointIndex > 0 ? renderedPath.RequestStart : actualStart);
+        if (!coarseDebugOnly)
+            points.Add(initialWaypointIndex > 0 ? renderedPath.RequestStart : actualStart);
 
-        var firstWaypointSkipped = false;
-        foreach (var segment in renderedPath.Result.Segments)
+        if (!coarseDebugOnly)
         {
-            var waypointStart = !firstWaypointSkipped ? Math.Clamp(initialWaypointIndex, 0, segment.Waypoints.Count) : 0;
-            firstWaypointSkipped = true;
-
-            for (var i = waypointStart; i < segment.Waypoints.Count; ++i)
+            var firstWaypointSkipped = false;
+            foreach (var segment in renderedPath.Result.Segments)
             {
-                var waypoint = segment.Waypoints[i];
-                if (Vector3.DistanceSquared(points[^1], waypoint) > DuplicateRenderedPointDistanceSq)
-                    points.Add(waypoint);
+                var waypointStart = !firstWaypointSkipped ? Math.Clamp(initialWaypointIndex, 0, segment.Waypoints.Count) : 0;
+                firstWaypointSkipped = true;
+
+                for (var i = waypointStart; i < segment.Waypoints.Count; ++i)
+                {
+                    var waypoint = segment.Waypoints[i];
+                    if (Vector3.DistanceSquared(points[^1], waypoint) > DuplicateRenderedPointDistanceSq)
+                        points.Add(waypoint);
+                }
             }
-        }
 
-        if (Vector3.DistanceSquared(points[^1], renderedPath.Result.FinalDestination) > DuplicateRenderedPointDistanceSq)
-            points.Add(renderedPath.Result.FinalDestination);
+            if (Vector3.DistanceSquared(points[^1], renderedPath.Result.FinalDestination) > DuplicateRenderedPointDistanceSq)
+                points.Add(renderedPath.Result.FinalDestination);
 
-        for (var i = 1; i < points.Count; ++i)
-        {
-            dd.DrawWorldLine(points[i - 1], points[i], renderedPath.LineColor, 2);
-            dd.DrawWorldPointFilled(points[i], 3, renderedPath.PointColor);
+            for (var i = 1; i < points.Count; ++i)
+            {
+                dd.DrawWorldLine(points[i - 1], points[i], renderedPath.LineColor, 2);
+                dd.DrawWorldPointFilled(points[i], 3, renderedPath.PointColor);
+            }
         }
 
         dd.DrawWorldPointFilled(renderedPath.RequestStart, 4, renderedPath.StartColor);
         dd.DrawWorldPointFilled(actualStart, 4, PathActualStartColor);
         dd.DrawWorldPointFilled(renderedPath.Result.FinalDestination, 4, renderedPath.EndColor);
 
-        if (Vector3.DistanceSquared(renderedPath.RequestStart, actualStart) > DuplicateRenderedPointDistanceSq)
+        if (!coarseDebugOnly && Vector3.DistanceSquared(renderedPath.RequestStart, actualStart) > DuplicateRenderedPointDistanceSq)
             dd.DrawWorldLine(renderedPath.RequestStart, actualStart, PathRequestedStartLinkColor, 2);
     }
 
@@ -431,6 +466,11 @@ internal class DebugNavmeshManager : IDisposable
             if (segment.FlightPathDebug == null)
                 continue;
 
+            if (segment.FlightPathDebug.CoarsePath.Count > 0)
+                DrawFlightCoarsePath(segment.FlightPathDebug.CoarsePath);
+            if (segment.FlightPathDebug.ProxyDebug is { } proxyDebug)
+                DrawFlightProxyDebug(proxyDebug);
+
             foreach (var debug in segment.FlightPathDebug.Waypoints)
             {
                 foreach (var sample in debug.Samples)
@@ -456,6 +496,58 @@ internal class DebugNavmeshManager : IDisposable
                 );
             }
         }
+    }
+
+    private void DrawFlightCoarsePath(IReadOnlyList<FlightCoarsePathDebugNode> coarsePath)
+    {
+        var volume = manager.Navmesh?.Volume;
+        for (var i = 0; i < coarsePath.Count; ++i)
+        {
+            var node = coarsePath[i];
+            if (volume != null && node.Voxel != VoxelMap.INVALID_VOXEL)
+            {
+                var bounds = volume.VoxelBounds(node.Voxel, 0);
+                dd.DrawWorldAABB((bounds.min + bounds.max) * 0.5f, (bounds.max - bounds.min) * 0.5f, PathFlightCoarseBoxColor, 1);
+            }
+
+            dd.DrawWorldPointFilled(node.Position, 4, PathFlightCoarsePointColor);
+            dd.DrawWorldText(node.Position + new Vector3(0, 0.12f, 0), $"L1[{node.PathIndex}] {node.Voxel:X}", 0xFFFFFFFFu);
+
+            if (i > 0)
+                dd.DrawWorldLine(coarsePath[i - 1].Position, node.Position, PathFlightCoarseLineColor, 2);
+        }
+    }
+
+    private void DrawFlightProxyDebug(FlightLongRangeProxyDebug proxyDebug)
+    {
+        var volume = manager.Navmesh?.Volume;
+        if (volume != null && proxyDebug.ProxyVoxel != VoxelMap.INVALID_VOXEL)
+        {
+            var bounds = volume.VoxelBounds(proxyDebug.ProxyVoxel, 0);
+            dd.DrawWorldAABB((bounds.min + bounds.max) * 0.5f, (bounds.max - bounds.min) * 0.5f, PathFlightProxyLineColor, 1);
+        }
+
+        dd.DrawWorldPointFilled(proxyDebug.ProxyPosition, 5, PathFlightProxyPointColor);
+        dd.DrawWorldLine(proxyDebug.ProxyPosition, proxyDebug.TailStartPosition, PathFlightProxyLineColor, 2);
+
+        var tailColor = proxyDebug.TailKind switch
+        {
+            FlightLongRangeTailKind.DirectToGoal       => PathFlightProxyTailDirectColor,
+            FlightLongRangeTailKind.ShortRangeRelay    => PathFlightProxyTailRelayColor,
+            FlightLongRangeTailKind.ShortRangeRelayPartial => PathFlightProxyTailRelayColor,
+            _                                          => PathFlightProxyLineColor
+        };
+
+        if (Vector3.DistanceSquared(proxyDebug.TailStartPosition, proxyDebug.TailTargetPosition) > DuplicateRenderedPointDistanceSq)
+            dd.DrawWorldLine(proxyDebug.TailStartPosition, proxyDebug.TailTargetPosition, tailColor, 2);
+
+        dd.DrawWorldPointFilled(proxyDebug.TailStartPosition, 4, tailColor);
+        dd.DrawWorldText
+        (
+            proxyDebug.ProxyPosition + new Vector3(0, 0.16f, 0),
+            $"proxy {proxyDebug.ProxyVoxel:X} tail={proxyDebug.TailKind}",
+            0xFFFFFFFFu
+        );
     }
 
     private void DrawConsumedPrefix(PostprocessedPathSegment? firstSegment, Vector3 actualStart, int initialWaypointIndex)
@@ -485,4 +577,7 @@ internal class DebugNavmeshManager : IDisposable
         var green      = (byte)(255 * normalized);
         return 0x66000000u | red | ((uint)green << 8);
     }
+
+    private static bool HasCoarseOnlyFlightDebug(PostprocessedPath result)
+        => result.Segments.Any(segment => segment is { Waypoints.Count: 0, FlightPathDebug.CoarsePath.Count: > 0 });
 }

@@ -1970,6 +1970,8 @@ internal sealed class PathPostprocessor
             return (DeduplicateWaypoints(segment.Points), segment.FlightPathDebug);
 
         var           rawDebugLookup            = segment.FlightPathDebug?.Waypoints.ToDictionary(d => d.PathIndex);
+        var           coarsePath                = segment.FlightPathDebug?.CoarsePath ?? [];
+        var           proxyDebug                = segment.FlightPathDebug?.ProxyDebug;
         List<Vector3> deduplicated              = [];
         List<int>     deduplicatedSourceIndices = [];
 
@@ -1985,7 +1987,7 @@ internal sealed class PathPostprocessor
 
         var deduplicatedDebugLookup = RemapFlightDebugLookup(rawDebugLookup, deduplicatedSourceIndices);
         var (simplifiedPoints, simplifiedDebugLookup) = SimplifyFlightWaypoints(deduplicated, deduplicatedDebugLookup);
-        return (simplifiedPoints, BuildFlightPathDebugPayload(simplifiedDebugLookup));
+        return (simplifiedPoints, BuildFlightPathDebugPayload(simplifiedDebugLookup, coarsePath, proxyDebug));
     }
 
     private static (List<Vector3> Waypoints, Dictionary<int, FlightPathWaypointDebug>? DebugLookup) SimplifyFlightWaypoints
@@ -2040,14 +2042,22 @@ internal sealed class PathPostprocessor
         return remapped.Count > 0 ? remapped : null;
     }
 
-    private static FlightPathDebugPayload? BuildFlightPathDebugPayload(Dictionary<int, FlightPathWaypointDebug>? debugLookup)
+    private static FlightPathDebugPayload? BuildFlightPathDebugPayload
+    (
+        Dictionary<int, FlightPathWaypointDebug>?      debugLookup,
+        IReadOnlyList<FlightCoarsePathDebugNode>?      coarsePath = null,
+        FlightLongRangeProxyDebug?                     proxyDebug = null
+    )
     {
-        if (debugLookup == null || debugLookup.Count == 0)
+        var resolvedCoarsePath = coarsePath ?? [];
+        if ((debugLookup == null || debugLookup.Count == 0) && resolvedCoarsePath.Count == 0 && proxyDebug == null)
             return null;
 
         return new()
         {
-            Waypoints = [.. debugLookup.OrderBy(pair => pair.Key).Select(pair => pair.Value)]
+            Waypoints  = debugLookup != null ? [.. debugLookup.OrderBy(pair => pair.Key).Select(pair => pair.Value)] : [],
+            CoarsePath = resolvedCoarsePath,
+            ProxyDebug = proxyDebug
         };
     }
 

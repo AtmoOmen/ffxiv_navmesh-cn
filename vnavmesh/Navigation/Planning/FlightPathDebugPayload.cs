@@ -106,7 +106,33 @@ internal readonly record struct FlightPathWaypointDebug
     public bool PushApplied => PushDistance > 0.0001f;
 }
 
+internal readonly record struct FlightCoarsePathDebugNode
+(
+    int     PathIndex,
+    ulong   Voxel,
+    Vector3 Position
+);
+
+internal enum FlightLongRangeTailKind : byte
+{
+    None,
+    DirectToGoal,
+    ShortRangeRelay,
+    ShortRangeRelayPartial
+}
+
+internal readonly record struct FlightLongRangeProxyDebug
+(
+    ulong                    ProxyVoxel,
+    Vector3                  ProxyPosition,
+    Vector3                  TailStartPosition,
+    Vector3                  TailTargetPosition,
+    FlightLongRangeTailKind  TailKind
+);
+
 internal sealed class FlightPathDebugPayload
 {
-    public required IReadOnlyList<FlightPathWaypointDebug> Waypoints { get; init; }
+    public required IReadOnlyList<FlightPathWaypointDebug> Waypoints     { get; init; }
+    public required IReadOnlyList<FlightCoarsePathDebugNode> CoarsePath  { get; init; }
+    public          FlightLongRangeProxyDebug?              ProxyDebug    { get; init; }
 }

@@ -19,7 +19,7 @@ public sealed class NavmeshBuildSettings
     }
 
     public float                               CellSize         = 0.25f;
-    public float                               CellHeight       = 0.125f;
+    public float                               CellHeight       = 0.25f;
     public float                               AgentHeight      = 2.0f;
     public float                               AgentRadius      = 0.5f;
     public float                               AgentMaxClimb    = 0.5f;
@@ -28,12 +28,12 @@ public sealed class NavmeshBuildSettings
     public float                               RegionMinSize    = 8;
     public float                               RegionMergeSize  = 20;
     public RcPartition                         Partitioning     = RcPartition.WATERSHED;
-    public float                               PolyMaxEdgeLen;
+    public float                               PolyMaxEdgeLen   = 12f;
     public float                               PolyMaxSimplificationError = 1.1f;
     public int                                 PolyMaxVerts               = 6;
     public float                               DetailSampleDist           = 6f;
     public float                               DetailMaxSampleError       = 1f;
-    public bool                                FastBuild                  = true;
+    public bool                                FastBuild                  = false;
     public bool                                GenerateEdgeClimbLinks;
     public bool                                GenerateEdgeJumpLinks;
     public float                               GroundTolerance     = 0.3f;

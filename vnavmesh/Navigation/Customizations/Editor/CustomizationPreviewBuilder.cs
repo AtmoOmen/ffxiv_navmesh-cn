@@ -15,6 +15,7 @@ using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Navigation.Volume.Pathfinding;
+using vnavmesh.Common.Navigation.Mesh.Build;
 
 namespace vnavmesh.Navigation.Customizations.Editor;
 
@@ -225,6 +226,32 @@ internal class CustomizationPreviewBuilder
         {
             var timer  = StopWatchTimer.Create();
             var result = await CreatePreviewResult(requestGeneration, scene, customization, includeTiles, cancel);
+            PreviewResult? oldResult = null;
+
+            if (result.NavmeshData != null)
+            {
+                var replaced = false;
+                await Service.Framework.Run
+                (
+                    () =>
+                    {
+                        if (requestGeneration != generation || cancel.IsCancellationRequested)
+                            return;
+
+                        manager.ReplaceMesh(result.NavmeshData);
+                        replaced = true;
+                    },
+                    cancel
+                );
+
+                if (!replaced)
+                {
+                    ReleasePreviewResult(result);
+                    return;
+                }
+
+                result.NavmeshOwnedByManager = true;
+            }
 
             lock (stateLock)
             {
@@ -234,13 +261,7 @@ internal class CustomizationPreviewBuilder
                     return;
                 }
 
-                if (result.NavmeshData != null)
-                {
-                    result.NavmeshOwnedByManager = true;
-                    manager.ReplaceMesh(result.NavmeshData);
-                }
-
-                var oldResult    = publishedResult;
+                oldResult        = publishedResult;
                 publishedResult  = result;
                 lastError        = null;
                 currentState     = State.Ready;
@@ -249,8 +270,9 @@ internal class CustomizationPreviewBuilder
                 activeTask       = null;
                 cancelSource?.Dispose();
                 cancelSource     = null;
-                ReleasePreviewResult(oldResult);
             }
+
+            ReleasePreviewResult(oldResult);
 
             Service.Log.Debug($"[navmesh] preview build time: {timer.Value().TotalMilliseconds:f1}ms");
         }
