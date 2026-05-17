@@ -12,9 +12,6 @@ namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.Alexandar;
 internal class Z0444启动之章3 : NavmeshCustomization
 {
     public override int Version => 2;
-    
-    public Z0444启动之章3() =>
-        Settings.Filtering -= NavmeshFilter.LedgeSpans;
 
     public override void CustomizeScene(SceneExtractor scene)
     {

@@ -16,7 +16,7 @@ public class NavmeshSettings
     public float         AgentRadius      = 0.5f;
     public float         AgentMaxClimb    = 0.5f;
     public float         AgentMaxSlopeDeg = 55f;
-    public NavmeshFilter Filtering        = NavmeshFilter.LowHangingObstacles | NavmeshFilter.LedgeSpans | NavmeshFilter.WalkableLowHeightSpans;
+    public NavmeshFilter Filtering        = NavmeshFilter.LowHangingObstacles | NavmeshFilter.WalkableLowHeightSpans;
     public float         RegionMinSize    = 8;
     public float         RegionMergeSize  = 20;
     public RcPartition   Partitioning     = RcPartition.WATERSHED;

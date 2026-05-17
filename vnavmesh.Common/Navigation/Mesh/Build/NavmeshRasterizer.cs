@@ -744,12 +744,8 @@ public class NavmeshRasterizer
             var flags           = p.Flags & ~instance.ForceClearPrimFlags | instance.ForceSetPrimFlags;
             var realSolid       = !flags.HasFlag(SceneExtractor.PrimitiveFlags.FlyThrough);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
-            var unwalkable = flags.HasFlag
-                                 (SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
-                             unwalkableSlope                                     ||
-                             _voxelizer != null                                      &&
-                             flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable) &&
-                             !flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
+            var unwalkable = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
+                             unwalkableSlope;
             var areaId        = unwalkable ? 0 : RC_WALKABLE_AREA;
             var inverseCrossY = _iset != null && crossY != 0 ? -1.0f / crossY : 0;
             var normalUp      = crossY > 0;
@@ -829,7 +825,7 @@ public class NavmeshRasterizer
 
                         if (c >= 0 && b >= 0 && c + b <= 1)
                         {
-                            var intersectY = v1y + b * v12y + c * v13y;
+                            var intersectY = ComputeTriangleIntersectY(v1y, v12y, v13y, b, c);
                             if (normalUp && y0 > 0)
                                 _iset.Add(x, y0 - 1, z, intersectY, true);
                             else if (!normalUp && y1 < _maxY - 1)
@@ -1069,7 +1065,14 @@ public class NavmeshRasterizer
 
                     if (c >= 0 && b >= 0 && c + b <= 1)
                     {
-                        var intersectY = worldVertices[offset1 + 1];
+                        var intersectY = ComputeTriangleIntersectY
+                        (
+                            worldVertices[offset1 + 1],
+                            worldVertices[offset2 + 1] - worldVertices[offset1 + 1],
+                            worldVertices[offset3 + 1] - worldVertices[offset1 + 1],
+                            b,
+                            c
+                        );
                         if (info.NormalUp && y0 > 0)
                             _iset.Add(x, y0 - 1, z, intersectY, true);
                         else if (!info.NormalUp && y1 < _maxY - 1)
@@ -1079,6 +1082,8 @@ public class NavmeshRasterizer
             }
         }
     }
+
+    private static float ComputeTriangleIntersectY(float v1y, float v12y, float v13y, float b, float c) => v1y + b * v12y + c * v13y;
 
     private void RasterizeGeneralPart
     (
@@ -1118,12 +1123,8 @@ public class NavmeshRasterizer
             var flags           = p.Flags & ~instance.ForceClearPrimFlags | instance.ForceSetPrimFlags;
             var realSolid       = !flags.HasFlag(SceneExtractor.PrimitiveFlags.FlyThrough);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
-            var unwalkable = flags.HasFlag
-                                 (SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
-                             unwalkableSlope                                     ||
-                             _voxelizer != null                                      &&
-                             flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable) &&
-                             !flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
+            var unwalkable = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
+                             unwalkableSlope;
             var areaId = unwalkable ? 0 : RC_WALKABLE_AREA;
             if (_voxelizer != null && realSolid)
                 RasterizeVolumeThinWallStrip(v1, v2, v3, v12cross13.X, crossY, v12cross13.Z);
@@ -1673,8 +1674,6 @@ public class NavmeshRasterizer
                             continue; // TODO: rasterize to normal heightfield, can't do it right now, since we're using same heightfield for both mesh and volume
 
                         var unwalkable = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceUnwalkable);
-                        unwalkable |= _voxelizer != null &&
-                                      flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable); // for flyable scenes, assume unlandable == unwalkable
 
                         if (!unwalkable)
                         {

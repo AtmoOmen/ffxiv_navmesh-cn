@@ -11,11 +11,8 @@ public class Z0815安穆艾兰 : NavmeshCustomization
 {
     public override int Version => 1;
 
-    public Z0815安穆艾兰()
-    {
+    public Z0815安穆艾兰() =>
         ApplyAgentRadiusOneSettings();
-        Settings.Filtering -= NavmeshFilter.LedgeSpans;
-    }
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
