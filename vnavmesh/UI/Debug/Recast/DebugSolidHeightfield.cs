@@ -40,13 +40,14 @@ public class DebugSolidHeightfield : DebugRecast
             _spanCellOffsets[x, z] = _numNullSpans + _numWalkableSpans;
             var span = hf.spans[icell++];
 
-            while (span != null)
+            while (span != 0)
             {
-                if (span.area == 0)
+                ref var spanRef = ref hf.Span(span);
+                if (spanRef.area == 0)
                     ++_numNullSpans;
                 else
                     ++_numWalkableSpans;
-                span = span.next;
+                span = spanRef.next;
             }
         }
     }
@@ -76,7 +77,7 @@ public class DebugSolidHeightfield : DebugRecast
             for (var x = 0; x < _hf.width; ++x)
             {
                 var span = _hf.spans[z * _hf.width + x];
-                if (span == null)
+                if (span == 0)
                     continue;
 
                 nz ??= _tree.Node($"[*x{z}]");
@@ -91,11 +92,12 @@ public class DebugSolidHeightfield : DebugRecast
                 {
                     var ispan = 0;
 
-                    while (span != null)
+                    while (span != 0)
                     {
-                        if (_tree.LeafNode($"{ispan}: y={span.smin}-{span.smax}, area={span.area:X}").SelectedOrHovered)
+                        ref var spanRef = ref _hf.Span(span);
+                        if (_tree.LeafNode($"{ispan}: y={spanRef.smin}-{spanRef.smax}, area={spanRef.area:X}").SelectedOrHovered)
                             VisualizeSpan(_spanCellOffsets[x, z] + ispan);
-                        span = span.next;
+                        span = spanRef.next;
                         ++ispan;
                     }
                 }
@@ -130,13 +132,14 @@ public class DebugSolidHeightfield : DebugRecast
                 {
                     var span = _hf.spans[icell++];
 
-                    while (span != null)
+                    while (span != 0)
                     {
-                        world.M22 = (span.smax - span.smin) * chh;
-                        world.M42 = _hf.bmin.Y + (span.smin + span.smax) * chh;
-                        builder.AddInstance(new(world, AreaColor(span.area)));
+                        ref var spanRef = ref _hf.Span(span);
+                        world.M22 = (spanRef.smax - spanRef.smin) * chh;
+                        world.M42 = _hf.bmin.Y + (spanRef.smin + spanRef.smax) * chh;
+                        builder.AddInstance(new(world, AreaColor(spanRef.area)));
                         builder.AddMesh(box.FirstVertex, box.FirstPrimitive, box.NumPrimitives, icnt++, 1);
-                        span = span.next;
+                        span = spanRef.next;
                     }
 
                     world.M41 += _hf.cs;
@@ -159,10 +162,10 @@ public class DebugSolidHeightfield : DebugRecast
         var numSpans = 0;
         var span     = _hf.spans[z * _hf.width + x];
 
-        while (span != null)
+        while (span != 0)
         {
             ++numSpans;
-            span = span.next;
+            span = _hf.Span(span).next;
         }
 
         if (numSpans > 0)

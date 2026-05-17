@@ -700,8 +700,8 @@ public class NavmeshBuilder
 
         var preCompactSpanCount = 0;
         for (var cell = 0; cell < shf.spans.Length; ++cell)
-        for (var span = shf.spans[cell]; span != null; span = span.next)
-            if (span.area != 0)
+        for (var span = shf.spans[cell]; span != 0; span = shf.Span(span).next)
+            if (shf.Span(span).area != 0)
                 preCompactSpanCount++;
 
         var chf = RcCompacts.BuildCompactHeightfield(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);

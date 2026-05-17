@@ -1180,11 +1180,12 @@ public class NavmeshRasterizer
         // find insert position for new span: skip any existing spans that end before new span start
         var     prevMaxY = mergeBelow ? y0 - _minSpanGap - 1 : y1; // any spans that have smax >= prevMaxY are merged
         var     nextMinY = y1 + _minSpanGap + 1;                   // any spans that have smin <= nextMinY are merged
-        RcSpan? prevSpan = null;
-        var     currSpan = cellHead;
+        uint prevSpanIndex = 0;
+        var  currSpanIndex = cellHead;
 
-        while (currSpan != null)
+        while (currSpanIndex != 0)
         {
+            ref var currSpan = ref _heightfield.Span(currSpanIndex);
             if (currSpan.smin > nextMinY)
             {
                 // new span should be inserted before current one
@@ -1194,8 +1195,8 @@ public class NavmeshRasterizer
             if (currSpan.smax < prevMaxY)
             {
                 // new span is fully above current one - continue...
-                prevSpan = currSpan;
-                currSpan = currSpan.next;
+                prevSpanIndex = currSpanIndex;
+                currSpanIndex = currSpan.next;
                 continue;
             }
 
@@ -1208,25 +1209,26 @@ public class NavmeshRasterizer
             y0 = mergeBelow ? Math.Min(y0, currSpan.smin) : Math.Max(y0, currSpan.smax);
             y1 = Math.Max(y1, currSpan.smax);
 
-            var nextSpan = currSpan.next;
-            if (prevSpan == null)
-                cellHead = nextSpan;
+            var nextSpanIndex = currSpan.next;
+            if (prevSpanIndex == 0)
+                cellHead = nextSpanIndex;
             else
-                prevSpan.next = nextSpan;
-            FreeSpan(currSpan);
-            currSpan = nextSpan;
+                _heightfield.Span(prevSpanIndex).next = nextSpanIndex;
+            FreeSpan(currSpanIndex);
+            currSpanIndex = nextSpanIndex;
         }
 
         // insert new span
-        var newSpan = AllocSpan();
+        var newSpanIndex = AllocSpan();
+        ref var newSpan = ref _heightfield.Span(newSpanIndex);
         newSpan.smin = y0;
         newSpan.smax = y1;
         newSpan.area = areaId;
-        newSpan.next = currSpan;
-        if (prevSpan == null)
-            cellHead = newSpan;
+        newSpan.next = currSpanIndex;
+        if (prevSpanIndex == 0)
+            cellHead = newSpanIndex;
         else
-            prevSpan.next = newSpan;
+            _heightfield.Span(prevSpanIndex).next = newSpanIndex;
 
         // mark overlapping voxels as solid; use unmodified y coords since it's possible for a realSolid span to be merged with a fly-through span
         // TODO: figure out if we can preserve flythrough-ability using areaId - not sure if nonzero area id always indicates a walkable surface, recast docs are very unclear on this front
@@ -1376,34 +1378,14 @@ public class NavmeshRasterizer
         WriteVolumeWallThickness(x, z, y0, y1, crossX, crossY, crossZ);
     }
 
-    private RcSpan AllocSpan()
+    private uint AllocSpan()
     {
-        if (_heightfield.freelist == null)
-        {
-            var spanPool = new RcSpanPool { next = _heightfield.pools };
-            _heightfield.pools = spanPool;
-
-            RcSpan? freeList = null;
-
-            for (var i = spanPool.items.Length - 1; i >= 0; --i)
-            {
-                spanPool.items[i].next = freeList;
-                freeList               = spanPool.items[i];
-            }
-
-            _heightfield.freelist = freeList;
-        }
-
-        var span = _heightfield.freelist!;
-        _heightfield.freelist = span.next;
-        span.next             = null;
-        return span;
+        return _heightfield.spanPool.Alloc();
     }
 
-    private void FreeSpan(RcSpan span)
+    private void FreeSpan(uint spanIndex)
     {
-        span.next             = _heightfield.freelist;
-        _heightfield.freelist = span;
+        _heightfield.spanPool.Free(spanIndex);
     }
 
     // TODO: maintain non-empty cells in intersection set?
