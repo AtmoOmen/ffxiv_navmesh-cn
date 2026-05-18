@@ -1,13 +1,12 @@
 using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Navigation.Planning;
 
-namespace vnavmesh.Navigation.Volume.Pathfinding;
+namespace vnavmesh.Navigation.Volume;
 
 public class VoxelPathfind
 {
@@ -78,7 +77,7 @@ public class VoxelPathfind
 
     internal FlightPathDebugPayload? LastPathDebug => lastPathDebug;
 
-    public VoxelPathfind(VoxelMap volume, Config _)
+    public VoxelPathfind(VoxelMap volume, PluginConfig _)
     {
         Volume                      = volume;
         l0Desc                      = volume.Levels[0];

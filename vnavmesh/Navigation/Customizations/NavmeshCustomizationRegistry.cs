@@ -1,5 +1,4 @@
 using System.Reflection;
-using vnavmesh.Bootstrap;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Attributes;
 using vnavmesh.Navigation.Scene;

@@ -1,6 +1,5 @@
 using System.Numerics;
 using DotRecast.Core.Numerics;
-using vnavmesh.Bootstrap;
 using vnavmesh.Shared.Models;
 using vnavmesh.UI.Debug.Common.Components;
 

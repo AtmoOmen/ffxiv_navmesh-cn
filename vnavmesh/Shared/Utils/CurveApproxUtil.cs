@@ -1,8 +1,7 @@
 using System.Numerics;
 using vnavmesh.Common.Models;
-using vnavmesh.Shared.Models;
 
-namespace vnavmesh.Shared.Utilities;
+namespace vnavmesh.Shared.Utils;
 
 // a bunch of utilities for approximating curves with line segments
 // we need them, since clipping and rendering works with polygons

@@ -6,9 +6,8 @@ using System.Threading;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Lumina.Excel.Sheets;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Utilities;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Navigation.Customizations;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Editor;
@@ -25,7 +24,7 @@ namespace vnavmesh.UI.Editor;
 
 internal sealed class CustomizationEditorView
 (
-    Config             config,
+    PluginConfig             config,
     DebugDrawer        dd,
     DebugGameCollision collision,
     NavmeshManager     manager,

@@ -3,7 +3,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Lumina.Excel;
 
-namespace vnavmesh.Bootstrap;
+namespace vnavmesh;
 
 public class Service
 {

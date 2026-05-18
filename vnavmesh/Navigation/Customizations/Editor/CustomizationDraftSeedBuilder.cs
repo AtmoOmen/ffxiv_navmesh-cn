@@ -1,7 +1,7 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Attributes;
 using vnavmesh.Navigation.Customizations.Extensions;
@@ -12,7 +12,7 @@ namespace vnavmesh.Navigation.Customizations.Editor;
 
 internal static class CustomizationDraftSeedBuilder
 {
-    public static CustomizationDraft CreateFromCustomization(SceneDefinition scene, NavmeshCustomization customization, string territoryName, Config config)
+    public static CustomizationDraft CreateFromCustomization(SceneDefinition scene, NavmeshCustomization customization, string territoryName, PluginConfig config)
     {
         var draft = new CustomizationDraft
         {

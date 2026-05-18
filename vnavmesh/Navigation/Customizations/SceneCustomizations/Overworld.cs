@@ -1,5 +1,4 @@
 ﻿using Lumina.Excel.Sheets;
-using vnavmesh.Bootstrap;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Scene;
 

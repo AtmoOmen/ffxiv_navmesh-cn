@@ -13,14 +13,12 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using Lumina.Excel.Sheets;
-using vnavmesh.Bootstrap;
-using vnavmesh.Bootstrap.Composition;
 using vnavmesh.Common.Ipc;
 using vnavmesh.Common.Navigation.Mesh.Build;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Navigation.Scene;
 using vnavmesh.Common.Utilities;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Navigation.Customizations;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Extensions;
@@ -65,7 +63,7 @@ public sealed class NavmeshManager : IDisposable
 
     private static readonly DtQueryDefaultFilter SPruneFilter = new();
 
-    private readonly Config        config;
+    private readonly PluginConfig        config;
     private readonly PluginPaths   paths;
     private readonly DirectoryInfo cacheDirectory;
 
@@ -78,7 +76,7 @@ public sealed class NavmeshManager : IDisposable
     private int                      numActivePathfinds;
     private int                      nextBuildSequence;
 
-    public NavmeshManager(PluginPaths paths, Config config)
+    public NavmeshManager(PluginPaths paths, PluginConfig config)
     {
         this.config = config;
         this.paths  = paths;

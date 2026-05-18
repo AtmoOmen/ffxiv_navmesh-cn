@@ -2,7 +2,6 @@ using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.Interop;
-using vnavmesh.Bootstrap;
 using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.UI.Debug.Layout;

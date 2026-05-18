@@ -2,11 +2,10 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Models;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
@@ -17,7 +16,7 @@ namespace vnavmesh.Movement.Execution;
 
 internal sealed class MovementUnstuckController
 (
-    Config         config,
+    PluginConfig         config,
     NavmeshManager manager
 )
 {

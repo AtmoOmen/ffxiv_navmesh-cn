@@ -1,41 +1,38 @@
 using System.Globalization;
 using System.Numerics;
 using Dalamud.Game.Command;
-using vnavmesh.Bootstrap;
-using vnavmesh.Configuration;
-using vnavmesh.Integration.Windowing;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 
-namespace vnavmesh.Integration.Commands;
+namespace vnavmesh.Internal;
 
-internal sealed class CommandProvider : IDisposable
+internal sealed class PluginCommands : IDisposable
 {
-    private readonly Config               _config;
-    private readonly NavmeshManager       _navmeshManager;
-    private readonly MovementPlanExecutor _movementExecutor;
-    private readonly AsyncMoveRequest     _asyncMove;
-    private readonly WindowProvider       _windowProvider;
-    private readonly CommandInfo          _commandInfo;
+    private readonly PluginConfig         config;
+    private readonly NavmeshManager       navmeshManager;
+    private readonly MovementPlanExecutor movementExecutor;
+    private readonly AsyncMoveRequest     asyncMove;
+    private readonly PluginWindows       windowProvider;
+    private readonly CommandInfo          commandInfo;
 
-    public CommandProvider
+    public PluginCommands
     (
-        Config               config,
+        PluginConfig         config,
         NavmeshManager       navmeshManager,
         MovementPlanExecutor movementExecutor,
         AsyncMoveRequest     asyncMove,
-        WindowProvider       windowProvider
+        PluginWindows       windowProvider
     )
     {
-        _config           = config;
-        _navmeshManager   = navmeshManager;
-        _movementExecutor = movementExecutor;
-        _asyncMove        = asyncMove;
-        _windowProvider   = windowProvider;
+        this.config           = config;
+        this.navmeshManager   = navmeshManager;
+        this.movementExecutor = movementExecutor;
+        this.asyncMove        = asyncMove;
+        this.windowProvider   = windowProvider;
 
-        _commandInfo = new(OnCommand)
+        commandInfo = new(OnCommand)
         {
             HelpMessage = """
                           打开调试菜单
@@ -59,8 +56,8 @@ internal sealed class CommandProvider : IDisposable
             ShowInHelp = true
         };
 
-        Service.CommandManager.AddHandler("/vnav",     _commandInfo);
-        Service.CommandManager.AddHandler("/vnavmesh", new(OnCommand) { HelpMessage = _commandInfo.HelpMessage, ShowInHelp = false });
+        Service.CommandManager.AddHandler("/vnav",     commandInfo);
+        Service.CommandManager.AddHandler("/vnavmesh", new(OnCommand) { HelpMessage = commandInfo.HelpMessage, ShowInHelp = false });
     }
 
     public void Dispose()
@@ -75,7 +72,7 @@ internal sealed class CommandProvider : IDisposable
 
         if (string.IsNullOrWhiteSpace(arguments))
         {
-            _windowProvider.IsOpen ^= true;
+            windowProvider.IsOpen ^= true;
             return;
         }
 
@@ -86,10 +83,10 @@ internal sealed class CommandProvider : IDisposable
         switch (args[0])
         {
             case "reload":
-                _navmeshManager.Reload(true);
+                navmeshManager.Reload(true);
                 break;
             case "rebuild":
-                _navmeshManager.Reload(false);
+                navmeshManager.Reload(false);
                 break;
             case "moveto":
                 MoveToCommand(args, false, false);
@@ -101,7 +98,7 @@ internal sealed class CommandProvider : IDisposable
             case "movetarget":
                 var moveTarget = Service.TargetManager.Target;
                 if (moveTarget != null)
-                    _asyncMove.MoveTo(moveTarget.Position, false);
+                    asyncMove.MoveTo(moveTarget.Position, false);
                 break;
             case "moveflag":
                 MoveFlagCommand(false);
@@ -116,28 +113,28 @@ internal sealed class CommandProvider : IDisposable
             case "flytarget":
                 var flyTarget = Service.TargetManager.Target;
                 if (flyTarget != null)
-                    _asyncMove.MoveTo(flyTarget.Position, true);
+                    asyncMove.MoveTo(flyTarget.Position, true);
                 break;
             case "flyflag":
                 MoveFlagCommand(true);
                 break;
             case "stop":
-                _movementExecutor.Stop();
+                movementExecutor.Stop();
                 break;
             case "aligncamera":
                 if (args.Length == 1)
-                    _config.AlignCameraToMovement ^= true;
+                    config.AlignCameraToMovement ^= true;
                 else
                     AlignCameraCommand(args[1]);
-                _config.Save();
+                config.Save();
                 break;
             case "dtr":
-                _config.EnableDTR ^= true;
-                _config.Save();
+                config.EnableDTR ^= true;
+                config.Save();
                 break;
             case "collider":
-                _config.ForceShowGameCollision ^= true;
-                _config.Save();
+                config.ForceShowGameCollision ^= true;
+                config.Save();
                 break;
         }
     }
@@ -155,27 +152,29 @@ internal sealed class CommandProvider : IDisposable
             float.Parse(args[2], CultureInfo.InvariantCulture),
             float.Parse(args[3], CultureInfo.InvariantCulture)
         );
-        _asyncMove.MoveTo(origin + offset, fly);
+        asyncMove.MoveTo(origin + offset, fly);
     }
 
     private void MoveFlagCommand(bool fly)
     {
-        if (_navmeshManager.Query == null)
+        if (navmeshManager.Query == null)
             return;
 
-        var point = MapUtil.FlagToPoint(_navmeshManager.Query);
+        var point = MapUtil.FlagToPoint(navmeshManager.Query);
         if (point == null)
             return;
 
-        _asyncMove.MoveTo(point.Value, fly);
+        asyncMove.MoveTo(point.Value, fly);
     }
 
     private void AlignCameraCommand(string argument)
     {
         var normalized = argument.ToLowerInvariant();
-        if (normalized is "true" or "yes" or "enable")
-            _config.AlignCameraToMovement = true;
-        else if (normalized is "false" or "no" or "disable")
-            _config.AlignCameraToMovement = false;
+        config.AlignCameraToMovement = normalized switch
+        {
+            "true" or "yes" or "enable"  => true,
+            "false" or "no" or "disable" => false,
+            _                            => config.AlignCameraToMovement
+        };
     }
 }

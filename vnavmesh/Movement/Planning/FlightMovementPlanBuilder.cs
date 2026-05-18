@@ -1,5 +1,4 @@
 using Dalamud.Game.ClientState.Conditions;
-using vnavmesh.Bootstrap;
 using vnavmesh.Navigation.Planning;
 
 namespace vnavmesh.Movement.Planning;

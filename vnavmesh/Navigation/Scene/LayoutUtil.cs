@@ -5,7 +5,6 @@ using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.Interop;
 using FFXIVClientStructs.STD;
 using Lumina.Excel.Sheets;
-using vnavmesh.Bootstrap;
 using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Navigation.Scene;

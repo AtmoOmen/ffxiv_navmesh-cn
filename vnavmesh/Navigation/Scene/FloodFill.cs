@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Text.Json;
-using vnavmesh.Bootstrap;
 using Seeds = System.Collections.Generic.Dictionary<uint, System.Collections.Generic.List<vnavmesh.Navigation.Scene.JsonVec>>;
 
 namespace vnavmesh.Navigation.Scene;

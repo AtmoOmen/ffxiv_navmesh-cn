@@ -1,27 +1,24 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Bootstrap;
-using vnavmesh.Configuration;
-using vnavmesh.Integration.Windowing;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 
-namespace vnavmesh.Integration.Ipc;
+namespace vnavmesh.Internal;
 
-internal class IPCProvider : IDisposable
+internal class PluginIPC : IDisposable
 {
-    private readonly Config       config;
+    private readonly PluginConfig config;
     private readonly List<Action> disposeActions = [];
 
-    public IPCProvider
+    public PluginIPC
     (
-        Config               config,
+        PluginConfig         config,
         NavmeshManager       navmeshManager,
         MovementPlanExecutor movementExecutor,
         AsyncMoveRequest     move,
-        WindowProvider       windowProvider
+        PluginWindows        windowProvider
     )
     {
         this.config = config;

@@ -1,4 +1,4 @@
-namespace vnavmesh.Navigation.Volume.Pathfinding;
+namespace vnavmesh.Navigation.Volume;
 
 public enum VolumeSearchTermination : byte
 {

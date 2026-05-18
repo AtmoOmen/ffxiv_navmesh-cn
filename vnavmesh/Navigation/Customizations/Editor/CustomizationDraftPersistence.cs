@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using vnavmesh.Bootstrap;
 
 namespace vnavmesh.Navigation.Customizations.Editor;
 

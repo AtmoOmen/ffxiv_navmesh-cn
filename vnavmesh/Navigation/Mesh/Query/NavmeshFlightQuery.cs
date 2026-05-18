@@ -1,11 +1,10 @@
 using System.Numerics;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Planning;
-using vnavmesh.Navigation.Volume.Pathfinding;
+using vnavmesh.Navigation.Volume;
 
 namespace vnavmesh.Navigation.Mesh.Query;
 

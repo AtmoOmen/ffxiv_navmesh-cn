@@ -2,7 +2,6 @@ using System.Runtime.InteropServices;
 using Dalamud.Hooking;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Models;
 using vnavmesh.Shared.Models;
 

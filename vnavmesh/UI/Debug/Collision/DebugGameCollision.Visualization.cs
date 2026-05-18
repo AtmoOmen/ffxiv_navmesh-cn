@@ -1,9 +1,8 @@
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Models;
 using vnavmesh.Shared.Models;
-using vnavmesh.Shared.Utilities;
+using vnavmesh.Shared.Utils;
 using vnavmesh.UI.Rendering;
 using Vector3 = System.Numerics.Vector3;
 using Vector4 = System.Numerics.Vector4;

@@ -1,5 +1,4 @@
 using System.Numerics;
-using vnavmesh.Bootstrap;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Mesh.Runtime;

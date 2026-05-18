@@ -2,7 +2,6 @@ using System.Numerics;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using Lumina.Excel.Sheets;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Navigation.Mesh.Build;

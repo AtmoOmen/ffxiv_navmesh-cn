@@ -1,6 +1,5 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Models;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Planning;

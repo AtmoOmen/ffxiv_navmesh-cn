@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace vnavmesh.Navigation.Volume.Pathfinding;
+namespace vnavmesh.Navigation.Volume;
 
 public struct VolumePathfindNode
 {

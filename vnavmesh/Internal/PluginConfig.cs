@@ -2,11 +2,10 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Configuration;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
-using vnavmesh.Bootstrap;
 
-namespace vnavmesh.Configuration;
+namespace vnavmesh.Internal;
 
-public class Config : IPluginConfiguration
+public class PluginConfig : IPluginConfiguration
 {
     public int Version { get; set; } = 1;
 

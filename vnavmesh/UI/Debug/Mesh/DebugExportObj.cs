@@ -4,7 +4,6 @@ using System.Text;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Bootstrap;
 
 namespace vnavmesh.UI.Debug.Mesh;
 

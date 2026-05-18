@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using DotRecast.Detour;
 using SharpDX.Win32;
 using vnavmesh.Common.Utilities;
-using vnavmesh.Shared.Utilities;
 
 namespace vnavmesh.Navigation.Mesh.Runtime;
 

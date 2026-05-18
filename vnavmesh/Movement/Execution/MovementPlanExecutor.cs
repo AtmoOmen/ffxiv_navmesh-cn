@@ -3,10 +3,9 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Models;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Movement.Drivers;
 using vnavmesh.Movement.Interop;
 using vnavmesh.Movement.Planning;
@@ -25,7 +24,7 @@ public sealed class MovementPlanExecutor : IDisposable
     public List<Vector3>                           Waypoints => CollectWaypoints();
     internal event Action<MovementFailureContext>? OnMovementFailure;
 
-    private readonly Config                    _config;
+    private readonly PluginConfig                    _config;
     private readonly NavmeshManager            _manager;
     private readonly CameraAlignmentController _camera        = new();
     private readonly MovementInputController   _movement      = new();
@@ -47,7 +46,7 @@ public sealed class MovementPlanExecutor : IDisposable
     private float                   _activeDestinationTolerance = 0.05f;
     private float?                  _nextToleranceOverride;
 
-    public MovementPlanExecutor(Config config, NavmeshManager manager)
+    public MovementPlanExecutor(PluginConfig config, NavmeshManager manager)
     {
         _config                   =  config;
         _manager                  =  manager;

@@ -1,4 +1,4 @@
-namespace vnavmesh.Bootstrap.Composition;
+namespace vnavmesh.Internal;
 
 public sealed class PluginPaths
 (

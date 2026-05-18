@@ -1,15 +1,13 @@
 using Dalamud.Game.Gui.Dtr;
-using vnavmesh.Bootstrap;
-using vnavmesh.Configuration;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
 
-namespace vnavmesh.Integration.Status;
+namespace vnavmesh.Internal;
 
-public class DTRProvider
+public class PluginDTR
 (
-    Config               config,
+    PluginConfig               config,
     NavmeshManager       manager,
     AsyncMoveRequest     asyncMove,
     MovementPlanExecutor movementExecutor

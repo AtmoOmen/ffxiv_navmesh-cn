@@ -8,9 +8,8 @@ using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Models;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.Shared.Models;
 using vnavmesh.UI.Debug.Common;
@@ -42,7 +41,7 @@ public unsafe partial class DebugGameCollision : IDisposable
     private const float DefaultCollisionRenderHorizontalDistance = 50f;
     private const float DefaultCollisionRenderVerticalDistance   = 10f;
 
-    private readonly Config      _config;
+    private readonly PluginConfig      _config;
     private          UITree      _tree = new();
     private          DebugDrawer _dd;
     private          BitMask     _shownLayers = new(1);
@@ -67,7 +66,7 @@ public unsafe partial class DebugGameCollision : IDisposable
 
     private RaycastHit? _savedHit;
 
-    public DebugGameCollision(Config config, DebugDrawer dd)
+    public DebugGameCollision(PluginConfig config, DebugDrawer dd)
     {
         _config          = config;
         _dd              = dd;

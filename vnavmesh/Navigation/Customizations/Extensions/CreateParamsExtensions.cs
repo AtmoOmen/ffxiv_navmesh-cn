@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using DotRecast.Detour;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Mesh.Build;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 

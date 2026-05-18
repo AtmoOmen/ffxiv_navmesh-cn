@@ -3,26 +3,25 @@ using System.Linq;
 using System.Threading;
 using DotRecast.Detour;
 using DotRecast.Recast;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
-using vnavmesh.Configuration;
 using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Extensions;
 using vnavmesh.Navigation.Mesh.Build;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
-using vnavmesh.Navigation.Volume.Pathfinding;
 using vnavmesh.Common.Navigation.Mesh.Build;
+using vnavmesh.Internal;
+using vnavmesh.Navigation.Volume;
 
 namespace vnavmesh.Navigation.Customizations.Editor;
 
 internal class CustomizationPreviewBuilder
 (
     NavmeshManager manager,
-    Config         config
+    PluginConfig         config
 ) : IDisposable
 {
     public enum State

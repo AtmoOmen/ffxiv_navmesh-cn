@@ -1,13 +1,10 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Volume;
-using vnavmesh.Navigation.Volume.Pathfinding;
-using vnavmesh.Shared.Utilities;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Rendering;

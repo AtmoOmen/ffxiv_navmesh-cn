@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace vnavmesh.Navigation.Volume.Pathfinding;
+namespace vnavmesh.Navigation.Volume;
 
 internal readonly record struct VolumeNeighbourEvaluation
 (

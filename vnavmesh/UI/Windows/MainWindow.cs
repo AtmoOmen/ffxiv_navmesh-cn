@@ -1,8 +1,6 @@
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
-using vnavmesh.Bootstrap;
-using vnavmesh.Bootstrap.Composition;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
@@ -16,7 +14,7 @@ namespace vnavmesh.UI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private readonly Config                  config;
+    private readonly PluginConfig                  config;
     private readonly MovementPlanExecutor    movementExecutor;
     private readonly DebugDrawer             debugDrawer = new();
     private readonly DebugGameCollision      debugGameColl;
@@ -26,7 +24,7 @@ public class MainWindow : Window, IDisposable
 
     public MainWindow
     (
-        Config               config,
+        PluginConfig               config,
         PluginPaths          paths,
         NavmeshManager       manager,
         MovementPlanExecutor movementExecutor,

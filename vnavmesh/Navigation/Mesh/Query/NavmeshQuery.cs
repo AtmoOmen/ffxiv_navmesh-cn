@@ -1,14 +1,13 @@
 using System.Numerics;
 using DotRecast.Core;
 using DotRecast.Detour;
-using vnavmesh.Bootstrap;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Common.Utilities;
-using vnavmesh.Configuration;
+using vnavmesh.Internal;
 using vnavmesh.Navigation.Planning;
-using vnavmesh.Navigation.Volume.Pathfinding;
+using vnavmesh.Navigation.Volume;
 
 namespace vnavmesh.Navigation.Mesh.Query;
 
@@ -27,7 +26,7 @@ public class NavmeshQuery
 
     internal Navmesh NavmeshData { get; }
 
-    internal Config ConfigData { get; }
+    internal PluginConfig ConfigData { get; }
 
     internal IDtQueryFilter AllTraversableFilter { get; } = new DtQueryDefaultFilter();
 
@@ -64,7 +63,7 @@ public class NavmeshQuery
     private VoxelPathfind?  volumeQuery;
     private bool            released;
 
-    public NavmeshQuery(Navmesh navmesh, Config config)
+    public NavmeshQuery(Navmesh navmesh, PluginConfig config)
     {
         this.NavmeshData = navmesh;
         this.ConfigData  = config;

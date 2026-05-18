@@ -1,9 +1,9 @@
 using System.Reflection;
 using Dalamud.Plugin;
 using Microsoft.Extensions.DependencyInjection;
-using vnavmesh.Bootstrap.Composition;
+using vnavmesh.Internal;
 
-namespace vnavmesh.Bootstrap;
+namespace vnavmesh;
 
 public sealed class Plugin : IDalamudPlugin
 {
