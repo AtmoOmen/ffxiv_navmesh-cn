@@ -2,7 +2,7 @@ using vnavmesh.Navigation.Customizations.Abstractions;
 using vnavmesh.Navigation.Customizations.Attributes;
 using vnavmesh.Navigation.Scene;
 
-namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations;
+namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.PVP;
 
 [CustomizationTerritory(250)]
 internal class Z0250狼狱停船场 : NavmeshCustomization
