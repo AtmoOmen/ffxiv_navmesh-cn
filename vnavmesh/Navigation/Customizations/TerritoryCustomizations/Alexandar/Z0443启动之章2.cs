@@ -9,10 +9,7 @@ namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.Alexandar;
 [CustomizationTerritory(443)]
 internal class Z0443启动之章2 : NavmeshCustomization
 {
-    public override int Version => 1;
-
-    public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers) =>
-        LinkDrop(mesh, new(9.0f, 12.1f, 36.5f), new(-3.3f, -18.2f, 37.5f));
+    public override int Version => 2;
     
     public override void CustomizeSettings(DtNavMeshCreateParams config) =>
         config.AddOffMeshConnection

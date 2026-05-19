@@ -11,7 +11,7 @@ namespace vnavmesh.Navigation.Customizations.TerritoryCustomizations.Alexandar;
 [CustomizationTerritory(444)]
 internal class Z0444启动之章3 : NavmeshCustomization
 {
-    public override int Version => 2;
+    public override int Version => 3;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -68,11 +68,21 @@ internal class Z0444启动之章3 : NavmeshCustomization
             NavmeshPolyFlags.ManualOffMesh,
             NavmeshOffMeshKind.ManualOffMesh
         );
+        config.AddOffMeshConnection
+        (
+            new(20.97561f, 35.141724f, -15.054151f),
+            new(24.470856f, 23.111866f, -19.177319f),
+            0.5f,
+            false,
+            0,
+            NavmeshArea.ManualOffMesh,
+            NavmeshPolyFlags.ManualOffMesh,
+            NavmeshOffMeshKind.ManualOffMesh
+        );
     }
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
-        LinkDrop(mesh, new(20.97561f, 35.141724f, -15.054151f), new(24.470856f, 23.111866f, -19.177319f));
         LinkPoints(mesh, new(38.509922f, -9.536743E-07f, -0.274802f), new(48.962902f, 0f, -0.06897486f));
         LinkPoints(mesh, new(58.524216f, 0.011983752f, -21.014153f),  new(58.992924f, -9f, -42.920166f));
     }

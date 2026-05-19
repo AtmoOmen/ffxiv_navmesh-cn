@@ -168,7 +168,7 @@ internal static class CustomizationEditorInspector
             SelectionKind.InstancePatch     => "修改或移除某模型实例, 可强制写入或清除碰撞标记",
             SelectionKind.PartPatch         => "修改模型内部顶点或三角, 适合局部几何修补",
             SelectionKind.ColliderInsertion => "两点生成的障碍体, 用中心和尺寸调整后自动重建预览",
-            SelectionKind.MeshLink          => "在已构建导航网格上追加连线、下落或客户端路径",
+            SelectionKind.MeshLink          => "在已构建导航网格上追加连线或客户端路径",
             SelectionKind.OffMeshConnection => "在构建参数中追加离网连接",
             SelectionKind.PreviewMesh       => "实时预览模型, 右键可加入草稿删除清单",
             SelectionKind.PreviewInstance   => "实时预览实例, 可在世界中点选并编辑变换或标记",

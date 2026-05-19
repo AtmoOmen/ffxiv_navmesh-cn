@@ -229,19 +229,6 @@ public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
 
 输入的坐标会投影到最近的导航多边形上，不需要精确悬浮在某个多边形正上方。
 
-### 下落连接（Drop Link）
-
-`LinkDrop` 用于角色从高处跳下 / 掉落的场景，系统自动根据 `landingHint` 向下搜寻落点：
-
-```csharp
-public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
-{
-    LinkDrop(mesh, new(边缘X, 边缘Y, 边缘Z), new(参考落点X, 参考落点Y, 参考落点Z));
-}
-```
-
-参数说明：`edgePos` 是下落出发点，`landingHint` 是落点的粗略参考坐标——系统会从此坐标开始向下逐级搜索合适的落点多边形。
-
 ### 客户端路径连接（ClientPath Link）
 
 `LinkClientPath` 是特殊的传送连接，告诉寻路系统这里需要走游戏内置的客户端路径（比如坐骑、特殊移动）。行为和 `LinkPoints` 类似但会额外引发客户端路径跟随行为。
@@ -282,8 +269,8 @@ public override void CustomizeSettings(DtNavMeshCreateParams config)
 
 ### LinkPoints vs AddOffMeshConnection 何时用哪个？
 
-- `CustomizeMesh` 中的 `LinkPoints` / `LinkDrop`：在导航网格已组装完成后操作，适合"逻辑上关联但在物理空间不连通"的连接（穿门、传送、跨空气墙）。
-- `CustomizeSettings` 中的 `AddOffMeshConnection`：在 Recast 构建过程中操作，适合"物理上连通但构建时可能被隔断"的连接（同一场景内的上下坡、平台跳跃）。
+- `CustomizeMesh` 中的 `LinkPoints`：在导航网格已组装完成后操作，适合"逻辑上关联但在物理空间不连通"的连接（穿门、传送、跨空气墙）。
+- `CustomizeSettings` 中的 `AddOffMeshConnection`：在 Recast 构建过程中操作，适合需要显式定义的离网连接, 包括同一场景内的上下坡、平台跳跃、下落点连接。
 
 两者可以同时存在。对于同一个现实场景的连接（比如走一段坡道同时需要穿一个空气墙门），两种都用。
 

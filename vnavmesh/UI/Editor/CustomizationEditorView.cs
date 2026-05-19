@@ -548,7 +548,6 @@ internal sealed class CustomizationEditorView
                 statusText = kind switch
                 {
                     DraftMeshLinkKind.Points     => "已添加网格连线",
-                    DraftMeshLinkKind.Drop       => "已添加下落连接",
                     DraftMeshLinkKind.ClientPath => "已添加客户端路径连接",
                     _                            => "已添加 mesh link"
                 };

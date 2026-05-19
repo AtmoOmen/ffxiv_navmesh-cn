@@ -130,21 +130,6 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
-                "下落连接",
-                PickKind.LinkDrop,
-                "在画面点两个世界点生成下落连接",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
-            
-            ImGui.SameLine();
-            DrawModeButton
-            (
                 "客户端路径",
                 PickKind.LinkClientPath,
                 "在画面点两个世界点生成客户端路径连接",
