@@ -3,12 +3,92 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Customizations.Editor;
+using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.UI.Editor;
 
 internal static class CustomizationEditorWidgets
 {
+    public static string FormatEnumDisplayName<T>(T value) where T : struct, Enum =>
+        GetEnumDisplayName(value);
+
+    public static string FormatPreviewStateDisplayName(CustomizationPreviewBuilder.State value) =>
+        value switch
+        {
+            CustomizationPreviewBuilder.State.NotBuilt   => "未构建",
+            CustomizationPreviewBuilder.State.InProgress => "构建中",
+            CustomizationPreviewBuilder.State.Failed     => "失败",
+            CustomizationPreviewBuilder.State.Ready      => "就绪",
+            _                                            => value.ToString()
+        };
+
+    private static string GetFlagsDisplayName<T>(T value) where T : struct, Enum
+    {
+        var raw = Convert.ToUInt64(value);
+        if (raw == 0)
+            return GetEnumDisplayName(value);
+
+        var names = new List<string>();
+
+        foreach (var candidate in Enum.GetValues<T>())
+        {
+            var candidateRaw = Convert.ToUInt64(candidate);
+            if (candidateRaw == 0 || (candidateRaw & (candidateRaw - 1)) != 0)
+                continue;
+
+            if ((raw & candidateRaw) == candidateRaw)
+                names.Add(GetEnumDisplayName(candidate));
+        }
+
+        return names.Count > 0 ? string.Join(" | ", names) : value.ToString();
+    }
+
+    private static string GetEnumDisplayName<T>(T value) where T : struct, Enum =>
+        value switch
+        {
+            DraftSceneInstancePatchKind.ClearInstances    => "清空实例",
+            DraftSceneInstancePatchKind.RemoveInstance    => "删除实例",
+            DraftSceneInstancePatchKind.Transform         => "变换",
+            DraftSceneInstancePatchKind.SetFlags          => "设置标记",
+            DraftScenePartPatchKind.Vertex                => "顶点",
+            DraftScenePartPatchKind.PrimitiveFlags        => "三角标记",
+            DraftScenePartPatchKind.PrimitiveEdit         => "三角编辑",
+            DraftSceneColliderInsertionKind.Aabb          => "AABB",
+            DraftSceneColliderInsertionKind.Cylinder      => "圆柱",
+            DraftMeshLinkKind.Points                      => "两点直连",
+            DraftMeshLinkKind.ClientPath                  => "客户端路径",
+            SceneExtractor.PrimitiveFlags.None            => "无",
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable => "强制不可行走",
+            SceneExtractor.PrimitiveFlags.FlyThrough      => "可穿飞",
+            SceneExtractor.PrimitiveFlags.Unlandable      => "不可降落",
+            SceneExtractor.PrimitiveFlags.ForceWalkable   => "强制可行走",
+            SceneExtractor.PrimitiveFlags.Fishable        => "可钓鱼",
+            NavmeshArea.Null                              => "空",
+            NavmeshArea.Ground                            => "地面",
+            NavmeshArea.GeneratedClimbDown                => "自动跳落",
+            NavmeshArea.GeneratedEdgeJump                 => "自动边缘跳跃",
+            NavmeshArea.ManualOffMesh                     => "手动离网连接",
+            NavmeshArea.Teleport                          => "传送",
+            NavmeshArea.ClientPath                        => "客户端路径",
+            NavmeshPolyFlags.None                         => "无",
+            NavmeshPolyFlags.Ground                       => "地面",
+            NavmeshPolyFlags.GeneratedClimbDown           => "自动跳落",
+            NavmeshPolyFlags.GeneratedEdgeJump            => "自动边缘跳跃",
+            NavmeshPolyFlags.ManualOffMesh                => "手动离网连接",
+            NavmeshPolyFlags.Teleport                     => "传送",
+            NavmeshPolyFlags.ClientPath                   => "客户端路径",
+            NavmeshPolyFlags.Unreachable                  => "不可达",
+            NavmeshPolyFlags.AllTraversable               => "全部可通行",
+            NavmeshOffMeshKind.GeneratedClimbDown         => "自动跳落",
+            NavmeshOffMeshKind.GeneratedEdgeJump          => "自动边缘跳跃",
+            NavmeshOffMeshKind.ManualOffMesh              => "手动离网连接",
+            NavmeshOffMeshKind.Teleport                   => "传送",
+            NavmeshOffMeshKind.ClientPath                 => "客户端路径",
+            _                                             => value.ToString()
+        };
+
     public static bool DrawBool(string label, ref bool value) =>
         ImGui.Checkbox(label, ref value);
 
@@ -35,7 +115,18 @@ internal static class CustomizationEditorWidgets
             return false;
 
         if (ulong.TryParse
-                (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? text[2..] : text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var parsed))
+            (
+                text.StartsWith
+                (
+                    "0x",
+                    StringComparison.OrdinalIgnoreCase
+                )
+                    ? text[2..]
+                    : text,
+                NumberStyles.HexNumber,
+                CultureInfo.InvariantCulture,
+                out var parsed
+            ))
         {
             value = parsed;
             return true;
@@ -53,10 +144,10 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.TreeNodeEx(label, ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= ImGui.DragFloat("X", ref value.X, 0.1f, -100000, 100000, "%.3f");
-            changed |= ImGui.DragFloat("Y", ref value.Y, 0.1f, -100000, 100000, "%.3f");
-            changed |= ImGui.DragFloat("Z", ref value.Z, 0.1f, -100000, 100000, "%.3f");
-            
+            changed |= ImGui.DragFloat("X 轴", ref value.X, 0.1f, -100000, 100000, "%.3f");
+            changed |= ImGui.DragFloat("Y 轴", ref value.Y, 0.1f, -100000, 100000, "%.3f");
+            changed |= ImGui.DragFloat("Z 轴", ref value.Z, 0.1f, -100000, 100000, "%.3f");
+
             ImGui.TreePop();
         }
 
@@ -77,14 +168,14 @@ internal static class CustomizationEditorWidgets
         if (changed)
         {
             size = Vector3.Max(size, new(0.01f));
-            min  = center - size * 0.5f;
-            max  = center + size * 0.5f;
+            min  = center - (size * 0.5f);
+            max  = center + (size * 0.5f);
         }
 
-        if (ImGui.TreeNodeEx("原始 Min / Max"))
+        if (ImGui.TreeNodeEx("原始最小值 / 最大值"))
         {
-            changed |= DrawVector3("Min", ref min);
-            changed |= DrawVector3("Max", ref max);
+            changed |= DrawVector3("最小值", ref min);
+            changed |= DrawVector3("最大值", ref max);
             ImGui.TreePop();
         }
 
@@ -100,17 +191,17 @@ internal static class CustomizationEditorWidgets
 
         var translation = matrix.Translation;
         var scale       = matrix.GetScale();
-        changed |= DrawVector3("Translation", ref translation);
-        changed |= DrawVector3("Scale",       ref scale);
+        changed |= DrawVector3("平移", ref translation);
+        changed |= DrawVector3("缩放", ref scale);
         if (changed)
             matrix.SetTranslationScale(translation, scale);
 
-        if (ImGui.TreeNodeEx("Raw Matrix4x3"))
+        if (ImGui.TreeNodeEx("原始 Matrix4x3"))
         {
-            changed |= DrawVector3("Row0", ref matrix.Row0);
-            changed |= DrawVector3("Row1", ref matrix.Row1);
-            changed |= DrawVector3("Row2", ref matrix.Row2);
-            changed |= DrawVector3("Row3", ref matrix.Row3);
+            changed |= DrawVector3("第 0 行", ref matrix.Row0);
+            changed |= DrawVector3("第 1 行", ref matrix.Row1);
+            changed |= DrawVector3("第 2 行", ref matrix.Row2);
+            changed |= DrawVector3("第 3 行", ref matrix.Row3);
             ImGui.TreePop();
         }
 
@@ -121,6 +212,7 @@ internal static class CustomizationEditorWidgets
     public static bool DrawNullableFloat(string label, ref float? value, float fallback, string help = "")
     {
         var enabled = value.HasValue;
+
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
             value = enabled ? fallback : null;
@@ -137,6 +229,7 @@ internal static class CustomizationEditorWidgets
                 ImGui.SameLine();
                 ImGuiComponents.HelpMarker(help);
             }
+
             return false;
         }
 
@@ -156,6 +249,7 @@ internal static class CustomizationEditorWidgets
     public static bool DrawNullableInt(string label, ref int? value, int fallback, string help = "")
     {
         var enabled = value.HasValue;
+
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
             value = enabled ? fallback : null;
@@ -172,10 +266,12 @@ internal static class CustomizationEditorWidgets
                 ImGui.SameLine();
                 ImGuiComponents.HelpMarker(help);
             }
+
             return false;
         }
 
         var current = value!.Value;
+
         if (ImGui.InputInt($"##{label}_value", ref current))
         {
             value = current;
@@ -190,6 +286,7 @@ internal static class CustomizationEditorWidgets
     public static bool DrawNullableBool(string label, ref bool? value, bool fallback, string help = "")
     {
         var enabled = value.HasValue;
+
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
             value = enabled ? fallback : null;
@@ -206,6 +303,7 @@ internal static class CustomizationEditorWidgets
                 ImGui.SameLine();
                 ImGuiComponents.HelpMarker(help);
             }
+
             return false;
         }
 
@@ -225,6 +323,7 @@ internal static class CustomizationEditorWidgets
     public static bool DrawNullableEnum<T>(string label, ref T? value, T? fallback, string help = "") where T : struct, Enum
     {
         var enabled = value.HasValue;
+
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
             value = enabled ? fallback : null;
@@ -241,6 +340,7 @@ internal static class CustomizationEditorWidgets
                 ImGui.SameLine();
                 ImGuiComponents.HelpMarker(help);
             }
+
             return false;
         }
 
@@ -260,6 +360,7 @@ internal static class CustomizationEditorWidgets
     public static bool DrawNullableIntArray(string label, ref int[]? value, int[] fallback, string help = "")
     {
         var enabled = value != null;
+
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
             value = enabled ? (int[])fallback.Clone() : null;
@@ -276,6 +377,7 @@ internal static class CustomizationEditorWidgets
                 ImGui.SameLine();
                 ImGuiComponents.HelpMarker(help);
             }
+
             return false;
         }
 
@@ -308,6 +410,7 @@ internal static class CustomizationEditorWidgets
     public static bool DrawNullableFlags<T>(string label, ref T? value, T? fallback, string help = "") where T : struct, Enum
     {
         var enabled = value.HasValue;
+
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
             value = enabled ? fallback : null;
@@ -324,6 +427,7 @@ internal static class CustomizationEditorWidgets
                 ImGui.SameLine();
                 ImGuiComponents.HelpMarker(help);
             }
+
             return false;
         }
 
@@ -343,7 +447,7 @@ internal static class CustomizationEditorWidgets
     public static bool DrawEnumCombo<T>(string label, ref T value) where T : struct, Enum
     {
         var       changed = false;
-        using var combo   = ImRaii.Combo(label, value.ToString());
+        using var combo   = ImRaii.Combo(label, GetEnumDisplayName(value));
         if (!combo)
             return false;
 
@@ -351,7 +455,7 @@ internal static class CustomizationEditorWidgets
         {
             var isSelected = EqualityComparer<T>.Default.Equals(candidate, value);
 
-            if (ImGui.Selectable(candidate.ToString(), isSelected) && !isSelected)
+            if (ImGui.Selectable(GetEnumDisplayName(candidate), isSelected) && !isSelected)
             {
                 value   = candidate;
                 changed = true;
@@ -390,7 +494,7 @@ internal static class CustomizationEditorWidgets
 
     public static bool DrawFlags<T>(string label, ref T value) where T : struct, Enum
     {
-        using var combo = ImRaii.Combo(label, value.ToString());
+        using var combo = ImRaii.Combo(label, GetFlagsDisplayName(value));
         if (!combo)
             return false;
 
@@ -400,12 +504,12 @@ internal static class CustomizationEditorWidgets
         foreach (var candidate in Enum.GetValues<T>())
         {
             var raw = Convert.ToUInt64(candidate);
-            if (raw == 0 || (raw & raw - 1) != 0)
+            if (raw == 0 || (raw & (raw - 1)) != 0)
                 continue;
 
             var enabled = (current & raw) == raw;
 
-            if (ImGui.Checkbox(candidate.ToString(), ref enabled))
+            if (ImGui.Checkbox(GetEnumDisplayName(candidate), ref enabled))
             {
                 current = enabled ? current | raw : current & ~raw;
                 changed = true;

@@ -233,6 +233,18 @@ public unsafe class DebugDrawer : IDisposable
         _viewportTexts.Add((WorldToScreen(p), color, text));
     }
 
+    public bool TryWorldToScreen(Vector3 p, out Vector2 screen)
+    {
+        if (Vector4.Dot(new(p, 1), NearPlane) >= 0)
+        {
+            screen = default;
+            return false;
+        }
+
+        screen = WorldToScreen(p);
+        return true;
+    }
+
     // arrow with pointer at p coming from the direction of q
     public void DrawWorldArrowPoint(Vector3 p, Vector3 q, float l, uint color, int thickness = 1)
     {

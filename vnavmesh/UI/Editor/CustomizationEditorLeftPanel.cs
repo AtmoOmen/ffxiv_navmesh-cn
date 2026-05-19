@@ -338,7 +338,7 @@ internal static class CustomizationEditorLeftPanel
         {
             DrawDraftItems
             (
-                "mesh 删除",
+                "网格删除",
                 BuildMeshRemovalEntries(workspace, previewBuilder, collision),
                 SelectionKind.MeshRemoval,
                 ref selection,
@@ -382,7 +382,7 @@ internal static class CustomizationEditorLeftPanel
         {
             DrawDraftItems
             (
-                "mesh link",
+                "网格连接",
                 BuildMeshLinkEntries(workspace, collision),
                 SelectionKind.MeshLink,
                 ref selection,
@@ -391,7 +391,7 @@ internal static class CustomizationEditorLeftPanel
             );
             DrawDraftItems
             (
-                "off-mesh 连接",
+                "离网连接",
                 BuildOffMeshConnectionEntries(workspace, collision),
                 SelectionKind.OffMeshConnection,
                 ref selection,
@@ -417,14 +417,23 @@ internal static class CustomizationEditorLeftPanel
 
         foreach (var item in items)
         {
-            if (!item.IsInRange)
+            var pushedTextStyle = false;
+            if (!item.IsEnabled)
+            {
+                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.82f, 0.58f, 0.34f, 1f));
+                pushedTextStyle = true;
+            }
+            else if (!item.IsInRange)
+            {
                 ImGui.PushStyleColor(ImGuiCol.Text, ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]);
+                pushedTextStyle = true;
+            }
 
             var label = $"[{item.Index}] {item.Label}";
             if (ImGui.Selectable(label, selection.Kind == kind && selection.Index == item.Index))
                 selection = new(kind, item.Index);
 
-            if (!item.IsInRange)
+            if (pushedTextStyle)
                 ImGui.PopStyleColor();
 
             if (!focusConsumed && focusSelection is { Kind: var focusKind, Index: var focusIndex } && focusKind == kind && focusIndex == item.Index)
@@ -445,7 +454,7 @@ internal static class CustomizationEditorLeftPanel
         {
             var item = workspace.Draft.MeshRemovals[i];
             var info = DescribeMeshRemoval(previewBuilder, collision, item);
-            entries.Add(CreateDraftEntry(i, FormatMeshRemovalLabel(item), item.Note, info));
+            entries.Add(CreateDraftEntry(i, FormatMeshRemovalLabel(item), item.Note, item.Enabled, info));
         }
 
         SortDraftEntries(entries);
@@ -460,7 +469,7 @@ internal static class CustomizationEditorLeftPanel
         {
             var item = workspace.Draft.InstancePatches[i];
             var info = DescribeInstancePatch(previewBuilder, collision, item);
-            entries.Add(CreateDraftEntry(i, FormatInstancePatchLabel(item), item.Note, info));
+            entries.Add(CreateDraftEntry(i, FormatInstancePatchLabel(item), item.Note, item.Enabled, info));
         }
 
         SortDraftEntries(entries);
@@ -475,7 +484,7 @@ internal static class CustomizationEditorLeftPanel
         {
             var item = workspace.Draft.PartPatches[i];
             var info = DescribePartPatch(previewBuilder, collision, item);
-            entries.Add(CreateDraftEntry(i, $"{item.MeshKey} p{item.PartIndex} {item.Kind}", item.Note, info));
+            entries.Add(CreateDraftEntry(i, $"{item.MeshKey} 部件 {item.PartIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}", item.Note, item.Enabled, info));
         }
 
         SortDraftEntries(entries);
@@ -489,7 +498,7 @@ internal static class CustomizationEditorLeftPanel
         {
             var item  = workspace.Draft.ColliderInsertions[i];
             var info  = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Min, item.Max));
-            entries.Add(CreateDraftEntry(i, $"{item.Kind} {item.Min:f1} -> {item.Max:f1}", item.Note, info));
+            entries.Add(CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Min:f1} -> {item.Max:f1}", item.Note, item.Enabled, info));
         }
 
         SortDraftEntries(entries);
@@ -503,7 +512,7 @@ internal static class CustomizationEditorLeftPanel
         {
             var item = workspace.Draft.MeshLinks[i];
             var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Start, item.End));
-            entries.Add(CreateDraftEntry(i, $"{item.Kind} {item.Start:f1} -> {item.End:f1}", item.Note, info));
+            entries.Add(CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Start:f1} -> {item.End:f1}", item.Note, item.Enabled, info));
         }
 
         SortDraftEntries(entries);
@@ -517,7 +526,7 @@ internal static class CustomizationEditorLeftPanel
         {
             var item = workspace.Draft.OffMeshConnections[i];
             var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Start, item.End));
-            entries.Add(CreateDraftEntry(i, $"{item.Kind} {item.Start:f1} -> {item.End:f1}", item.Note, info));
+            entries.Add(CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Start:f1} -> {item.End:f1}", item.Note, item.Enabled, info));
         }
 
         SortDraftEntries(entries);
@@ -568,8 +577,8 @@ internal static class CustomizationEditorLeftPanel
             ? new(collision.GetHorizontalDistanceToBounds(bounds), collision.IsBoundsWithinEditorRenderDistance(bounds))
             : DraftDistanceInfo.Unknown;
 
-    private static DraftListEntry CreateDraftEntry(int index, string label, string note, DraftDistanceInfo info) =>
-        new(index, AppendNote(label, note), info.Distance, info.IsInRange);
+    private static DraftListEntry CreateDraftEntry(int index, string label, string note, bool enabled, DraftDistanceInfo info) =>
+        new(index, FormatDraftLabel(label, note, enabled, info.IsInRange), info.Distance, enabled, info.IsInRange);
 
     private static void SortDraftEntries(List<DraftListEntry> entries) =>
         entries.Sort
@@ -588,16 +597,18 @@ internal static class CustomizationEditorLeftPanel
             }
         );
 
-    private static string AppendNote(string label, string note) =>
-        string.IsNullOrWhiteSpace(note) ? label : $"{label} - {note.Trim()}";
+    private static string FormatDraftLabel(string fallbackLabel, string note, bool enabled, bool isInRange)
+    {
+        return string.IsNullOrWhiteSpace(note) ? fallbackLabel : note.Trim();
+    }
 
     private static string FormatMeshRemovalLabel(DraftSceneMeshRemoval item) =>
-        item.Enabled ? item.MeshKey : $"{item.MeshKey} (off)";
+        item.MeshKey;
 
     private static string FormatInstancePatchLabel(DraftSceneInstancePatch item) =>
         item.Kind == DraftSceneInstancePatchKind.ClearInstances
-            ? $"{item.MeshKey} {item.Kind}"
-            : $"{item.MeshKey} #{item.InstanceIndex} {item.Kind}";
+            ? $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}"
+            : $"{item.MeshKey} #{item.InstanceIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}";
 
     private static bool TryGetNearestInstanceBounds(SceneExtractor.Mesh mesh, DebugGameCollision collision, out AABB bounds)
     {
@@ -766,7 +777,7 @@ internal static class CustomizationEditorLeftPanel
         return tags.Count == 0 ? string.Empty : $" [{string.Join(", ", tags)}]";
     }
 
-    private readonly record struct DraftListEntry(int Index, string Label, float? Distance, bool IsInRange);
+    private readonly record struct DraftListEntry(int Index, string Label, float? Distance, bool IsEnabled, bool IsInRange);
 
     private readonly record struct DraftDistanceInfo(float? Distance, bool IsInRange)
     {

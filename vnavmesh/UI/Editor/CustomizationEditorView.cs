@@ -58,6 +58,7 @@ internal sealed class CustomizationEditorView
     private          bool                            lastPickMouseDown;
     private          bool                            lastPickEscapeDown;
     private          bool                            lastWorldSelectMouseDown;
+    private          CustomizationEditorWorldOverlay.DraftEditState draftEditState;
     private          string                          statusText    = string.Empty;
     private          string                          exportDirText = "";
     private          CustomizationDraftExportResult? lastExport;
@@ -199,6 +200,8 @@ internal sealed class CustomizationEditorView
                 ref selection,
                 ref pendingLeftPanelFocusSelection,
                 ref statusText,
+                ref draftEditState,
+                CommitDraftChange,
                 collision,
                 dd,
                 previewBuilder,
@@ -249,6 +252,7 @@ internal sealed class CustomizationEditorView
         lastPickMouseDown        = CustomizationEditorWorldOverlay.TakeKeyPress(0x01, ref lastPickMouseDown);
         lastWorldSelectMouseDown = lastPickMouseDown;
         lastPickEscapeDown       = CustomizationEditorWorldOverlay.TakeKeyPress(0x1B, ref lastPickEscapeDown);
+        draftEditState           = default;
         previewDirty             = true;
         statusText               = string.Empty;
     }
@@ -361,9 +365,8 @@ internal sealed class CustomizationEditorView
             Draft         = draft,
             Settings      = new()
             {
-                ExportDirectory     = Path.Combine(configDirectory.FullName, "customization-editor", "generated"),
-                AutoSave            = true,
-                RebuildDelaySeconds = 0.4f
+                ExportDirectory = Path.Combine(configDirectory.FullName, "customization-editor", "generated"),
+                AutoSave        = true
             }
         };
     }
@@ -407,6 +410,7 @@ internal sealed class CustomizationEditorView
             pickKind = PickKind.None;
             pendingPickPoint = null;
             currentPickPoint = null;
+            draftEditState = default;
             previewDirty = false;
             previewBuilder.Clear();
             SaveWorkspace(true);
@@ -444,6 +448,7 @@ internal sealed class CustomizationEditorView
         redo.Clear();
         selection     = new(SelectionKind.Workspace);
         pendingLeftPanelFocusSelection = null;
+        draftEditState = default;
         previewDirty  = true;
         previewBuilder.Clear();
     }
@@ -500,7 +505,7 @@ internal sealed class CustomizationEditorView
                      ? "状态: 就绪"
                      : $"状态: {statusText}"
         };
-        ImGui.TextUnformatted($"预览: {previewBuilder.CurrentState}  |  {statusSummary}");
+        ImGui.TextUnformatted($"预览: {CustomizationEditorWidgets.FormatPreviewStateDisplayName(previewBuilder.CurrentState)}  |  {statusSummary}");
     }
 
     private void RebuildSceneExtract(uint territoryID)
@@ -549,7 +554,7 @@ internal sealed class CustomizationEditorView
                 {
                     DraftMeshLinkKind.Points     => "已添加网格连线",
                     DraftMeshLinkKind.ClientPath => "已添加客户端路径连接",
-                    _                            => "已添加 mesh link"
+                    _                            => "已添加网格连接"
                 };
             }
         );
@@ -562,7 +567,7 @@ internal sealed class CustomizationEditorView
             {
                 workspace.Draft.OffMeshConnections.Add(new() { Start = a, End = b });
                 selection  = new(SelectionKind.OffMeshConnection, workspace.Draft.OffMeshConnections.Count - 1);
-                statusText = "已添加 off-mesh 连接";
+                statusText = "已添加离网连接";
             }
         );
     }
@@ -574,7 +579,7 @@ internal sealed class CustomizationEditorView
         if (existingIndex >= 0)
         {
             selection  = new(SelectionKind.MeshRemoval, existingIndex);
-            statusText = "已选现有 mesh 删除项";
+            statusText = "已选现有网格删除项";
             return;
         }
 
@@ -583,7 +588,7 @@ internal sealed class CustomizationEditorView
             {
                 workspace.Draft.MeshRemovals.Add(new() { MeshKey = key });
                 selection  = new(SelectionKind.MeshRemoval, workspace.Draft.MeshRemovals.Count - 1);
-                statusText = "已加入 mesh 删除清单";
+                statusText = "已加入网格删除清单";
             }
         );
     }
@@ -754,6 +759,7 @@ internal sealed class CustomizationEditorView
         historySnapshot  = workspace.Draft.Clone();
         selection        = new(SelectionKind.Workspace);
         pendingLeftPanelFocusSelection = null;
+        draftEditState   = default;
         previewDirty     = true;
         historySuspended = false;
         SaveWorkspace();
@@ -770,6 +776,7 @@ internal sealed class CustomizationEditorView
         historySnapshot  = workspace.Draft.Clone();
         selection        = new(SelectionKind.Workspace);
         pendingLeftPanelFocusSelection = null;
+        draftEditState   = default;
         previewDirty     = true;
         historySuspended = false;
         SaveWorkspace();

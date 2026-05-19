@@ -61,7 +61,6 @@ public sealed class CustomizationEditorSettings
 {
     public string ExportDirectory     = "";
     public bool   AutoSave            = true;
-    public float  RebuildDelaySeconds = 0.4f;
 }
 
 public struct DraftMatrix4x3

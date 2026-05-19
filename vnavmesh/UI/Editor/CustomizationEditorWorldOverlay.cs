@@ -20,6 +20,32 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     public delegate void AddOffMeshConnectionDelegate(Vector3 a, Vector3 b);
 
+    public struct DraftEditState
+    {
+        public DraftEditMode Mode;
+        public int           Index;
+        public Vector3       PlaneOrigin;
+        public Vector3       PlaneNormal;
+        public Vector3       DragStartPoint;
+        public Vector3       InitialA;
+        public Vector3       InitialB;
+    }
+
+    public enum DraftEditMode
+    {
+        None,
+        ColliderInsertionMin,
+        ColliderInsertionMax,
+        ColliderInsertionTranslate,
+        MeshLinkStart,
+        MeshLinkEnd,
+        MeshLinkTranslate,
+        OffMeshStart,
+        OffMeshEnd,
+        OffMeshTranslate,
+        InstanceTranslation
+    }
+
     private const int VK_LBUTTON = 0x01;
     private const int VK_ESCAPE  = 0x1B;
 
@@ -35,6 +61,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
         ref Selection                    selection,
         ref Selection?                   pendingLeftPanelFocusSelection,
         ref string                       statusText,
+        ref DraftEditState               draftEditState,
+        Action                           onDraftEdited,
         DebugGameCollision               collision,
         DebugDrawer                      dd,
         CustomizationPreviewBuilder      previewBuilder,
@@ -82,6 +110,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         DrawPreviewInstancesOverlay(selection, previewBuilder, dd);
         DrawInstancePatchOverlay(workspace, selection, previewBuilder, collision, dd);
+        HandleDraftEditing(ref workspace, ref selection, ref draftEditState, ref statusText, onDraftEdited, dd);
 
         if (pendingPickPoint is { } pending)
         {
@@ -304,7 +333,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         selection                      = bestSelection;
         pendingLeftPanelFocusSelection = selection;
-        statusText                     = $"已选碰撞插入: {workspace.Draft.ColliderInsertions[selection.Index].Kind}";
+        statusText                     = $"已选碰撞插入: {CustomizationEditorWidgets.FormatEnumDisplayName(workspace.Draft.ColliderInsertions[selection.Index].Kind)}";
         return true;
     }
 
@@ -333,6 +362,439 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         origin    = dd.Origin;
         direction = Vector3.Normalize(dir);
+        return true;
+    }
+
+    private static void HandleDraftEditing
+    (
+        ref CustomizationEditorWorkspace workspace,
+        ref Selection                    selection,
+        ref DraftEditState               draftEditState,
+        ref string                       statusText,
+        Action                           onDraftEdited,
+        DebugDrawer                      dd
+    )
+    {
+        if (!TryGetViewportCursorPosition(out var screenPos))
+        {
+            draftEditState = default;
+            return;
+        }
+
+        if (!TryGetWorldSelectionRay(dd, out var rayOrigin, out var rayDirection))
+        {
+            draftEditState = default;
+            return;
+        }
+
+        if (draftEditState.Mode != DraftEditMode.None)
+        {
+            UpdateDraftEditing(ref workspace, ref selection, ref draftEditState, ref statusText, onDraftEdited, rayOrigin, rayDirection);
+            return;
+        }
+
+        DrawDraftEditingHandles(ref workspace, selection, rayOrigin, rayDirection, screenPos, dd, ref draftEditState);
+    }
+
+    private static void DrawDraftEditingHandles
+    (
+        ref CustomizationEditorWorkspace workspace,
+        Selection                        selection,
+        Vector3                          rayOrigin,
+        Vector3                          rayDirection,
+        Vector2                          screenPos,
+        DebugDrawer                      dd,
+        ref DraftEditState               draftEditState
+    )
+    {
+        switch (selection.Kind)
+        {
+            case SelectionKind.ColliderInsertion:
+                if (selection.Index >= 0 && selection.Index < workspace.Draft.ColliderInsertions.Count)
+                {
+                    ref var item = ref CollectionsMarshal.AsSpan(workspace.Draft.ColliderInsertions)[selection.Index];
+                    if (!item.Enabled)
+                        return;
+
+                    DrawHandle
+                    (
+                        item.Min,
+                        8f,
+                        0xFF4DDBFF,
+                        rayOrigin,
+                        rayDirection,
+                        dd,
+                        screenPos,
+                        ref draftEditState,
+                        new()
+                        {
+                            Mode          = DraftEditMode.ColliderInsertionMin,
+                            Index         = selection.Index,
+                            PlaneOrigin   = item.Min,
+                            InitialA      = item.Min,
+                            InitialB      = item.Max
+                        },
+                        "拖拽最小角点"
+                    );
+                    DrawHandle
+                    (
+                        item.Max,
+                        8f,
+                        0xFFFFB84D,
+                        rayOrigin,
+                        rayDirection,
+                        dd,
+                        screenPos,
+                        ref draftEditState,
+                        new()
+                        {
+                            Mode          = DraftEditMode.ColliderInsertionMax,
+                            Index         = selection.Index,
+                            PlaneOrigin   = item.Max,
+                            InitialA      = item.Min,
+                            InitialB      = item.Max
+                        },
+                        "拖拽最大角点"
+                    );
+                    DrawTranslationHandle((item.Min + item.Max) * 0.5f, selection.Index, DraftEditMode.ColliderInsertionTranslate, rayOrigin, rayDirection, dd, screenPos, ref draftEditState, item.Min, item.Max);
+                }
+                break;
+            case SelectionKind.MeshLink:
+                if (selection.Index >= 0 && selection.Index < workspace.Draft.MeshLinks.Count)
+                {
+                    ref var item = ref CollectionsMarshal.AsSpan(workspace.Draft.MeshLinks)[selection.Index];
+                    if (!item.Enabled)
+                        return;
+
+                    DrawSegmentHandles
+                    (
+                        item.Start,
+                        item.End,
+                        selection.Index,
+                        DraftEditMode.MeshLinkStart,
+                        DraftEditMode.MeshLinkEnd,
+                        rayOrigin,
+                        rayDirection,
+                        dd,
+                        screenPos,
+                        ref draftEditState
+                    );
+                    DrawTranslationHandle((item.Start + item.End) * 0.5f, selection.Index, DraftEditMode.MeshLinkTranslate, rayOrigin, rayDirection, dd, screenPos, ref draftEditState, item.Start, item.End);
+                }
+                break;
+            case SelectionKind.OffMeshConnection:
+                if (selection.Index >= 0 && selection.Index < workspace.Draft.OffMeshConnections.Count)
+                {
+                    ref var item = ref CollectionsMarshal.AsSpan(workspace.Draft.OffMeshConnections)[selection.Index];
+                    if (!item.Enabled)
+                        return;
+
+                    DrawSegmentHandles
+                    (
+                        item.Start,
+                        item.End,
+                        selection.Index,
+                        DraftEditMode.OffMeshStart,
+                        DraftEditMode.OffMeshEnd,
+                        rayOrigin,
+                        rayDirection,
+                        dd,
+                        screenPos,
+                        ref draftEditState
+                    );
+                    DrawTranslationHandle((item.Start + item.End) * 0.5f, selection.Index, DraftEditMode.OffMeshTranslate, rayOrigin, rayDirection, dd, screenPos, ref draftEditState, item.Start, item.End);
+                }
+                break;
+            case SelectionKind.InstancePatch:
+                if (selection.Index >= 0 && selection.Index < workspace.Draft.InstancePatches.Count)
+                {
+                    ref var item = ref CollectionsMarshal.AsSpan(workspace.Draft.InstancePatches)[selection.Index];
+                    if (!item.Enabled || item.Kind != DraftSceneInstancePatchKind.Transform)
+                        return;
+
+                    DrawHandle
+                    (
+                        item.WorldTransform.Translation,
+                        9f,
+                        0xFFFFD94A,
+                        rayOrigin,
+                        rayDirection,
+                        dd,
+                        screenPos,
+                        ref draftEditState,
+                        new()
+                        {
+                            Mode        = DraftEditMode.InstanceTranslation,
+                            Index       = selection.Index,
+                            PlaneOrigin = item.WorldTransform.Translation,
+                            InitialA    = item.WorldTransform.Translation
+                        },
+                        "拖拽实例位置"
+                    );
+                }
+                break;
+        }
+    }
+
+    private static void DrawSegmentHandles
+    (
+        Vector3            start,
+        Vector3            end,
+        int                index,
+        DraftEditMode      startMode,
+        DraftEditMode      endMode,
+        Vector3            rayOrigin,
+        Vector3            rayDirection,
+        DebugDrawer        dd,
+        Vector2            screenPos,
+        ref DraftEditState draftEditState
+    )
+    {
+        DrawHandle
+        (
+            start,
+            7f,
+            0xFF4DDBFF,
+            rayOrigin,
+            rayDirection,
+            dd,
+            screenPos,
+            ref draftEditState,
+            new()
+            {
+                Mode        = startMode,
+                Index       = index,
+                InitialA    = start,
+                InitialB    = end
+            },
+            "拖拽起点"
+        );
+        DrawHandle
+        (
+            end,
+            7f,
+            0xFFFFB84D,
+            rayOrigin,
+            rayDirection,
+            dd,
+            screenPos,
+            ref draftEditState,
+            new()
+            {
+                Mode        = endMode,
+                Index       = index,
+                InitialA    = start,
+                InitialB    = end
+            },
+            "拖拽终点"
+        );
+    }
+
+    private static void DrawTranslationHandle
+    (
+        Vector3            center,
+        int                index,
+        DraftEditMode      mode,
+        Vector3            rayOrigin,
+        Vector3            rayDirection,
+        DebugDrawer        dd,
+        Vector2            screenPos,
+        ref DraftEditState draftEditState,
+        Vector3            start,
+        Vector3            end
+    )
+    {
+        DrawHandle
+        (
+            center,
+            9f,
+            0xFFFFD94A,
+            rayOrigin,
+            rayDirection,
+            dd,
+            screenPos,
+            ref draftEditState,
+            new()
+            {
+                Mode        = mode,
+                Index       = index,
+                InitialA    = start,
+                InitialB    = end,
+                PlaneOrigin = center
+            },
+            "拖拽整体位置"
+        );
+    }
+
+    private static void DrawHandle
+    (
+        Vector3            position,
+        float              radius,
+        uint               color,
+        Vector3            rayOrigin,
+        Vector3            rayDirection,
+        DebugDrawer        dd,
+        Vector2            screenPos,
+        ref DraftEditState draftEditState,
+        DraftEditState     nextState,
+        string             tooltip
+    )
+    {
+        dd.DrawWorldPointFilled(position, radius, color);
+        if (!TryGetScreenDistance(dd, position, screenPos, out var distance) || distance > 12f)
+            return;
+
+        dd.DrawWorldPoint(position, radius + 2f, 0xFFFFFFFF, 2);
+        if (!ImGui.IsMouseClicked(ImGuiMouseButton.Left) || !IsWorldClickAllowed())
+            return;
+
+        nextState.PlaneNormal = -Vector3.Normalize(dd.Origin - position);
+        nextState.PlaneOrigin = position;
+        if (!TryRayPlaneIntersection(rayOrigin, rayDirection, nextState.PlaneOrigin, nextState.PlaneNormal, out nextState.DragStartPoint))
+            nextState.DragStartPoint = position;
+        draftEditState = nextState;
+    }
+
+    private static void UpdateDraftEditing
+    (
+        ref CustomizationEditorWorkspace workspace,
+        ref Selection                    selection,
+        ref DraftEditState               draftEditState,
+        ref string                       statusText,
+        Action                           onDraftEdited,
+        Vector3                          rayOrigin,
+        Vector3                          rayDirection
+    )
+    {
+        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+        {
+            onDraftEdited();
+            statusText     = "已更新草稿可视化编辑结果";
+            draftEditState = default;
+            return;
+        }
+
+        if (!TryRayPlaneIntersection(rayOrigin, rayDirection, draftEditState.PlaneOrigin, draftEditState.PlaneNormal, out var hitPoint))
+            return;
+
+        var delta = hitPoint - draftEditState.DragStartPoint;
+
+        switch (draftEditState.Mode)
+        {
+            case DraftEditMode.ColliderInsertionMin:
+            case DraftEditMode.ColliderInsertionMax:
+            case DraftEditMode.ColliderInsertionTranslate:
+                if (draftEditState.Index < 0 || draftEditState.Index >= workspace.Draft.ColliderInsertions.Count)
+                    return;
+
+                ref var collider = ref CollectionsMarshal.AsSpan(workspace.Draft.ColliderInsertions)[draftEditState.Index];
+                switch (draftEditState.Mode)
+                {
+                    case DraftEditMode.ColliderInsertionMin:
+                        collider.Min = draftEditState.InitialA + delta;
+                        break;
+                    case DraftEditMode.ColliderInsertionMax:
+                        collider.Max = draftEditState.InitialB + delta;
+                        break;
+                    default:
+                        collider.Min = draftEditState.InitialA + delta;
+                        collider.Max = draftEditState.InitialB + delta;
+                        break;
+                }
+                NormalizeBounds(ref collider.Min, ref collider.Max);
+                selection = new(SelectionKind.ColliderInsertion, draftEditState.Index);
+                break;
+            case DraftEditMode.MeshLinkStart:
+            case DraftEditMode.MeshLinkEnd:
+            case DraftEditMode.MeshLinkTranslate:
+                if (draftEditState.Index < 0 || draftEditState.Index >= workspace.Draft.MeshLinks.Count)
+                    return;
+
+                ref var meshLink = ref CollectionsMarshal.AsSpan(workspace.Draft.MeshLinks)[draftEditState.Index];
+                switch (draftEditState.Mode)
+                {
+                    case DraftEditMode.MeshLinkStart:
+                        meshLink.Start = draftEditState.InitialA + delta;
+                        break;
+                    case DraftEditMode.MeshLinkEnd:
+                        meshLink.End = draftEditState.InitialB + delta;
+                        break;
+                    default:
+                        meshLink.Start = draftEditState.InitialA + delta;
+                        meshLink.End   = draftEditState.InitialB + delta;
+                        break;
+                }
+                selection = new(SelectionKind.MeshLink, draftEditState.Index);
+                break;
+            case DraftEditMode.OffMeshStart:
+            case DraftEditMode.OffMeshEnd:
+            case DraftEditMode.OffMeshTranslate:
+                if (draftEditState.Index < 0 || draftEditState.Index >= workspace.Draft.OffMeshConnections.Count)
+                    return;
+
+                ref var offMesh = ref CollectionsMarshal.AsSpan(workspace.Draft.OffMeshConnections)[draftEditState.Index];
+                switch (draftEditState.Mode)
+                {
+                    case DraftEditMode.OffMeshStart:
+                        offMesh.Start = draftEditState.InitialA + delta;
+                        break;
+                    case DraftEditMode.OffMeshEnd:
+                        offMesh.End = draftEditState.InitialB + delta;
+                        break;
+                    default:
+                        offMesh.Start = draftEditState.InitialA + delta;
+                        offMesh.End   = draftEditState.InitialB + delta;
+                        break;
+                }
+                selection = new(SelectionKind.OffMeshConnection, draftEditState.Index);
+                break;
+            case DraftEditMode.InstanceTranslation:
+                if (draftEditState.Index < 0 || draftEditState.Index >= workspace.Draft.InstancePatches.Count)
+                    return;
+
+                ref var patch = ref CollectionsMarshal.AsSpan(workspace.Draft.InstancePatches)[draftEditState.Index];
+                patch.WorldTransform.Translation = draftEditState.InitialA + delta;
+                selection = new(SelectionKind.InstancePatch, draftEditState.Index);
+                break;
+        }
+    }
+
+    private static bool TryGetScreenDistance(DebugDrawer dd, Vector3 worldPosition, Vector2 screenPos, out float distance)
+    {
+        if (!dd.TryWorldToScreen(worldPosition, out var handlePos))
+        {
+            distance = float.MaxValue;
+            return false;
+        }
+
+        distance = Vector2.Distance(handlePos, screenPos + ImGuiHelpers.MainViewport.Pos);
+        return true;
+    }
+
+    private static bool TryRayPlaneIntersection
+    (
+        Vector3 rayOrigin,
+        Vector3 rayDirection,
+        Vector3 planeOrigin,
+        Vector3 planeNormal,
+        out Vector3 intersection
+    )
+    {
+        var denom = Vector3.Dot(rayDirection, planeNormal);
+        if (MathF.Abs(denom) < 0.0001f)
+        {
+            intersection = default;
+            return false;
+        }
+
+        var distance = Vector3.Dot(planeOrigin - rayOrigin, planeNormal) / denom;
+        if (distance < 0)
+        {
+            intersection = default;
+            return false;
+        }
+
+        intersection = rayOrigin + (rayDirection * distance);
         return true;
     }
 

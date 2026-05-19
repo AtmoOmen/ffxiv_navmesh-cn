@@ -141,15 +141,15 @@ internal static class CustomizationEditorInspector
             SelectionKind.BuildProfile      => "构建参数覆盖",
             SelectionKind.BuildSettings     => "构建设置覆盖",
             SelectionKind.FlyingOverride    => "飞行支持",
-            SelectionKind.MeshRemoval       => $"mesh 删除 [{selection.Index}]",
+            SelectionKind.MeshRemoval       => $"网格删除 [{selection.Index}]",
             SelectionKind.InstancePatch     => $"实例补丁 [{selection.Index}]",
             SelectionKind.PartPatch         => $"顶点 / 三角补丁 [{selection.Index}]",
             SelectionKind.ColliderInsertion => $"碰撞插入 [{selection.Index}]",
-            SelectionKind.MeshLink          => $"mesh link [{selection.Index}]",
-            SelectionKind.OffMeshConnection => $"off-mesh 连接 [{selection.Index}]",
-            SelectionKind.PreviewMesh       => $"预览 mesh: {selection.Key}",
+            SelectionKind.MeshLink          => $"网格连接 [{selection.Index}]",
+            SelectionKind.OffMeshConnection => $"离网连接 [{selection.Index}]",
+            SelectionKind.PreviewMesh       => $"预览网格: {selection.Key}",
             SelectionKind.PreviewInstance   => $"预览实例: {selection.Key} #{selection.Index}",
-            SelectionKind.PreviewPart       => $"预览 part: {selection.Key} p{selection.Index}",
+            SelectionKind.PreviewPart       => $"预览部分: {selection.Key} p{selection.Index}",
             SelectionKind.PreviewVertex     => $"预览顶点: {selection.Key} p{selection.Index} v{selection.SubIndex}",
             SelectionKind.PreviewPrimitive  => $"预览三角: {selection.Key} p{selection.Index} t{selection.SubIndex}",
             SelectionKind.Diagnostics       => "诊断",
@@ -238,7 +238,6 @@ internal static class CustomizationEditorInspector
             onCommit();
 
         CustomizationEditorWidgets.DrawBool("自动保存", ref workspace.Settings.AutoSave);
-        CustomizationEditorWidgets.DrawFloat("重建延迟", ref workspace.Settings.RebuildDelaySeconds, 0.05f, 0.1f, 5f);
 
         if (ImGui.InputText("导出目录", ref exportDirText))
         {
@@ -466,7 +465,7 @@ internal static class CustomizationEditorInspector
             _     => 0
         };
 
-        if (CustomizationEditorWidgets.DrawEnumCombo("Flying Support", ref next, ["默认", "启用", "禁用"]))
+        if (CustomizationEditorWidgets.DrawEnumCombo("支持飞行", ref next, ["默认", "启用", "禁用"]))
         {
             workspace.Draft.FlyingSupportedOverride = next switch
             {
@@ -484,19 +483,21 @@ internal static class CustomizationEditorInspector
             return;
 
         var changed = false;
-        changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
-        changed |= CustomizationEditorWidgets.DrawString("Mesh Key", ref item.MeshKey);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
-
-        if (ImGui.Button("删除这一项"))
+        var enabledBefore = item.Enabled;
+        if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.MeshRemovals.RemoveAt(selection.Index);
             selection = new(SelectionKind.Workspace);
             onCommit();
             return;
         }
+        changed |= enabledBefore != item.Enabled;
 
-        if (changed) onCommit();
+        changed |= CustomizationEditorWidgets.DrawString("网格键", ref item.MeshKey);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+
+        if (changed) 
+            onCommit();
     }
 
     private static void DrawInstancePatchInspector(ref CustomizationEditorWorkspace workspace, ref Selection selection, CommitDelegate onCommit)
@@ -505,23 +506,24 @@ internal static class CustomizationEditorInspector
             return;
 
         var changed = false;
-        changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
-        changed |= CustomizationEditorWidgets.DrawString("Mesh Key", ref item.MeshKey);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
-        changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
-        changed |= CustomizationEditorWidgets.DrawInt("Instance Index", ref item.InstanceIndex);
-        changed |= CustomizationEditorWidgets.DrawUInt64("Instance ID", ref item.InstanceId);
-        changed |= CustomizationEditorWidgets.DrawMatrix("World Transform", ref item.WorldTransform);
-        changed |= CustomizationEditorWidgets.DrawFlags("Set Flags",   ref item.ForceSetPrimFlags);
-        changed |= CustomizationEditorWidgets.DrawFlags("Clear Flags", ref item.ForceClearPrimFlags);
-
-        if (ImGui.Button("删除这一项"))
+        var enabledBefore = item.Enabled;
+        if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.InstancePatches.RemoveAt(selection.Index);
             selection = new(SelectionKind.Workspace);
             onCommit();
             return;
         }
+        changed |= enabledBefore != item.Enabled;
+
+        changed |= CustomizationEditorWidgets.DrawString("网格键", ref item.MeshKey);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
+        changed |= CustomizationEditorWidgets.DrawInt("实例索引", ref item.InstanceIndex);
+        changed |= CustomizationEditorWidgets.DrawUInt64("实例编号", ref item.InstanceId);
+        changed |= CustomizationEditorWidgets.DrawMatrix("世界变换", ref item.WorldTransform);
+        changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
+        changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
 
         if (changed) onCommit();
     }
@@ -532,29 +534,30 @@ internal static class CustomizationEditorInspector
             return;
 
         var changed = false;
-        changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
-        changed |= CustomizationEditorWidgets.DrawString("Mesh Key", ref item.MeshKey);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
-        changed |= CustomizationEditorWidgets.DrawInt("Part Index", ref item.PartIndex);
-        changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
-        changed |= CustomizationEditorWidgets.DrawInt("Vertex Index",    ref item.VertexIndex);
-        changed |= CustomizationEditorWidgets.DrawInt("Primitive Index", ref item.PrimitiveIndex);
-        changed |= CustomizationEditorWidgets.DrawVector3("Position", ref item.Position);
-        changed |= CustomizationEditorWidgets.DrawInt("V1", ref item.V1);
-        changed |= CustomizationEditorWidgets.DrawInt("V2", ref item.V2);
-        changed |= CustomizationEditorWidgets.DrawInt("V3", ref item.V3);
-        changed |= CustomizationEditorWidgets.DrawUInt64("Material", ref item.Material);
-        changed |= CustomizationEditorWidgets.DrawFlags("Flags",       ref item.Flags);
-        changed |= CustomizationEditorWidgets.DrawFlags("Set Flags",   ref item.ForceSetPrimFlags);
-        changed |= CustomizationEditorWidgets.DrawFlags("Clear Flags", ref item.ForceClearPrimFlags);
-
-        if (ImGui.Button("删除这一项"))
+        var enabledBefore = item.Enabled;
+        if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.PartPatches.RemoveAt(selection.Index);
             selection = new(SelectionKind.Workspace);
             onCommit();
             return;
         }
+        changed |= enabledBefore != item.Enabled;
+
+        changed |= CustomizationEditorWidgets.DrawString("网格键", ref item.MeshKey);
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        changed |= CustomizationEditorWidgets.DrawInt("部件索引", ref item.PartIndex);
+        changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
+        changed |= CustomizationEditorWidgets.DrawInt("顶点索引", ref item.VertexIndex);
+        changed |= CustomizationEditorWidgets.DrawInt("三角索引", ref item.PrimitiveIndex);
+        changed |= CustomizationEditorWidgets.DrawVector3("位置", ref item.Position);
+        changed |= CustomizationEditorWidgets.DrawInt("顶点 1", ref item.V1);
+        changed |= CustomizationEditorWidgets.DrawInt("顶点 2", ref item.V2);
+        changed |= CustomizationEditorWidgets.DrawInt("顶点 3", ref item.V3);
+        changed |= CustomizationEditorWidgets.DrawUInt64("材质", ref item.Material);
+        changed |= CustomizationEditorWidgets.DrawFlags("标记", ref item.Flags);
+        changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
+        changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
 
         if (changed) onCommit();
     }
@@ -565,20 +568,21 @@ internal static class CustomizationEditorInspector
             return;
 
         var changed = false;
-        changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
-        changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
-        changed |= CustomizationEditorWidgets.DrawBoundsEditor("几何", ref item.Min, ref item.Max);
-        changed |= CustomizationEditorWidgets.DrawFlags("Set Flags",   ref item.ForceSetPrimFlags);
-        changed |= CustomizationEditorWidgets.DrawFlags("Clear Flags", ref item.ForceClearPrimFlags);
-
-        if (ImGui.Button("删除这一项"))
+        var enabledBefore = item.Enabled;
+        if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.ColliderInsertions.RemoveAt(selection.Index);
             selection = new(SelectionKind.Workspace);
             onCommit();
             return;
         }
+        changed |= enabledBefore != item.Enabled;
+
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
+        changed |= CustomizationEditorWidgets.DrawBoundsEditor("几何", ref item.Min, ref item.Max);
+        changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
+        changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
 
         if (changed) onCommit();
     }
@@ -589,20 +593,21 @@ internal static class CustomizationEditorInspector
             return;
 
         var changed = false;
-        changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
-        changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
-        changed |= CustomizationEditorWidgets.DrawVector3("Start", ref item.Start);
-        changed |= CustomizationEditorWidgets.DrawVector3("End",   ref item.End);
-        changed |= CustomizationEditorWidgets.DrawBool("Bidirectional", ref item.Bidirectional);
-
-        if (ImGui.Button("删除这一项"))
+        var enabledBefore = item.Enabled;
+        if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.MeshLinks.RemoveAt(selection.Index);
             selection = new(SelectionKind.Workspace);
             onCommit();
             return;
         }
+        changed |= enabledBefore != item.Enabled;
+
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
+        changed |= CustomizationEditorWidgets.DrawVector3("起点", ref item.Start);
+        changed |= CustomizationEditorWidgets.DrawVector3("终点", ref item.End);
+        changed |= CustomizationEditorWidgets.DrawBool("双向", ref item.Bidirectional);
 
         if (changed) onCommit();
     }
@@ -613,24 +618,25 @@ internal static class CustomizationEditorInspector
             return;
 
         var changed = false;
-        changed |= CustomizationEditorWidgets.DrawBool("Enabled", ref item.Enabled);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
-        changed |= CustomizationEditorWidgets.DrawVector3("Start", ref item.Start);
-        changed |= CustomizationEditorWidgets.DrawVector3("End",   ref item.End);
-        changed |= CustomizationEditorWidgets.DrawFloat("Radius", ref item.Radius, 0.05f, 0.01f, 10f);
-        changed |= CustomizationEditorWidgets.DrawBool("Bidirectional", ref item.Bidirectional);
-        changed |= CustomizationEditorWidgets.DrawInt("UserId", ref item.UserId);
-        changed |= CustomizationEditorWidgets.DrawEnumCombo("Area", ref item.Area);
-        changed |= CustomizationEditorWidgets.DrawFlags("Flags", ref item.Flags);
-        changed |= CustomizationEditorWidgets.DrawEnumCombo("Kind", ref item.Kind);
-
-        if (ImGui.Button("删除这一项"))
+        var enabledBefore = item.Enabled;
+        if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.OffMeshConnections.RemoveAt(selection.Index);
             selection = new(SelectionKind.Workspace);
             onCommit();
             return;
         }
+        changed |= enabledBefore != item.Enabled;
+
+        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        changed |= CustomizationEditorWidgets.DrawVector3("起点", ref item.Start);
+        changed |= CustomizationEditorWidgets.DrawVector3("终点", ref item.End);
+        changed |= CustomizationEditorWidgets.DrawFloat("半径", ref item.Radius, 0.05f, 0.01f, 10f);
+        changed |= CustomizationEditorWidgets.DrawBool("双向", ref item.Bidirectional);
+        changed |= CustomizationEditorWidgets.DrawInt("用户编号", ref item.UserId);
+        changed |= CustomizationEditorWidgets.DrawEnumCombo("区域", ref item.Area);
+        changed |= CustomizationEditorWidgets.DrawFlags("标记", ref item.Flags);
+        changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
 
         if (changed) onCommit();
     }
@@ -705,10 +711,10 @@ internal static class CustomizationEditorInspector
             return;
 
         ImGui.TextUnformatted(selection.Key);
-        ImGui.TextUnformatted($"{mesh.Parts.Count} parts, {mesh.Instances.Count} instances");
-        ImGui.TextUnformatted($"Bounds: {mesh.LocalBounds.Min:f3} - {mesh.LocalBounds.Max:f3}");
+        ImGui.TextUnformatted($"{mesh.Parts.Count} 个部件, {mesh.Instances.Count} 个实例");
+        ImGui.TextUnformatted($"边界: {mesh.LocalBounds.Min:f3} - {mesh.LocalBounds.Max:f3}");
 
-        if (ImGui.Button("加入 mesh 删除清单"))
+        if (ImGui.Button("加入网格删除清单"))
             onAddMeshRemoval(selection.Key);
     }
 
@@ -731,15 +737,15 @@ internal static class CustomizationEditorInspector
         var selKey   = selection.Key;
         var selIndex = selection.Index;
         var instance = mesh.Instances[selIndex];
-        ImGui.TextUnformatted($"Mesh: {selection.Key}");
-        ImGui.TextUnformatted($"Instance: {instance.Id:X}");
-        ImGui.TextUnformatted($"Bounds: {instance.WorldBounds.Min:f3} - {instance.WorldBounds.Max:f3}");
+        ImGui.TextUnformatted($"网格: {selection.Key}");
+        ImGui.TextUnformatted($"实例: {instance.Id:X}");
+        ImGui.TextUnformatted($"边界: {instance.WorldBounds.Min:f3} - {instance.WorldBounds.Max:f3}");
 
         var transformPatch = workspace.Draft.InstancePatches.FirstOrDefault
             (x => x.MeshKey == selKey && x.InstanceIndex == selIndex && x.Kind == DraftSceneInstancePatchKind.Transform);
         var transform = transformPatch?.WorldTransform ?? DraftMatrix4x3.FromRuntime(instance.WorldTransform);
 
-        if (CustomizationEditorWidgets.DrawMatrix("Transform", ref transform))
+        if (CustomizationEditorWidgets.DrawMatrix("变换", ref transform))
         {
             transformPatch ??= new()
             {
@@ -767,8 +773,8 @@ internal static class CustomizationEditorInspector
         var flagsChanged = false;
         var setFlags     = flagsPatch.ForceSetPrimFlags;
         var clearFlags   = flagsPatch.ForceClearPrimFlags;
-        flagsChanged |= CustomizationEditorWidgets.DrawFlags("Set Flags",   ref setFlags);
-        flagsChanged |= CustomizationEditorWidgets.DrawFlags("Clear Flags", ref clearFlags);
+        flagsChanged |= CustomizationEditorWidgets.DrawFlags("设置标记", ref setFlags);
+        flagsChanged |= CustomizationEditorWidgets.DrawFlags("清除标记", ref clearFlags);
 
         if (flagsChanged)
         {
@@ -782,13 +788,13 @@ internal static class CustomizationEditorInspector
         if (ImGui.Button("加入实例变换补丁"))
             onAddInstancePatch(mesh, selection.Key, selection.Index, DraftSceneInstancePatchKind.Transform);
         ImGui.SameLine();
-        if (ImGui.Button("加入实例 flags 补丁"))
+        if (ImGui.Button("加入实例标记补丁"))
             onAddInstancePatch(mesh, selection.Key, selection.Index, DraftSceneInstancePatchKind.SetFlags);
         ImGui.SameLine();
         if (ImGui.Button("移除这个实例"))
             onAddInstancePatch(mesh, selection.Key, selection.Index, DraftSceneInstancePatchKind.RemoveInstance);
         ImGui.SameLine();
-        if (ImGui.Button("清空这个 mesh 的全部实例"))
+        if (ImGui.Button("清空这个网格的全部实例"))
             onAddInstancePatch(mesh, selection.Key, selection.Index, DraftSceneInstancePatchKind.ClearInstances);
     }
 
@@ -814,19 +820,19 @@ internal static class CustomizationEditorInspector
         var part                   = mesh.Parts[selIndex];
         var selectedVertexIndex    = selection.Kind == SelectionKind.PreviewVertex ? selection.SubIndex : -1;
         var selectedPrimitiveIndex = selection.Kind == SelectionKind.PreviewPrimitive ? selection.SubIndex : -1;
-        ImGui.TextUnformatted($"Mesh: {selection.Key}");
-        ImGui.TextUnformatted($"Part: {selection.Index}");
-        ImGui.TextUnformatted($"{part.Vertices.Count} vertices, {part.Primitives.Count} primitives");
-        ImGui.TextUnformatted($"Bounds: {part.LocalBounds.Min:f3} - {part.LocalBounds.Max:f3}");
+        ImGui.TextUnformatted($"网格: {selection.Key}");
+        ImGui.TextUnformatted($"部件: {selection.Index}");
+        ImGui.TextUnformatted($"{part.Vertices.Count} 个顶点, {part.Primitives.Count} 个三角");
+        ImGui.TextUnformatted($"边界: {part.LocalBounds.Min:f3} - {part.LocalBounds.Max:f3}");
 
         if (selectedVertexIndex >= 0 && selectedVertexIndex < part.Vertices.Count)
         {
             var vertexPatch = workspace.Draft.PartPatches.FirstOrDefault
                 (x => PartPatchMatches(x, selKey, selIndex, DraftScenePartPatchKind.Vertex, selectedVertexIndex));
             var position = vertexPatch?.Position ?? part.Vertices[selectedVertexIndex];
-            ImGui.TextUnformatted($"Selected vertex: {selectedVertexIndex}");
+            ImGui.TextUnformatted($"选中顶点: {selectedVertexIndex}");
 
-            if (CustomizationEditorWidgets.DrawVector3("Position", ref position))
+            if (CustomizationEditorWidgets.DrawVector3("位置", ref position))
             {
                 vertexPatch ??= new()
                 {
@@ -854,8 +860,8 @@ internal static class CustomizationEditorInspector
             var flagsPatch = workspace.Draft.PartPatches.FirstOrDefault
                 (x => PartPatchMatches(x, selKey, selIndex, DraftScenePartPatchKind.PrimitiveFlags, selectedPrimitiveIndex));
             var primitiveFlags = flagsPatch?.Flags ?? primitive.Flags;
-            ImGui.TextUnformatted($"Selected primitive: {selectedPrimitiveIndex} {primitive.V1}x{primitive.V2}x{primitive.V3}");
-            var flagsChanged = CustomizationEditorWidgets.DrawFlags("Flags", ref primitiveFlags);
+            ImGui.TextUnformatted($"选中三角: {selectedPrimitiveIndex} {primitive.V1}x{primitive.V2}x{primitive.V3}");
+            var flagsChanged = CustomizationEditorWidgets.DrawFlags("标记", ref primitiveFlags);
 
             if (flagsChanged)
             {
@@ -880,11 +886,11 @@ internal static class CustomizationEditorInspector
             var editFlags   = editPatch?.Flags    ?? primitive.Flags;
             var material    = editPatch?.Material ?? primitive.Material;
             var editChanged = false;
-            editChanged |= CustomizationEditorWidgets.DrawInt("V1", ref v1);
-            editChanged |= CustomizationEditorWidgets.DrawInt("V2", ref v2);
-            editChanged |= CustomizationEditorWidgets.DrawInt("V3", ref v3);
-            editChanged |= CustomizationEditorWidgets.DrawFlags("Edit Flags", ref editFlags);
-            editChanged |= CustomizationEditorWidgets.DrawUInt64("Material", ref material);
+            editChanged |= CustomizationEditorWidgets.DrawInt("顶点 1", ref v1);
+            editChanged |= CustomizationEditorWidgets.DrawInt("顶点 2", ref v2);
+            editChanged |= CustomizationEditorWidgets.DrawInt("顶点 3", ref v3);
+            editChanged |= CustomizationEditorWidgets.DrawFlags("编辑标记", ref editFlags);
+            editChanged |= CustomizationEditorWidgets.DrawUInt64("材质", ref material);
 
             if (editChanged)
             {
@@ -905,7 +911,7 @@ internal static class CustomizationEditorInspector
                 onCommit();
             }
 
-            if (ImGui.Button("删除三角 flags 补丁"))
+            if (ImGui.Button("删除三角标记补丁"))
                 onRemoveMatchingPartPatch(selection.Key, selection.Index, DraftScenePartPatchKind.PrimitiveFlags, selectedPrimitiveIndex);
             ImGui.SameLine();
             if (ImGui.Button("删除三角高级编辑补丁"))
@@ -913,7 +919,7 @@ internal static class CustomizationEditorInspector
         }
         else
         {
-            if (ImGui.Button("加入三角 flags 补丁"))
+            if (ImGui.Button("加入三角标记补丁"))
                 onAddPartPatch(mesh, selection.Key, selection.Index, DraftScenePartPatchKind.PrimitiveFlags);
             ImGui.SameLine();
             if (ImGui.Button("加入三角高级编辑补丁"))
@@ -939,5 +945,12 @@ internal static class CustomizationEditorInspector
 
         item = items[index];
         return true;
+    }
+
+    private static bool DrawEnabledWithDelete(ref bool enabled)
+    {
+        CustomizationEditorWidgets.DrawBool("启用", ref enabled);
+        ImGui.SameLine();
+        return ImGui.Button("删除");
     }
 }
