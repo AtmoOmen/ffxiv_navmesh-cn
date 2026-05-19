@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.CN.NET.Sdk/15.0.0">
     <PropertyGroup>
-        <Version>0.5.9.0</Version>
+        <Version>0.6.0.0</Version>
         <PackageProjectUrl>https://github.com/AtmoOmen/ffxiv_navmesh</PackageProjectUrl>
         <ImplicitUsings>enable</ImplicitUsings>
         <DebugType>none</DebugType>
