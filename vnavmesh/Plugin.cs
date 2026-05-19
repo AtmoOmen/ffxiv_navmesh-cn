@@ -2,6 +2,10 @@ using System.Reflection;
 using Dalamud.Plugin;
 using Microsoft.Extensions.DependencyInjection;
 using vnavmesh.Internal;
+using vnavmesh.Movement;
+using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation.Scene;
+using vnavmesh.UI.Windows;
 
 namespace vnavmesh;
 
@@ -30,7 +34,7 @@ public sealed class Plugin : IDalamudPlugin
                                   ValidateScopes  = true
                               }
                           );
-        serviceProvider.GetRequiredService<PluginRuntime>();
+        serviceProvider.ActivatePluginServices();
         
         return;
 
@@ -52,5 +56,38 @@ public sealed class Plugin : IDalamudPlugin
     {
         Service.ChatGui.Print($"[{Service.PluginInterface.Manifest.Name}] {message}");
         Service.Log.Error(ex, message);
+    }
+}
+
+public static class DICollectionExtensions
+{
+    public static IServiceCollection AddPluginServices(this IServiceCollection services)
+    {
+        var pluginFile      = new FileInfo(Service.PluginInterface.AssemblyLocation.FullName);
+        var pluginDirectory = pluginFile.Directory ?? throw new InvalidOperationException("无法定位插件目录");
+        services.AddSingleton(new PluginPaths(pluginDirectory, Service.PluginInterface.ConfigDirectory));
+        services.AddSingleton(Service.PluginInterface.GetPluginConfig() as PluginConfig ?? new());
+
+        services.AddSingleton(sp => new NavmeshManager(sp.GetRequiredService<PluginPaths>(), sp.GetRequiredService<PluginConfig>()));
+        services.AddSingleton<MovementPlanExecutor>();
+        services.AddSingleton<AsyncMoveRequest>();
+        services.AddSingleton<SceneTransitionPathCleaner>();
+        services.AddSingleton<PluginDTR>();
+        services.AddSingleton<MainWindow>();
+        services.AddSingleton<PluginWindows>();
+        services.AddSingleton<PluginCommands>();
+        services.AddSingleton<PluginIPC>();
+        services.AddSingleton<PluginRuntime>();
+
+        return services;
+    }
+
+    public static void ActivatePluginServices(this IServiceProvider serviceProvider)
+    {
+        serviceProvider.GetRequiredService<PluginRuntime>();
+        serviceProvider.GetRequiredService<SceneTransitionPathCleaner>();
+        serviceProvider.GetRequiredService<PluginWindows>();
+        serviceProvider.GetRequiredService<PluginCommands>();
+        serviceProvider.GetRequiredService<PluginIPC>();
     }
 }
