@@ -43,7 +43,7 @@ public unsafe partial class DebugGameCollision
         return MathF.Sqrt(dx * dx + dz * dz);
     }
 
-    public void VisualizeCollider(Collider* coll, BitMask filterId, BitMask filterMask)
+    public void VisualizeCollider(Collider* coll, BitMask filterId, BitMask filterMask, bool drawLine = true)
     {
         if (coll == null)
             return;
@@ -104,6 +104,9 @@ public unsafe partial class DebugGameCollision
             }
                 break;
         }
+
+        if (!drawLine)
+            return;
 
         Vector3 trans;
         coll->GetTranslation(&trans);

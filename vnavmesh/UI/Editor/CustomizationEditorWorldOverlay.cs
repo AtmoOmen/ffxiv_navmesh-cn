@@ -150,7 +150,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         currentPickPoint = hit.Point;
         dd.DrawWorldPointFilled(hit.Point, 5, 0xFFFFFF00);
-        collision.VisualizeCollider(hit.Object, default, default);
+        collision.VisualizeCollider(hit.Object, default, default, false);
 
         if (!clicked)
             return;
@@ -221,7 +221,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         {
             currentPickPoint = hit.Point;
             dd.DrawWorldPointFilled(hit.Point, 5, 0xFFFFFF00);
-            collision.VisualizeCollider(hit.Object, default, default);
+            collision.VisualizeCollider(hit.Object, default, default, false);
         }
 
         if (!clicked)

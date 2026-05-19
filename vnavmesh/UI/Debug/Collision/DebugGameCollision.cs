@@ -152,7 +152,7 @@ public unsafe partial class DebugGameCollision : IDisposable
             foreach (var coll in s->Colliders)
             {
                 if (FilterCollider(coll))
-                    VisualizeCollider(coll, _materialId, _materialMask);
+                    VisualizeCollider(coll, _materialId, _materialMask, false);
             }
         }
 
@@ -205,7 +205,7 @@ public unsafe partial class DebugGameCollision : IDisposable
                 {
                     // TODO: visualize cell bounds?
                     foreach (var coll in node.Colliders)
-                        VisualizeCollider(coll, _materialId, _materialMask);
+                        VisualizeCollider(coll, _materialId, _materialMask, false);
                 }
             }
         }
@@ -312,7 +312,7 @@ public unsafe partial class DebugGameCollision : IDisposable
         }
 
         if (n.SelectedOrHovered)
-            VisualizeCollider(coll, _materialId, _materialMask);
+            VisualizeCollider(coll, _materialId, _materialMask, false);
         if (!n.Opened)
             return;
 
@@ -345,7 +345,7 @@ public unsafe partial class DebugGameCollision : IDisposable
                         using var mn = _tree.Node
                             ($"Mesh {i}: file=tr{entry->MeshId:d4}.pcb, bounds={AABBStr(entry->Bounds)} == {(nint)elem->Mesh:X}###mesh_{i}", elem->Mesh == null);
                         if (mn.SelectedOrHovered && elem->Mesh != null)
-                            VisualizeCollider(&elem->Mesh->Collider, _materialId, _materialMask);
+                            VisualizeCollider(&elem->Mesh->Collider, _materialId, _materialMask, false);
                         if (mn.Opened)
                             DrawColliderMesh(elem->Mesh);
                     }
