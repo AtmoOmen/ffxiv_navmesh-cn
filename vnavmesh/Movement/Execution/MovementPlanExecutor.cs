@@ -7,64 +7,64 @@ using vnavmesh.Common.Models;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Internal;
 using vnavmesh.Movement.Drivers;
+using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Interop;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Planning;
-using vnavmesh.Shared.Models;
 
-namespace vnavmesh.Movement.Execution;
+namespace vnavmesh.Movement;
 
 public sealed class MovementPlanExecutor : IDisposable
 {
-    public bool                                    MovementAllowed = true;
-    public float                                   Tolerance => _nextToleranceOverride ?? (IsRunning ? _activeDestinationTolerance : _config.PathTolerance);
-    public bool                                    IsRunning => _activePlan != null;
-    public List<Vector3>                           Waypoints => CollectWaypoints();
+    public bool          MovementAllowed = true;
+    public float         Tolerance => nextToleranceOverride ?? (IsRunning ? activeDestinationTolerance : config.PathTolerance);
+    public bool          IsRunning => activePlan != null;
+    public List<Vector3> Waypoints => CollectWaypoints();
+
     internal event Action<MovementFailureContext>? OnMovementFailure;
 
-    private readonly PluginConfig                    _config;
-    private readonly NavmeshManager            _manager;
-    private readonly CameraAlignmentController _camera        = new();
-    private readonly MovementInputController   _movement      = new();
-    private readonly MovementUnstuckController _unstuck;
-    private readonly GroundTraverseDriver      _groundDriver  = new();
-    private readonly FlightTraverseDriver      _flightDriver  = new();
-    private readonly TakeoffDriver             _takeoffDriver = new();
-    private readonly bool[]                    _sharedPathIsRunning;
+    private const string SHARED_PATH_TAG        = "vnav.PathIsRunning";
+    private const float  TAKEOFF_RESUME_DELTA_Y = 0.1f;
 
-    private const string SharedPathTag             = "vnav.PathIsRunning";
-    private const float  TakeoffResumeDeltaY       = 0.1f;
+    private readonly PluginConfig              config;
+    private readonly NavmeshManager            manager;
+    private readonly CameraAlignmentController camera   = new();
+    private readonly MovementInputController   movement = new();
+    private readonly MovementUnstuckController unstuck;
+    private readonly TraverseDriver            traverseDriver = new();
+    private readonly TakeoffDriver             takeoffDriver  = new();
+    private readonly bool[]                    sharedPathIsRunning;
 
-    private MovementPlan?           _activePlan;
-    private int                     _activeSegmentIndex;
-    private int[]                   _segmentWaypointIndices = [];
-    private IMovementSegmentDriver? _activeDriver;
-    private DateTime                _nextJump;
-    private Vector3?                _previousPosition;
-    private float                   _activeDestinationTolerance = 0.05f;
-    private float?                  _nextToleranceOverride;
+    private MovementPlan?           activePlan;
+    private int                     activeSegmentIndex;
+    private int[]                   segmentWaypointIndices = [];
+    private IMovementSegmentDriver? activeDriver;
+    private DateTime                nextJump;
+    private Vector3?                previousPosition;
+    private float                   activeDestinationTolerance = 0.05f;
+    private float?                  nextToleranceOverride;
 
     public MovementPlanExecutor(PluginConfig config, NavmeshManager manager)
     {
-        _config                   =  config;
-        _manager                  =  manager;
-        _unstuck                  =  new(config, manager);
-        _sharedPathIsRunning      =  Service.PluginInterface.GetOrCreateData<bool[]>(SharedPathTag, () => [false]);
-        _activeDestinationTolerance = _config.PathTolerance;
-        _manager.OnNavmeshChanged += OnNavmeshChanged;
-        OnNavmeshChanged(_manager.Navmesh, _manager.Query);
+        this.config                   =  config;
+        this.manager                  =  manager;
+        unstuck                       =  new(config, manager);
+        sharedPathIsRunning           =  Service.PluginInterface.GetOrCreateData<bool[]>(SHARED_PATH_TAG, () => [false]);
+        activeDestinationTolerance    =  this.config.PathTolerance;
+        this.manager.OnNavmeshChanged += OnNavmeshChanged;
+        OnNavmeshChanged(this.manager.Navmesh, this.manager.Query);
     }
 
     public void Dispose()
     {
         ResetControllers();
         UpdateSharedState(false);
-        Service.PluginInterface.RelinquishData(SharedPathTag);
-        _manager.OnNavmeshChanged -= OnNavmeshChanged;
-        _camera.Dispose();
-        _movement.Dispose();
+        Service.PluginInterface.RelinquishData(SHARED_PATH_TAG);
+        manager.OnNavmeshChanged -= OnNavmeshChanged;
+        camera.Dispose();
+        movement.Dispose();
     }
 
     public void Update(IFramework framework)
@@ -74,61 +74,62 @@ public sealed class MovementPlanExecutor : IDisposable
             return;
 
         var frameCurrentPosition  = player.Position;
-        var framePreviousPosition = _previousPosition ?? frameCurrentPosition;
+        var framePreviousPosition = previousPosition ?? frameCurrentPosition;
 
-        if (_activePlan == null)
+        if (activePlan == null)
         {
-            _previousPosition = frameCurrentPosition;
-            _unstuck.Reset();
+            previousPosition = frameCurrentPosition;
+            unstuck.Reset();
             ResetControllers();
             return;
         }
 
-        var pathSuspended = _unstuck.SuspendsPathExecution;
+        var pathSuspended = unstuck.SuspendsPathExecution;
         SyncActiveDriver(player, framePreviousPosition);
         if (!pathSuspended)
             AdvanceCompletedSegments(player, framePreviousPosition);
 
-        if (_activePlan == null)
+        if (activePlan == null)
         {
-            _previousPosition = frameCurrentPosition;
-            _unstuck.Reset();
+            previousPosition = frameCurrentPosition;
+            unstuck.Reset();
             ResetControllers();
             return;
         }
 
         SyncActiveDriver(player, framePreviousPosition);
 
-        if (_config.CancelMoveOnUserInput && _movement.UserInput)
+        if (config.CancelMoveOnUserInput && movement.UserInput)
         {
             Stop();
-            _previousPosition = frameCurrentPosition;
+            previousPosition = frameCurrentPosition;
             return;
         }
 
         var context       = BuildContext(player, framePreviousPosition);
-        var unstuckUpdate = _unstuck.Update(context, SuspendsUnstuck());
+        var unstuckUpdate = unstuck.Update(context, SuspendsUnstuck());
+
         if (unstuckUpdate.RequestRepath)
         {
             Fail(MovementFailureReason.RepathRequiredAfterUnstuck);
-            _previousPosition = frameCurrentPosition;
+            previousPosition = frameCurrentPosition;
             return;
         }
 
-        if (unstuckUpdate.SuspendPathExecution || _unstuck.SuspendsPathExecution)
+        if (unstuckUpdate.SuspendPathExecution || unstuck.SuspendsPathExecution)
         {
             GameplayActivityBridge.ResetAFKTime();
             if (unstuckUpdate.OverrideCommand is { } overrideCommand)
                 ApplyFrameCommand(overrideCommand, frameCurrentPosition);
-            _previousPosition = frameCurrentPosition;
+            previousPosition = frameCurrentPosition;
             return;
         }
 
         GameplayActivityBridge.ResetAFKTime();
-        var update = _activeDriver!.Update(context);
+        var update = activeDriver!.Update(context);
 
         if (update.ActiveWaypointIndex is { } nextWaypointIndex)
-            _segmentWaypointIndices[_activeSegmentIndex] = Math.Clamp(nextWaypointIndex, 0, _activePlan!.Segments[_activeSegmentIndex].Waypoints.Count);
+            segmentWaypointIndices[activeSegmentIndex] = Math.Clamp(nextWaypointIndex, 0, activePlan!.Segments[activeSegmentIndex].Waypoints.Count);
 
         if (update.Failure is { } failure)
         {
@@ -138,7 +139,7 @@ public sealed class MovementPlanExecutor : IDisposable
         }
 
         ApplyFrameCommand(unstuckUpdate.OverrideCommand ?? update.Command, frameCurrentPosition);
-        _previousPosition = frameCurrentPosition;
+        previousPosition = frameCurrentPosition;
     }
 
     internal void Execute(MovementPlan plan)
@@ -147,14 +148,14 @@ public sealed class MovementPlanExecutor : IDisposable
         if (plan.Segments.Count == 0)
             return;
 
-        _activePlan                            = plan;
-        _activeSegmentIndex                    = 0;
-        _segmentWaypointIndices                = new int[plan.Segments.Count];
-        _activeDestinationTolerance            = plan.DestinationTolerance;
-        _previousPosition                      = Service.ObjectTable.LocalPlayer?.Position;
-        _unstuck.Reset();
+        activePlan                 = plan;
+        activeSegmentIndex         = 0;
+        segmentWaypointIndices     = new int[plan.Segments.Count];
+        activeDestinationTolerance = plan.DestinationTolerance;
+        previousPosition           = Service.ObjectTable.LocalPlayer?.Position;
+        unstuck.Reset();
         UpdateSharedState(true);
-        EnterCurrentSegment(_previousPosition);
+        EnterCurrentSegment(previousPosition);
     }
 
     public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0, Vector3? goalPosition = null, float? tolerance = null)
@@ -165,13 +166,13 @@ public sealed class MovementPlanExecutor : IDisposable
             return;
         }
 
-        var requestedMode     = ignoreDeltaY ? MovementMode.Ground : MovementMode.Flight;
+        var requestedMode                = ignoreDeltaY ? MovementMode.Ground : MovementMode.Flight;
         var resolvedGoal                 = goalPosition ?? waypoints[^1];
         var resolvedDestinationTolerance = destTolerance > 0 ? destTolerance : tolerance ?? ConsumeNextTolerance();
         var segments                     = new List<MovementSegment>();
         var normalizedWaypoints = requestedMode == MovementMode.Flight && !IsAirborne
-            ? FlightWaypointNormalizer.NormalizeForTakeoff(waypoints, Service.ObjectTable.LocalPlayer?.Position ?? waypoints[0])
-            : waypoints.ToList();
+                                      ? FlightWaypointNormalizer.NormalizeForTakeoff(waypoints, Service.ObjectTable.LocalPlayer?.Position ?? waypoints[0])
+                                      : waypoints.ToList();
 
         Service.Log.Debug("收到执行器原始路径输入：该入口会绕过算路层与后处理层");
 
@@ -179,8 +180,12 @@ public sealed class MovementPlanExecutor : IDisposable
         {
             segments.Add
             (
-                new TakeoffSegment
+                new()
                 {
+                    Kind                = MovementSegmentKind.Takeoff,
+                    MovementMode        = MovementMode.Flight,
+                    GeometryOwnership   = PathGeometryOwnership.None,
+                    ReachabilitySource  = PathReachabilitySource.Volume,
                     CompletionTolerance = 0
                 }
             );
@@ -189,16 +194,20 @@ public sealed class MovementPlanExecutor : IDisposable
         segments.Add
         (
             requestedMode == MovementMode.Flight
-                ? new FlightTraverseSegment
+                ? new MovementSegment
                 {
+                    Kind                = MovementSegmentKind.FlightTraverse,
+                    MovementMode        = MovementMode.Flight,
                     CompletionTolerance = 0,
                     StartPosition       = Service.ObjectTable.LocalPlayer?.Position ?? normalizedWaypoints[0],
                     GeometryOwnership   = PathGeometryOwnership.ExternalInput,
                     ReachabilitySource  = PathReachabilitySource.ExternalInput,
                     Waypoints           = normalizedWaypoints
                 }
-                : new GroundTraverseSegment
+                : new MovementSegment
                 {
+                    Kind                = MovementSegmentKind.GroundTraverse,
+                    MovementMode        = MovementMode.Ground,
                     CompletionTolerance = 0,
                     StartPosition       = Service.ObjectTable.LocalPlayer?.Position ?? normalizedWaypoints[0],
                     GeometryOwnership   = PathGeometryOwnership.ExternalInput,
@@ -222,38 +231,38 @@ public sealed class MovementPlanExecutor : IDisposable
 
     public void Stop()
     {
-        ExitCurrentSegment(_previousPosition);
-        _activePlan                            = null;
-        _activeSegmentIndex                    = 0;
-        _segmentWaypointIndices                = [];
-        _activeDestinationTolerance            = _config.PathTolerance;
-        _unstuck.Reset();
+        ExitCurrentSegment(previousPosition);
+        activePlan                 = null;
+        activeSegmentIndex         = 0;
+        segmentWaypointIndices     = [];
+        activeDestinationTolerance = config.PathTolerance;
+        unstuck.Reset();
         UpdateSharedState(false);
         ResetControllers();
     }
 
     public float ConsumeNextTolerance()
     {
-        var tolerance = _nextToleranceOverride ?? _config.PathTolerance;
-        _nextToleranceOverride = null;
+        var tolerance = nextToleranceOverride ?? config.PathTolerance;
+        nextToleranceOverride = null;
         return tolerance;
     }
 
     public void SetNextTolerance(float tolerance) =>
-        _nextToleranceOverride = MathF.Max(0, tolerance);
+        nextToleranceOverride = MathF.Max(0, tolerance);
 
     private void AdvanceCompletedSegments(IPlayerCharacter player, Vector3? previousPosition)
     {
-        while (_activePlan != null)
+        while (activePlan != null)
         {
             var context = BuildContext(player, previousPosition);
-            if (!_activeDriver!.ShouldAdvance(context))
+            if (!activeDriver!.ShouldAdvance(context))
                 return;
 
             ExitCurrentSegment(previousPosition);
-            _activeSegmentIndex++;
+            activeSegmentIndex++;
 
-            if (_activeSegmentIndex >= _activePlan.Segments.Count)
+            if (activeSegmentIndex >= activePlan.Segments.Count)
             {
                 Stop();
                 return;
@@ -265,32 +274,32 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private void EnterCurrentSegment(Vector3? previousPosition)
     {
-        if (_activePlan == null)
+        if (activePlan == null)
             return;
 
-        var context  = BuildContextForCurrentSegment(previousPosition);
-        _activeDriver = ResolveDriver(context);
-        _unstuck.Reset();
-        _activeDriver.Enter(context);
+        var context = BuildContextForCurrentSegment(previousPosition);
+        activeDriver = ResolveDriver(context);
+        unstuck.Reset();
+        activeDriver.Enter(context);
         ConsumeInitialWaypoints(previousPosition);
     }
 
     private void ExitCurrentSegment(Vector3? previousPosition)
     {
-        if (_activePlan == null || _activeDriver == null || _activeSegmentIndex >= _activePlan.Segments.Count)
+        if (activePlan == null || activeDriver == null || activeSegmentIndex >= activePlan.Segments.Count)
             return;
 
-        _activeDriver.Exit(BuildContextForCurrentSegment(previousPosition));
-        _activeDriver = null;
+        activeDriver.Exit(BuildContextForCurrentSegment(previousPosition));
+        activeDriver = null;
     }
 
     private void SyncActiveDriver(IPlayerCharacter player, Vector3? previousPosition)
     {
-        if (_activePlan == null || _activeSegmentIndex >= _activePlan.Segments.Count)
+        if (activePlan == null || activeSegmentIndex >= activePlan.Segments.Count)
             return;
 
         var desiredDriver = ResolveDriver(BuildContext(player, previousPosition));
-        if (ReferenceEquals(_activeDriver, desiredDriver))
+        if (ReferenceEquals(activeDriver, desiredDriver))
             return;
 
         SwitchDriver(desiredDriver, previousPosition);
@@ -298,28 +307,28 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private void SwitchDriver(IMovementSegmentDriver driver, Vector3? previousPosition)
     {
-        if (_activePlan == null)
+        if (activePlan == null)
             return;
 
-        if (_activeDriver != null)
-            _activeDriver.Exit(BuildContextForCurrentSegment(previousPosition));
+        if (activeDriver != null)
+            activeDriver.Exit(BuildContextForCurrentSegment(previousPosition));
 
-        _activeDriver = driver;
-        _unstuck.Reset();
-        _activeDriver.Enter(BuildContextForCurrentSegment(previousPosition));
+        activeDriver = driver;
+        unstuck.Reset();
+        activeDriver.Enter(BuildContextForCurrentSegment(previousPosition));
     }
 
     private MovementExecutionContext BuildContext(IPlayerCharacter player, Vector3? previousPosition) =>
         new()
         {
-            Config                 = _config,
+            Config                 = config,
             Player                 = player,
-            Query                  = _manager.Query,
-            Plan                   = _activePlan!,
-            SegmentIndex           = _activeSegmentIndex,
-            Segment                = _activePlan!.Segments[_activeSegmentIndex],
-            ActiveWaypointIndex    = _segmentWaypointIndices[_activeSegmentIndex],
-            SegmentWaypointIndices = _segmentWaypointIndices,
+            Query                  = manager.Query,
+            Plan                   = activePlan!,
+            SegmentIndex           = activeSegmentIndex,
+            Segment                = activePlan!.Segments[activeSegmentIndex],
+            ActiveWaypointIndex    = segmentWaypointIndices[activeSegmentIndex],
+            SegmentWaypointIndices = segmentWaypointIndices,
             MovementAllowed        = MovementAllowed,
             PreviousPosition       = previousPosition
         };
@@ -329,14 +338,14 @@ public sealed class MovementPlanExecutor : IDisposable
         var player = Service.ObjectTable.LocalPlayer ?? throw new InvalidOperationException("本地玩家不存在，无法构建移动上下文");
         return new()
         {
-            Config                 = _config,
+            Config                 = config,
             Player                 = player,
-            Query                  = _manager.Query,
-            Plan                   = _activePlan!,
-            SegmentIndex           = _activeSegmentIndex,
-            Segment                = _activePlan!.Segments[_activeSegmentIndex],
-            ActiveWaypointIndex    = _segmentWaypointIndices[_activeSegmentIndex],
-            SegmentWaypointIndices = _segmentWaypointIndices,
+            Query                  = manager.Query,
+            Plan                   = activePlan!,
+            SegmentIndex           = activeSegmentIndex,
+            Segment                = activePlan!.Segments[activeSegmentIndex],
+            ActiveWaypointIndex    = segmentWaypointIndices[activeSegmentIndex],
+            SegmentWaypointIndices = segmentWaypointIndices,
             MovementAllowed        = MovementAllowed,
             PreviousPosition       = previousPosition
         };
@@ -344,83 +353,73 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private void ConsumeInitialWaypoints(Vector3? previousPosition)
     {
-        if (_activePlan == null || _activeSegmentIndex >= _activePlan.Segments.Count)
+        if (activePlan == null || activeSegmentIndex >= activePlan.Segments.Count)
             return;
 
         var context = BuildContextForCurrentSegment(previousPosition);
         var nextWaypointIndex = context.Segment.Kind switch
         {
-            MovementSegmentKind.GroundTraverse => DriverMath.ConsumeGroundWaypoints(context),
-            MovementSegmentKind.FlightTraverse => DriverMath.ConsumeFlightWaypoints(context),
+            MovementSegmentKind.GroundTraverse => WaypointProgression.ConsumeGroundWaypoints(context),
+            MovementSegmentKind.FlightTraverse => WaypointProgression.ConsumeFlightWaypoints(context),
             _                                  => -1
         };
 
         if (nextWaypointIndex >= 0)
-            _segmentWaypointIndices[_activeSegmentIndex] = Math.Clamp(nextWaypointIndex, 0, context.WaypointCount);
+            segmentWaypointIndices[activeSegmentIndex] = Math.Clamp(nextWaypointIndex, 0, context.WaypointCount);
     }
 
     private IMovementSegmentDriver ResolveDriver(MovementExecutionContext context)
     {
-        if (context.Segment.Kind == MovementSegmentKind.FlightTraverse
-            && !IsAirborne
-            && context.TryGetFirstElevatedRemainingWaypoint(TakeoffResumeDeltaY, out _))
-            return _takeoffDriver;
+        if (context.Segment.Kind == MovementSegmentKind.FlightTraverse && !IsAirborne && context.TryGetFirstElevatedRemainingWaypoint(TAKEOFF_RESUME_DELTA_Y, out _))
+            return takeoffDriver;
 
-        return ResolveDriver(context.Segment.Kind);
+        return context.Segment.Kind == MovementSegmentKind.Takeoff ? takeoffDriver : traverseDriver;
     }
-
-    private IMovementSegmentDriver ResolveDriver(MovementSegmentKind kind) => kind switch
-    {
-        MovementSegmentKind.GroundTraverse => _groundDriver,
-        MovementSegmentKind.Takeoff        => _takeoffDriver,
-        MovementSegmentKind.FlightTraverse => _flightDriver,
-        _                                  => throw new ArgumentOutOfRangeException(nameof(kind), kind, "未知移动阶段")
-    };
 
     private void ApplyFrameCommand(MovementFrameCommand command, Vector3 currentPosition)
     {
-        _movement.Enabled              = command.MovementEnabled || command.EnableFacingAlign;
-        _movement.AllowVerticalControl = command.AllowVerticalControl;
-        _movement.DesiredPosition      = command.DesiredPosition;
-        _movement.EnableFacingAlign    = command.EnableFacingAlign;
-        _movement.DesiredFacing        = command.DesiredFacing;
+        movement.Enabled              = command.MovementEnabled || command.EnableFacingAlign;
+        movement.AllowVerticalControl = command.AllowVerticalControl;
+        movement.DesiredPosition      = command.DesiredPosition;
+        movement.EnableFacingAlign    = command.EnableFacingAlign;
+        movement.DesiredFacing        = command.DesiredFacing;
 
-        _camera.Enabled         = command.EnableCameraAlign;
-        _camera.SpeedH          = _camera.SpeedV = 360.Degrees();
-        _camera.DesiredAzimuth  = command.DesiredAzimuth;
-        _camera.DesiredAltitude = command.DesiredAltitude;
+        camera.Enabled         = command.EnableCameraAlign;
+        camera.SpeedH          = camera.SpeedV = 360.Degrees();
+        camera.DesiredAzimuth  = command.DesiredAzimuth;
+        camera.DesiredAltitude = command.DesiredAltitude;
 
         if (command.RequestJump)
             ExecuteJump();
 
         if (!command.MovementEnabled)
-            _movement.DesiredPosition = currentPosition;
+            movement.DesiredPosition = currentPosition;
     }
 
     private void ResetControllers()
     {
-        _movement.Enabled           = false;
-        _movement.EnableFacingAlign = false;
-        _movement.DesiredFacing     = default;
-        _camera.Enabled             = false;
-        _camera.SpeedH              = _camera.SpeedV = default;
+        movement.Enabled           = false;
+        movement.EnableFacingAlign = false;
+        movement.DesiredFacing     = default;
+        camera.Enabled             = false;
+        camera.SpeedH              = camera.SpeedV = default;
         if (Service.ObjectTable.LocalPlayer is { } player)
-            _movement.DesiredPosition = player.Position;
+            movement.DesiredPosition = player.Position;
     }
 
     private void Fail(MovementFailureReason reason)
     {
-        if (_activePlan == null)
+        if (activePlan == null)
             return;
 
         var activeWaypoint = ResolveActiveWaypoint();
         var context = new MovementFailureContext
         (
             reason,
-            _activePlan.RequestedMode,
-            _activePlan.Segments[_activeSegmentIndex].Kind,
-            _activePlan.RequestedDestination,
-            _activePlan.DestinationTolerance,
+            activePlan.RequestedMode,
+            activePlan.Segments[activeSegmentIndex].Kind,
+            activePlan.RequestedDestination,
+            activePlan.DestinationTolerance,
             activeWaypoint
         );
         Stop();
@@ -429,31 +428,31 @@ public sealed class MovementPlanExecutor : IDisposable
 
     private Vector3 ResolveActiveWaypoint()
     {
-        if (_activePlan == null)
+        if (activePlan == null)
             return default;
 
-        for (var i = _activeSegmentIndex; i < _activePlan.Segments.Count; i++)
+        for (var i = activeSegmentIndex; i < activePlan.Segments.Count; i++)
         {
-            var segment       = _activePlan.Segments[i];
-            var waypointIndex = _segmentWaypointIndices[i];
+            var segment       = activePlan.Segments[i];
+            var waypointIndex = segmentWaypointIndices[i];
             if (waypointIndex < segment.Waypoints.Count)
                 return segment.Waypoints[waypointIndex];
         }
 
-        return _activePlan.FinalDestination;
+        return activePlan.FinalDestination;
     }
 
     private List<Vector3> CollectWaypoints()
     {
-        if (_activePlan == null)
+        if (activePlan == null)
             return [];
 
         List<Vector3> result = [];
 
-        for (var i = _activeSegmentIndex; i < _activePlan.Segments.Count; i++)
+        for (var i = activeSegmentIndex; i < activePlan.Segments.Count; i++)
         {
-            var segment = _activePlan.Segments[i];
-            var start   = _segmentWaypointIndices[i];
+            var segment = activePlan.Segments[i];
+            var start   = segmentWaypointIndices[i];
             for (var waypointIndex = start; waypointIndex < segment.Waypoints.Count; waypointIndex++)
                 result.Add(segment.Waypoints[waypointIndex]);
         }
@@ -466,20 +465,20 @@ public sealed class MovementPlanExecutor : IDisposable
         if (Service.Condition[ConditionFlag.Diving])
             return;
 
-        if (DateTime.Now >= _nextJump)
+        if (DateTime.Now >= nextJump)
         {
             ActionManager.Instance()->UseAction(ActionType.GeneralAction, 2);
-            _nextJump = DateTime.Now.AddMilliseconds(100);
+            nextJump = DateTime.Now.AddMilliseconds(100);
         }
     }
 
     private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query) =>
         Stop();
 
-    private void UpdateSharedState(bool isRunning) => _sharedPathIsRunning[0] = isRunning;
+    private void UpdateSharedState(bool isRunning) => sharedPathIsRunning[0] = isRunning;
 
     private bool SuspendsUnstuck() =>
-        ReferenceEquals(_activeDriver, _takeoffDriver) || _activePlan == null || _activeSegmentIndex >= _activePlan.Segments.Count;
+        ReferenceEquals(activeDriver, takeoffDriver) || activePlan == null || activeSegmentIndex >= activePlan.Segments.Count;
 
     private static bool IsAirborne => Service.Condition[ConditionFlag.InFlight] || Service.Condition[ConditionFlag.Diving];
 }

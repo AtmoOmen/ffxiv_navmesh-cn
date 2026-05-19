@@ -1,11 +1,11 @@
 using System.Numerics;
 using vnavmesh.Common.Models;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Shared.Models;
+using vnavmesh.Movement.Planning;
 
 namespace vnavmesh.Movement.Drivers;
 
-internal sealed class GroundTraverseDriver : IMovementSegmentDriver
+internal sealed class TraverseDriver : IMovementSegmentDriver
 {
     public void Enter(MovementExecutionContext context)
     {
@@ -13,12 +13,12 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
 
     public SegmentDriverUpdate Update(MovementExecutionContext context)
     {
-        var nextWaypointIndex = DriverMath.ConsumeGroundWaypoints(context);
+        var nextWaypointIndex = ConsumeWaypoints(context);
         if (nextWaypointIndex >= context.WaypointCount)
             return new(CreateIdleCommand(context.Player.Position), nextWaypointIndex);
 
         var desired = context.Segment.Waypoints[nextWaypointIndex];
-        return new(BuildCommand(context, desired, false, false), nextWaypointIndex);
+        return new(BuildCommand(context, desired), nextWaypointIndex);
     }
 
     public bool ShouldAdvance(MovementExecutionContext context) => context.ActiveWaypointIndex >= context.WaypointCount;
@@ -27,23 +27,25 @@ internal sealed class GroundTraverseDriver : IMovementSegmentDriver
     {
     }
 
-    private static MovementFrameCommand BuildCommand(MovementExecutionContext context, Vector3 desired, bool allowVerticalControl, bool requestJump)
+    private static int ConsumeWaypoints(MovementExecutionContext context) => context.Segment.Kind switch
     {
-        var delta = new Vector3
-        (
-            desired.X - context.Player.Position.X,
-            desired.Y - context.Player.Position.Y,
-            desired.Z - context.Player.Position.Z
-        );
+        MovementSegmentKind.GroundTraverse => WaypointProgression.ConsumeGroundWaypoints(context),
+        MovementSegmentKind.FlightTraverse => WaypointProgression.ConsumeFlightWaypoints(context),
+        _                                  => -1
+    };
+
+    private static MovementFrameCommand BuildCommand(MovementExecutionContext context, Vector3 desired)
+    {
+        var delta = desired - context.Player.Position;
         return new
         (
             desired,
             context.MovementAllowed,
-            allowVerticalControl,
+            context.Segment.Kind == MovementSegmentKind.FlightTraverse,
             context.Config.AlignCameraToMovement,
             Angle.FromDirectionXZ(delta) + 180.Degrees(),
             context.Config.AlignCameraHeight.Degrees(),
-            requestJump,
+            false,
             false,
             default
         );

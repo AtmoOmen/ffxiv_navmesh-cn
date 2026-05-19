@@ -779,7 +779,7 @@ internal sealed class PathPostprocessor
 
         return Math.Clamp
         (
-            DriverMath.ConsumeGroundWaypoints
+            WaypointProgression.ConsumeGroundWaypoints
             (
                 segment.TraversalStartPosition,
                 segment.TraversalStartPosition,

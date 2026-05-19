@@ -3,15 +3,14 @@ using vnavmesh.Navigation.Planning;
 
 namespace vnavmesh.Movement.Planning;
 
-internal abstract class MovementSegment
+internal sealed class MovementSegment
 {
-    public abstract MovementSegmentKind    Kind                 { get; }
-    public abstract bool                   AllowVerticalControl { get; }
-    public          MovementMode           MovementMode         { get; protected init; }
-    public          Vector3                StartPosition        { get; init; }
-    public          PathGeometryOwnership  GeometryOwnership    { get; init; }
-    public          PathReachabilitySource ReachabilitySource   { get; init; }
-    public          float                  CompletionTolerance  { get; init; }
-    public          IReadOnlyList<Vector3> Waypoints            { get; init; } = [];
-    public          GroundCorridorPayload? GroundCorridor       { get; init; }
+    public required MovementSegmentKind    Kind                { get; init; }
+    public required MovementMode           MovementMode        { get; init; }
+    public          Vector3                StartPosition       { get; init; }
+    public          PathGeometryOwnership  GeometryOwnership   { get; init; }
+    public          PathReachabilitySource ReachabilitySource  { get; init; }
+    public          float                  CompletionTolerance { get; init; }
+    public          IReadOnlyList<Vector3> Waypoints           { get; init; } = [];
+    public          GroundCorridorPayload? GroundCorridor      { get; init; }
 }

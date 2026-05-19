@@ -5,7 +5,6 @@ using Dalamud.Hooking;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using vnavmesh.Common.Models;
-using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Interop;
 
@@ -107,7 +106,7 @@ public unsafe class MovementInputController : IDisposable
         var movementAllowed = bAdditiveUnk == 0 && rmiWalkIsInputEnabled1(self) && rmiWalkIsInputEnabled2(self);
         UserInput = *sumLeft != 0 || *sumForward != 0;
 
-        if (movementAllowed && (IgnoreUserInput || *sumLeft == 0 && *sumForward == 0) && DirectionToDestination(false) is { } relDir)
+        if (movementAllowed && (IgnoreUserInput || (*sumLeft == 0 && *sumForward == 0)) && DirectionToDestination(false) is { } relDir)
         {
             var dir = relDir.h.ToDirection();
             *sumLeft    = dir.X;
@@ -123,7 +122,7 @@ public unsafe class MovementInputController : IDisposable
         rmiFlyHook.Original(self, result);
         UserInput = result->Forward != 0 || result->Left != 0 || result->Up != 0;
 
-        if ((IgnoreUserInput || result->Forward == 0 && result->Left == 0 && result->Up == 0) && DirectionToDestination(AllowVerticalControl) is { } relDir)
+        if ((IgnoreUserInput || (result->Forward == 0 && result->Left == 0 && result->Up == 0)) && DirectionToDestination(AllowVerticalControl) is { } relDir)
         {
             var dir = relDir.h.ToDirection();
             result->Forward = dir.Y;

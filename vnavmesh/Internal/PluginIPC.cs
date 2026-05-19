@@ -1,7 +1,7 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Movement.Requests;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 

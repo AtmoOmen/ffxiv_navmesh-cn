@@ -1,8 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using Dalamud.Game.Command;
-using vnavmesh.Movement.Execution;
-using vnavmesh.Movement.Requests;
+using vnavmesh.Movement;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Scene;
 
@@ -14,7 +13,7 @@ internal sealed class PluginCommands : IDisposable
     private readonly NavmeshManager       navmeshManager;
     private readonly MovementPlanExecutor movementExecutor;
     private readonly AsyncMoveRequest     asyncMove;
-    private readonly PluginWindows       windowProvider;
+    private readonly PluginWindows        windowProvider;
     private readonly CommandInfo          commandInfo;
 
     public PluginCommands
@@ -23,7 +22,7 @@ internal sealed class PluginCommands : IDisposable
         NavmeshManager       navmeshManager,
         MovementPlanExecutor movementExecutor,
         AsyncMoveRequest     asyncMove,
-        PluginWindows       windowProvider
+        PluginWindows        windowProvider
     )
     {
         this.config           = config;

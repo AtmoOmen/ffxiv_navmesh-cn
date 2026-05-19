@@ -1,7 +1,6 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using vnavmesh.Common.Models;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
@@ -9,22 +8,20 @@ using vnavmesh.Internal;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Mesh.Query;
 using vnavmesh.Navigation.Mesh.Runtime;
-using vnavmesh.Navigation.Volume;
-using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Execution;
 
 internal sealed class MovementUnstuckController
 (
-    PluginConfig         config,
+    PluginConfig   config,
     NavmeshManager manager
 )
 {
-    private const double CHECK_EXPIRATION             = 1.0;
-    private const double UNSTUCK_DURATION_SECONDS     = 1.0;
-    private const float  MIN_MOVEMENT_DISTANCE        = 2.0f;
-    private const float  MIN_RECOVERY_TARGET_DISTANCE = 25f;
-    private const float  MAX_RECOVERY_TARGET_DISTANCE = 35f;
+    private const double CHECK_EXPIRATION               = 1.0;
+    private const double UNSTUCK_DURATION_SECONDS       = 1.0;
+    private const float  MIN_MOVEMENT_DISTANCE          = 2.0f;
+    private const float  MIN_RECOVERY_TARGET_DISTANCE   = 25f;
+    private const float  MAX_RECOVERY_TARGET_DISTANCE   = 35f;
     private const int    RANDOM_TARGET_RESOLVE_ATTEMPTS = 12;
 
     private DateTime lastMovementTime    = DateTime.MinValue;
@@ -44,9 +41,9 @@ internal sealed class MovementUnstuckController
         unstuckStartTime    = DateTime.MinValue;
         lastCheckTime       = DateTime.MinValue;
         lastJumpAttemptTime = DateTime.MinValue;
-        lastPosition    = default;
-        recoveryTarget  = default;
-        IsRunning        = false;
+        lastPosition        = default;
+        recoveryTarget      = default;
+        IsRunning           = false;
     }
 
     public UnstuckUpdate Update(MovementExecutionContext context, bool suspended)
@@ -74,14 +71,14 @@ internal sealed class MovementUnstuckController
 
         if (now.Subtract(lastCheck).TotalSeconds > CHECK_EXPIRATION)
         {
-            lastPosition = context.Player.Position;
+            lastPosition     = context.Player.Position;
             lastMovementTime = now;
             return default;
         }
 
         if (MeasureDistance(lastPosition, context.Player.Position, IsGroundSegment(context)) >= MIN_MOVEMENT_DISTANCE)
         {
-            lastPosition = context.Player.Position;
+            lastPosition     = context.Player.Position;
             lastMovementTime = now;
             return default;
         }
@@ -98,7 +95,7 @@ internal sealed class MovementUnstuckController
         {
             lastMovementTime    = now;
             lastJumpAttemptTime = now;
-            lastPosition    = context.Player.Position;
+            lastPosition        = context.Player.Position;
             Service.Log.Information("[自动防卡] 优先尝试跳跃脱困");
             return new(BuildRecoveryCommand(context, ResolvePathGoal(context), false, true));
         }
@@ -107,11 +104,11 @@ internal sealed class MovementUnstuckController
         {
             Service.Log.Warning("[自动防卡] 未找到可用的随机脱困目标点，本次跳过位移脱困");
             lastMovementTime = now;
-            lastPosition = context.Player.Position;
+            lastPosition     = context.Player.Position;
             return default;
         }
 
-        IsRunning     = true;
+        IsRunning        = true;
         unstuckStartTime = now;
         Service.Log.Information($"[自动防卡] 开始随机位移脱困：目标点 = {recoveryTarget:f3}");
         return new(BuildRecoveryCommand(context, recoveryTarget, IsFlightSegment(context), false), true);
@@ -149,15 +146,15 @@ internal sealed class MovementUnstuckController
     private void StopRunning()
     {
         IsRunning     = false;
-        lastCheckTime    = DateTime.MinValue;
-        lastPosition = default;
+        lastCheckTime = DateTime.MinValue;
+        lastPosition  = default;
     }
 
     private void ResetTracking()
     {
         lastCheckTime    = DateTime.MinValue;
         lastMovementTime = DateTime.MinValue;
-        lastPosition = default;
+        lastPosition     = default;
     }
 
     internal static bool TryResolveRecoveryTarget(NavmeshQuery query, Vector3 origin, bool fly, out Vector3 target)
@@ -181,7 +178,7 @@ internal sealed class MovementUnstuckController
     {
         var radius = RandomDistance();
         var target = query.FindRandomPointOnMeshAroundCircle(origin, radius, false);
-        return target is { } resolved && IsValidRecoveryTarget(origin, resolved, flatten: true) ? resolved : null;
+        return target is { } resolved && IsValidRecoveryTarget(origin, resolved, true) ? resolved : null;
     }
 
     private static Vector3? ResolveRandomFlightTarget(NavmeshQuery query, Vector3 origin)
@@ -191,7 +188,7 @@ internal sealed class MovementUnstuckController
             return null;
 
         var radius         = RandomDistance();
-        var verticalOffset = Random.Shared.NextSingle() * 16f - 8f;
+        var verticalOffset = (Random.Shared.NextSingle() * 16f) - 8f;
         var angle          = Random.Shared.NextSingle() * MathF.Tau;
         var sample         = origin + new Vector3(MathF.Cos(angle) * radius, verticalOffset, MathF.Sin(angle) * radius);
         var voxel          = query.FindNearestVolumeVoxel(sample, 4f, 4f);
@@ -199,18 +196,18 @@ internal sealed class MovementUnstuckController
             return null;
 
         var target = VoxelSearch.FindClosestVoxelPoint(volume, voxel, sample);
-        return IsValidRecoveryTarget(origin, target, flatten: false) ? target : null;
+        return IsValidRecoveryTarget(origin, target, false) ? target : null;
     }
 
     private static float RandomDistance() =>
-        Random.Shared.NextSingle() * (MAX_RECOVERY_TARGET_DISTANCE - MIN_RECOVERY_TARGET_DISTANCE) + MIN_RECOVERY_TARGET_DISTANCE;
+        (Random.Shared.NextSingle() * (MAX_RECOVERY_TARGET_DISTANCE - MIN_RECOVERY_TARGET_DISTANCE)) + MIN_RECOVERY_TARGET_DISTANCE;
 
     private static bool IsValidRecoveryTarget(Vector3 origin, Vector3 target, bool flatten)
     {
         var delta = target - origin;
         return flatten
-            ? new Vector2(delta.X, delta.Z).Length() >= MIN_RECOVERY_TARGET_DISTANCE
-            : delta.Length() >= MIN_RECOVERY_TARGET_DISTANCE;
+                   ? new Vector2(delta.X, delta.Z).Length() >= MIN_RECOVERY_TARGET_DISTANCE
+                   : delta.Length()                         >= MIN_RECOVERY_TARGET_DISTANCE;
     }
 
     private static Vector3 ResolvePathGoal(MovementExecutionContext context) =>

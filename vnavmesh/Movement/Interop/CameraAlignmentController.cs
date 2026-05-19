@@ -3,7 +3,6 @@ using Dalamud.Hooking;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using vnavmesh.Common.Models;
-using vnavmesh.Shared.Models;
 
 namespace vnavmesh.Movement.Interop;
 
@@ -100,7 +99,7 @@ public unsafe class CameraAlignmentController : IDisposable
             var maxH   = SpeedH.Rad * dt;
             var maxV   = SpeedV.Rad * dt;
 
-            if (!EnableSmoothing || SmoothTimeH <= 0 && SmoothTimeV <= 0)
+            if (!EnableSmoothing || (SmoothTimeH <= 0 && SmoothTimeV <= 0))
             {
                 self->InputDeltaH = Math.Clamp(deltaH.Rad, -maxH, maxH);
                 self->InputDeltaV = Math.Clamp(deltaV.Rad, -maxV, maxV);
@@ -125,21 +124,21 @@ public unsafe class CameraAlignmentController : IDisposable
         smoothTime = Math.Max(0.0001f, smoothTime);
         var omega      = 2f    / smoothTime;
         var x          = omega * deltaTime;
-        var exp        = 1f    / (1f + x + 0.48f * x * x + 0.235f * x * x * x);
+        var exp        = 1f    / (1f + x + (0.48f * x * x) + (0.235f * x * x * x));
         var change     = current - target;
         var originalTo = target;
         var maxChange  = maxSpeed * smoothTime;
         change = Math.Clamp(change, -maxChange, maxChange);
         target = current - change;
 
-        var temp = (currentVelocity + omega * change) * deltaTime;
-        currentVelocity = (currentVelocity - omega           * temp) * exp;
-        var output = target                + (change + temp) * exp;
+        var temp = (currentVelocity + (omega * change)) * deltaTime;
+        currentVelocity = (currentVelocity - (omega           * temp)) * exp;
+        var output = target                + ((change + temp) * exp);
 
         var origMinusCurrent = originalTo - current;
         var outMinusOrig     = output     - originalTo;
 
-        if (origMinusCurrent > 0 == outMinusOrig > 0)
+        if ((origMinusCurrent > 0) == (outMinusOrig > 0))
         {
             output          = originalTo;
             currentVelocity = (output - originalTo) / deltaTime;

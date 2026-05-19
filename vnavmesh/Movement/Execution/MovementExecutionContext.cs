@@ -8,7 +8,7 @@ namespace vnavmesh.Movement.Execution;
 
 internal sealed class MovementExecutionContext
 {
-    public required PluginConfig             Config                 { get; init; }
+    public required PluginConfig       Config                 { get; init; }
     public required IPlayerCharacter   Player                 { get; init; }
     public required NavmeshQuery?      Query                  { get; init; }
     public required MovementPlan       Plan                   { get; init; }
@@ -19,35 +19,15 @@ internal sealed class MovementExecutionContext
     public required bool               MovementAllowed        { get; init; }
     public          Vector3?           PreviousPosition       { get; init; }
 
-    public int      WaypointCount               => Segment.Waypoints.Count;
-    public int      TraverseSegmentCount        => WaypointCount;
-    public int      CurrentTraverseSegmentIndex => ActiveWaypointIndex;
-    public bool     HasRemainingWaypoints       => ActiveWaypointIndex < WaypointCount;
-    public Vector3? ActiveWaypoint              => HasRemainingWaypoints ? Segment.Waypoints[ActiveWaypointIndex] : null;
+    public int      WaypointCount         => Segment.Waypoints.Count;
+    public bool     HasRemainingWaypoints => ActiveWaypointIndex < WaypointCount;
+    public Vector3? ActiveWaypoint        => HasRemainingWaypoints ? Segment.Waypoints[ActiveWaypointIndex] : null;
 
     public bool TryGetFirstRemainingWaypoint(out Vector3 waypoint) =>
         TryFindRemainingWaypoint(static (_, _) => true, out waypoint);
 
     public bool TryGetFirstElevatedRemainingWaypoint(float minHeightDelta, out Vector3 waypoint) =>
         TryFindRemainingWaypoint(static (candidate, minimumY) => candidate.Y > minimumY, out waypoint, Player.Position.Y + minHeightDelta);
-
-    public bool TryGetFirstRemainingWaypoint(int startSegmentIndex, out Vector3 waypoint)
-    {
-        for (var i = startSegmentIndex; i < Plan.Segments.Count; i++)
-        {
-            var segment       = Plan.Segments[i];
-            var waypointIndex = SegmentWaypointIndices[i];
-
-            if (waypointIndex < segment.Waypoints.Count)
-            {
-                waypoint = segment.Waypoints[waypointIndex];
-                return true;
-            }
-        }
-
-        waypoint = default;
-        return false;
-    }
 
     private bool TryFindRemainingWaypoint(Func<Vector3, float, bool> predicate, out Vector3 waypoint, float threshold = 0)
     {
@@ -59,6 +39,7 @@ internal sealed class MovementExecutionContext
             for (var waypointIndex = firstWaypointIndex; waypointIndex < segment.Waypoints.Count; waypointIndex++)
             {
                 var candidate = segment.Waypoints[waypointIndex];
+
                 if (predicate(candidate, threshold))
                 {
                     waypoint = candidate;
@@ -73,7 +54,7 @@ internal sealed class MovementExecutionContext
 
     public bool TryGetCurrentTraverseSegment(int traverseSegmentIndex, out Vector3 start, out Vector3 end)
     {
-        if (traverseSegmentIndex < 0 || traverseSegmentIndex >= TraverseSegmentCount)
+        if (traverseSegmentIndex < 0 || traverseSegmentIndex >= WaypointCount)
         {
             start = default;
             end   = default;

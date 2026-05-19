@@ -2,26 +2,25 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Movement.Drivers;
 
-internal static class DriverMath
+internal static class WaypointProgression
 {
-    private const float MinSegmentLengthSq = 0.000001f;
+    private const float MinSegmentLengthSq      = 0.000001f;
     private const float SegmentEndCaptureRadius = 0.05f;
 
     public static int ConsumeGroundWaypoints(Vector3 currentPosition, Vector3? previousPosition, Vector3 startPosition, IReadOnlyList<Vector3> waypoints) =>
-        ConsumeTraverseWaypoints(currentPosition, previousPosition, startPosition, waypoints, flatten: true);
+        ConsumeTraverseWaypoints(currentPosition, previousPosition, startPosition, waypoints, true);
 
     public static int ConsumeFlightWaypoints(Vector3 currentPosition, Vector3? previousPosition, Vector3 startPosition, IReadOnlyList<Vector3> waypoints) =>
-        ConsumeTraverseWaypoints(currentPosition, previousPosition, startPosition, waypoints, flatten: false);
+        ConsumeTraverseWaypoints(currentPosition, previousPosition, startPosition, waypoints, false);
 
     public static int ConsumeGroundWaypoints(MovementExecutionContext context) =>
-        ConsumeTraverseSegments(context, flatten: true);
+        ConsumeTraverseSegments(context, true);
 
     public static int ConsumeFlightWaypoints(MovementExecutionContext context) =>
-        ConsumeTraverseSegments(context, flatten: false);
+        ConsumeTraverseSegments(context, false);
 
     public static float DistanceToLineSegment(Vector3 v, Vector3 a, Vector3 b)
     {
@@ -40,12 +39,12 @@ internal static class DriverMath
 
     private static int ConsumeTraverseSegments(MovementExecutionContext context, bool flatten)
     {
-        var currentTraverseSegmentIndex = context.CurrentTraverseSegmentIndex;
-        var current                     = Project(context.Player.Position, flatten);
+        var currentTraverseSegmentIndex = context.ActiveWaypointIndex;
+        var current                     = Project(context.Player.Position,                             flatten);
         var previous                    = Project(context.PreviousPosition ?? context.Player.Position, flatten);
 
         if (context.Plan.DestinationTolerance > 0 && Vector3.Distance(current, Project(context.Plan.FinalDestination, flatten)) <= context.Plan.DestinationTolerance)
-            return context.TraverseSegmentCount;
+            return context.WaypointCount;
 
         while (context.TryGetCurrentTraverseSegment(currentTraverseSegmentIndex, out var segmentStart, out var segmentEnd))
         {
@@ -82,7 +81,7 @@ internal static class DriverMath
     )
     {
         var currentTraverseSegmentIndex = 0;
-        var current                     = Project(currentPosition, flatten);
+        var current                     = Project(currentPosition,                     flatten);
         var previous                    = Project(previousPosition ?? currentPosition, flatten);
 
         while (TryGetTraverseSegment(startPosition, waypoints, currentTraverseSegmentIndex, out var segmentStart, out var segmentEnd))
@@ -116,7 +115,7 @@ internal static class DriverMath
     private static bool ShouldAdvanceTraverseSegment(Vector3 current, Vector3 previous, Vector3 segmentStart, Vector3 segmentEnd, bool flatten)
     {
         var projectedStart = Project(segmentStart, flatten);
-        var projectedEnd   = Project(segmentEnd, flatten);
+        var projectedEnd   = Project(segmentEnd,   flatten);
         var progress       = ComputeProjectionParameter(current, projectedStart, projectedEnd);
 
         if (progress >= 1f)
@@ -133,13 +132,13 @@ internal static class DriverMath
         var segment      = end - start;
         var segmentLenSq = segment.LengthSquared();
         return segmentLenSq > MinSegmentLengthSq
-            ? Vector3.Dot(position - start, segment) / segmentLenSq
-            : 1f;
+                   ? Vector3.Dot(position - start, segment) / segmentLenSq
+                   : 1f;
     }
 
     private static Vector3 Project(Vector3 value, bool flatten) => flatten
-        ? new(value.X, 0, value.Z)
-        : value;
+                                                                       ? new(value.X, 0, value.Z)
+                                                                       : value;
 
     private static bool ShouldHoldForClientPath(MovementExecutionContext context, int waypointIndex, out bool proceed)
     {

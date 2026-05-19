@@ -1,6 +1,5 @@
 using Dalamud.Plugin.Services;
-using vnavmesh.Movement.Execution;
-using vnavmesh.Movement.Requests;
+using vnavmesh.Movement;
 using vnavmesh.Navigation.Mesh.Runtime;
 
 namespace vnavmesh.Internal;
@@ -10,14 +9,14 @@ internal sealed class PluginRuntime : IDisposable
     private readonly NavmeshManager       navmeshManager;
     private readonly MovementPlanExecutor movementExecutor;
     private readonly AsyncMoveRequest     asyncMoveRequest;
-    private readonly PluginDTR          dtrProvider;
+    private readonly PluginDTR            dtrProvider;
 
     public PluginRuntime
     (
         NavmeshManager       navmeshManager,
         MovementPlanExecutor movementExecutor,
         AsyncMoveRequest     asyncMoveRequest,
-        PluginDTR          dtrProvider
+        PluginDTR            dtrProvider
     )
     {
         this.navmeshManager   = navmeshManager;

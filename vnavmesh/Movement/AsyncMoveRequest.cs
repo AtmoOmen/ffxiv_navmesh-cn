@@ -4,21 +4,20 @@ using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Planning;
 
-namespace vnavmesh.Movement.Requests;
+namespace vnavmesh.Movement;
 
 public class AsyncMoveRequest : IDisposable
 {
     private const float DUPLICATE_REQUEST_DISTANCE_SQ = 0.000001f;
 
-    private readonly NavmeshManager            manager;
-    private readonly MovementPlanExecutor      executor;
-    private readonly GroundMovementPlanBuilder groundPlanBuilder = new();
-    private readonly FlightMovementPlanBuilder flightPlanBuilder = new();
-    private          Task<PostprocessedPath>?  pendingTask;
-    private          PendingMoveRequest?       pendingMoveRequest;
-    private          PendingMoveRequest?       activeMoveRequest;
-    private          ExternalMoveRequest?      activeExternalMoveRequest;
-    private          RecoveryRetry?            recoveryRetry;
+    private readonly NavmeshManager           manager;
+    private readonly MovementPlanExecutor     executor;
+    private readonly MovementPlanBuilder      planBuilder = new();
+    private          Task<PostprocessedPath>? pendingTask;
+    private          PendingMoveRequest?      pendingMoveRequest;
+    private          PendingMoveRequest?      activeMoveRequest;
+    private          ExternalMoveRequest?     activeExternalMoveRequest;
+    private          RecoveryRetry?           recoveryRetry;
 
     public bool TaskInProgress => pendingTask != null;
 
@@ -57,7 +56,7 @@ public class AsyncMoveRequest : IDisposable
     {
         if (pendingTask == null && recoveryRetry == null && !executor.IsRunning)
         {
-            activeMoveRequest = null;
+            activeMoveRequest         = null;
             activeExternalMoveRequest = null;
         }
 
@@ -75,13 +74,16 @@ public class AsyncMoveRequest : IDisposable
 
             try
             {
-                var result = pendingTask.Result;
+                var result  = pendingTask.Result;
                 var request = pendingMoveRequest;
+
                 if (result.Succeeded)
                 {
                     executor.Execute(BuildPlan(result));
                     activeMoveRequest = request;
-                    activeExternalMoveRequest = request is { Origin: PathRequestOrigin.Normal } ? new(request.Value.Destination, request.Value.Fly, request.Value.Range) : null;
+                    activeExternalMoveRequest = request is { Origin: PathRequestOrigin.Normal }
+                                                    ? new(request.Value.Destination, request.Value.Fly, request.Value.Range)
+                                                    : null;
                     recoveryRetry = null;
                 }
                 else if (request is { Origin: PathRequestOrigin.RepathAfterUnstuck })
@@ -91,19 +93,19 @@ public class AsyncMoveRequest : IDisposable
                 }
                 else
                 {
-                    activeMoveRequest = null;
+                    activeMoveRequest         = null;
                     activeExternalMoveRequest = null;
                 }
             }
             catch (Exception ex)
             {
-                activeMoveRequest = null;
+                activeMoveRequest         = null;
                 activeExternalMoveRequest = null;
                 Plugin.DuoLog(ex, "算路失败");
             }
 
             pendingTask.Dispose();
-            pendingTask = null;
+            pendingTask        = null;
             pendingMoveRequest = null;
         }
     }
@@ -113,9 +115,9 @@ public class AsyncMoveRequest : IDisposable
 
     public void Stop()
     {
-        recoveryRetry = null;
-        pendingMoveRequest = null;
-        activeMoveRequest = null;
+        recoveryRetry             = null;
+        pendingMoveRequest        = null;
+        activeMoveRequest         = null;
         activeExternalMoveRequest = null;
         executor.Stop();
 
@@ -129,6 +131,7 @@ public class AsyncMoveRequest : IDisposable
     private bool MoveToInternal(Vector3 dest, bool fly, float range, PathRequestOrigin origin)
     {
         var externalRequest = new ExternalMoveRequest(dest, fly, range);
+
         if (origin == PathRequestOrigin.Normal && IsDuplicateExternalRequest(externalRequest))
         {
             Service.Log.Debug($"忽略重复 {(fly ? "飞行" : "地面")} 移动请求：目标 = {dest:f3}");
@@ -142,20 +145,16 @@ public class AsyncMoveRequest : IDisposable
         }
 
         recoveryRetry = null;
-        var resolvedDestinationTolerance = range > 0 ? range : executor.ConsumeNextTolerance();
-        var toleranceStr = resolvedDestinationTolerance > 0 ? $"，终点容差 = {resolvedDestinationTolerance:f3}" : "";
+        var resolvedDestinationTolerance = range                        > 0 ? range : executor.ConsumeNextTolerance();
+        var toleranceStr                 = resolvedDestinationTolerance > 0 ? $"，终点容差 = {resolvedDestinationTolerance:f3}" : "";
         Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
-        pendingTask = manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance);
+        pendingTask        = manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance);
         pendingMoveRequest = new(dest, fly, resolvedDestinationTolerance, origin);
         return true;
     }
 
     private MovementPlan BuildPlan(PostprocessedPath result)
-    {
-        return result.RequestedMode == MovementMode.Flight
-                   ? flightPlanBuilder.Build(result)
-                   : groundPlanBuilder.Build(result);
-    }
+        => planBuilder.Build(result);
 
     private bool IsDuplicateExternalRequest(ExternalMoveRequest request)
         => IsEquivalentExternalRequest(pendingMoveRequest, request) || IsEquivalentExternalRequest(activeExternalMoveRequest, request);
@@ -165,7 +164,8 @@ public class AsyncMoveRequest : IDisposable
         if (existing is not { } current)
             return false;
 
-        return current.Origin == PathRequestOrigin.Normal && IsEquivalentExternalRequest(new ExternalMoveRequest(current.Destination, current.Fly, current.Range), request);
+        return current.Origin == PathRequestOrigin.Normal &&
+               IsEquivalentExternalRequest(new ExternalMoveRequest(current.Destination, current.Fly, current.Range), request);
     }
 
     private static bool IsEquivalentExternalRequest(ExternalMoveRequest? existing, ExternalMoveRequest request)
@@ -173,9 +173,9 @@ public class AsyncMoveRequest : IDisposable
         if (existing is not { } current)
             return false;
 
-        return current.Fly == request.Fly
-               && MathF.Abs(current.Range - request.Range) <= float.Epsilon
-               && Vector3.DistanceSquared(current.Destination, request.Destination) <= DUPLICATE_REQUEST_DISTANCE_SQ;
+        return current.Fly                                                       == request.Fly   &&
+               MathF.Abs(current.Range - request.Range)                          <= float.Epsilon &&
+               Vector3.DistanceSquared(current.Destination, request.Destination) <= DUPLICATE_REQUEST_DISTANCE_SQ;
     }
 
     private void HandleFailedRepathAfterUnstuck(PendingMoveRequest request)
@@ -209,8 +209,26 @@ public class AsyncMoveRequest : IDisposable
         RepathAfterUnstuck
     }
 
-    private readonly record struct ExternalMoveRequest(Vector3 Destination, bool Fly, float Range);
-    private readonly record struct PendingMoveRequest(Vector3 Destination, bool Fly, float Range, PathRequestOrigin Origin);
+    private readonly record struct ExternalMoveRequest
+    (
+        Vector3 Destination,
+        bool    Fly,
+        float   Range
+    );
 
-    private readonly record struct RecoveryRetry(Vector3 Destination, bool Fly, float Range, DateTime ExecuteAt);
+    private readonly record struct PendingMoveRequest
+    (
+        Vector3           Destination,
+        bool              Fly,
+        float             Range,
+        PathRequestOrigin Origin
+    );
+
+    private readonly record struct RecoveryRetry
+    (
+        Vector3  Destination,
+        bool     Fly,
+        float    Range,
+        DateTime ExecuteAt
+    );
 }
