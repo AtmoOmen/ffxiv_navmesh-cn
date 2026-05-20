@@ -171,8 +171,8 @@ internal class DebugNavmeshManager : IDisposable
                     asyncMove.MoveTo(target, true);
                 
                 ImGui.SameLine(0, ImGui.GetStyle().ItemSpacing.X * ImGuiHelpers.GlobalScale);
-                if (ImGui.Button("停止寻路"))
-                    movementExecutor.Stop();
+                if (ImGui.Button("取消寻路"))
+                    asyncMove.Stop();
             }
 
             using (ImRaii.Disabled(player == null || target == Vector3.Zero || renderPathTask != null))

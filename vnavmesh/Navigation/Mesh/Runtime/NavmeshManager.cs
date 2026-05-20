@@ -133,15 +133,20 @@ public sealed class NavmeshManager : IDisposable
         if (currentCancelSource == null)
             throw new Exception("无法发起查询, 导航数据未就绪");
 
-        var combined = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
+        var combined    = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
+        var cleanedUp   = 0;
         ++numActivePathfinds;
 
-        return ExecuteWhenIdle
+        var task = ExecuteWhenIdle
         (
             async _ =>
             {
                 using var autoDisposeCombined  = combined;
-                using var autoDecrementCounter = new OnDispose(() => --numActivePathfinds);
+                using var autoDecrementCounter = new OnDispose(() =>
+                {
+                    if (Interlocked.Exchange(ref cleanedUp, 1) == 0)
+                        --numActivePathfinds;
+                });
 
                 Log($"发起算路。起点: {from} 终点: {to}");
                 var result = await Task.Run
@@ -167,6 +172,24 @@ public sealed class NavmeshManager : IDisposable
             },
             combined.Token
         );
+
+        // 任务在 lambda 执行前被取消时, lambda 内的 using 不会执行, 需要在此兜底清理
+        _ = task.ContinueWith
+        (
+            _ =>
+            {
+                if (Interlocked.Exchange(ref cleanedUp, 1) == 0)
+                {
+                    --numActivePathfinds;
+                    combined.Dispose();
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.NotOnRanToCompletion,
+            TaskScheduler.Default
+        );
+
+        return task;
     }
 
     internal Task<PostprocessedPath> QueryStraightPathDetailed
@@ -182,15 +205,20 @@ public sealed class NavmeshManager : IDisposable
         if (currentCancelSource == null)
             throw new Exception("无法发起查询, 导航数据未就绪");
 
-        var combined = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
+        var combined    = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
+        var cleanedUp   = 0;
         ++numActivePathfinds;
 
-        return ExecuteWhenIdle
+        var task = ExecuteWhenIdle
         (
             async _ =>
             {
                 using var autoDisposeCombined  = combined;
-                using var autoDecrementCounter = new OnDispose(() => --numActivePathfinds);
+                using var autoDecrementCounter = new OnDispose(() =>
+                {
+                    if (Interlocked.Exchange(ref cleanedUp, 1) == 0)
+                        --numActivePathfinds;
+                });
 
                 Log($"发起 straight path 查询。起点: {from} 终点: {to}");
                 var result = await Task.Run
@@ -216,6 +244,23 @@ public sealed class NavmeshManager : IDisposable
             },
             combined.Token
         );
+
+        _ = task.ContinueWith
+        (
+            _ =>
+            {
+                if (Interlocked.Exchange(ref cleanedUp, 1) == 0)
+                {
+                    --numActivePathfinds;
+                    combined.Dispose();
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.NotOnRanToCompletion,
+            TaskScheduler.Default
+        );
+
+        return task;
     }
 
     public (Vector3 Min, Vector3 Max) BuildBitmap(Vector3 startingPos, string filename, float pixelSize, AABB? mapBounds = null)
@@ -854,8 +899,7 @@ public sealed class NavmeshManager : IDisposable
         (
             async () =>
             {
-                await prev.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
-                _ = prev.Exception;
+                await WaitForPrevious(prev, token).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext);
                 var t = task(token);
                 await t.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
                 LogTaskError(t);
@@ -871,8 +915,7 @@ public sealed class NavmeshManager : IDisposable
         (
             async () =>
             {
-                await prev.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
-                _ = prev.Exception;
+                await WaitForPrevious(prev, token).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext);
                 var t = task(token);
                 await ((Task)t).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
                 LogTaskError(t);
@@ -882,6 +925,21 @@ public sealed class NavmeshManager : IDisposable
         );
         loadQueryTask = res;
         return res;
+    }
+
+    // 等待前序任务完成, 同时响应取消令牌
+    private static async Task WaitForPrevious(Task prev, CancellationToken token)
+    {
+        try
+        {
+            await prev.WaitAsync(token).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            throw;
+        }
+
+        _ = prev.Exception;
     }
 
     private static void Log(string message) =>

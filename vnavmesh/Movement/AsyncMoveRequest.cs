@@ -14,6 +14,7 @@ public class AsyncMoveRequest : IDisposable
     private readonly MovementPlanExecutor     executor;
     private readonly MovementPlanBuilder      planBuilder = new();
     private          Task<PostprocessedPath>? pendingTask;
+    private          CancellationTokenSource? pendingTaskCancelSource;
     private          PendingMoveRequest?      pendingMoveRequest;
     private          PendingMoveRequest?      activeMoveRequest;
     private          ExternalMoveRequest?     activeExternalMoveRequest;
@@ -43,6 +44,7 @@ public class AsyncMoveRequest : IDisposable
 
     public void Dispose()
     {
+        pendingTaskCancelSource?.Cancel();
         if (pendingTask != null)
         {
             if (!pendingTask.IsCompleted)
@@ -50,6 +52,9 @@ public class AsyncMoveRequest : IDisposable
             pendingTask.Dispose();
             pendingTask = null;
         }
+
+        pendingTaskCancelSource?.Dispose();
+        pendingTaskCancelSource = null;
     }
 
     public void Update()
@@ -97,6 +102,11 @@ public class AsyncMoveRequest : IDisposable
                     activeExternalMoveRequest = null;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                activeMoveRequest         = null;
+                activeExternalMoveRequest = null;
+            }
             catch (Exception ex)
             {
                 activeMoveRequest         = null;
@@ -105,8 +115,10 @@ public class AsyncMoveRequest : IDisposable
             }
 
             pendingTask.Dispose();
-            pendingTask        = null;
-            pendingMoveRequest = null;
+            pendingTask = null;
+            pendingTaskCancelSource?.Dispose();
+            pendingTaskCancelSource = null;
+            pendingMoveRequest      = null;
         }
     }
 
@@ -120,12 +132,21 @@ public class AsyncMoveRequest : IDisposable
         activeMoveRequest         = null;
         activeExternalMoveRequest = null;
         executor.Stop();
+        CancelPendingPathfind();
+    }
+
+    private void CancelPendingPathfind()
+    {
+        pendingTaskCancelSource?.Cancel();
 
         if (pendingTask is { IsCompleted: true })
         {
             pendingTask.Dispose();
             pendingTask = null;
         }
+
+        pendingTaskCancelSource?.Dispose();
+        pendingTaskCancelSource = null;
     }
 
     private bool MoveToInternal(Vector3 dest, bool fly, float range, PathRequestOrigin origin)
@@ -148,8 +169,9 @@ public class AsyncMoveRequest : IDisposable
         var resolvedDestinationTolerance = range                        > 0 ? range : executor.ConsumeNextTolerance();
         var toleranceStr                 = resolvedDestinationTolerance > 0 ? $"，终点容差 = {resolvedDestinationTolerance:f3}" : "";
         Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
-        pendingTask        = manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance);
-        pendingMoveRequest = new(dest, fly, resolvedDestinationTolerance, origin);
+        pendingTaskCancelSource = new();
+        pendingTask             = manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance, pendingTaskCancelSource.Token);
+        pendingMoveRequest      = new(dest, fly, resolvedDestinationTolerance, origin);
         return true;
     }
 
