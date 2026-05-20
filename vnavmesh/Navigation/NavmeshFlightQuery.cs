@@ -105,35 +105,51 @@ internal sealed class NavmeshFlightQuery
         if (telemetry.Termination != VolumeSearchTermination.ReachedGoal)
         {
             var partialDestination = rawWaypoints[^1];
-            Service.Log.Warning
-            (
-                $"飞行体素搜索未抵达终点：终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，请求空体素终点 = {safeDestination:f3}，当前终点 = {partialDestination:f3}，后续不再强接终点"
-            );
+            var nearGoalThreshold  = ComputeNearGoalThreshold(volume);
+            var distanceToGoal     = Vector3.Distance(partialDestination, safeDestination);
 
-            return new()
+            if (distanceToGoal <= nearGoalThreshold)
             {
-                Status               = PathfindStatus.Partial,
-                RequestedMode        = MovementMode.Flight,
-                RequestedDestination = to,
-                FinalDestination     = partialDestination,
-                DestinationTolerance = 0,
-                Segments =
-                [
-                    new()
-                    {
-                        MovementMode         = MovementMode.Flight,
-                        SegmentKind          = MovementSegmentKind.FlightTraverse,
-                        AllowVerticalControl = true,
-                        ReachabilitySource   = PathReachabilitySource.Volume,
-                        GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
-                        TraversalStartPosition = from,
-                        StartPosition        = from,
-                        EndPosition          = partialDestination,
-                        Points               = [.. rawWaypoints],
-                        FlightPathDebug      = flightDebug
-                    }
-                ]
-            };
+                Service.Log.Debug
+                (
+                    $"[算路] 飞行体素搜索近终点视为完成：终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，路径终点 = {partialDestination:f3}，安全终点 = {safeDestination:f3}，距离 = {distanceToGoal:f3}，阈值 = {nearGoalThreshold:f3}"
+                );
+
+                if (Vector3.DistanceSquared(partialDestination, safeDestination) > 0.000001f)
+                    rawWaypoints.Add(safeDestination);
+            }
+            else
+            {
+                Service.Log.Warning
+                (
+                    $"飞行体素搜索未抵达终点：终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，请求空体素终点 = {safeDestination:f3}，当前终点 = {partialDestination:f3}，距离 = {distanceToGoal:f3}，阈值 = {nearGoalThreshold:f3}"
+                );
+
+                return new()
+                {
+                    Status               = PathfindStatus.Partial,
+                    RequestedMode        = MovementMode.Flight,
+                    RequestedDestination = to,
+                    FinalDestination     = partialDestination,
+                    DestinationTolerance = 0,
+                    Segments =
+                    [
+                        new()
+                        {
+                            MovementMode         = MovementMode.Flight,
+                            SegmentKind          = MovementSegmentKind.FlightTraverse,
+                            AllowVerticalControl = true,
+                            ReachabilitySource   = PathReachabilitySource.Volume,
+                            GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                            TraversalStartPosition = from,
+                            StartPosition        = from,
+                            EndPosition          = partialDestination,
+                            Points               = [.. rawWaypoints],
+                            FlightPathDebug      = flightDebug
+                        }
+                    ]
+                };
+            }
         }
 
         if (!requestedTargetLeaf.empty &&
@@ -379,6 +395,13 @@ internal sealed class NavmeshFlightQuery
         VolumeSearchTermination.StepBudgetReached => "步数触顶",
         _                                         => "未知"
     };
+
+    private static float ComputeNearGoalThreshold(VoxelMap volume)
+    {
+        var l1CellSize = volume.Levels[1].CellSize;
+        var maxL1Extent = MathF.Max(l1CellSize.X, MathF.Max(l1CellSize.Y, l1CellSize.Z));
+        return maxL1Extent * 2f;
+    }
 
     private static float HorizontalDistanceXZ(Vector3 left, Vector3 right)
     {

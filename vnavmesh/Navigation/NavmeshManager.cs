@@ -374,7 +374,7 @@ public sealed class NavmeshManager : IDisposable
                 if (ff.TryLookup(scene.TerritoryID, out var points))
                 {
                     var pruneSeeds = points.ToArray();
-                    if (EnableUnreachablePrune)
+                    if (ENABLE_UNREACHABLE_PRUNE)
                         Navmesh.DeferMeshMutation(mesh => PruneMesh(mesh, pruneSeeds));
                     else
                         Log($"已禁用不可达裁剪，跳过 {pruneSeeds.Length} 个种子点");
@@ -1332,7 +1332,7 @@ public sealed class NavmeshManager : IDisposable
     private const float PRUNE_PRESERVE_COMPONENT_MIN_RATIO = 0.05f;
     private const int   PRUNE_PRESERVE_COMPONENT_MIN_POLYS = 256;
     private const float PRUNE_MIN_KEEP_RATIO               = 0.40f;
-    private static readonly bool EnableUnreachablePrune    = false;
+    private const bool  ENABLE_UNREACHABLE_PRUNE           = true;
 
     #endregion
 }

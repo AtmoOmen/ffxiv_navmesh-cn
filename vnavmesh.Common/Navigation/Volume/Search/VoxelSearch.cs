@@ -10,6 +10,7 @@ public static class VoxelSearch
     private const float DownwardVoxelPreferencePenalty     = 0.5f;
     private const float BelowFloorVoxelBottomPenaltyScale  = 96f;
     private const float BelowFloorVoxelBottomPenaltyLinear = 12f;
+    private const int   MAX_LINE_STEP_ITERATIONS           = 4096;
 
     public static Vector3 FindClosestVoxelPoint(VoxelMap volume, ulong index, Vector3 p, float eps = 0.1f) =>
         volume.ClampPointToVoxel(index, p, eps);
@@ -88,12 +89,23 @@ public static class VoxelSearch
         if (fromVoxel == toVoxel || Vector3.DistanceSquared(fromPos, toPos) <= float.Epsilon)
             yield break;
 
-        var line = CreateLineState(fromVoxel, toPos - fromPos);
+        var line       = CreateLineState(fromVoxel, toPos - fromPos);
+        var iterations = 0;
+        var prevVoxel  = fromVoxel;
 
         while (fromVoxel != toVoxel)
         {
-            StepToNextVoxel(volume, line.originVoxel, toVoxel, fromPos, line.delta, line.epsilon, fromVoxel, out var nextVoxel, out var t, out var nextEmpty);
+            if (++iterations > MAX_LINE_STEP_ITERATIONS)
+                yield break;
+
+            if (!StepToNextVoxel(volume, toVoxel, fromPos, line.delta, line.epsilon, fromVoxel, out var nextVoxel, out var t, out var nextEmpty))
+                yield break;
+
+            if (nextVoxel == prevVoxel)
+                yield break;
+
             yield return (nextVoxel, t, nextEmpty);
+            prevVoxel = fromVoxel;
             fromVoxel = nextVoxel;
         }
     }
@@ -112,27 +124,36 @@ public static class VoxelSearch
         if (Vector3.DistanceSquared(fromPos, toPos) <= float.Epsilon)
             return false;
 
-        var line = CreateLineState(fromVoxel, toPos - fromPos);
+        var line       = CreateLineState(fromVoxel, toPos - fromPos);
+        var iterations = 0;
+        var prevVoxel  = fromVoxel;
 
         while (fromVoxel != toVoxel)
         {
-            StepToNextVoxel(volume, line.originVoxel, toVoxel, fromPos, line.delta, line.epsilon, fromVoxel, out var nextVoxel, out _, out var nextEmpty);
-            if (!nextEmpty)
+            if (++iterations > MAX_LINE_STEP_ITERATIONS)
                 return false;
 
+            if (!StepToNextVoxel(volume, toVoxel, fromPos, line.delta, line.epsilon, fromVoxel, out var nextVoxel, out _, out var nextEmpty))
+                return false;
+
+            if (!nextEmpty)
+                return false;
+            if (nextVoxel == prevVoxel)
+                return false;
+
+            prevVoxel = fromVoxel;
             fromVoxel = nextVoxel;
         }
 
         return true;
     }
 
-    private static (ulong originVoxel, Vector3 delta, float epsilon) CreateLineState(ulong fromVoxel, Vector3 delta)
-        => (fromVoxel, delta, 0.1f / delta.Length());
+    private static (Vector3 delta, float epsilon) CreateLineState(ulong _, Vector3 delta)
+        => (delta, MathF.Max(0.1f / delta.Length(), 1e-6f));
 
-    private static void StepToNextVoxel
+    private static bool StepToNextVoxel
     (
         VoxelMap  volume,
-        ulong     origFrom,
         ulong     toVoxel,
         Vector3   fromPos,
         Vector3   ab,
@@ -144,18 +165,17 @@ public static class VoxelSearch
     )
     {
         var (vMin, vMax) = volume.VoxelBounds(fromVoxel, 0);
-        
+
         var tx = ab.X == 0 ? float.MaxValue : ((ab.X > 0 ? vMax.X : vMin.X) - fromPos.X) / ab.X;
         var ty = ab.Y == 0 ? float.MaxValue : ((ab.Y > 0 ? vMax.Y : vMin.Y) - fromPos.Y) / ab.Y;
         var tz = ab.Z == 0 ? float.MaxValue : ((ab.Z > 0 ? vMax.Z : vMin.Z) - fromPos.Z) / ab.Z;
-        
+
         t = MathF.Min(MathF.Min(tx, ty), MathF.Min(tz, 1));
-        
+
         var tAdj = MathF.Min(t + eps, 1);
         var proj = fromPos + tAdj * ab;
-        
+
         (nextVoxel, nextEmpty) = volume.FindLeafVoxel(proj);
-        if (nextVoxel == fromVoxel)
-            throw new PathfindLoopException(origFrom, toVoxel, fromPos, fromPos + ab);
+        return nextVoxel != fromVoxel;
     }
 }
