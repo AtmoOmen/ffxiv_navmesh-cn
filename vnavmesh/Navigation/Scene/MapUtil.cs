@@ -1,6 +1,5 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using vnavmesh.Navigation.Mesh.Query;
 
 namespace vnavmesh.Navigation.Scene;
 

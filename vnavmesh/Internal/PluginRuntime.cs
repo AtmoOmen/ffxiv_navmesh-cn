@@ -1,6 +1,7 @@
 using Dalamud.Plugin.Services;
 using vnavmesh.Movement;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Movement.Execution;
+using vnavmesh.Navigation;
 
 namespace vnavmesh.Internal;
 

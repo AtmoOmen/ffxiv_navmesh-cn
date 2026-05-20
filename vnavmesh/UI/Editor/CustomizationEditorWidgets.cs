@@ -4,7 +4,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
-using vnavmesh.Navigation.Customizations.Editor;
+using vnavmesh.Navigation.Custom.Editor;
 using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.UI.Editor;

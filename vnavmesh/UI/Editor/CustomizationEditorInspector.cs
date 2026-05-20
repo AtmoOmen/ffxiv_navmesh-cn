@@ -1,8 +1,8 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
-using vnavmesh.Navigation.Customizations;
-using vnavmesh.Navigation.Customizations.Editor;
-using vnavmesh.Navigation.Mesh.Build;
+using vnavmesh.Navigation;
+using vnavmesh.Navigation.Custom;
+using vnavmesh.Navigation.Custom.Editor;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Editor.Types;
 

@@ -3,7 +3,7 @@ using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using vnavmesh.Common.Utilities;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;

@@ -2,7 +2,7 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using vnavmesh.Internal;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navigation.Mesh.Query;
+using vnavmesh.Navigation;
 
 namespace vnavmesh.Movement.Execution;
 

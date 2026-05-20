@@ -1,7 +1,7 @@
 using Dalamud.Game.Gui.Dtr;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation;
 
 namespace vnavmesh.Internal;
 

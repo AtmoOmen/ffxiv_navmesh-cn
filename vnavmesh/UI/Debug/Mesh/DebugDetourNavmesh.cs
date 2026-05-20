@@ -4,7 +4,6 @@ using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Utilities;
-using vnavmesh.Navigation.Mesh.Runtime;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Debug.Recast;

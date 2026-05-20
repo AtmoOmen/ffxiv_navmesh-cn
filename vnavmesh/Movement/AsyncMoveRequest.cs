@@ -1,7 +1,7 @@
 using System.Numerics;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation;
 using vnavmesh.Navigation.Planning;
 
 namespace vnavmesh.Movement;

@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Utilities;
-using vnavmesh.Navigation.Mesh.Query;
+using vnavmesh.Navigation;
 using vnavmesh.Navigation.Volume;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;

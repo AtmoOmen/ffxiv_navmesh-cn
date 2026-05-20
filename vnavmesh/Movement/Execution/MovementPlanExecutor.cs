@@ -7,14 +7,12 @@ using vnavmesh.Common.Models;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Internal;
 using vnavmesh.Movement.Drivers;
-using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Interop;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navigation.Mesh.Query;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Navigation;
 using vnavmesh.Navigation.Planning;
 
-namespace vnavmesh.Movement;
+namespace vnavmesh.Movement.Execution;
 
 public sealed class MovementPlanExecutor : IDisposable
 {

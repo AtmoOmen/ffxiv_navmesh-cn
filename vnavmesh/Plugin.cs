@@ -3,7 +3,8 @@ using Dalamud.Plugin;
 using Microsoft.Extensions.DependencyInjection;
 using vnavmesh.Internal;
 using vnavmesh.Movement;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Movement.Execution;
+using vnavmesh.Navigation;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Windows;
 

@@ -1,0 +1,29 @@
+using System.Numerics;
+using vnavmesh.Navigation.Custom.Abstractions;
+using vnavmesh.Navigation.Custom.Attributes;
+using vnavmesh.Navigation.Custom.Extensions;
+using vnavmesh.Navigation.Scene;
+
+namespace vnavmesh.Navigation.Custom.Customizations.Territory.Overworld;
+
+[CustomizationTerritory(155)]
+internal class Z0155库尔札斯中央高地 : NavmeshCustomization
+{
+    public override int Version => 8;
+
+    public Z0155库尔札斯中央高地() =>
+        ApplyAgentRadiusOneSettings();
+
+    public override void CustomizeScene(SceneExtractor scene)
+    {
+        // add a fake stair in front of the disconnected second staircase on the second floor of the building in Whitebrim Front
+        scene.InsertAABoxCollider(new Vector3(1.5f, 0.15f, 0.2f), new(-417.5f, 221.5f, -288.8f));
+
+        // set the doorstep of Monument Tower as walkable, though you can't land on it
+        if (scene.Meshes.TryGetValue("bg/ffxiv/roc_r1/fld/r1f1/collision/r1f1_b7_astr1.pcb", out var tower))
+        {
+            foreach (var inst in tower.Instances)
+                inst.ForceSetPrimFlags |= SceneExtractor.PrimitiveFlags.ForceWalkable;
+        }
+    }
+}

@@ -1,7 +1,7 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Navigation.Customizations.Editor;
+using vnavmesh.Navigation.Custom.Editor;
 using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;

@@ -26,6 +26,10 @@
         <Reference Include="Dalamud.Common" Private="false"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Navigation\Custom\Customizations\" />
+    </ItemGroup>
+
     <Target Name="CopyNavmeshWorker" AfterTargets="Build">
         <MSBuild Projects="..\vnavmesh.Worker\vnavmesh.Worker.csproj"
                  Targets="GetTargetPath"

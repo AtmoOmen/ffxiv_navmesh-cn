@@ -2,7 +2,8 @@ using System.Globalization;
 using System.Numerics;
 using Dalamud.Game.Command;
 using vnavmesh.Movement;
-using vnavmesh.Navigation.Mesh.Runtime;
+using vnavmesh.Movement.Execution;
+using vnavmesh.Navigation;
 using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Internal;
