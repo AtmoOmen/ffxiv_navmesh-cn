@@ -89,6 +89,19 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     previewBuilder
                 );
                 break;
+            case PickKind.SelectTriangle:
+                HandleTriangleSelection
+                (
+                    ref selection,
+                    ref pendingLeftPanelFocusSelection,
+                    ref lastWorldSelectMouseDown,
+                    ref currentPickPoint,
+                    ref statusText,
+                    collision,
+                    dd,
+                    previewBuilder
+                );
+                break;
             case PickKind.None:
                 break;
             default:
@@ -109,6 +122,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
 
         DrawPreviewInstancesOverlay(selection, previewBuilder, dd);
+        DrawPreviewVertexOverlay(selection, previewBuilder, dd);
+        DrawPreviewPrimitiveOverlay(selection, previewBuilder, dd);
         DrawInstancePatchOverlay(workspace, selection, previewBuilder, collision, dd);
         HandleDraftEditing(ref workspace, ref selection, ref draftEditState, ref statusText, onDraftEdited, dd);
 
@@ -154,6 +169,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             dd.DrawWorldArc(link.Start, link.End, 0.15f, 3f, 3f, 0xFFFF8800, 2);
         }
+
+        DrawPartPatchOverlay(workspace, selection, previewBuilder, collision, dd);
     }
 
     private static void HandlePicking
@@ -261,6 +278,128 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         statusText = "未选中可编辑对象";
     }
+
+    private static void HandleTriangleSelection
+    (
+        ref Selection               selection,
+        ref Selection?              pendingLeftPanelFocusSelection,
+        ref bool                    lastWorldSelectMouseDown,
+        ref Vector3?                currentPickPoint,
+        ref string                  statusText,
+        DebugGameCollision          collision,
+        DebugDrawer                 dd,
+        CustomizationPreviewBuilder previewBuilder
+    )
+    {
+        var clicked = TakeWorldSelectClick(ref lastWorldSelectMouseDown);
+        if (!IsWorldClickAllowed())
+            return;
+
+        if (!TryGetWorldSelectionRay(dd, out var rayOrigin, out var rayDirection))
+            return;
+
+        if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
+            return;
+
+        TriangleHit? closestHit = null;
+        var closestDistance = float.MaxValue;
+
+        foreach (var (key, mesh) in previewBuilder.Extractor.Meshes.OrderBy(static x => x.Key, StringComparer.Ordinal))
+        {
+            for (var instanceIndex = 0; instanceIndex < mesh.Instances.Count; ++instanceIndex)
+            {
+                var instance = mesh.Instances[instanceIndex];
+                if (!collision.IsBoundsWithinEditorRenderDistance(instance.WorldBounds))
+                    continue;
+
+                for (var partIndex = 0; partIndex < mesh.Parts.Count; ++partIndex)
+                {
+                    var part = mesh.Parts[partIndex];
+                    for (var primIndex = 0; primIndex < part.Primitives.Count; ++primIndex)
+                    {
+                        var prim = part.Primitives[primIndex];
+                        var v0 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V1]);
+                        var v1 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V2]);
+                        var v2 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V3]);
+
+                        if (RayIntersectsTriangle(rayOrigin, rayDirection, v0, v1, v2, out var distance, out var hitPoint))
+                        {
+                            if (distance < closestDistance)
+                            {
+                                closestDistance = distance;
+                                closestHit = new(key, partIndex, primIndex, hitPoint, v0, v1, v2);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (closestHit != null)
+        {
+            currentPickPoint = closestHit.Value.HitPoint;
+            dd.DrawWorldPointFilled(closestHit.Value.HitPoint, 5, 0xFFFFFF00);
+            dd.DrawWorldTriangle(closestHit.Value.V0, closestHit.Value.V1, closestHit.Value.V2, 0xFFFFFF00, 3);
+
+            if (clicked)
+            {
+                selection = new(SelectionKind.PreviewPrimitive, closestHit.Value.PartIndex, closestHit.Value.PrimitiveIndex, closestHit.Value.MeshKey);
+                pendingLeftPanelFocusSelection = selection;
+                statusText = $"已选三角形: {closestHit.Value.MeshKey} p{closestHit.Value.PartIndex} t{closestHit.Value.PrimitiveIndex}";
+            }
+        }
+        else if (clicked)
+        {
+            statusText = "未选中三角形";
+        }
+    }
+
+    private static bool RayIntersectsTriangle
+    (
+        Vector3 rayOrigin,
+        Vector3 rayDirection,
+        Vector3 v0,
+        Vector3 v1,
+        Vector3 v2,
+        out float distance,
+        out Vector3 hitPoint
+    )
+    {
+        distance = 0f;
+        hitPoint = default;
+
+        var edge1 = v1 - v0;
+        var edge2 = v2 - v0;
+        var h = Vector3.Cross(rayDirection, edge2);
+        var a = Vector3.Dot(edge1, h);
+
+        if (MathF.Abs(a) < 0.00001f)
+            return false;
+
+        var f = 1f / a;
+        var s = rayOrigin - v0;
+        var u = f * Vector3.Dot(s, h);
+
+        if (u < 0f || u > 1f)
+            return false;
+
+        var q = Vector3.Cross(s, edge1);
+        var v = f * Vector3.Dot(rayDirection, q);
+
+        if (v < 0f || u + v > 1f)
+            return false;
+
+        var t = f * Vector3.Dot(edge2, q);
+
+        if (t <= 0.00001f)
+            return false;
+
+        distance = t;
+        hitPoint = rayOrigin + rayDirection * t;
+        return true;
+    }
+
+    private readonly record struct TriangleHit(string MeshKey, int PartIndex, int PrimitiveIndex, Vector3 HitPoint, Vector3 V0, Vector3 V1, Vector3 V2);
 
     private static bool TrySelectPreviewInstance
     (
@@ -866,6 +1005,54 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
+    private static void DrawPreviewVertexOverlay(Selection selection, CustomizationPreviewBuilder previewBuilder, DebugDrawer dd)
+    {
+        if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
+            return;
+
+        if (selection is not { Kind: SelectionKind.PreviewVertex, Key: not null } ||
+            !previewBuilder.Extractor.Meshes.TryGetValue(selection.Key, out var mesh) ||
+            selection.Index < 0 ||
+            selection.Index >= mesh.Parts.Count)
+            return;
+
+        var part = mesh.Parts[selection.Index];
+        if (selection.SubIndex < 0 || selection.SubIndex >= part.Vertices.Count)
+            return;
+
+        var vertex = part.Vertices[selection.SubIndex];
+        foreach (var instance in mesh.Instances)
+        {
+            var worldPos = instance.WorldTransform.TransformCoordinate(vertex);
+            dd.DrawWorldPointFilled(worldPos, 6, 0xFFFFD94A);
+        }
+    }
+
+    private static void DrawPreviewPrimitiveOverlay(Selection selection, CustomizationPreviewBuilder previewBuilder, DebugDrawer dd)
+    {
+        if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
+            return;
+
+        if (selection is not { Kind: SelectionKind.PreviewPrimitive, Key: not null } ||
+            !previewBuilder.Extractor.Meshes.TryGetValue(selection.Key, out var mesh) ||
+            selection.Index < 0 ||
+            selection.Index >= mesh.Parts.Count)
+            return;
+
+        var part = mesh.Parts[selection.Index];
+        if (selection.SubIndex < 0 || selection.SubIndex >= part.Primitives.Count)
+            return;
+
+        var prim = part.Primitives[selection.SubIndex];
+        foreach (var instance in mesh.Instances)
+        {
+            var v0 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V1]);
+            var v1 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V2]);
+            var v2 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V3]);
+            dd.DrawWorldTriangle(v0, v1, v2, 0xFFFFD94A, 3);
+        }
+    }
+
     private static void DrawInstancePatchOverlay
     (
         CustomizationEditorWorkspace workspace,
@@ -947,6 +1134,83 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             if (overlay.HasFlags)
                 DrawFlagOverlay(overlay.Bounds, overlay.FlagSetMask, overlay.FlagClearMask, dd, overlay.IsSelected);
+        }
+    }
+
+    private static void DrawPartPatchOverlay
+    (
+        CustomizationEditorWorkspace workspace,
+        Selection                    selection,
+        CustomizationPreviewBuilder  previewBuilder,
+        DebugGameCollision           collision,
+        DebugDrawer                  dd
+    )
+    {
+        if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
+            return;
+
+        for (var i = 0; i < workspace.Draft.PartPatches.Count; ++i)
+        {
+            var patch = workspace.Draft.PartPatches[i];
+            if (!patch.Enabled || string.IsNullOrWhiteSpace(patch.MeshKey))
+                continue;
+
+            if (!previewBuilder.Extractor.Meshes.TryGetValue(patch.MeshKey, out var mesh))
+                continue;
+
+            if (patch.PartIndex < 0 || patch.PartIndex >= mesh.Parts.Count)
+                continue;
+
+            var part = mesh.Parts[patch.PartIndex];
+            var isSelected = selection.Kind == SelectionKind.PartPatch && selection.Index == i;
+
+            foreach (var instance in mesh.Instances)
+            {
+                if (!collision.IsBoundsWithinEditorRenderDistance(instance.WorldBounds))
+                    continue;
+
+                switch (patch.Kind)
+                {
+                    case DraftScenePartPatchKind.Vertex:
+                        if (patch.VertexIndex >= 0 && patch.VertexIndex < part.Vertices.Count)
+                        {
+                            var worldPos = instance.WorldTransform.TransformCoordinate(patch.Position);
+                            var color = isSelected ? 0xFFFFD94A : 0xFF00FF00;
+                            dd.DrawWorldPointFilled(worldPos, isSelected ? 6 : 4, color);
+                        }
+                        break;
+
+                    case DraftScenePartPatchKind.PrimitiveFlags:
+                    case DraftScenePartPatchKind.PrimitiveEdit:
+                        if (patch.PrimitiveIndex >= 0 && patch.PrimitiveIndex < part.Primitives.Count)
+                        {
+                            var prim = part.Primitives[patch.PrimitiveIndex];
+                            Vector3 v0, v1, v2;
+
+                            if (patch.Kind == DraftScenePartPatchKind.PrimitiveEdit)
+                            {
+                                v0 = patch.V1 >= 0 && patch.V1 < part.Vertices.Count ? part.Vertices[patch.V1] : part.Vertices[prim.V1];
+                                v1 = patch.V2 >= 0 && patch.V2 < part.Vertices.Count ? part.Vertices[patch.V2] : part.Vertices[prim.V2];
+                                v2 = patch.V3 >= 0 && patch.V3 < part.Vertices.Count ? part.Vertices[patch.V3] : part.Vertices[prim.V3];
+                            }
+                            else
+                            {
+                                v0 = part.Vertices[prim.V1];
+                                v1 = part.Vertices[prim.V2];
+                                v2 = part.Vertices[prim.V3];
+                            }
+
+                            var worldV0 = instance.WorldTransform.TransformCoordinate(v0);
+                            var worldV1 = instance.WorldTransform.TransformCoordinate(v1);
+                            var worldV2 = instance.WorldTransform.TransformCoordinate(v2);
+
+                            var color = isSelected ? 0xFFFFD94A : patch.Kind == DraftScenePartPatchKind.PrimitiveEdit ? 0xFFFF00FF : 0xFF00FFFF;
+                            var thickness = isSelected ? 3 : 2;
+                            dd.DrawWorldTriangle(worldV0, worldV1, worldV2, color, thickness);
+                        }
+                        break;
+                }
+            }
         }
     }
 
@@ -1144,6 +1408,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         kind switch
         {
             PickKind.SelectCollider => "选中碰撞体",
+            PickKind.SelectTriangle => "选中三角形",
             PickKind.Aabb           => "AABB 障碍",
             PickKind.Cylinder       => "圆柱障碍",
             PickKind.LinkPoints     => "网格连线",

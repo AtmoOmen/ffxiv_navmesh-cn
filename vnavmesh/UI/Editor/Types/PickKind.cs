@@ -4,6 +4,7 @@ internal enum PickKind
 {
     None,
     SelectCollider,
+    SelectTriangle,
     Aabb,
     Cylinder,
     LinkPoints,

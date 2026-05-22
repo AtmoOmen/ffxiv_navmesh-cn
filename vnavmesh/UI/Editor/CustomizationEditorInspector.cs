@@ -1,3 +1,4 @@
+using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using vnavmesh.Navigation;
@@ -548,18 +549,71 @@ internal static class CustomizationEditorInspector
         changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
         changed |= CustomizationEditorWidgets.DrawInt("部件索引", ref item.PartIndex);
         changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
-        changed |= CustomizationEditorWidgets.DrawInt("顶点索引", ref item.VertexIndex);
-        changed |= CustomizationEditorWidgets.DrawInt("三角索引", ref item.PrimitiveIndex);
-        changed |= CustomizationEditorWidgets.DrawVector3("位置", ref item.Position);
-        changed |= CustomizationEditorWidgets.DrawInt("顶点 1", ref item.V1);
-        changed |= CustomizationEditorWidgets.DrawInt("顶点 2", ref item.V2);
-        changed |= CustomizationEditorWidgets.DrawInt("顶点 3", ref item.V3);
-        changed |= CustomizationEditorWidgets.DrawUInt64("材质", ref item.Material);
-        changed |= CustomizationEditorWidgets.DrawFlags("标记", ref item.Flags);
-        changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
-        changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
 
-        if (changed) onCommit();
+        ImGui.Separator();
+
+        switch (item.Kind)
+        {
+            case DraftScenePartPatchKind.Vertex:
+                changed |= CustomizationEditorWidgets.DrawInt("顶点索引", ref item.VertexIndex);
+                changed |= CustomizationEditorWidgets.DrawVector3("位置", ref item.Position);
+                break;
+
+            case DraftScenePartPatchKind.PrimitiveFlags:
+                changed |= CustomizationEditorWidgets.DrawInt("三角索引", ref item.PrimitiveIndex);
+                changed |= CustomizationEditorWidgets.DrawFlags("标记", ref item.Flags);
+
+                if (ImGui.Button("不可行走"))
+                {
+                    item.Flags = SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                    changed = true;
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("可行走"))
+                {
+                    item.Flags = SceneExtractor.PrimitiveFlags.ForceWalkable;
+                    changed = true;
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("飞行穿透"))
+                {
+                    item.Flags = SceneExtractor.PrimitiveFlags.FlyThrough;
+                    changed = true;
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("不可降落"))
+                {
+                    item.Flags = SceneExtractor.PrimitiveFlags.Unlandable;
+                    changed = true;
+                }
+                ImGui.SameLine();
+                if (ImGui.Button("清除"))
+                {
+                    item.Flags = SceneExtractor.PrimitiveFlags.None;
+                    changed = true;
+                }
+                break;
+
+            case DraftScenePartPatchKind.PrimitiveEdit:
+                changed |= CustomizationEditorWidgets.DrawInt("三角索引", ref item.PrimitiveIndex);
+                changed |= CustomizationEditorWidgets.DrawInt("顶点 1", ref item.V1);
+                changed |= CustomizationEditorWidgets.DrawInt("顶点 2", ref item.V2);
+                changed |= CustomizationEditorWidgets.DrawInt("顶点 3", ref item.V3);
+                changed |= CustomizationEditorWidgets.DrawUInt64("材质", ref item.Material);
+                changed |= CustomizationEditorWidgets.DrawFlags("标记", ref item.Flags);
+
+                if (ImGui.Button("移除三角形"))
+                {
+                    item.V1 = item.V2 = item.V3 = 0;
+                    changed = true;
+                }
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("将三个顶点索引设为相同值");
+                break;
+        }
+
+        if (changed)
+            onCommit();
     }
 
     private static void DrawColliderInsertionInspector(ref CustomizationEditorWorkspace workspace, ref Selection selection, CommitDelegate onCommit)
@@ -820,110 +874,126 @@ internal static class CustomizationEditorInspector
         var part                   = mesh.Parts[selIndex];
         var selectedVertexIndex    = selection.Kind == SelectionKind.PreviewVertex ? selection.SubIndex : -1;
         var selectedPrimitiveIndex = selection.Kind == SelectionKind.PreviewPrimitive ? selection.SubIndex : -1;
+
         ImGui.TextUnformatted($"网格: {selection.Key}");
         ImGui.TextUnformatted($"部件: {selection.Index}");
         ImGui.TextUnformatted($"{part.Vertices.Count} 个顶点, {part.Primitives.Count} 个三角");
         ImGui.TextUnformatted($"边界: {part.LocalBounds.Min:f3} - {part.LocalBounds.Max:f3}");
+        ImGui.Separator();
 
         if (selectedVertexIndex >= 0 && selectedVertexIndex < part.Vertices.Count)
         {
-            var vertexPatch = workspace.Draft.PartPatches.FirstOrDefault
-                (x => PartPatchMatches(x, selKey, selIndex, DraftScenePartPatchKind.Vertex, selectedVertexIndex));
-            var position = vertexPatch?.Position ?? part.Vertices[selectedVertexIndex];
-            ImGui.TextUnformatted($"选中顶点: {selectedVertexIndex}");
-
-            if (CustomizationEditorWidgets.DrawVector3("位置", ref position))
-            {
-                vertexPatch ??= new()
-                {
-                    MeshKey     = selection.Key,
-                    PartIndex   = selection.Index,
-                    Kind        = DraftScenePartPatchKind.Vertex,
-                    VertexIndex = selectedVertexIndex
-                };
-                vertexPatch.Position = position;
-                if (!workspace.Draft.PartPatches.Contains(vertexPatch))
-                    workspace.Draft.PartPatches.Add(vertexPatch);
-                onCommit();
-            }
-
-            if (ImGui.Button("删除顶点位置补丁"))
-                onRemoveMatchingPartPatch(selection.Key, selection.Index, DraftScenePartPatchKind.Vertex, selectedVertexIndex);
+            DrawPreviewVertexInfo(workspace, part, selKey, selIndex, selectedVertexIndex, mesh, onAddPartPatch);
         }
-        else if (ImGui.Button("加入顶点位置补丁")) onAddPartPatch(mesh, selection.Key, selection.Index, DraftScenePartPatchKind.Vertex);
-
-        ImGui.SameLine();
-
-        if (selectedPrimitiveIndex >= 0 && selectedPrimitiveIndex < part.Primitives.Count)
+        else if (selectedPrimitiveIndex >= 0 && selectedPrimitiveIndex < part.Primitives.Count)
         {
-            var primitive = part.Primitives[selectedPrimitiveIndex];
-            var flagsPatch = workspace.Draft.PartPatches.FirstOrDefault
-                (x => PartPatchMatches(x, selKey, selIndex, DraftScenePartPatchKind.PrimitiveFlags, selectedPrimitiveIndex));
-            var primitiveFlags = flagsPatch?.Flags ?? primitive.Flags;
-            ImGui.TextUnformatted($"选中三角: {selectedPrimitiveIndex} {primitive.V1}x{primitive.V2}x{primitive.V3}");
-            var flagsChanged = CustomizationEditorWidgets.DrawFlags("标记", ref primitiveFlags);
-
-            if (flagsChanged)
-            {
-                flagsPatch ??= new()
-                {
-                    MeshKey        = selection.Key,
-                    PartIndex      = selection.Index,
-                    Kind           = DraftScenePartPatchKind.PrimitiveFlags,
-                    PrimitiveIndex = selectedPrimitiveIndex
-                };
-                flagsPatch.Flags = primitiveFlags;
-                if (!workspace.Draft.PartPatches.Contains(flagsPatch))
-                    workspace.Draft.PartPatches.Add(flagsPatch);
-                onCommit();
-            }
-
-            var editPatch = workspace.Draft.PartPatches.FirstOrDefault
-                (x => PartPatchMatches(x, selKey, selIndex, DraftScenePartPatchKind.PrimitiveEdit, selectedPrimitiveIndex));
-            var v1          = editPatch?.V1       ?? primitive.V1;
-            var v2          = editPatch?.V2       ?? primitive.V2;
-            var v3          = editPatch?.V3       ?? primitive.V3;
-            var editFlags   = editPatch?.Flags    ?? primitive.Flags;
-            var material    = editPatch?.Material ?? primitive.Material;
-            var editChanged = false;
-            editChanged |= CustomizationEditorWidgets.DrawInt("顶点 1", ref v1);
-            editChanged |= CustomizationEditorWidgets.DrawInt("顶点 2", ref v2);
-            editChanged |= CustomizationEditorWidgets.DrawInt("顶点 3", ref v3);
-            editChanged |= CustomizationEditorWidgets.DrawFlags("编辑标记", ref editFlags);
-            editChanged |= CustomizationEditorWidgets.DrawUInt64("材质", ref material);
-
-            if (editChanged)
-            {
-                editPatch ??= new()
-                {
-                    MeshKey        = selection.Key,
-                    PartIndex      = selection.Index,
-                    Kind           = DraftScenePartPatchKind.PrimitiveEdit,
-                    PrimitiveIndex = selectedPrimitiveIndex
-                };
-                editPatch.V1       = v1;
-                editPatch.V2       = v2;
-                editPatch.V3       = v3;
-                editPatch.Flags    = editFlags;
-                editPatch.Material = material;
-                if (!workspace.Draft.PartPatches.Contains(editPatch))
-                    workspace.Draft.PartPatches.Add(editPatch);
-                onCommit();
-            }
-
-            if (ImGui.Button("删除三角标记补丁"))
-                onRemoveMatchingPartPatch(selection.Key, selection.Index, DraftScenePartPatchKind.PrimitiveFlags, selectedPrimitiveIndex);
-            ImGui.SameLine();
-            if (ImGui.Button("删除三角高级编辑补丁"))
-                onRemoveMatchingPartPatch(selection.Key, selection.Index, DraftScenePartPatchKind.PrimitiveEdit, selectedPrimitiveIndex);
+            DrawPreviewPrimitiveInfo(workspace, part, selKey, selIndex, selectedPrimitiveIndex, mesh, onAddPartPatch);
         }
         else
         {
-            if (ImGui.Button("加入三角标记补丁"))
-                onAddPartPatch(mesh, selection.Key, selection.Index, DraftScenePartPatchKind.PrimitiveFlags);
+            ImGui.TextDisabled("在左侧树中选择顶点或三角以查看详情");
+        }
+    }
+
+    private static void DrawPreviewVertexInfo
+    (
+        CustomizationEditorWorkspace workspace,
+        SceneExtractor.MeshPart      part,
+        string                       meshKey,
+        int                          partIndex,
+        int                          vertexIndex,
+        SceneExtractor.Mesh          mesh,
+        AddPartPatchDelegate         onAddPartPatch
+    )
+    {
+        var originalPosition = part.Vertices[vertexIndex];
+        var existingPatch = workspace.Draft.PartPatches.FirstOrDefault
+            (x => PartPatchMatches(x, meshKey, partIndex, DraftScenePartPatchKind.Vertex, vertexIndex));
+
+        ImGui.TextUnformatted($"顶点索引: {vertexIndex}");
+        ImGui.TextUnformatted($"原始位置: {originalPosition:f3}");
+
+        if (existingPatch != null)
+        {
+            ImGui.Separator();
+            ImGui.TextColored(new Vector4(0.3f, 1f, 0.3f, 1f), "✓ 已有位置补丁");
+            ImGui.TextUnformatted($"补丁位置: {existingPatch.Position:f3}");
+            ImGui.TextDisabled("要编辑此补丁, 请在左侧草稿区选择对应的补丁项");
+        }
+        else
+        {
+            ImGui.Separator();
+            if (ImGui.Button("创建位置补丁"))
+            {
+                onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.Vertex, vertexIndex);
+            }
             ImGui.SameLine();
-            if (ImGui.Button("加入三角高级编辑补丁"))
-                onAddPartPatch(mesh, selection.Key, selection.Index, DraftScenePartPatchKind.PrimitiveEdit);
+            ImGui.TextDisabled("将以当前位置创建补丁");
+        }
+    }
+
+    private static void DrawPreviewPrimitiveInfo
+    (
+        CustomizationEditorWorkspace workspace,
+        SceneExtractor.MeshPart      part,
+        string                       meshKey,
+        int                          partIndex,
+        int                          primitiveIndex,
+        SceneExtractor.Mesh          mesh,
+        AddPartPatchDelegate         onAddPartPatch
+    )
+    {
+        var primitive = part.Primitives[primitiveIndex];
+        var flagsPatch = workspace.Draft.PartPatches.FirstOrDefault
+            (x => PartPatchMatches(x, meshKey, partIndex, DraftScenePartPatchKind.PrimitiveFlags, primitiveIndex));
+        var editPatch = workspace.Draft.PartPatches.FirstOrDefault
+            (x => PartPatchMatches(x, meshKey, partIndex, DraftScenePartPatchKind.PrimitiveEdit, primitiveIndex));
+
+        ImGui.TextUnformatted($"三角索引: {primitiveIndex}");
+        ImGui.TextUnformatted($"顶点索引: {primitive.V1} / {primitive.V2} / {primitive.V3}");
+        ImGui.TextUnformatted($"标记: {primitive.Flags}");
+        ImGui.TextUnformatted($"材质: {primitive.Material}");
+
+        ImGui.Separator();
+
+        if (flagsPatch != null)
+        {
+            ImGui.TextColored(new Vector4(0.3f, 1f, 1f, 1f), "✓ 已有标记补丁");
+            ImGui.TextUnformatted($"补丁标记: {flagsPatch.Flags}");
+        }
+        else
+        {
+            if (ImGui.Button("创建标记补丁"))
+            {
+                onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.PrimitiveFlags, primitiveIndex);
+            }
+            ImGui.SameLine();
+            ImGui.TextDisabled("将以当前标记创建补丁");
+        }
+
+        ImGui.Separator();
+
+        if (editPatch != null)
+        {
+            ImGui.TextColored(new Vector4(1f, 0.3f, 1f, 1f), "✓ 已有高级编辑补丁");
+            ImGui.TextUnformatted($"补丁顶点: {editPatch.V1} / {editPatch.V2} / {editPatch.V3}");
+            ImGui.TextUnformatted($"补丁标记: {editPatch.Flags}");
+            ImGui.TextUnformatted($"补丁材质: {editPatch.Material}");
+        }
+        else
+        {
+            if (ImGui.Button("创建高级编辑补丁"))
+            {
+                onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.PrimitiveEdit, primitiveIndex);
+            }
+            ImGui.SameLine();
+            ImGui.TextDisabled("将以当前值创建补丁");
+        }
+
+        if (flagsPatch != null || editPatch != null)
+        {
+            ImGui.Separator();
+            ImGui.TextDisabled("要编辑补丁, 请在左侧草稿区选择对应的补丁项");
         }
     }
 

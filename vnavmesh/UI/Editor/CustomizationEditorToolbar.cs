@@ -81,7 +81,22 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
-            
+
+            ImGui.SameLine();
+            DrawModeButton
+            (
+                "选三角形",
+                PickKind.SelectTriangle,
+                "在游戏画面点选三角形, 选中后右侧直接编辑",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
             ImGui.SameLine();
             DrawModeButton
             (
@@ -347,9 +362,12 @@ internal static class CustomizationEditorToolbar
         lastPickMouseDown        = IsKeyDown(VK_LBUTTON);
         lastWorldSelectMouseDown = lastPickMouseDown;
         lastPickEscapeDown       = IsKeyDown(VK_ESCAPE);
-        statusText = kind == PickKind.SelectCollider
-                         ? "点击游戏画面中的碰撞体以选中"
-                         : $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)}: 在画面点击第 1 个世界点";
+        statusText = kind switch
+        {
+            PickKind.SelectCollider => "点击游戏画面中的碰撞体以选中",
+            PickKind.SelectTriangle => "点击游戏画面中的三角形以选中",
+            _                       => $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)}: 在画面点击第 1 个世界点"
+        };
     }
 
     private static bool IsKeyDown(int virtualKey) =>
