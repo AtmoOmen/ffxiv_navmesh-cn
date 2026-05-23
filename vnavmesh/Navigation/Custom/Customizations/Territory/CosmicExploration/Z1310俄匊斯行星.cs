@@ -1,8 +1,9 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
+using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Custom.Abstractions;
 using vnavmesh.Navigation.Custom.Attributes;
+using vnavmesh.Navigation.Custom.Extensions;
 using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Navigation.Custom.Customizations.Territory.CosmicExploration;
@@ -14,243 +15,190 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
 
     public override void CustomizeScene(SceneExtractor scene)
     {
-        string[] doubleLiners = ["bg/ffxiv/cos_c1/hou/c1w3/collision/c1w3_03_t200a.pcb"];
-
-        foreach (var liner in doubleLiners)
+        if (scene.Meshes.TryGetValue("bg/ffxiv/cos_c1/hou/c1w3/collision/c1w3_03_t200a.pcb", out var mesh0))
         {
-            if (scene.Meshes.TryGetValue(liner, out var cl))
+            if (29 < mesh0.Parts.Count)
             {
-                // prevent agent from trying to climb the side of the ramp of a green cosmoliner - can cause issues if idiots set a very high path tolerance
-                var departVerts = CollectionsMarshal.AsSpan(cl.Parts[29].Vertices);
-                departVerts[129].Y += 1;
-                departVerts[130].Y += 1;
-                departVerts[132].Y += 1;
-                departVerts[133].Y += 1;
+                var part = mesh0.Parts[29];
 
-                var box = SceneExtractor.BuildBoxMesh()[0];
-
-                foreach (ref var vert in CollectionsMarshal.AsSpan(box.Vertices))
+                if (129 < part.Vertices.Count)
                 {
-                    vert *= new Vector3(1.5f, 3.75f, 1.5f);
-                    vert += new Vector3(4.5f, 6.25f, -1);
+                    part.Vertices[129] = new(7.4296174f, 1.6966519f, 5.3007555f);
+                    part.LocalBounds   = CalculateLocalBounds(part.Vertices);
+                    RecalculateMeshBounds(mesh0);
                 }
-
-                cl.Parts.Add(box);
             }
-        }
 
-        if (scene.Meshes.TryGetValue("bg/ffxiv/cos_c1/hou/c1w3/collision/c1w3_03_t600a.pcb", out var mesh))
-        {
-            var box = SceneExtractor.BuildBoxMesh()[0];
-
-            foreach (ref var vert in CollectionsMarshal.AsSpan(box.Vertices))
+            if (29 < mesh0.Parts.Count)
             {
-                vert *= new Vector3(1.5f, 3.75f, 1.5f);
-                vert += new Vector3(0,    6.25f, -1);
+                var part = mesh0.Parts[29];
+
+                if (130 < part.Vertices.Count)
+                {
+                    part.Vertices[130] = new(7.4453645f, 1.7093903f, 5.7623405f);
+                    part.LocalBounds   = CalculateLocalBounds(part.Vertices);
+                    RecalculateMeshBounds(mesh0);
+                }
             }
 
-            mesh.Parts.Add(box);
+            if (29 < mesh0.Parts.Count)
+            {
+                var part = mesh0.Parts[29];
+
+                if (132 < part.Vertices.Count)
+                {
+                    part.Vertices[132] = new(7.4882116f, 1.4999946f, 7.285237f);
+                    part.LocalBounds   = CalculateLocalBounds(part.Vertices);
+                    RecalculateMeshBounds(mesh0);
+                }
+            }
+
+            if (29 < mesh0.Parts.Count)
+            {
+                var part = mesh0.Parts[29];
+
+                if (133 < part.Vertices.Count)
+                {
+                    part.Vertices[133] = new(7.4882116f, 1.4999946f, 4.714626f);
+                    part.LocalBounds   = CalculateLocalBounds(part.Vertices);
+                    RecalculateMeshBounds(mesh0);
+                }
+            }
         }
+
+        scene.InsertAABoxCollider
+        (
+            new AABB
+            {
+                Min = new(-131.259f, -195.082f, -840.71716f),
+                Max = new(-128.37198f, -188.6f, -831.78186f)
+            },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
+        scene.InsertAABoxCollider
+        (
+            new AABB
+            {
+                Min = new(-152.32198f, -193.773f, -933.42145f),
+                Max = new(-142.62202f, -190.537f, -923.9085f)
+            },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
     }
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
-        var festivalVersion = festivalLayers.LastOrDefault() >> 16;
-
-        // add jump down point for a raised rock that a drone spawns on
-        LinkPoints(mesh, new(148.5f, -92, -540), new(150.25f, -92.725f, -536f));
-
-        #region base
-
-        // base -> N
-        LinkClientPath(mesh, new(-175.5f, 3f, 52.8f),       new(-145.5f, -20.3f, -214.8f));
-        LinkClientPath(mesh, new(-154.5f, -20.5f, -213.8f), new(-184.5f, 3.2f, 53.8f));
-
-        // base -> W
-        LinkClientPath(mesh, new(-298.2f, 3f, 133.5f),    new(-519.8f, 25.7f, 115.5f));
-        LinkClientPath(mesh, new(-518.8f, 25.5f, 124.5f), new(-297.2f, 3.2f, 142.5f));
-
-        // base -> E
-        LinkClientPath(mesh, new(-61.8f, 3f, 142.5f), new(157.8f, 2.2f, -3.5f));
-        LinkClientPath(mesh, new(156.8f, 2f, -12.5f), new(-62.8f, 3.2f, 133.5f));
-
-        #endregion
-
-        #region E
-
-        // North
-        LinkClientPath(mesh, new(184.5f, 2f, -31.2f),    new(196.5f, -51.8f, -377.8f));
-        LinkClientPath(mesh, new(187.5f, -52f, -376.8f), new(175.5f, 2.2f, -30.2f));
-
-        // East
-        LinkClientPath(mesh, new(203.2f, 2f, -3.5f),     new(500.5f, -49.8f, -290.8f));
-        LinkClientPath(mesh, new(491.5f, -50f, -289.8f), new(202.2f, 2.2f, -12.5f));
-
-        #endregion
-
-        #region NE
-
-        // E -> Far East (against map)
-        LinkClientPath(mesh, new(215.2f, -52f, -395.5f), new(473.8f, -49.8f, -308.5f));
-        LinkClientPath(mesh, new(472.8f, -50f, -317.5f), new(214.2f, -51.8f, -404.5f));
-
-        // N -> Far N (against map, beside pin)
-        LinkClientPath(mesh, new(196.5f, -52f, -423.2f),    new(314.5f, -151.3f, -603.8f));
-        LinkClientPath(mesh, new(305.5f, -151.5f, -602.8f), new(187.5f, -51.8f, -422.2f));
-
-        #endregion
-
-        #region NE far
-
-        // NE above location -> E below location name
-        LinkClientPath(mesh, new(333.2f, -151.5f, -621.5f), new(491.5f, -49.8f, -335.2f));
-        LinkClientPath(mesh, new(500.5f, -50f, -336.2f),    new(332.2f, -151.3f, -630.5f));
-
-        if (festivalVersion >= 0x1A)
-        {
-            // NE cave
-            LinkClientPath(mesh, new(286.8f, -151.5f, -630.5f),    new(92.692f, -190.3f, -780.797f));
-            LinkClientPath(mesh, new(89.056f, -190.5f, -772.504f), new(287.8f, -151.3f, -621.5f));
-
-            // entrance 1
-            LinkClientPath(mesh, new(1.4f, -189.05f, -799.4f), new(-89.8f, -188.85f, -799.4f));
-            // entrance 2
-            LinkClientPath(mesh, new(-126.6f, -189.05f, -841.2f), new(-126.6f, -188.85f, -893.8f));
-            // entrance 3
-            LinkClientPath(mesh, new(-183.2f, -189.05f, -949.4f), new(-290.8f, -188.85f, -949.4f));
-            // entrance 4
-            LinkClientPath(mesh, new(-325.4f, -189.05f, -913.8f), new(-325.4f, -188.85f, -835.2f));
-
-            // exit 4
-            LinkClientPath(mesh, new(-306.6f, -189.05f, -836.2f), new(-306.6f, -188.85f, -914.8f));
-            // exit 3
-            LinkClientPath(mesh, new(-289.8f, -189.05f, -930.6f), new(-182.2f, -188.85f, -930.6f));
-            // exit 2
-            LinkClientPath(mesh, new(-145.4f, -189.05f, -892.8f), new(-145.4f, -188.85f, -840.2f));
-            // exit 1
-            LinkClientPath(mesh, new(-88.8f, -189.05f, -780.6f), new(2.4f, -188.85f, -780.6f));
-        }
-
-        #endregion
-
-        #region EE
-
-        if (festivalVersion >= 0x0B)
-        {
-            // shadefleet N <-> NNE
-            LinkClientPath(mesh, new(728.5f, 220.75f, -124.2f), new(518.2f, -49.8f, -317.5f));
-            LinkClientPath(mesh, new(519.2f, -50f, -308.5f),    new(719.5f, 220.95f, -123.2f));
-
-            // shadefleet S <-> shadefleet N
-            LinkClientPath(mesh, new(674.5f, 136f, 266.8f),    new(728.5f, 220.95f, -78.8f));
-            LinkClientPath(mesh, new(719.5f, 220.75f, -77.8f), new(665.5f, 136.2f, 267.8f));
-
-            // shadefleet S <-> mid east
-            LinkClientPath(mesh, new(646.8f, 136f, 285.5f),       new(356.976f, 102.7f, 380.004f));
-            LinkClientPath(mesh, new(362.343f, 102.5f, 387.297f), new(647.8f, 136.2f, 294.5f));
-        }
-
-        #endregion
-
-        #region SE
-
-        // North -> Mid East
-        LinkClientPath(mesh, new(96.5f, 100f, 329.8f), new(184.5f, 2.2f, 14.2f));
-        LinkClientPath(mesh, new(175.5f, 2f, 15.2f),   new(87.5f, 100.2f, 330.8f));
-
-        // E -> Single on E
-        LinkClientPath(mesh, new(115.2f, 100f, 357.5f),       new(323.024f, 102.7f, 409.996f));
-        LinkClientPath(mesh, new(317.657f, 102.5f, 402.703f), new(114.2f, 100.2f, 348.5f));
-
-        #endregion
-
-        #region SW far
-
-        // North Side -> SW Cosmo
-        LinkClientPath(mesh, new(-440.5f, 104f, 746.8f), new(-383.5f, 47.2f, 423.2f));
-        LinkClientPath(mesh, new(-392.5f, 47f, 424.2f),  new(-449.5f, 104.2f, 747.8f));
-
-        // West Side -> West Cosmo
-        LinkClientPath(mesh, new(-468.2f, 104f, 765.5f),  new(-656.5f, 30.7f, 453.2f));
-        LinkClientPath(mesh, new(-665.5f, 30.5f, 454.2f), new(-467.2f, 104.2f, 774.5f));
-
-        #endregion
-
-        #region SW wall
-
-        // N -> West of base
-        LinkClientPath(mesh, new(-656.5f, 30.5f, 407.8f), new(-564.2f, 25.7f, 124.5f));
-        LinkClientPath(mesh, new(-565.2f, 25.5f, 115.5f), new(-665.5f, 30.7f, 408.8f));
-
-        // E -> SE Cosmoliner
-        LinkClientPath(mesh, new(-637.8f, 30.5f, 435.5f), new(-410.2f, 47.2f, 405.5f));
-        LinkClientPath(mesh, new(-411.2f, 47f, 396.5f),   new(-638.8f, 30.7f, 426.5f));
-
-        #endregion
-
-        #region SW
-
-        // N -> West of base
-        LinkClientPath(mesh, new(-383.5f, 47f, 377.8f),   new(-537.5f, 25.7f, 142.2f));
-        LinkClientPath(mesh, new(-546.5f, 25.5f, 143.2f), new(-392.5f, 47.2f, 378.8f));
-
-        // E -> SE of base
-        LinkClientPath(mesh, new(-364.8f, 47f, 405.5f), new(69.8f, 100.2f, 357.5f));
-        LinkClientPath(mesh, new(68.8f, 100f, 348.5f),  new(-365.8f, 47.2f, 396.5f));
-
-        #endregion
-
-        #region W
-
-        // North -> NW (Below Erg Eris)
-        LinkClientPath(mesh, new(-537.5f, 25.5f, 96.8f),  new(-525.5f, -24.8f, -217.8f));
-        LinkClientPath(mesh, new(-534.5f, -25f, -216.8f), new(-546.5f, 25.7f, 97.8f));
-
-        #endregion
-
-        #region NW
-
-        // N -> NW (Above Erg Eris, below flower looking hole)
-        LinkClientPath(mesh, new(-525.5f, -25f, -263.2f),   new(-697.5f, -85.3f, -471.8f));
-        LinkClientPath(mesh, new(-706.5f, -85.5f, -470.8f), new(-534.5f, -24.8f, -262.2f));
-
-        // E -> Cosmoliner N of base
-        LinkClientPath(mesh, new(-506.8f, -25f, -235.5f),   new(-172.2f, -20.3f, -232.5f));
-        LinkClientPath(mesh, new(-173.2f, -20.5f, -241.5f), new(-507.8f, -24.8f, -244.5f));
-
-        #endregion
-
-        #region N
-
-        // N -> Far North
-        LinkClientPath(mesh, new(-145.5f, -20.5f, -260.2f), new(-127.5f, -72.3f, -559.8f));
-        LinkClientPath(mesh, new(-136.5f, -72.5f, -558.8f), new(-154.5f, -20.3f, -259.2f));
-
-        // E -> NE
-        LinkClientPath(mesh, new(-126.8f, -20.5f, -232.5f), new(169.8f, -51.8f, -395.5f));
-        LinkClientPath(mesh, new(168.8f, -52f, -404.5f),    new(-127.8f, -20.3f, -241.5f));
-
-        #endregion
-
-        #region NN
-
-        // W -> Far NW (East Side
-        LinkClientPath(mesh, new(-155.2f, -73f, -586.5f),   new(-679.8f, -85.3f, -498.5f));
-        LinkClientPath(mesh, new(-678.8f, -85.5f, -489.5f), new(-154.2f, -72.8f, -577.5f));
-
-        // N -> FARR NW/Against N Wall
-        LinkClientPath(mesh, new(-127.5f, -73f, -605.2f),    new(-457.8f, -102.3f, -764.5f));
-        LinkClientPath(mesh, new(-456.8f, -102.5f, -755.5f), new(-136.5f, -72.8f, -604.2f));
-
-        #endregion
-
-        #region NNW
-
-        // North -> NW Cosmoliner
-        LinkClientPath(mesh, new(-697.5f, -85.5f, -517.2f),  new(-502.2f, -102.3f, -755.5f));
-        LinkClientPath(mesh, new(-503.2f, -102.5f, -764.5f), new(-706.5f, -85.3f, -516.2f));
-
-        #endregion
-
+        LinkPoints(mesh, new(148.5f, -91.78484f, -540f), new(150.25f, -92.63461f, -536f));
+        LinkClientPath(mesh, new(-175.5f, 3.25f, 52.8f),              new(-145.5f, -20.25f, -214.8f));
+        LinkClientPath(mesh, new(-154.53415f, -20.25f, -214.1073f),   new(-184.5f, 3.25f, 53.8f));
+        LinkClientPath(mesh, new(-298.2f, 3.25f, 133.5f),             new(-519.8f, 25.75f, 115.5f));
+        LinkClientPath(mesh, new(-519.12f, 25.75f, 124.54f),          new(-297.2f, 3.25f, 142.5f));
+        LinkClientPath(mesh, new(-61.8f, 3.25f, 142.5f),              new(157.8f, 2.25f, -3.5f));
+        LinkClientPath(mesh, new(157.25f, 2.25f, -12.5f),             new(-62.8f, 3.25f, 133.5f));
+        LinkClientPath(mesh, new(184.5f, 2.25f, -30.75f),             new(196.5f, -51.75f, -377.8f));
+        LinkClientPath(mesh, new(187.46585f, -51.75f, -377.1073f),    new(175.5f, 2.25f, -30.2f));
+        LinkClientPath(mesh, new(202.88f, 2.25f, -3.4600003f),        new(500.5f, -49.75f, -290.8f));
+        LinkClientPath(mesh, new(491.46585f, -49.75f, -290.1073f),    new(202.2f, 2.25f, -12.5f));
+        LinkClientPath(mesh, new(214.88f, -51.75f, -395.46002f),      new(473.8f, -49.75f, -308.5f));
+        LinkClientPath(mesh, new(473.25f, -49.75f, -317.5f),          new(214.2f, -51.75f, -404.5f));
+        LinkClientPath(mesh, new(196.5f, -51.75f, -422.75f),          new(314.5f, -151.25f, -603.8f));
+        LinkClientPath(mesh, new(305.46585f, -151.25f, -603.1073f),   new(187.5f, -51.75f, -422.2f));
+        LinkClientPath(mesh, new(332.88f, -151.25f, -621.45996f),     new(491.5f, -49.75f, -335.2f));
+        LinkClientPath(mesh, new(500.5f, -49.75f, -335.75f),          new(332.2f, -151.25f, -630.5f));
+        LinkClientPath(mesh, new(287.25f, -151.25f, -630.5f),         new(92.692f, -190.25f, -780.797f));
+        LinkClientPath(mesh, new(88.77321f, -190.25f, -772.66565f),   new(287.8f, -151.25f, -621.5f));
+        LinkClientPath(mesh, new(1.75f, -188.75f, -799.4f),           new(-89.8f, -188.75f, -799.4f));
+        LinkClientPath(mesh, new(-126.6f, -188.75f, -840.75f),        new(-126.6f, -188.8f, -893.8f));
+        LinkClientPath(mesh, new(-182.75f, -188.75f, -949.4f),        new(-290.8f, -188.75f, -949.4f));
+        LinkClientPath(mesh, new(-325.43768f, -188.75f, -914.10156f), new(-325.4f, -188.75f, -835.2f));
+        LinkClientPath(mesh, new(-306.6f, -188.75f, -835.75f),        new(-306.6f, -188.75f, -914.8f));
+        LinkClientPath(mesh, new(-290.10156f, -188.75f, -930.5623f),  new(-182.2f, -188.75f, -930.6f));
+        LinkClientPath(mesh, new(-145.4377f, -188.75f, -893.10156f),  new(-145.4f, -188.75f, -840.2f));
+        LinkClientPath(mesh, new(-89.10154f, -188.75f, -780.5623f),   new(2.4f, -188.75f, -780.6f));
+        LinkClientPath(mesh, new(728.5f, 221f, -123.75f),             new(518.2f, -49.75f, -317.5f));
+        LinkClientPath(mesh, new(519f, -49.75f, -308.5f),             new(719.5f, 221f, -123.2f));
+        LinkClientPath(mesh, new(674.5f, 136.25f, 267.25f),           new(728.5f, 221f, -78.8f));
+        LinkClientPath(mesh, new(719.4658f, 221f, -78.107315f),       new(665.5f, 136.25f, 267.8f));
+        LinkClientPath(mesh, new(647.25f, 136.25f, 285.5f),           new(356.976f, 102.75f, 380.004f));
+        LinkClientPath(mesh, new(361.99622f, 102.75f, 387.54468f),    new(647.8f, 136.25f, 294.5f));
+        LinkClientPath(mesh, new(96.5f, 100.25f, 330.25f),            new(184.5f, 2.25f, 14.2f));
+        LinkClientPath(mesh, new(175.46585f, 2.25f, 14.892683f),      new(87.5f, 100.25f, 330.8f));
+        LinkClientPath(mesh, new(114.88f, 100.25f, 357.53998f),       new(323.024f, 102.75f, 409.996f));
+        LinkClientPath(mesh, new(318.0126f, 102.75f, 402.5252f),      new(114.2f, 100.25f, 348.5f));
+        LinkClientPath(mesh, new(-440.5f, 104.25f, 747.25f),          new(-383.5f, 47.25f, 423.2f));
+        LinkClientPath(mesh, new(-392.5f, 47.25f, 424f),              new(-449.5f, 104.25f, 747.8f));
+        LinkClientPath(mesh, new(-467.75f, 104.25f, 765.5f),          new(-656.5f, 30.63261f, 453.2f));
+        LinkClientPath(mesh, new(-665.5342f, 30.75f, 453.8927f),      new(-467.2f, 104.25f, 774.5f));
+        LinkClientPath(mesh, new(-656.5f, 30.75f, 408.25f),           new(-564.2f, 25.75f, 124.5f));
+        LinkClientPath(mesh, new(-564.75f, 25.75f, 115.5f),           new(-665.5f, 30.75f, 408.8f));
+        LinkClientPath(mesh, new(-638f, 30.75f, 435.5f),              new(-410.2f, 47.25f, 405.5f));
+        LinkClientPath(mesh, new(-410.75f, 47.25f, 396.5f),           new(-638.8f, 30.75f, 426.5f));
+        LinkClientPath(mesh, new(-383.5f, 47.25f, 377.8f),            new(-537.5f, 25.75f, 142.2f));
+        LinkClientPath(mesh, new(-546.5341f, 25.75f, 142.89268f),     new(-392.5f, 47.25f, 378.8f));
+        LinkClientPath(mesh, new(-365.12f, 47.25f, 405.54f),          new(69.8f, 100.25f, 357.5f));
+        LinkClientPath(mesh, new(69.25f, 100.25f, 348.5f),            new(-365.8f, 47.25f, 396.5f));
+        LinkClientPath(mesh, new(-537.5f, 25.75f, 97.25f),            new(-525.5f, -24.75f, -217.8f));
+        LinkClientPath(mesh, new(-534.5341f, -24.75f, -217.1073f),    new(-546.5f, 25.75f, 97.8f));
+        LinkClientPath(mesh, new(-525.5f, -24.75f, -262.75f),         new(-697.5f, -85.25f, -471.8f));
+        LinkClientPath(mesh, new(-706.5342f, -85.25f, -471.1073f),    new(-534.5f, -24.75f, -262.2f));
+        LinkClientPath(mesh, new(-507f, -24.75f, -235.5f),            new(-172.2f, -20.25f, -232.5f));
+        LinkClientPath(mesh, new(-172.75f, -20.25f, -241.5f),         new(-507.8f, -24.858137f, -244.5f));
+        LinkClientPath(mesh, new(-145.5f, -20.25f, -259.75f),         new(-127.5f, -72.75f, -559.8f));
+        LinkClientPath(mesh, new(-136.53415f, -72.75f, -559.1073f),   new(-154.5f, -20.341175f, -259.2f));
+        LinkClientPath(mesh, new(-127f, -20.25f, -232.5f),            new(169.8f, -51.75f, -395.5f));
+        LinkClientPath(mesh, new(169.25f, -51.75f, -404.5f),          new(-127.8f, -20.25f, -241.5f));
+        LinkClientPath(mesh, new(-154.75f, -72.75f, -586.5f),         new(-679.8f, -85.25f, -498.5f));
+        LinkClientPath(mesh, new(-679f, -85.25f, -489.5f),            new(-154.2f, -72.75f, -577.5f));
+        LinkClientPath(mesh, new(-127.5f, -72.75f, -605.2f),          new(-457.8f, -102.25f, -764.5f));
+        LinkClientPath(mesh, new(-457.12f, -102.25f, -755.45996f),    new(-136.5f, -72.75f, -604.2f));
+        LinkClientPath(mesh, new(-697.5f, -85.25f, -516.75f),         new(-502.2f, -102.25f, -755.5f));
+        LinkClientPath(mesh, new(-502.75f, -102.25f, -764.5f),        new(-706.5f, -85.35814f, -516.2f));
     }
+
+    private static void RecalculateMeshBounds(SceneExtractor.Mesh mesh)
+    {
+        mesh.LocalBounds = CalculateLocalBounds(mesh.Parts);
+        foreach (var instance in mesh.Instances)
+            instance.WorldBounds = TransformBounds(instance.WorldTransform, mesh.LocalBounds);
+    }
+
+    private static AABB CalculateLocalBounds(List<SceneExtractor.MeshPart> parts)
+    {
+        var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };
+
+        foreach (var part in parts)
+        {
+            bounds.Min = Vector3.Min(bounds.Min, part.LocalBounds.Min);
+            bounds.Max = Vector3.Max(bounds.Max, part.LocalBounds.Max);
+        }
+
+        return bounds;
+    }
+
+    private static AABB CalculateLocalBounds(List<Vector3> vertices)
+    {
+        var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };
+
+        foreach (var vertex in vertices)
+        {
+            bounds.Min = Vector3.Min(bounds.Min, vertex);
+            bounds.Max = Vector3.Max(bounds.Max, vertex);
+        }
+
+        return bounds;
+    }
+
+    private static AABB TransformBounds(Matrix4x3 worldTransform, AABB localBounds)
+    {
+        var localCenter = (localBounds.Min + localBounds.Max) * 0.5f;
+        var localExtent = (localBounds.Max - localBounds.Min) * 0.5f;
+        var axisX       = worldTransform.Row0;
+        var axisY       = worldTransform.Row1;
+        var axisZ       = worldTransform.Row2;
+        var center      = (axisX      * localCenter.X) + (axisY      * localCenter.Y) + (axisZ      * localCenter.Z) + worldTransform.Row3;
+        var extent      = (Abs(axisX) * localExtent.X) + (Abs(axisY) * localExtent.Y) + (Abs(axisZ) * localExtent.Z);
+        return new() { Min = center                    - extent, Max = center         + extent };
+    }
+
+    private static Vector3 Abs(Vector3 value) => new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
 }
