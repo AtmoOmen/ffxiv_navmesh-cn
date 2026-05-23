@@ -10,7 +10,7 @@ namespace vnavmesh.Navigation.Custom.Customizations.Territory.CosmicExploration;
 [CustomizationTerritory(1310)]
 internal class Z1310俄匊斯行星 : NavmeshCustomization
 {
-    public override int Version => 3;
+    public override int Version => 4;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -53,9 +53,6 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
         }
     }
 
-    private const float pi  = MathF.PI;
-    private const float hpi = pi / 2;
-
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
         var festivalVersion = festivalLayers.LastOrDefault() >> 16;
@@ -66,63 +63,72 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
         #region base
 
         // base -> N
-        AddCosmoliner(new(-180, 0.5f, 52), default, new(-150, -23, -213), new(pi, 0, pi));
+        LinkClientPath(mesh, new(-175.5f, 3f, 52.8f),       new(-145.5f, -20.3f, -214.8f));
+        LinkClientPath(mesh, new(-154.5f, -20.5f, -213.8f), new(-184.5f, 3.2f, 53.8f));
 
         // base -> W
-        AddCosmoliner(new(-299, 0.5f, 138), new Vector3(0, hpi, 0), new(-518, 23, 120), new(0, -hpi, 0));
+        LinkClientPath(mesh, new(-298.2f, 3f, 133.5f),    new(-519.8f, 25.7f, 115.5f));
+        LinkClientPath(mesh, new(-518.8f, 25.5f, 124.5f), new(-297.2f, 3.2f, 142.5f));
 
         // base -> E
-        AddCosmoliner(new(-61, 0.5f, 138), new Vector3(0, -hpi, 0), new(156, -0.5f, -8), new(0, hpi, 0));
+        LinkClientPath(mesh, new(-61.8f, 3f, 142.5f), new(157.8f, 2.2f, -3.5f));
+        LinkClientPath(mesh, new(156.8f, 2f, -12.5f), new(-62.8f, 3.2f, 133.5f));
 
         #endregion
 
         #region E
 
         // North
-        AddCosmoliner(new(180, -0.5f, -32), default, new(192, -54.5f, -376), new(pi, 0, pi));
+        LinkClientPath(mesh, new(184.5f, 2f, -31.2f),    new(196.5f, -51.8f, -377.8f));
+        LinkClientPath(mesh, new(187.5f, -52f, -376.8f), new(175.5f, 2.2f, -30.2f));
 
         // East
-        AddCosmoliner(new(204, -0.5f, -8), new(0, -hpi, 0), new(496, -52.5f, -289), new(-pi, 0, pi));
+        LinkClientPath(mesh, new(203.2f, 2f, -3.5f),     new(500.5f, -49.8f, -290.8f));
+        LinkClientPath(mesh, new(491.5f, -50f, -289.8f), new(202.2f, 2.2f, -12.5f));
 
         #endregion
 
         #region NE
 
         // E -> Far East (against map)
-        AddCosmoliner(new(216, -54.5f, -400), new(0, -hpi, 0), new(472, -52.5f, -313), new(0, hpi, 0));
+        LinkClientPath(mesh, new(215.2f, -52f, -395.5f), new(473.8f, -49.8f, -308.5f));
+        LinkClientPath(mesh, new(472.8f, -50f, -317.5f), new(214.2f, -51.8f, -404.5f));
 
         // N -> Far N (against map, beside pin)
-        AddCosmoliner(new(192, -54.5f, -424), default, new(310, -154, -602), new(-pi, 0, -pi));
+        LinkClientPath(mesh, new(196.5f, -52f, -423.2f),    new(314.5f, -151.3f, -603.8f));
+        LinkClientPath(mesh, new(305.5f, -151.5f, -602.8f), new(187.5f, -51.8f, -422.2f));
 
         #endregion
 
         #region NE far
 
         // NE above location -> E below location name
-        AddCosmoliner(new(334, -154, -626), new(0, -hpi, 0), new(496, -52.5f, -337), default);
+        LinkClientPath(mesh, new(333.2f, -151.5f, -621.5f), new(491.5f, -49.8f, -335.2f));
+        LinkClientPath(mesh, new(500.5f, -50f, -336.2f),    new(332.2f, -151.3f, -630.5f));
 
         if (festivalVersion >= 0x1A)
         {
             // NE cave
-            AddCosmoliner(new(286, -154, -626), new(0, hpi, 0), new(92, -193, -776), new(-pi, 1.047f, pi));
+            LinkClientPath(mesh, new(286.8f, -151.5f, -630.5f),    new(92.692f, -190.3f, -780.797f));
+            LinkClientPath(mesh, new(89.056f, -190.5f, -772.504f), new(287.8f, -151.3f, -621.5f));
 
             // entrance 1
-            AddSoloLiner(new(0.6f, -191.55f, -799.4f), new(0, hpi, 0), new(-88, -191.55f, -799.4f), new(0, -hpi, 0));
+            LinkClientPath(mesh, new(1.4f, -189.05f, -799.4f), new(-89.8f, -188.85f, -799.4f));
             // entrance 2
-            AddSoloLiner(new(-126.6f, -191.55f, -842), default, new(-126.6f, -191.55f, -892), new(-pi, 0, -pi));
+            LinkClientPath(mesh, new(-126.6f, -189.05f, -841.2f), new(-126.6f, -188.85f, -893.8f));
             // entrance 3
-            AddSoloLiner(new(-184, -191.55f, -949.4f), new(0, hpi, 0), new(-289, -191.55f, -949.4f), new(0, -hpi, 0));
+            LinkClientPath(mesh, new(-183.2f, -189.05f, -949.4f), new(-290.8f, -188.85f, -949.4f));
             // entrance 4
-            AddSoloLiner(new(-325.4f, -191.55f, -913), new(pi, 0, pi), new(-325.4f, -191.55f, -837), default);
+            LinkClientPath(mesh, new(-325.4f, -189.05f, -913.8f), new(-325.4f, -188.85f, -835.2f));
 
             // exit 4
-            AddSoloLiner(new(-306.6f, -191.55f, -837), default, new(-306.6f, -191.55f, -913), new(pi, 0, pi));
+            LinkClientPath(mesh, new(-306.6f, -189.05f, -836.2f), new(-306.6f, -188.85f, -914.8f));
             // exit 3
-            AddSoloLiner(new(-289, -191.55f, -930.6f), new(0, -hpi, 0), new(-184, -191.55f, -930.6f), new(0, hpi, 0));
+            LinkClientPath(mesh, new(-289.8f, -189.05f, -930.6f), new(-182.2f, -188.85f, -930.6f));
             // exit 2
-            AddSoloLiner(new(-145.4f, -191.55f, -892), new(-pi, 0, -pi), new(-145.4f, -191.55f, -842), default);
+            LinkClientPath(mesh, new(-145.4f, -189.05f, -892.8f), new(-145.4f, -188.85f, -840.2f));
             // exit 1
-            AddSoloLiner(new(-88, -191.55f, -780.6f), new(0, -hpi, 0), new(0.6f, -191.55f, -780.6f), new(0, hpi, 0));
+            LinkClientPath(mesh, new(-88.8f, -189.05f, -780.6f), new(2.4f, -188.85f, -780.6f));
         }
 
         #endregion
@@ -132,13 +138,16 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
         if (festivalVersion >= 0x0B)
         {
             // shadefleet N <-> NNE
-            AddCosmoliner(new(724, 218.25f, -125), default, new(520, -52.5f, -313), new(0, -hpi, 0));
+            LinkClientPath(mesh, new(728.5f, 220.75f, -124.2f), new(518.2f, -49.8f, -317.5f));
+            LinkClientPath(mesh, new(519.2f, -50f, -308.5f),    new(719.5f, 220.95f, -123.2f));
 
             // shadefleet S <-> shadefleet N
-            AddCosmoliner(new(670, 133.5f, 266), default, new(724, 218.25f, -77), new(pi, 0, pi));
+            LinkClientPath(mesh, new(674.5f, 136f, 266.8f),    new(728.5f, 220.95f, -78.8f));
+            LinkClientPath(mesh, new(719.5f, 220.75f, -77.8f), new(665.5f, 136.2f, 267.8f));
 
             // shadefleet S <-> mid east
-            AddCosmoliner(new(646, 133.5f, 290), new(0, hpi, 0), new(360.785f, 100, 383), new(0, -1.047f, 0));
+            LinkClientPath(mesh, new(646.8f, 136f, 285.5f),       new(356.976f, 102.7f, 380.004f));
+            LinkClientPath(mesh, new(362.343f, 102.5f, 387.297f), new(647.8f, 136.2f, 294.5f));
         }
 
         #endregion
@@ -146,114 +155,102 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
         #region SE
 
         // North -> Mid East
-        AddCosmoliner(new(92, 97.5f, 329), default, new(180, -0.5f, 16), new(pi, 0, pi));
+        LinkClientPath(mesh, new(96.5f, 100f, 329.8f), new(184.5f, 2.2f, 14.2f));
+        LinkClientPath(mesh, new(175.5f, 2f, 15.2f),   new(87.5f, 100.2f, 330.8f));
 
         // E -> Single on E
-        AddCosmoliner(new(116, 97.5f, 353), new(0, -hpi, 0), new(319.215f, 100, 407), new(pi, -1.047f, pi));
+        LinkClientPath(mesh, new(115.2f, 100f, 357.5f),       new(323.024f, 102.7f, 409.996f));
+        LinkClientPath(mesh, new(317.657f, 102.5f, 402.703f), new(114.2f, 100.2f, 348.5f));
 
         #endregion
 
         #region SW far
 
         // North Side -> SW Cosmo
-        AddCosmoliner(new(-445, 101.5f, 746), default, new(-388, 44.5f, 425), new(pi, 0, pi));
+        LinkClientPath(mesh, new(-440.5f, 104f, 746.8f), new(-383.5f, 47.2f, 423.2f));
+        LinkClientPath(mesh, new(-392.5f, 47f, 424.2f),  new(-449.5f, 104.2f, 747.8f));
 
         // West Side -> West Cosmo
-        AddCosmoliner(new(-469, 101.5f, 770), new(0, hpi, 0), new(-661, 28, 455), new(-pi, 0, -pi));
+        LinkClientPath(mesh, new(-468.2f, 104f, 765.5f),  new(-656.5f, 30.7f, 453.2f));
+        LinkClientPath(mesh, new(-665.5f, 30.5f, 454.2f), new(-467.2f, 104.2f, 774.5f));
 
         #endregion
 
         #region SW wall
 
         // N -> West of base
-        AddCosmoliner(new(-661, 28, 407), default, new(-566, 23, 120), new(0, hpi, 0));
+        LinkClientPath(mesh, new(-656.5f, 30.5f, 407.8f), new(-564.2f, 25.7f, 124.5f));
+        LinkClientPath(mesh, new(-565.2f, 25.5f, 115.5f), new(-665.5f, 30.7f, 408.8f));
 
         // E -> SE Cosmoliner
-        AddCosmoliner(new(-637, 28, 431), new(0, -hpi, 0), new(-412, 44.5f, 401), new(0, hpi, 0));
+        LinkClientPath(mesh, new(-637.8f, 30.5f, 435.5f), new(-410.2f, 47.2f, 405.5f));
+        LinkClientPath(mesh, new(-411.2f, 47f, 396.5f),   new(-638.8f, 30.7f, 426.5f));
 
         #endregion
 
         #region SW
 
         // N -> West of base
-        AddCosmoliner(new(-388, 44.5f, 377), default, new(-542, 23, 144), new(-pi, 0, -pi));
+        LinkClientPath(mesh, new(-383.5f, 47f, 377.8f),   new(-537.5f, 25.7f, 142.2f));
+        LinkClientPath(mesh, new(-546.5f, 25.5f, 143.2f), new(-392.5f, 47.2f, 378.8f));
 
         // E -> SE of base
-        AddCosmoliner(new(-364, 44.5f, 401), new(0, -hpi, 0), new(68, 97.5f, 353), new(0, hpi, 0));
+        LinkClientPath(mesh, new(-364.8f, 47f, 405.5f), new(69.8f, 100.2f, 357.5f));
+        LinkClientPath(mesh, new(68.8f, 100f, 348.5f),  new(-365.8f, 47.2f, 396.5f));
 
         #endregion
 
         #region W
 
         // North -> NW (Below Erg Eris)
-        AddCosmoliner(new(-542, 23, 96), default, new(-530, -27.5f, -216), new(pi, 0, -pi));
+        LinkClientPath(mesh, new(-537.5f, 25.5f, 96.8f),  new(-525.5f, -24.8f, -217.8f));
+        LinkClientPath(mesh, new(-534.5f, -25f, -216.8f), new(-546.5f, 25.7f, 97.8f));
 
         #endregion
 
         #region NW
 
         // N -> NW (Above Erg Eris, below flower looking hole)
-        AddCosmoliner(new(-530, -27.5f, -264), default, new(-702, -88, -470), new(pi, 0, -pi));
+        LinkClientPath(mesh, new(-525.5f, -25f, -263.2f),   new(-697.5f, -85.3f, -471.8f));
+        LinkClientPath(mesh, new(-706.5f, -85.5f, -470.8f), new(-534.5f, -24.8f, -262.2f));
 
         // E -> Cosmoliner N of base
-        AddCosmoliner(new(-506, -27.5f, -240), new(0, -hpi, 0), new(-174, -23, -237), new(0, hpi, 0));
+        LinkClientPath(mesh, new(-506.8f, -25f, -235.5f),   new(-172.2f, -20.3f, -232.5f));
+        LinkClientPath(mesh, new(-173.2f, -20.5f, -241.5f), new(-507.8f, -24.8f, -244.5f));
 
         #endregion
 
         #region N
 
         // N -> Far North
-        AddCosmoliner(new(-150, -23, -261), default, new(-132, -75, -558), new(pi, 0, -pi));
+        LinkClientPath(mesh, new(-145.5f, -20.5f, -260.2f), new(-127.5f, -72.3f, -559.8f));
+        LinkClientPath(mesh, new(-136.5f, -72.5f, -558.8f), new(-154.5f, -20.3f, -259.2f));
 
         // E -> NE
-        AddCosmoliner(new(-126, -23, -237), new(0, -hpi, 0), new(168, -54.5f, -400), new(0, hpi, 0));
+        LinkClientPath(mesh, new(-126.8f, -20.5f, -232.5f), new(169.8f, -51.8f, -395.5f));
+        LinkClientPath(mesh, new(168.8f, -52f, -404.5f),    new(-127.8f, -20.3f, -241.5f));
 
         #endregion
 
         #region NN
 
         // W -> Far NW (East Side
-        AddCosmoliner(new(-156, -75.5f, -582), new(0, hpi, 0), new(-678, -88, -494), new(0, -hpi, 0));
+        LinkClientPath(mesh, new(-155.2f, -73f, -586.5f),   new(-679.8f, -85.3f, -498.5f));
+        LinkClientPath(mesh, new(-678.8f, -85.5f, -489.5f), new(-154.2f, -72.8f, -577.5f));
 
         // N -> FARR NW/Against N Wall
-        AddCosmoliner(new(-132, -75.5f, -606), default, new(-456, -105f, -760), new(0, -hpi, 0));
+        LinkClientPath(mesh, new(-127.5f, -73f, -605.2f),    new(-457.8f, -102.3f, -764.5f));
+        LinkClientPath(mesh, new(-456.8f, -102.5f, -755.5f), new(-136.5f, -72.8f, -604.2f));
 
         #endregion
 
         #region NNW
 
         // North -> NW Cosmoliner
-        AddCosmoliner(new(-702, -88, -518), default, new(-504, -105, -760), new(0, hpi, 0));
+        LinkClientPath(mesh, new(-697.5f, -85.5f, -517.2f),  new(-502.2f, -102.3f, -755.5f));
+        LinkClientPath(mesh, new(-503.2f, -102.5f, -764.5f), new(-706.5f, -85.3f, -516.2f));
 
         #endregion
 
-        return;
-
-        void AddCosmoliner(Vector3 pointAPos, Vector3 pointARotation, Vector3 pointBPos, Vector3 pointBRotation)
-        {
-            var (depA, arrA) = GetPoints(pointAPos, pointARotation);
-            var (depB, arrB) = GetPoints(pointBPos, pointBRotation);
-
-            LinkClientPath(mesh, depA, arrB);
-            LinkClientPath(mesh, depB, arrA);
-        }
-
-        void AddSoloLiner(Vector3 pointAPos, Vector3 pointARotation, Vector3 pointBPos, Vector3 pointBRotation)
-        {
-            var adjA = Vector3.Transform(new(0, 2.5f, 0.8f), Quaternion.CreateFromYawPitchRoll(pointARotation.Y, pointARotation.X, pointARotation.Z));
-            var adjB = Vector3.Transform(new(0, 2.7f, 1.8f), Quaternion.CreateFromYawPitchRoll(pointBRotation.Y, pointBRotation.X, pointBRotation.Z));
-            var ptA  = pointAPos + adjA;
-            var ptB  = pointBPos + adjB;
-
-            LinkClientPath(mesh, ptA, ptB);
-        }
-
-        (Vector3 DepartPoint, Vector3 ArrivePoint) GetPoints(Vector3 worldPos, Vector3 rotation)
-        {
-            var q    = Quaternion.CreateFromYawPitchRoll(rotation.Y, rotation.X, rotation.Z);
-            var adjD = Vector3.Transform(new(4.5f, 2.5f, 0.8f),  q);
-            var adjA = Vector3.Transform(new(-4.5f, 2.7f, 1.8f), q);
-            return (adjD + worldPos, adjA + worldPos);
-        }
     }
 }
