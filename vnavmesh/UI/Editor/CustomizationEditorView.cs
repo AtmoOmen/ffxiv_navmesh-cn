@@ -6,6 +6,7 @@ using System.Threading;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Lumina.Excel.Sheets;
+using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Common.Utilities;
 using vnavmesh.Internal;
 using vnavmesh.Navigation;
@@ -61,7 +62,7 @@ internal sealed class CustomizationEditorView
     private          string                          exportDirText = "";
     private          CustomizationDraftExportResult? lastExport;
     private          bool                            previewDirty  = true;
-    private          Task<CustomizationEditorWorkspace>? pendingWorkspaceCreation;
+    private          Task<(CustomizationEditorWorkspace Workspace, SceneDefinition Scene, SceneExtractor Extractor, Navmesh Navmesh)>? pendingWorkspaceCreation;
     private          CancellationTokenSource?             pendingWorkspaceCreationCancel;
     private          float                                leftPaneWidth = 340;
 
@@ -126,7 +127,11 @@ internal sealed class CustomizationEditorView
             else if (pendingWorkspaceCreation != null)
             {
                 ImGui.TextDisabled("正在创建工作区");
-                ImGui.TextWrapped("正在通过外置 worker 准备初始数据, 完成后会自动切换到新工作区");
+                var progress = manager.ExternalBuildProgress;
+                if (progress >= 0)
+                    ImGui.TextWrapped($"正在通过外置 worker 准备初始数据 ({progress * 100:f0}%), 完成后会自动切换到新工作区");
+                else
+                    ImGui.TextWrapped("正在通过外置 worker 准备初始数据, 完成后会自动切换到新工作区");
             }
             else if (workspaceLoaded)
             {
@@ -272,13 +277,15 @@ internal sealed class CustomizationEditorView
             }
             else
             {
-                var created = pendingWorkspaceCreation.Result;
+                var (created, scene, extractor, navmesh) = pendingWorkspaceCreation.Result;
                 store.Workspaces.Add(created);
                 store.CurrentWorkspaceId = created.WorkspaceId;
                 store.SchemaVersion      = 1;
                 SaveWorkspace(true);
-                SelectWorkspace(created.WorkspaceId);
-                statusText = $"已新建工作区: {workspace.WorkspaceName}";
+                SelectWorkspace(created.WorkspaceId, true);
+                previewBuilder.Publish(scene, extractor, navmesh);
+                previewDirty = false;
+                statusText = $"已新建工作区并自动激活预览: {workspace.WorkspaceName}";
             }
         }
         finally
@@ -329,7 +336,7 @@ internal sealed class CustomizationEditorView
     private CustomizationEditorWorkspace? ResolveCurrentWorkspace() =>
         store.Workspaces.FirstOrDefault(x => x.WorkspaceId == store.CurrentWorkspaceId);
 
-    private async Task<CustomizationEditorWorkspace> CreateWorkspaceAsync(string name, CancellationToken cancel)
+    private async Task<(CustomizationEditorWorkspace Workspace, SceneDefinition Scene, SceneExtractor Extractor, Navmesh Navmesh)> CreateWorkspaceAsync(string name, CancellationToken cancel)
     {
         var scene = new SceneDefinition();
         scene.FillFromActiveLayout();
@@ -340,22 +347,42 @@ internal sealed class CustomizationEditorView
 
         var settings = baseCustomization.GetBuildSettings(scene).ToBuildSettings(baseCustomization.IsFlyingSupported(scene), baseCustomization.Version);
         settings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(baseCustomization));
+        
+        SceneExtractor? extractor = null;
         var customizedScene = await Task.Run(() =>
         {
-            var extractor = new SceneExtractor(scene);
+            extractor = new SceneExtractor(scene);
             baseCustomization.CustomizeScene(extractor);
             return extractor.ToBuildScene();
         }, cancel);
         cancel.ThrowIfCancellationRequested();
 
         var buildSignature = Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(customizedScene, settings);
-        var navmesh = await manager.BuildExternalNavmesh($"editor-seed-{territoryID}-{Guid.NewGuid():N}", customizedScene, settings, baseCustomization.Version, buildSignature, cancel);
+        Navmesh navmesh;
+        manager.ExternalBuildProgress = 0f;
+        try
+        {
+            navmesh = await manager.BuildExternalNavmesh
+            (
+                $"editor-seed-{territoryID}-{Guid.NewGuid():N}",
+                customizedScene,
+                settings,
+                baseCustomization.Version,
+                buildSignature,
+                cancel,
+                progress => manager.ExternalBuildProgress = Math.Clamp((float)progress, 0f, 0.99f)
+            );
+        }
+        finally
+        {
+            manager.ExternalBuildProgress = -1f;
+        }
         cancel.ThrowIfCancellationRequested();
         navmesh.RegisterBuildTimeOffMeshConnections(settings.OffMeshConnections);
         baseCustomization.CustomizeMesh(navmesh, [.. scene.FestivalLayers]);
         CustomizationDraftSeedBuilder.CopyMeshLinksFromNavmesh(draft, navmesh);
 
-        return new()
+        var createdWorkspace = new CustomizationEditorWorkspace
         {
             WorkspaceId   = Convert.ToHexString(Guid.NewGuid().ToByteArray()),
             WorkspaceName = string.IsNullOrWhiteSpace(name) ? $"工作区 {store.Workspaces.Count + 1}" : name,
@@ -367,6 +394,8 @@ internal sealed class CustomizationEditorView
                 AutoSave        = true
             }
         };
+
+        return (createdWorkspace, scene, extractor!, navmesh);
     }
 
     private void CreateWorkspace()
@@ -422,7 +451,9 @@ internal sealed class CustomizationEditorView
         statusText = $"已删除工作区, 当前为: {workspace.WorkspaceName}";
     }
 
-    private void SelectWorkspace(string workspaceId)
+    private void SelectWorkspace(string workspaceId) => SelectWorkspace(workspaceId, false);
+
+    private void SelectWorkspace(string workspaceId, bool avoidClear)
     {
         CancelPendingWorkspaceCreation();
 
@@ -447,8 +478,11 @@ internal sealed class CustomizationEditorView
         selection     = new(SelectionKind.Workspace);
         pendingLeftPanelFocusSelection = null;
         draftEditState = default;
-        previewDirty  = true;
-        previewBuilder.Clear();
+        if (!avoidClear)
+        {
+            previewDirty  = true;
+            previewBuilder.Clear();
+        }
     }
 
     private void UpgradeLegacyWorkspace()

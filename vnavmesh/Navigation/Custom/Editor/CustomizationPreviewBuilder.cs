@@ -188,6 +188,33 @@ internal class CustomizationPreviewBuilder
         Service.Log.Debug("[navmesh] schedule async preview build");
     }
 
+    public void Publish(SceneDefinition scene, SceneExtractor extractor, Navmesh navmesh)
+    {
+        Clear();
+
+        var query = new NavmeshQuery(navmesh, config);
+        var result = new PreviewResult
+        {
+            Scene          = CloneScene(scene),
+            Extractor      = extractor,
+            NavmeshData    = navmesh,
+            Query          = query,
+            Intermediates  = null,
+            BuildTelemetry = null
+        };
+
+        Service.Framework.Run(() =>
+        {
+            lock (stateLock)
+            {
+                manager.ReplaceMesh(navmesh);
+                result.NavmeshOwnedByManager = true;
+                publishedResult              = result;
+                currentState                 = State.Ready;
+            }
+        });
+    }
+
     public void Clear()
     {
         CancellationTokenSource? oldCancel;
