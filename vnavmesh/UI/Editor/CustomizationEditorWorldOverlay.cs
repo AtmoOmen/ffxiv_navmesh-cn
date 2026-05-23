@@ -134,15 +134,18 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 DrawPendingPickPreview(pickKind, pending, current, dd);
         }
 
-        foreach (var insertion in workspace.Draft.ColliderInsertions.Where(static x => x.Enabled))
+        for (var i = 0; i < workspace.Draft.ColliderInsertions.Count; ++i)
         {
+            var insertion = workspace.Draft.ColliderInsertions[i];
+            if (!insertion.Enabled)
+                continue;
+
             var bounds = CustomizationEditorSpatial.CreateBounds(insertion.Min, insertion.Max);
             if (!collision.IsBoundsWithinEditorRenderDistance(bounds))
                 continue;
 
             var selected = selection is { Kind: SelectionKind.ColliderInsertion, Index: var selectedIndex and >= 0 } &&
-                           selectedIndex < workspace.Draft.ColliderInsertions.Count                                  &&
-                           ReferenceEquals(workspace.Draft.ColliderInsertions[selectedIndex], insertion);
+                           selectedIndex == i;
             var color = selected
                             ? 0xFFFFD94A
                             : insertion.Kind == DraftSceneColliderInsertionKind.Cylinder
@@ -154,20 +157,88 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 dd.DrawWorldAABB((insertion.Min + insertion.Max) * 0.5f, (insertion.Max - insertion.Min) * 0.5f, color, selected ? 3 : 2);
         }
 
-        foreach (var link in workspace.Draft.MeshLinks.Where(static x => x.Enabled))
+        for (var i = 0; i < workspace.Draft.MeshLinks.Count; ++i)
         {
+            var link = workspace.Draft.MeshLinks[i];
+            if (!link.Enabled)
+                continue;
+
             if (!collision.IsSegmentWithinEditorRenderDistance(link.Start, link.End))
                 continue;
 
-            dd.DrawWorldLine(link.Start, link.End, 0xFFAAFF00, 2);
+            var selected = selection is { Kind: SelectionKind.MeshLink, Index: var selectedIndex and >= 0 } &&
+                           selectedIndex == i;
+            var color     = selected ? 0xFFFFD94A : 0xFFAAFF00;
+            var thickness = selected ? 6 : 4;
+
+            dd.DrawWorldLine(link.Start, link.End, color, thickness);
+
+            if (!link.Bidirectional)
+            {
+                var dir       = Vector3.Normalize(link.End - link.Start);
+                var len       = Vector3.Distance(link.Start, link.End);
+                var arrowSize = selected ? 20f : 15f;
+
+                // 每隔 4 米绘制一个单向流向箭头，距终点留出 0.5 米
+                for (var d = 4.0f; d < len - 0.5f; d += 4.0f)
+                {
+                    var p = link.Start          + (d * dir);
+                    dd.DrawWorldArrowPoint(p, p - dir, arrowSize, color, thickness);
+                }
+
+                // 终点处的箭头
+                dd.DrawWorldArrowPoint(link.End, link.End - dir, arrowSize, color, thickness);
+            }
         }
 
-        foreach (var link in workspace.Draft.OffMeshConnections.Where(static x => x.Enabled))
+        for (var i = 0; i < workspace.Draft.OffMeshConnections.Count; ++i)
         {
+            var link = workspace.Draft.OffMeshConnections[i];
+            if (!link.Enabled)
+                continue;
+
             if (!collision.IsSegmentWithinEditorRenderDistance(link.Start, link.End))
                 continue;
 
-            dd.DrawWorldArc(link.Start, link.End, 0.15f, 3f, 3f, 0xFFFF8800, 2);
+            var selected = selection is { Kind: SelectionKind.OffMeshConnection, Index: var selectedIndex and >= 0 } &&
+                           selectedIndex == i;
+            var color     = selected ? 0xFFFFD94A : 0xFFFF8800;
+            var thickness = selected ? 6 : 4;
+
+            if (link.Bidirectional)
+            {
+                var arrowSize = selected ? 10f : 6f;
+                dd.DrawWorldArc(link.Start, link.End, 0.15f, arrowSize, arrowSize, color, thickness);
+            }
+            else
+            {
+                // 单向抛物线本身不画起终点箭头，而是通过多点流动绘制
+                dd.DrawWorldArc(link.Start, link.End, 0.15f, 0f, 0f, color, thickness);
+
+                // 采样切线，在抛物线上绘制多个流动的大箭头
+                var delta     = link.End - link.Start;
+                var len       = delta.Length();
+                var h         = 0.15f * len;
+                var arrowSize = selected ? 20f : 15f;
+
+                Vector3 EvalArc(float u)
+                {
+                    var res   = link.Start + (u * delta);
+                    var coeff = (u              * 2f) - 1f;
+                    res.Y += h * (1f                  - (coeff * coeff));
+                    return res;
+                }
+
+                // 25%, 50%, 75%, 100% 处绘制流向大箭头
+                var steps = new[] { 0.25f, 0.5f, 0.75f, 1.0f };
+
+                foreach (var u in steps)
+                {
+                    var p = EvalArc(u);
+                    var q = EvalArc(u - 0.05f); // 采样 u 前面的点作为来向 q，求得局部曲率方向
+                    dd.DrawWorldArrowPoint(p, q, arrowSize, color, thickness);
+                }
+            }
         }
 
         DrawPartPatchOverlay(workspace, selection, previewBuilder, collision, dd);
@@ -273,6 +344,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (TrySelectColliderInsertion(ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, ref statusText))
             return;
 
+        if (TrySelectMeshLink(ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, ref statusText))
+            return;
+
+        if (TrySelectOffMeshConnection(ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, ref statusText))
+            return;
+
         if (hasHit && TrySelectPreviewInstance(ref selection, ref pendingLeftPanelFocusSelection, hit.Object, previewBuilder, ref statusText))
             return;
 
@@ -301,33 +378,33 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return;
 
-        TriangleHit? closestHit = null;
-        var closestDistance = float.MaxValue;
+        TriangleHit? closestHit      = null;
+        var          closestDistance = float.MaxValue;
 
         foreach (var (key, mesh) in previewBuilder.Extractor.Meshes.OrderBy(static x => x.Key, StringComparer.Ordinal))
         {
-            for (var instanceIndex = 0; instanceIndex < mesh.Instances.Count; ++instanceIndex)
+            foreach (var instance in mesh.Instances)
             {
-                var instance = mesh.Instances[instanceIndex];
                 if (!collision.IsBoundsWithinEditorRenderDistance(instance.WorldBounds))
                     continue;
 
                 for (var partIndex = 0; partIndex < mesh.Parts.Count; ++partIndex)
                 {
                     var part = mesh.Parts[partIndex];
+
                     for (var primIndex = 0; primIndex < part.Primitives.Count; ++primIndex)
                     {
                         var prim = part.Primitives[primIndex];
-                        var v0 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V1]);
-                        var v1 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V2]);
-                        var v2 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V3]);
+                        var v0   = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V1]);
+                        var v1   = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V2]);
+                        var v2   = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V3]);
 
                         if (RayIntersectsTriangle(rayOrigin, rayDirection, v0, v1, v2, out var distance, out var hitPoint))
                         {
                             if (distance < closestDistance)
                             {
                                 closestDistance = distance;
-                                closestHit = new(key, partIndex, primIndex, hitPoint, v0, v1, v2);
+                                closestHit      = new(key, partIndex, primIndex, hitPoint, v0, v1, v2);
                             }
                         }
                     }
@@ -348,20 +425,17 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 statusText = $"已选三角形: {closestHit.Value.MeshKey} p{closestHit.Value.PartIndex} t{closestHit.Value.PrimitiveIndex}";
             }
         }
-        else if (clicked)
-        {
-            statusText = "未选中三角形";
-        }
+        else if (clicked) statusText = "未选中三角形";
     }
 
     private static bool RayIntersectsTriangle
     (
-        Vector3 rayOrigin,
-        Vector3 rayDirection,
-        Vector3 v0,
-        Vector3 v1,
-        Vector3 v2,
-        out float distance,
+        Vector3     rayOrigin,
+        Vector3     rayDirection,
+        Vector3     v0,
+        Vector3     v1,
+        Vector3     v2,
+        out float   distance,
         out Vector3 hitPoint
     )
     {
@@ -370,8 +444,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         var edge1 = v1 - v0;
         var edge2 = v2 - v0;
-        var h = Vector3.Cross(rayDirection, edge2);
-        var a = Vector3.Dot(edge1, h);
+        var h     = Vector3.Cross(rayDirection, edge2);
+        var a     = Vector3.Dot(edge1, h);
 
         if (MathF.Abs(a) < 0.00001f)
             return false;
@@ -395,11 +469,20 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return false;
 
         distance = t;
-        hitPoint = rayOrigin + rayDirection * t;
+        hitPoint = rayOrigin + (rayDirection * t);
         return true;
     }
 
-    private readonly record struct TriangleHit(string MeshKey, int PartIndex, int PrimitiveIndex, Vector3 HitPoint, Vector3 V0, Vector3 V1, Vector3 V2);
+    private readonly record struct TriangleHit
+    (
+        string  MeshKey,
+        int     PartIndex,
+        int     PrimitiveIndex,
+        Vector3 HitPoint,
+        Vector3 V0,
+        Vector3 V1,
+        Vector3 V2
+    );
 
     private static bool TrySelectPreviewInstance
     (
@@ -413,7 +496,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (collider == null || previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return false;
 
-        var layoutObjectId = collider->LayoutObjectId << 32 | collider->LayoutObjectId >> 32;
+        var layoutObjectId = (collider->LayoutObjectId << 32) | (collider->LayoutObjectId >> 32);
 
         foreach (var (key, mesh) in previewBuilder.Extractor.Meshes.OrderBy(static x => x.Key, StringComparer.Ordinal))
         {
@@ -476,6 +559,133 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return true;
     }
 
+    private static bool TrySelectMeshLink
+    (
+        ref Selection                    selection,
+        ref Selection?                   pendingLeftPanelFocusSelection,
+        Vector3                          rayOrigin,
+        Vector3                          rayDirection,
+        ref CustomizationEditorWorkspace workspace,
+        ref string                       statusText
+    )
+    {
+        Selection? bestSelection = null;
+        var        bestRayT      = float.MaxValue;
+
+        for (var i = 0; i < workspace.Draft.MeshLinks.Count; ++i)
+        {
+            var item = workspace.Draft.MeshLinks[i];
+            if (!item.Enabled)
+                continue;
+
+            var dist = RaySegmentDistance(rayOrigin, rayDirection, item.Start, item.End, out var tOnRay, out _);
+            if (dist > 0.8f)
+                continue;
+
+            if (tOnRay < bestRayT)
+            {
+                bestRayT      = tOnRay;
+                bestSelection = new(SelectionKind.MeshLink, i);
+            }
+        }
+
+        if (bestSelection == null)
+            return false;
+
+        selection = bestSelection;
+        pendingLeftPanelFocusSelection = selection;
+        statusText = $"已选网格连线: {CustomizationEditorWidgets.FormatEnumDisplayName(workspace.Draft.MeshLinks[selection.Index].Kind)} #{selection.Index}";
+        return true;
+    }
+
+    private static bool TrySelectOffMeshConnection
+    (
+        ref Selection                    selection,
+        ref Selection?                   pendingLeftPanelFocusSelection,
+        Vector3                          rayOrigin,
+        Vector3                          rayDirection,
+        ref CustomizationEditorWorkspace workspace,
+        ref string                       statusText
+    )
+    {
+        Selection? bestSelection = null;
+        var        bestRayT      = float.MaxValue;
+
+        for (var i = 0; i < workspace.Draft.OffMeshConnections.Count; ++i)
+        {
+            var item = workspace.Draft.OffMeshConnections[i];
+            if (!item.Enabled)
+                continue;
+
+            var dist = RaySegmentDistance(rayOrigin, rayDirection, item.Start, item.End, out var tOnRay, out _);
+            if (dist > 0.8f)
+                continue;
+
+            if (tOnRay < bestRayT)
+            {
+                bestRayT      = tOnRay;
+                bestSelection = new(SelectionKind.OffMeshConnection, i);
+            }
+        }
+
+        if (bestSelection == null)
+            return false;
+
+        selection                      = bestSelection;
+        pendingLeftPanelFocusSelection = selection;
+        statusText                     = $"已选离网连接 #{selection.Index}";
+        return true;
+    }
+
+    private static float RaySegmentDistance(Vector3 rayOrigin, Vector3 rayDir, Vector3 p0, Vector3 p1, out float tOnRay, out float uOnSegment)
+    {
+        var u = p1 - p0;
+        var v = rayDir;
+        var w = rayOrigin - p0;
+
+        var a = Vector3.Dot(u, u);
+        var b = Vector3.Dot(u, v);
+        var c = Vector3.Dot(v, v);
+        var d = Vector3.Dot(u, w);
+        var e = Vector3.Dot(v, w);
+
+        var   D = (a * c) - (b * b);
+        float sc, tc;
+
+        if (D < 0.00001f)
+        {
+            sc = 0.0f;
+            tc = c > 0.0f ? e / c : 0.0f;
+        }
+        else
+        {
+            sc = ((b * e) - (c * d)) / D;
+            tc = ((a * e) - (b * d)) / D;
+        }
+
+        if (sc < 0.0f)
+            sc = 0.0f;
+        else if (sc > 1.0f)
+            sc = 1.0f;
+
+        tc = ((sc * b) + e) / c;
+
+        if (tc < 0.0f)
+        {
+            tc = 0.0f;
+            sc = -d / a;
+            if (sc      < 0.0f) sc = 0.0f;
+            else if (sc > 1.0f) sc = 1.0f;
+        }
+
+        tOnRay     = tc;
+        uOnSegment = sc;
+
+        var closestOnRay     = rayOrigin + (tc * rayDir);
+        var closestOnSegment = p0        + (sc * u);
+        return Vector3.Distance(closestOnRay, closestOnSegment);
+    }
+
     private static bool TryGetWorldSelectionRay(DebugDrawer dd, out Vector3 origin, out Vector3 direction)
     {
         origin    = default;
@@ -487,7 +697,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (dd.ViewportSize.X <= 0 || dd.ViewportSize.Y <= 0)
             return false;
 
-        var clipPos = new Vector3(2 * screenPos.X / dd.ViewportSize.X - 1, 1 - 2 * screenPos.Y / dd.ViewportSize.Y, 1);
+        var clipPos = new Vector3((2 * screenPos.X / dd.ViewportSize.X) - 1, 1 - (2 * screenPos.Y / dd.ViewportSize.Y), 1);
         Matrix4x4.Invert(dd.ViewProj, out var invViewProj);
         var cameraPosAtPlaneP = Vector4.Transform(clipPos, invViewProj);
         if (MathF.Abs(cameraPosAtPlaneP.W) < 0.0001f)
@@ -567,11 +777,11 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         ref draftEditState,
                         new()
                         {
-                            Mode          = DraftEditMode.ColliderInsertionMin,
-                            Index         = selection.Index,
-                            PlaneOrigin   = item.Min,
-                            InitialA      = item.Min,
-                            InitialB      = item.Max
+                            Mode        = DraftEditMode.ColliderInsertionMin,
+                            Index       = selection.Index,
+                            PlaneOrigin = item.Min,
+                            InitialA    = item.Min,
+                            InitialB    = item.Max
                         },
                         "拖拽最小角点"
                     );
@@ -587,16 +797,29 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         ref draftEditState,
                         new()
                         {
-                            Mode          = DraftEditMode.ColliderInsertionMax,
-                            Index         = selection.Index,
-                            PlaneOrigin   = item.Max,
-                            InitialA      = item.Min,
-                            InitialB      = item.Max
+                            Mode        = DraftEditMode.ColliderInsertionMax,
+                            Index       = selection.Index,
+                            PlaneOrigin = item.Max,
+                            InitialA    = item.Min,
+                            InitialB    = item.Max
                         },
                         "拖拽最大角点"
                     );
-                    DrawTranslationHandle((item.Min + item.Max) * 0.5f, selection.Index, DraftEditMode.ColliderInsertionTranslate, rayOrigin, rayDirection, dd, screenPos, ref draftEditState, item.Min, item.Max);
+                    DrawTranslationHandle
+                    (
+                        (item.Min + item.Max) * 0.5f,
+                        selection.Index,
+                        DraftEditMode.ColliderInsertionTranslate,
+                        rayOrigin,
+                        rayDirection,
+                        dd,
+                        screenPos,
+                        ref draftEditState,
+                        item.Min,
+                        item.Max
+                    );
                 }
+
                 break;
             case SelectionKind.MeshLink:
                 if (selection.Index >= 0 && selection.Index < workspace.Draft.MeshLinks.Count)
@@ -618,8 +841,21 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         screenPos,
                         ref draftEditState
                     );
-                    DrawTranslationHandle((item.Start + item.End) * 0.5f, selection.Index, DraftEditMode.MeshLinkTranslate, rayOrigin, rayDirection, dd, screenPos, ref draftEditState, item.Start, item.End);
+                    DrawTranslationHandle
+                    (
+                        (item.Start + item.End) * 0.5f,
+                        selection.Index,
+                        DraftEditMode.MeshLinkTranslate,
+                        rayOrigin,
+                        rayDirection,
+                        dd,
+                        screenPos,
+                        ref draftEditState,
+                        item.Start,
+                        item.End
+                    );
                 }
+
                 break;
             case SelectionKind.OffMeshConnection:
                 if (selection.Index >= 0 && selection.Index < workspace.Draft.OffMeshConnections.Count)
@@ -641,8 +877,21 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         screenPos,
                         ref draftEditState
                     );
-                    DrawTranslationHandle((item.Start + item.End) * 0.5f, selection.Index, DraftEditMode.OffMeshTranslate, rayOrigin, rayDirection, dd, screenPos, ref draftEditState, item.Start, item.End);
+                    DrawTranslationHandle
+                    (
+                        (item.Start + item.End) * 0.5f,
+                        selection.Index,
+                        DraftEditMode.OffMeshTranslate,
+                        rayOrigin,
+                        rayDirection,
+                        dd,
+                        screenPos,
+                        ref draftEditState,
+                        item.Start,
+                        item.End
+                    );
                 }
+
                 break;
             case SelectionKind.InstancePatch:
                 if (selection.Index >= 0 && selection.Index < workspace.Draft.InstancePatches.Count)
@@ -671,6 +920,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         "拖拽实例位置"
                     );
                 }
+
                 break;
         }
     }
@@ -701,10 +951,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
             ref draftEditState,
             new()
             {
-                Mode        = startMode,
-                Index       = index,
-                InitialA    = start,
-                InitialB    = end
+                Mode     = startMode,
+                Index    = index,
+                InitialA = start,
+                InitialB = end
             },
             "拖拽起点"
         );
@@ -720,10 +970,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
             ref draftEditState,
             new()
             {
-                Mode        = endMode,
-                Index       = index,
-                InitialA    = start,
-                InitialB    = end
+                Mode     = endMode,
+                Index    = index,
+                InitialA = start,
+                InitialB = end
             },
             "拖拽终点"
         );
@@ -827,6 +1077,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     return;
 
                 ref var collider = ref CollectionsMarshal.AsSpan(workspace.Draft.ColliderInsertions)[draftEditState.Index];
+
                 switch (draftEditState.Mode)
                 {
                     case DraftEditMode.ColliderInsertionMin:
@@ -840,6 +1091,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         collider.Max = draftEditState.InitialB + delta;
                         break;
                 }
+
                 NormalizeBounds(ref collider.Min, ref collider.Max);
                 selection = new(SelectionKind.ColliderInsertion, draftEditState.Index);
                 break;
@@ -850,6 +1102,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     return;
 
                 ref var meshLink = ref CollectionsMarshal.AsSpan(workspace.Draft.MeshLinks)[draftEditState.Index];
+
                 switch (draftEditState.Mode)
                 {
                     case DraftEditMode.MeshLinkStart:
@@ -863,6 +1116,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         meshLink.End   = draftEditState.InitialB + delta;
                         break;
                 }
+
                 selection = new(SelectionKind.MeshLink, draftEditState.Index);
                 break;
             case DraftEditMode.OffMeshStart:
@@ -872,6 +1126,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     return;
 
                 ref var offMesh = ref CollectionsMarshal.AsSpan(workspace.Draft.OffMeshConnections)[draftEditState.Index];
+
                 switch (draftEditState.Mode)
                 {
                     case DraftEditMode.OffMeshStart:
@@ -885,6 +1140,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         offMesh.End   = draftEditState.InitialB + delta;
                         break;
                 }
+
                 selection = new(SelectionKind.OffMeshConnection, draftEditState.Index);
                 break;
             case DraftEditMode.InstanceTranslation:
@@ -893,7 +1149,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
                 ref var patch = ref CollectionsMarshal.AsSpan(workspace.Draft.InstancePatches)[draftEditState.Index];
                 patch.WorldTransform.Translation = draftEditState.InitialA + delta;
-                selection = new(SelectionKind.InstancePatch, draftEditState.Index);
+                selection                        = new(SelectionKind.InstancePatch, draftEditState.Index);
                 break;
         }
     }
@@ -912,14 +1168,15 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static bool TryRayPlaneIntersection
     (
-        Vector3 rayOrigin,
-        Vector3 rayDirection,
-        Vector3 planeOrigin,
-        Vector3 planeNormal,
+        Vector3     rayOrigin,
+        Vector3     rayDirection,
+        Vector3     planeOrigin,
+        Vector3     planeNormal,
         out Vector3 intersection
     )
     {
         var denom = Vector3.Dot(rayDirection, planeNormal);
+
         if (MathF.Abs(denom) < 0.0001f)
         {
             intersection = default;
@@ -927,6 +1184,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
 
         var distance = Vector3.Dot(planeOrigin - rayOrigin, planeNormal) / denom;
+
         if (distance < 0)
         {
             intersection = default;
@@ -1010,9 +1268,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return;
 
-        if (selection is not { Kind: SelectionKind.PreviewVertex, Key: not null } ||
+        if (selection is not { Kind: SelectionKind.PreviewVertex, Key: not null }     ||
             !previewBuilder.Extractor.Meshes.TryGetValue(selection.Key, out var mesh) ||
-            selection.Index < 0 ||
+            selection.Index < 0                                                       ||
             selection.Index >= mesh.Parts.Count)
             return;
 
@@ -1021,6 +1279,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         var vertex = part.Vertices[selection.SubIndex];
+
         foreach (var instance in mesh.Instances)
         {
             var worldPos = instance.WorldTransform.TransformCoordinate(vertex);
@@ -1033,9 +1292,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return;
 
-        if (selection is not { Kind: SelectionKind.PreviewPrimitive, Key: not null } ||
+        if (selection is not { Kind: SelectionKind.PreviewPrimitive, Key: not null }  ||
             !previewBuilder.Extractor.Meshes.TryGetValue(selection.Key, out var mesh) ||
-            selection.Index < 0 ||
+            selection.Index < 0                                                       ||
             selection.Index >= mesh.Parts.Count)
             return;
 
@@ -1044,6 +1303,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         var prim = part.Primitives[selection.SubIndex];
+
         foreach (var instance in mesh.Instances)
         {
             var v0 = instance.WorldTransform.TransformCoordinate(part.Vertices[prim.V1]);
@@ -1065,7 +1325,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return;
 
-        Dictionary<(string MeshKey, ulong InstanceId, int InstanceIndex), InstanceOverlayInfo> overlays = [];
+        OverlaysCache.Clear();
+        OverlayPoolUsed = 0;
 
         for (var i = 0; i < workspace.Draft.InstancePatches.Count; ++i)
         {
@@ -1073,18 +1334,15 @@ internal static unsafe class CustomizationEditorWorldOverlay
             if (!patch.Enabled || string.IsNullOrWhiteSpace(patch.MeshKey))
                 continue;
 
-            if (patch.Kind == DraftSceneInstancePatchKind.ClearInstances)
-            {
-                continue;
-            }
+            if (patch.Kind == DraftSceneInstancePatchKind.ClearInstances) continue;
 
             if (!TryResolvePatchedInstance(previewBuilder.Extractor, patch, out var mesh, out var targetInstance))
                 continue;
 
-            var key = (patch.MeshKey, patch.InstanceId, patch.InstanceIndex);
-            ref var overlay = ref CollectionsMarshal.GetValueRefOrAddDefault(overlays, key, out _);
-            overlay ??= new(mesh, patch.WorldTransform.ToRuntime(), targetInstance.WorldBounds);
-            overlay.IsSelected |= selection.Kind == SelectionKind.InstancePatch && selection.Index == i;
+            var     key     = (patch.MeshKey, patch.InstanceId, patch.InstanceIndex);
+            ref var overlay = ref CollectionsMarshal.GetValueRefOrAddDefault(OverlaysCache, key, out _);
+            overlay            ??= GetOrCreateOverlay(mesh, patch.WorldTransform.ToRuntime(), targetInstance.WorldBounds);
+            overlay.IsSelected |=  selection.Kind == SelectionKind.InstancePatch && selection.Index == i;
 
             switch (patch.Kind)
             {
@@ -1097,16 +1355,16 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     overlay.Bounds       = CustomizationEditorSpatial.CalculateTransformedBounds(mesh.LocalBounds, overlay.Transform);
                     break;
                 case DraftSceneInstancePatchKind.SetFlags:
-                    overlay.HasFlags        = true;
-                    overlay.FlagSetMask    |= patch.ForceSetPrimFlags;
-                    overlay.FlagClearMask  |= patch.ForceClearPrimFlags;
-                    overlay.Transform       = targetInstance.WorldTransform;
-                    overlay.Bounds          = targetInstance.WorldBounds;
+                    overlay.HasFlags      =  true;
+                    overlay.FlagSetMask   |= patch.ForceSetPrimFlags;
+                    overlay.FlagClearMask |= patch.ForceClearPrimFlags;
+                    overlay.Transform     =  targetInstance.WorldTransform;
+                    overlay.Bounds        =  targetInstance.WorldBounds;
                     break;
             }
         }
 
-        foreach (var overlay in overlays.Values)
+        foreach (var overlay in OverlaysCache.Values)
         {
             if (!collision.IsBoundsWithinEditorRenderDistance(overlay.Bounds))
                 continue;
@@ -1120,14 +1378,16 @@ internal static unsafe class CustomizationEditorWorldOverlay
                                     : 0xFF33FF66;
             var thickness = overlay.IsSelected ? 3 : 2;
 
-            if (overlay.HasRemove)
-            {
-                overlay.Bounds = CustomizationEditorSpatial.CalculateTransformedBounds(overlay.Mesh.LocalBounds, overlay.Transform);
-            }
+            if (overlay.HasRemove) overlay.Bounds = CustomizationEditorSpatial.CalculateTransformedBounds(overlay.Mesh.LocalBounds, overlay.Transform);
 
             dd.DrawWorldAABB(overlay.Bounds, color, thickness);
-            foreach (var part in overlay.Mesh.Parts)
-                DrawMeshPreview(part, overlay.Transform, dd, color, thickness);
+
+            // 仅当被选中时，才在世界中绘制其精细的网格三角形面，防止未选中时的大量三角形坐标变换与 ImGui 顶点数据剧烈膨胀导致渲染掉帧
+            if (overlay.IsSelected)
+            {
+                foreach (var part in overlay.Mesh.Parts)
+                    DrawMeshPreview(part, overlay.Transform, dd, color, thickness);
+            }
 
             if (overlay.HasRemove)
                 DrawBoundsCross(overlay.Bounds, dd, color, thickness);
@@ -1135,6 +1395,13 @@ internal static unsafe class CustomizationEditorWorldOverlay
             if (overlay.HasFlags)
                 DrawFlagOverlay(overlay.Bounds, overlay.FlagSetMask, overlay.FlagClearMask, dd, overlay.IsSelected);
         }
+
+        // 清空重用池及临时缓存中的 Mesh 强引用，以防引起大对象内存泄漏
+        for (var i = 0; i < OverlayPoolUsed; ++i)
+        {
+            OverlayPool[i].Mesh = null!;
+        }
+        OverlaysCache.Clear();
     }
 
     private static void DrawPartPatchOverlay
@@ -1161,7 +1428,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             if (patch.PartIndex < 0 || patch.PartIndex >= mesh.Parts.Count)
                 continue;
 
-            var part = mesh.Parts[patch.PartIndex];
+            var part       = mesh.Parts[patch.PartIndex];
             var isSelected = selection.Kind == SelectionKind.PartPatch && selection.Index == i;
 
             foreach (var instance in mesh.Instances)
@@ -1175,16 +1442,17 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         if (patch.VertexIndex >= 0 && patch.VertexIndex < part.Vertices.Count)
                         {
                             var worldPos = instance.WorldTransform.TransformCoordinate(patch.Position);
-                            var color = isSelected ? 0xFFFFD94A : 0xFF00FF00;
+                            var color    = isSelected ? 0xFFFFD94A : 0xFF00FF00;
                             dd.DrawWorldPointFilled(worldPos, isSelected ? 6 : 4, color);
                         }
+
                         break;
 
                     case DraftScenePartPatchKind.PrimitiveFlags:
                     case DraftScenePartPatchKind.PrimitiveEdit:
                         if (patch.PrimitiveIndex >= 0 && patch.PrimitiveIndex < part.Primitives.Count)
                         {
-                            var prim = part.Primitives[patch.PrimitiveIndex];
+                            var     prim = part.Primitives[patch.PrimitiveIndex];
                             Vector3 v0, v1, v2;
 
                             if (patch.Kind == DraftScenePartPatchKind.PrimitiveEdit)
@@ -1204,19 +1472,20 @@ internal static unsafe class CustomizationEditorWorldOverlay
                             var worldV1 = instance.WorldTransform.TransformCoordinate(v1);
                             var worldV2 = instance.WorldTransform.TransformCoordinate(v2);
 
-                            var color = isSelected ? 0xFFFFD94A : patch.Kind == DraftScenePartPatchKind.PrimitiveEdit ? 0xFFFF00FF : 0xFF00FFFF;
+                            var color     = isSelected ? 0xFFFFD94A : patch.Kind == DraftScenePartPatchKind.PrimitiveEdit ? 0xFFFF00FF : 0xFF00FFFF;
                             var thickness = isSelected ? 3 : 2;
                             dd.DrawWorldTriangle(worldV0, worldV1, worldV2, color, thickness);
                         }
+
                         break;
                 }
             }
         }
     }
 
-    private static void DrawBoundsCross(FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB bounds, DebugDrawer dd, uint color, int thickness)
+    private static void DrawBoundsCross(AABB bounds, DebugDrawer dd, uint color, int thickness)
     {
-        dd.DrawWorldLine(bounds.Min, bounds.Max, color, thickness);
+        dd.DrawWorldLine(bounds.Min,                                    bounds.Max,                                    color, thickness);
         dd.DrawWorldLine(new(bounds.Min.X, bounds.Min.Y, bounds.Max.Z), new(bounds.Max.X, bounds.Max.Y, bounds.Min.Z), color, thickness);
         dd.DrawWorldLine(new(bounds.Min.X, bounds.Max.Y, bounds.Min.Z), new(bounds.Max.X, bounds.Min.Y, bounds.Max.Z), color, thickness);
         dd.DrawWorldLine(new(bounds.Min.X, bounds.Max.Y, bounds.Max.Z), new(bounds.Max.X, bounds.Min.Y, bounds.Min.Z), color, thickness);
@@ -1224,14 +1493,14 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static void DrawFlagOverlay
     (
-        FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB bounds,
-        SceneExtractor.PrimitiveFlags                                   setFlags,
-        SceneExtractor.PrimitiveFlags                                   clearFlags,
-        DebugDrawer                                                     dd,
-        bool                                                            isSelected
+        AABB                          bounds,
+        SceneExtractor.PrimitiveFlags setFlags,
+        SceneExtractor.PrimitiveFlags clearFlags,
+        DebugDrawer                   dd,
+        bool                          isSelected
     )
     {
-        var lines = new List<string>(2);
+        var lines   = new List<string>(2);
         var setText = FormatFlagOperation("Set", setFlags);
         if (!string.IsNullOrEmpty(setText))
             lines.Add(setText);
@@ -1244,7 +1513,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         var anchor = new Vector3(bounds.Min.X, bounds.Max.Y, bounds.Min.Z);
-        var color = isSelected ? 0xFFFFD94A : 0xFFFFFFFF;
+        var color  = isSelected ? 0xFFFFD94A : 0xFFFFFFFF;
         dd.DrawWorldText(anchor, string.Join("\n", lines), color);
     }
 
@@ -1276,13 +1545,13 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static bool TryResolvePatchedInstance
     (
-        SceneExtractor          extractor,
-        DraftSceneInstancePatch patch,
-        out SceneExtractor.Mesh mesh,
+        SceneExtractor                  extractor,
+        DraftSceneInstancePatch         patch,
+        out SceneExtractor.Mesh         mesh,
         out SceneExtractor.MeshInstance instance
     )
     {
-        mesh = null!;
+        mesh     = null!;
         instance = null!;
 
         if (!extractor.Meshes.TryGetValue(patch.MeshKey, out mesh))
@@ -1317,22 +1586,52 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private sealed class InstanceOverlayInfo
-    (
-        SceneExtractor.Mesh mesh,
-        Matrix4x3           transform,
-        FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB bounds
-    )
+    private static readonly Dictionary<(string MeshKey, ulong InstanceId, int InstanceIndex), InstanceOverlayInfo> OverlaysCache = [];
+    private static readonly List<InstanceOverlayInfo> OverlayPool = [];
+    private static int OverlayPoolUsed;
+
+    private static InstanceOverlayInfo GetOrCreateOverlay(SceneExtractor.Mesh mesh, Matrix4x3 transform, AABB bounds)
     {
-        public SceneExtractor.Mesh Mesh = mesh;
-        public Matrix4x3 Transform = transform;
-        public FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB Bounds = bounds;
-        public bool HasTransform;
-        public bool HasFlags;
-        public bool HasRemove;
-        public bool IsSelected;
+        if (OverlayPoolUsed < OverlayPool.Count)
+        {
+            var existing = OverlayPool[OverlayPoolUsed++];
+            existing.Reset(mesh, transform, bounds);
+            return existing;
+        }
+        else
+        {
+            var newOverlay = new InstanceOverlayInfo();
+            newOverlay.Reset(mesh, transform, bounds);
+            OverlayPool.Add(newOverlay);
+            OverlayPoolUsed++;
+            return newOverlay;
+        }
+    }
+
+    private sealed class InstanceOverlayInfo
+    {
+        public SceneExtractor.Mesh           Mesh = null!;
+        public Matrix4x3                     Transform;
+        public AABB                          Bounds;
+        public bool                          HasTransform;
+        public bool                          HasFlags;
+        public bool                          HasRemove;
+        public bool                          IsSelected;
         public SceneExtractor.PrimitiveFlags FlagSetMask;
         public SceneExtractor.PrimitiveFlags FlagClearMask;
+
+        public void Reset(SceneExtractor.Mesh mesh, Matrix4x3 transform, AABB bounds)
+        {
+            Mesh          = mesh;
+            Transform     = transform;
+            Bounds        = bounds;
+            HasTransform  = false;
+            HasFlags      = false;
+            HasRemove     = false;
+            IsSelected    = false;
+            FlagSetMask   = SceneExtractor.PrimitiveFlags.None;
+            FlagClearMask = SceneExtractor.PrimitiveFlags.None;
+        }
     }
 
     private static void DrawPendingPickPreview(PickKind pickKind, Vector3 first, Vector3 current, DebugDrawer dd)
