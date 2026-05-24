@@ -11,7 +11,7 @@ namespace vnavmesh.Navigation.Custom.Customizations.Territory.CosmicExploration;
 [CustomizationTerritory(1237)]
 internal class Z1237憧憬湾 : NavmeshCustomization
 {
-    public override int Version => 6;
+    public override int Version => 7;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -58,70 +58,52 @@ internal class Z1237憧憬湾 : NavmeshCustomization
         }
     }
 
-    private const float pi  = MathF.PI;
-    private const float hpi = pi / 2;
-
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
-        (Vector3 DepartPoint, Vector3 ArrivePoint) getPoints(Vector3 worldPos, Vector3 rotation)
-        {
-            var q    = Quaternion.CreateFromYawPitchRoll(rotation.Y, rotation.X, rotation.Z);
-            var adjD = Vector3.Transform(new(4.5f, 2.5f, 2.8f),  q);
-            var adjA = Vector3.Transform(new(-4.5f, 2.7f, 1.3f), q);
-            return (adjD + worldPos, adjA + worldPos);
-        }
-
-        void addCosmoliner(Vector3 pointAPos, Vector3 pointARotation, Vector3 pointBPos, Vector3 pointBRotation)
-        {
-            var (depA, arrA) = getPoints(pointAPos, pointARotation);
-            var (depB, arrB) = getPoints(pointBPos, pointBRotation);
-
-            LinkPoints(mesh, depA, arrB);
-            LinkPoints(mesh, depB, arrA);
-        }
 
         #region base liners
 
         // base <-> N
-        addCosmoliner(new(0, 1, -65), default, new(0, 38, -376), new(pi, 0, -pi));
-
+        LinkPoints(mesh, new(4.500f, 3.500f, -62.200f),    new(4.500f, 40.700f, -377.300f));
+        LinkPoints(mesh, new(-4.500f, 40.500f, -378.800f), new(-4.500f, 3.700f, -63.700f));
         // base <-> E
-        addCosmoliner(new(65, 1, 0), new(0, -hpi, 0), new(376, 40, 0), new(0, hpi, 0));
-
+        LinkPoints(mesh, new(62.200f, 3.500f, 4.500f),    new(377.300f, 42.700f, 4.500f));
+        LinkPoints(mesh, new(378.800f, 42.500f, -4.500f), new(63.700f, 3.700f, -4.500f));
         // base <-> S
-        addCosmoliner(new(0, 1, 65), new(pi, 0, -pi), new(0, 35, 376), default);
-
+        LinkPoints(mesh, new(-4.500f, 3.500f, 62.200f),  new(-4.500f, 37.700f, 377.300f));
+        LinkPoints(mesh, new(4.500f, 37.500f, 378.800f), new(4.500f, 3.700f, 63.700f));
         // base <-> W
-        addCosmoliner(new(-65, 1, 0), new(0, hpi, 0), new(-376, 36, 0), new(0, -hpi, 0));
+        LinkPoints(mesh, new(-62.200f, 3.500f, -4.500f),  new(-377.300f, 38.700f, -4.500f));
+        LinkPoints(mesh, new(-378.800f, 38.500f, 4.500f), new(-63.700f, 3.700f, 4.500f));
 
         #endregion
 
         #region inner ring liners
 
         // N <-> NE
-        addCosmoliner(new(24, 38, -400), new(0, -hpi, 0), new(272, 40.5f, -320), new(0, 0.698f, 0));
-
+        LinkPoints(mesh, new(21.200f, 40.500f, -395.500f),  new(269.388f, 43.200f, -316.112f));
+        LinkPoints(mesh, new(277.247f, 43.000f, -320.747f), new(22.700f, 40.700f, -404.500f));
         // NE <-> E
-        // note that when the X and Z rotations are + or -pi (which is the only nonzero value they get), the Y rotation sign is flipped from what would give the "correct" transformation - this is some math thing that i'm too dumb to understand most likely
-        addCosmoliner(new(311.65f, 40.5f, -272.75f), new(pi, 0.698f, -pi), new(400, 40, -24), default);
-
+        LinkPoints(mesh, new(306.403f, 43.000f, -272.003f), new(395.500f, 42.700f, -22.700f));
+        LinkPoints(mesh, new(404.500f, 42.500f, -21.200f),  new(314.262f, 43.200f, -276.638f));
         // E <-> SE
-        addCosmoliner(new(400, 40, 24), new(pi, 0, pi), new(296.971f, 25, 263.029f), new(0, -0.785f, 0));
-
+        LinkPoints(mesh, new(395.500f, 42.500f, 21.200f),  new(292.869f, 27.700f, 260.768f));
+        LinkPoints(mesh, new(298.175f, 27.500f, 268.190f), new(404.500f, 42.700f, 22.700f));
         // SE <-> S
-        addCosmoliner(new(263.029f, 25, 296.971f), new(-pi, -0.785f, -pi), new(24, 35, 400), new(0, -pi / 2, 0));
-
+        LinkPoints(mesh, new(261.825f, 27.500f, 291.810f), new(22.700f, 37.700f, 395.500f));
+        LinkPoints(mesh, new(21.200f, 37.500f, 404.500f),  new(267.131f, 27.700f, 299.232f));
         // S <-> SW
-        addCosmoliner(new(-24, 35, 400), new(0, hpi, 0), new(-263.029f, 29, 296.971f), new(-pi, 0.785f, pi));
-
+        LinkPoints(mesh, new(-21.200f, 37.500f, 395.500f),  new(-260.765f, 31.700f, 292.871f));
+        LinkPoints(mesh, new(-268.191f, 31.500f, 298.171f), new(-22.700f, 37.700f, 404.500f));
         // SW <-> W
-        addCosmoliner(new(-296.971f, 29, 263.029f), new(0, 0.785f, 0), new(-400, 36, 24), new(-pi, 0, pi));
-
+        LinkPoints(mesh, new(-291.809f, 31.500f, 261.829f), new(-395.500f, 38.700f, 22.700f));
+        LinkPoints(mesh, new(-404.500f, 38.500f, 21.200f),  new(-299.235f, 31.700f, 267.129f));
         // W <-> NW
-        addCosmoliner(new(-400, 36, -24), default, new(-296.971f, 34, -263.028f), new(pi, -0.785f, pi));
-
+        LinkPoints(mesh, new(-395.500f, 38.500f, -21.200f),  new(-292.869f, 36.700f, -260.767f));
+        LinkPoints(mesh, new(-298.175f, 36.500f, -268.189f), new(-404.500f, 38.700f, -22.700f));
         // NW <-> N
-        addCosmoliner(new(-263.029f, 34, -296.97f), new(0, -0.785f, 0), new(-24, 38, -400), new(0, hpi, 0));
+        LinkPoints(mesh, new(-261.825f, 36.500f, -291.809f), new(-22.700f, 40.700f, -395.500f));
+        LinkPoints(mesh, new(-21.200f, 40.500f, -404.500f),  new(-267.131f, 36.700f, -299.231f));
 
         #endregion
 
@@ -133,10 +115,12 @@ internal class Z1237憧憬湾 : NavmeshCustomization
         LinkPoints(mesh, new(390.42264f, -57, -394.7571f), new(308.2982f, 43.2f, -325.8215f));
 
         // downstairs <-> NNEE
-        addCosmoliner(new(433.426f, -59.5f, -415.135f), new(0, -0.873f, 0), new(624.088f, -74.5f, -556.224f), new(-pi, -0.908f, -pi));
+        LinkPoints(mesh, new(434.172f, -57.000f, -409.888f), new(627.882f, -71.800f, -553.477f));
+        LinkPoints(mesh, new(623.526f, -72.000f, -561.494f), new(429.538f, -56.800f, -417.748f));
 
         // NNEE <-> NNEEEE
-        addCosmoliner(new(657.776f, -74.5f, -552.088f), new(-pi, 0.663f, pi), new(868, -58, -374), new(0, 0.873f, 0));
+        LinkPoints(mesh, new(652.506f, -72.000f, -551.525f), new(866.105f, -55.300f, -369.717f));
+        LinkPoints(mesh, new(873.037f, -55.500f, -375.649f), new(660.523f, -71.800f, -555.882f));
 
         // NNEE -> loop
         LinkPoints(mesh, new(625.157f, -71.970f, -583.71f),   new(366.911f, -117.3f, -834.9056f));
@@ -148,19 +132,20 @@ internal class Z1237憧憬湾 : NavmeshCustomization
         #region SE
 
         // E <-> EE
-        addCosmoliner(new(424, 40, 0), new(0, -hpi, 0), new(720, 59, -4), new(0, hpi, 0));
-
+        LinkPoints(mesh, new(421.200f, 42.500f, 4.500f),  new(721.300f, 61.700f, 0.500f));
+        LinkPoints(mesh, new(722.800f, 61.500f, -8.500f), new(422.700f, 42.700f, -4.500f));
         // EE <-> SSEE
-        addCosmoliner(new(744, 59, 20), new(-pi, 0, pi), new(444.069f, 45, 493.713f), new(0, -0.785f, 0));
-
+        LinkPoints(mesh, new(739.500f, 61.500f, 17.200f),  new(439.967f, 47.700f, 491.452f));
+        LinkPoints(mesh, new(445.273f, 47.500f, 498.874f), new(748.500f, 61.700f, 18.700f));
         // SE <-> SSEE
-        addCosmoliner(new(296.971f, 25, 296.971f), new(-pi, 0.785f, pi), new(410.127f, 45, 493.713f), new(0, 0.785f, 0));
-
+        LinkPoints(mesh, new(291.809f, 27.500f, 298.171f), new(407.863f, 47.700f, 497.813f));
+        LinkPoints(mesh, new(415.289f, 47.500f, 492.513f), new(299.235f, 27.700f, 292.871f));
         // SSEE <-> SS
-        addCosmoliner(new(410.127f, 45, 527.654f), new(pi, -0.785f, pi), new(-76, 50.5f, 750), new(0, -hpi, 0));
-
+        LinkPoints(mesh, new(408.923f, 47.500f, 522.493f), new(-77.300f, 53.200f, 745.500f));
+        LinkPoints(mesh, new(-78.800f, 53.000f, 754.500f), new(414.229f, 47.700f, 529.915f));
         // S <-> SS
-        addCosmoliner(new(0, 35, 424), new(pi, 0, -pi), new(-100, 50.5f, 726), default);
+        LinkPoints(mesh, new(-4.500f, 37.500f, 421.200f),  new(-104.500f, 53.200f, 727.300f));
+        LinkPoints(mesh, new(-95.500f, 53.000f, 728.800f), new(4.500f, 37.700f, 422.700f));
 
         #endregion
 
@@ -172,26 +157,28 @@ internal class Z1237憧憬湾 : NavmeshCustomization
         LinkPoints(mesh, new(-317.979f, 55, 759.97f), new(-123.75f, 55.2f, 760));
 
         // crater SE <-> N
-        addCosmoliner(new(-340, 50.5f, 726), default, new(-596, 50, 390), new(0, -hpi, 0));
-
+        LinkPoints(mesh, new(-335.500f, 53.000f, 728.800f), new(-597.300f, 52.700f, 385.500f));
+        LinkPoints(mesh, new(-598.800f, 52.500f, 394.500f), new(-344.500f, 53.200f, 727.300f));
         // crater N <-> SW
-        addCosmoliner(new(-644, 50, 390), new(0, hpi, 0), new(-734, 91, 740), default);
-
+        LinkPoints(mesh, new(-641.200f, 52.500f, 385.500f), new(-738.500f, 93.700f, 741.300f));
+        LinkPoints(mesh, new(-729.500f, 93.500f, 742.800f), new(-642.700f, 52.700f, 394.500f));
         // crater SW <-> SE
-        addCosmoliner(new(-710, 91, 764), new(0, -hpi, 0), new(-364, 50.5f, 750), new(0, hpi, 0));
+        LinkPoints(mesh, new(-712.800f, 93.500f, 768.500f), new(-362.700f, 53.200f, 754.500f));
+        LinkPoints(mesh, new(-361.200f, 53.000f, 745.500f), new(-711.300f, 93.700f, 759.500f));
 
         #endregion
 
         #region NW
 
         // W <-> WW
-        addCosmoliner(new(-424, 36, 0), new(0, hpi, 0), new(-675, 60, 10), new(0, -hpi, 0));
-
+        LinkPoints(mesh, new(-421.200f, 38.500f, -4.500f), new(-676.300f, 62.700f, 5.500f));
+        LinkPoints(mesh, new(-677.800f, 62.500f, 14.500f), new(-422.700f, 38.700f, 4.500f));
         // NW <-> NNWW
-        addCosmoliner(new(-296.971f, 34, -296.970f), new(0, 0.785f, 0), new(-523.029f, 59, -523.029f), new(-pi, 0.785f, pi));
-
+        LinkPoints(mesh, new(-291.809f, 36.500f, -298.170f), new(-520.765f, 61.700f, -527.129f));
+        LinkPoints(mesh, new(-528.191f, 61.500f, -521.829f), new(-299.235f, 36.700f, -292.870f));
         // WW <-> NNWW
-        addCosmoliner(new(-699, 60, -14), default, new(-556.971f, 59, -523.029f), new(pi, -0.785f, pi));
+        LinkPoints(mesh, new(-694.500f, 62.500f, -11.200f),  new(-552.869f, 61.700f, -520.768f));
+        LinkPoints(mesh, new(-558.175f, 61.500f, -528.190f), new(-703.500f, 62.700f, -12.700f));
 
         #endregion
 

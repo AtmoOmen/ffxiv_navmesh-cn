@@ -11,7 +11,15 @@ namespace vnavmesh.Navigation.Custom.Customizations.Territory.Alexandar;
 [CustomizationTerritory(444)]
 internal class Z0444启动之章3 : NavmeshCustomization
 {
-    public override int Version => 3;
+    public override int Version => 4;
+
+    public override void CustomizeBuildSettings(SceneDefinition definition, NavmeshSettings settings)
+    {
+        settings.CellSize    = 0.25f;
+        settings.CellHeight  = 0.125f;
+        settings.AgentHeight = 1.5f;
+        settings.AgentRadius = 0.5f;
+    }
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -46,6 +54,7 @@ internal class Z0444启动之章3 : NavmeshCustomization
 
     public override void CustomizeSettings(DtNavMeshCreateParams config)
     {
+        // 下落2
         config.AddOffMeshConnection
         (
             new(16.790548f, 18f, -18.193995f),
@@ -57,33 +66,17 @@ internal class Z0444启动之章3 : NavmeshCustomization
             NavmeshPolyFlags.GeneratedEdgeJump | NavmeshPolyFlags.ManualOffMesh,
             NavmeshOffMeshKind.ManualOffMesh
         );
-        config.AddOffMeshConnection
-        (
-            new(35.09059f, -9.536743E-07f, -6.1794167f),
-            new(38.55001f, -9.536743E-07f, 0.0067253113f),
-            0.5f,
-            false,
-            0,
-            NavmeshArea.ManualOffMesh,
-            NavmeshPolyFlags.ManualOffMesh,
-            NavmeshOffMeshKind.ManualOffMesh
-        );
-        config.AddOffMeshConnection
-        (
-            new(20.97561f, 35.141724f, -15.054151f),
-            new(24.470856f, 23.111866f, -19.177319f),
-            0.5f,
-            false,
-            0,
-            NavmeshArea.ManualOffMesh,
-            NavmeshPolyFlags.ManualOffMesh,
-            NavmeshOffMeshKind.ManualOffMesh
-        );
     }
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
-        LinkPoints(mesh, new(38.509922f, -9.536743E-07f, -0.274802f), new(48.962902f, 0f, -0.06897486f));
-        LinkPoints(mesh, new(58.524216f, 0.011983752f, -21.014153f),  new(58.992924f, -9f, -42.920166f));
+        // 下落1
+        LinkPoints(mesh, new(20.97561f, 35.141724f, -15.054151f), new(24.470856f, 23.111866f, -19.177319f));
+        // 门前2
+        LinkPoints(mesh, new(38.509922f, -9.536743E-07f, -0.274802f), new(48.962902f, 0f, -0.06897486f), true);
+        // 传送带
+        LinkPoints(mesh, new(58.524216f, 0.011983752f, -21.014153f), new(58.992924f, -9f, -42.920166f));
+        // 门前1
+        LinkPoints(mesh, new(35.091225f, 9.536743E-07f, -6.1722064f), new(38.528137f, 9.536743E-07f, 0.020476937f), true);
     }
 }

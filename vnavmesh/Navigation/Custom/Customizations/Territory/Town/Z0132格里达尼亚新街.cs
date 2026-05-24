@@ -10,7 +10,7 @@ namespace vnavmesh.Navigation.Custom.Customizations.Territory.Town;
 [CustomizationTerritory(132)]
 internal class Z0132格里达尼亚新街 : NavmeshCustomization
 {
-    public override int Version => 3;
+    public override int Version => 4;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -33,10 +33,10 @@ internal class Z0132格里达尼亚新街 : NavmeshCustomization
         base.CustomizeMesh(mesh, festivalLayers);
 
         // GC entrance to Barracks
-        LinkPoints(mesh, new(-65.98f, -0.5f, 3.3f), new(-75.4f, -0.5f, -3.47f));
+        LinkPoints(mesh, new(-65.98f, -0.5f, 3.3f), new(-75.4f, -0.5f, -3.47f), true);
 
         //bridge to past aetheryte plaza and back
-        LinkPoints(mesh, new(-21.689f, -4.302f, 16.821f), new(33.436f, -1.582f, 61.284f));
-        LinkPoints(mesh, new(53.482f, -0.772f, 71.466f),  new(3.601f, -2.647f, 34.097f));
+        LinkPoints(mesh, new(-21.689f, -4.302f, 16.821f), new(33.436f, -1.582f, 61.284f), true);
+        LinkPoints(mesh, new(53.482f, -0.772f, 71.466f),  new(3.601f, -2.647f, 34.097f), true);
     }
 }

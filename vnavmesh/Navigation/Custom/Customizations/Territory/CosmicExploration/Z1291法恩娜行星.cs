@@ -10,7 +10,7 @@ namespace vnavmesh.Navigation.Custom.Customizations.Territory.CosmicExploration;
 [CustomizationTerritory(1291)]
 internal class Z1291法恩娜行星 : NavmeshCustomization
 {
-    public override int Version => 6;
+    public override int Version => 8;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -61,163 +61,138 @@ internal class Z1291法恩娜行星 : NavmeshCustomization
         }
     }
 
-    private const float pi  = MathF.PI;
-    private const float hpi = pi / 2;
-
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
-        (Vector3 DepartPoint, Vector3 ArrivePoint) getPoints(Vector3 worldPos, Vector3 rotation)
-        {
-            var q    = Quaternion.CreateFromYawPitchRoll(rotation.Y, rotation.X, rotation.Z);
-            var adjD = Vector3.Transform(new(4.5f, 2.5f, 0.8f),  q);
-            var adjA = Vector3.Transform(new(-4.5f, 2.7f, 1.8f), q);
-            return (adjD + worldPos, adjA + worldPos);
-        }
-
-        void addCosmoliner(Vector3 pointAPos, Vector3 pointARotation, Vector3 pointBPos, Vector3 pointBRotation)
-        {
-            var (depA, arrA) = getPoints(pointAPos, pointARotation);
-            var (depB, arrB) = getPoints(pointBPos, pointBRotation);
-
-            LinkPoints(mesh, depA, arrB);
-            LinkPoints(mesh, depB, arrA);
-        }
-
-        var festivalVersion = festivalLayers.FirstOrDefault() >> 16;
-
-        if (festivalVersion < 0x06)
-            return;
 
         #region base liners
 
         // base <-> N
-        addCosmoliner(new(340, 52.5f, -486), default, new(300, 135, -756), new(pi, 0, -pi));
-
+        LinkPoints(mesh, new(344.500f, 55.000f, -485.200f),  new(304.500f, 137.700f, -757.800f));
+        LinkPoints(mesh, new(295.500f, 137.500f, -756.800f), new(335.500f, 55.200f, -484.200f));
         // base <-> E
-        addCosmoliner(new(406, 52.5f, -420), new(0, -hpi, 0), new(756, 52, -430), new(0, hpi, 0));
-
+        LinkPoints(mesh, new(405.200f, 55.000f, -415.500f), new(757.800f, 54.700f, -425.500f));
+        LinkPoints(mesh, new(756.800f, 54.500f, -434.500f), new(404.200f, 55.200f, -424.500f));
         // base <-> S
-        addCosmoliner(new(340, 52.5f, -354), new(pi, 0, -pi), new(330, 52.5f, -152), default);
-
+        LinkPoints(mesh, new(335.500f, 55.000f, -354.800f), new(325.500f, 55.200f, -150.200f));
+        LinkPoints(mesh, new(334.500f, 55.000f, -151.200f), new(344.500f, 55.200f, -355.800f));
         // base <-> W
-        addCosmoliner(new(274, 52.5f, -420), new(0, hpi, 0), new(-52, 25.5f, -402), new(0, -hpi, 0));
+        LinkPoints(mesh, new(274.800f, 55.000f, -424.500f), new(-53.800f, 28.200f, -406.500f));
+        LinkPoints(mesh, new(-52.800f, 28.000f, -397.500f), new(275.800f, 55.200f, -415.500f));
 
         #endregion
 
         #region inner ring liners
 
         // N <-> NE
-        addCosmoliner(new(324, 135, -780), new(0, -hpi, 0), new(687.144f, 45, -730.321f), new(0, 1.047f, 0));
-
+        LinkPoints(mesh, new(323.200f, 137.500f, -775.500f), new(686.452f, 47.700f, -725.524f));
+        LinkPoints(mesh, new(690.087f, 47.500f, -733.818f),  new(322.200f, 137.700f, -784.500f));
         // NE <-> E
-        addCosmoliner(new(712.856f, 45, -699.679f), new(pi, 0.349f, pi), new(780, 52, -454), default);
-
+        LinkPoints(mesh, new(708.354f, 47.500f, -698.892f), new(775.500f, 54.700f, -452.200f));
+        LinkPoints(mesh, new(784.500f, 54.500f, -453.200f), new(716.469f, 47.700f, -702.909f));
         // E <-> SE
-        addCosmoliner(new(780, 52, -406), new(-pi, 0, pi), new(730, 36, -61), default);
-
+        LinkPoints(mesh, new(775.500f, 54.500f, -406.800f), new(725.500f, 38.700f, -59.200f));
+        LinkPoints(mesh, new(734.500f, 38.500f, -60.200f),  new(784.500f, 54.700f, -407.800f));
         // SE <-> S
-        addCosmoliner(new(706, 36, -37), new(0, hpi, 0), new(354, 52.5f, -128), new(0, -hpi, 0));
-
+        LinkPoints(mesh, new(706.800f, 38.500f, -41.500f),  new(352.200f, 55.200f, -132.500f));
+        LinkPoints(mesh, new(353.200f, 55.000f, -123.500f), new(707.800f, 38.700f, -32.500f));
         // S <-> SW
-        addCosmoliner(new(306, 52.5f, -128), new(0, hpi, 0), new(26.971f, -10, -143.971f), new(0, -0.785f, 0));
-
+        LinkPoints(mesh, new(306.800f, 55.000f, -132.500f), new(22.515f, -7.300f, -145.878f));
+        LinkPoints(mesh, new(29.589f, -7.500f, -140.224f),  new(307.800f, 55.200f, -123.500f));
         // SW <-> W
-        addCosmoliner(new(-6.971f, -10, -143.971f), new(0, 0.785f, 0), new(-76, 25.5f, -378), new(-pi, 0, pi));
-
+        LinkPoints(mesh, new(-3.222f, -7.500f, -146.586f),  new(-71.500f, 28.200f, -379.800f));
+        LinkPoints(mesh, new(-80.500f, 28.000f, -378.800f), new(-8.882f, -7.300f, -139.517f));
         // W <-> NW
-        addCosmoliner(new(-76, 25.5f, -426), default, new(-130.908f, 62.5f, -731.091f), new(-pi, 0.087f, -pi));
-
+        LinkPoints(mesh, new(-71.500f, 28.000f, -425.200f),  new(-126.581f, 65.200f, -733.275f));
+        LinkPoints(mesh, new(-135.460f, 65.000f, -731.497f), new(-80.500f, 28.200f, -424.200f));
         // NW <-> N
-        addCosmoliner(new(-109.091f, 62.5f, -757.092f), new(0, -1.484f, 0), new(276, 135, -780), new(0, hpi, 0));
-
+        LinkPoints(mesh, new(-109.498f, 65.000f, -752.540f), new(277.800f, 137.700f, -775.500f));
+        LinkPoints(mesh, new(276.800f, 137.500f, -784.500f), new(-111.274f, 65.200f, -761.419f));
         // S <-> soda-lime float
-        addCosmoliner(new(330, 52.5f, -104), new(-pi, 0, -pi), new(255, -9.5f, 108), default);
-
+        LinkPoints(mesh, new(325.500f, 55.000f, -104.800f), new(250.500f, -6.800f, 109.800f));
+        LinkPoints(mesh, new(259.500f, -7.000f, 108.800f),  new(334.500f, 55.200f, -105.800f));
         // soda-lime float <-> SW
-        addCosmoliner(new(231, -9.5f, 132), new(0, hpi, 0), new(26.971f, -10, -110.029f), new(pi, 0.785f, pi));
+        LinkPoints(mesh, new(231.800f, -7.000f, 127.500f), new(28.882f, -7.300f, -114.483f));
+        LinkPoints(mesh, new(23.222f, -7.500f, -107.414f), new(232.800f, -6.800f, 136.500f));
 
         #endregion
-
-        if (festivalVersion < 0x0F)
-            return;
 
         #region peninsula
 
         // soda-lime float <-> peninsula E
-        addCosmoliner(new(255, -9.5f, 156), new(pi, 0, pi), new(185, -5.5f, 406), default);
-
+        LinkPoints(mesh, new(250.500f, -7.000f, 155.200f), new(180.500f, -2.800f, 407.800f));
+        LinkPoints(mesh, new(189.500f, -3.000f, 406.800f), new(259.500f, -6.800f, 154.200f));
         // peninsula E <-> peninsula SW
-        addCosmoliner(new(185, -5.5f, 454), new(pi, 0, pi), new(-64, 34, 660), new(0, -hpi, 0));
-
+        LinkPoints(mesh, new(180.500f, -3.000f, 453.200f), new(-65.800f, 36.700f, 655.500f));
+        LinkPoints(mesh, new(-64.800f, 36.500f, 664.500f), new(189.500f, -2.800f, 452.200f));
         // peninsula E <-> peninsula NW
-        addCosmoliner(new(161, -5.5f, 430), new(0, hpi, 0), new(-136, 28.5f, 305), new(0, -hpi, 0));
-
+        LinkPoints(mesh, new(161.800f, -3.000f, 425.500f),  new(-137.800f, 31.200f, 300.500f));
+        LinkPoints(mesh, new(-136.800f, 31.000f, 309.500f), new(162.800f, -2.800f, 434.500f));
         // peninsula SW <-> peninsula NW
-        addCosmoliner(new(-88, 34, 636), default, new(-160, 28.5f, 329), new(pi, 0, pi));
+        LinkPoints(mesh, new(-83.500f, 36.500f, 636.800f),  new(-155.500f, 31.200f, 327.200f));
+        LinkPoints(mesh, new(-164.500f, 31.000f, 328.200f), new(-92.500f, 36.700f, 637.800f));
 
         #endregion
 
         #region scoresheen sands
 
         // N sands <-> NW
-        addCosmoliner(new(-623.029f, -2, -656.971f), new(0, -0.785f, 0), new(-156.909f, 62.5f, -752.908f), new(-pi, -1.484f, -pi));
-
+        LinkPoints(mesh, new(-620.411f, 0.500f, -653.224f),  new(-154.726f, 65.200f, -748.581f));
+        LinkPoints(mesh, new(-156.502f, 65.000f, -757.460f), new(-627.484f, 0.700f, -658.878f));
         // N sands <-> E1 sands
-        addCosmoliner(new(-623.029f, -2, -623.029f), new(pi, 0.785f, -pi), new(-422, -2, -430.785f), new(0, 0.524f, 0));
-
+        LinkPoints(mesh, new(-626.778f, 0.500f, -620.414f), new(-424.996f, 0.700f, -426.975f));
+        LinkPoints(mesh, new(-417.704f, 0.500f, -432.344f), new(-621.118f, 0.700f, -627.483f));
         // N sands <-> W sands
-        addCosmoliner(new(-656.971f, -2, -623.029f), new(pi, -0.785f, pi), new(-768, 13.5f, -294), default);
-
+        LinkPoints(mesh, new(-659.589f, 0.500f, -626.776f),  new(-772.500f, 16.200f, -292.200f));
+        LinkPoints(mesh, new(-763.500f, 16.000f, -293.200f), new(-652.516f, 0.700f, -621.122f));
         // E1 sands <-> W
-        addCosmoliner(new(-389.215f, -2, -422), new(0, -1.047f, 0), new(-100, 25.5f, -402), new(0, hpi, 0));
-
+        LinkPoints(mesh, new(-387.657f, 0.500f, -417.703f), new(-98.200f, 28.200f, -397.500f));
+        LinkPoints(mesh, new(-99.200f, 28.000f, -406.500f), new(-393.024f, 0.700f, -424.996f));
         // E1 sands <-> W sands
-        addCosmoliner(new(-430.785f, -2, -398), new(pi, -1.047f, pi), new(-744, 13.5f, -270), new(0, -hpi, 0));
-
+        LinkPoints(mesh, new(-432.343f, 0.500f, -402.297f),  new(-745.800f, 16.200f, -274.500f));
+        LinkPoints(mesh, new(-744.800f, 16.000f, -265.500f), new(-426.976f, 0.700f, -395.004f));
         // E1 sands <-> E2 sands
-        addCosmoliner(new(-398, -2, -389.215f), new(-pi, 0.524f, -pi), new(-326.971f, -5, -151.971f), new(0, 0.785f, 0));
-
+        LinkPoints(mesh, new(-402.296f, 0.500f, -387.656f),  new(-328.882f, -2.300f, -147.517f));
+        LinkPoints(mesh, new(-323.222f, -2.500f, -154.586f), new(-395.004f, 0.700f, -393.025f));
         // E2 sands <-> SW
-        addCosmoliner(new(-293.029f, -5, -151.971f), new(0, -0.785f, 0), new(-6.971f, -10, -110.029f), new(pi, -0.785f, pi));
-
+        LinkPoints(mesh, new(-290.411f, -2.500f, -148.224f), new(-2.515f, -7.300f, -108.122f));
+        LinkPoints(mesh, new(-9.589f, -7.500f, -113.776f),   new(-297.485f, -2.300f, -153.878f));
         // E2 sands <-> peninsula NW
-        addCosmoliner(new(-293.029f, -5, -118.029f), new(pi, 0.785f, pi), new(-160, 28.5f, 281), default);
-
+        LinkPoints(mesh, new(-296.778f, -2.500f, -115.414f), new(-164.500f, 31.200f, 282.800f));
+        LinkPoints(mesh, new(-155.500f, 31.000f, 281.800f),  new(-291.118f, -2.300f, -122.483f));
         // E2 sands <-> S sands
-        addCosmoliner(new(-326.971f, -5, -118.029f), new(pi, -0.785f, pi), new(-556, 24.5f, 50), new(0, -hpi, 0));
-
+        LinkPoints(mesh, new(-329.589f, -2.500f, -121.776f), new(-557.800f, 27.200f, 45.500f));
+        LinkPoints(mesh, new(-556.800f, 27.000f, 54.500f),   new(-322.515f, -2.300f, -116.122f));
         // W sands <-> S sands
-        addCosmoliner(new(-768, 13.5f, -246), new(pi, 0, pi), new(-604, 24.5f, 50), new(0, hpi, 0));
+        LinkPoints(mesh, new(-772.500f, 16.000f, -246.800f), new(-602.200f, 27.200f, 54.500f));
+        LinkPoints(mesh, new(-603.200f, 27.000f, 45.500f),   new(-763.500f, 16.200f, -247.800f));
 
         #endregion
-
-        if (festivalVersion < 0x14)
-            return;
 
         #region pools
 
         // soda-lime float <-> pools E
-        addCosmoliner(new(279, -9.5f, 132), new(0, -hpi, 0), new(830, -168, 415), new(0, 0.349f, 0));
-
+        LinkPoints(mesh, new(278.200f, -7.000f, 136.500f),   new(826.387f, -165.300f, 418.230f));
+        LinkPoints(mesh, new(834.502f, -165.500f, 414.213f), new(277.200f, -6.800f, 127.500f));
         // pools E <-> pools S
-        addCosmoliner(new(830, -168, 455), new(pi, -0.349f, pi), new(549.696f, -220, 748.473f), new(0, -1.396f, 0));
-
+        LinkPoints(mesh, new(826.045f, -165.500f, 452.709f), new(547.141f, -217.300f, 744.355f));
+        LinkPoints(mesh, new(549.691f, -217.500f, 753.044f), new(834.844f, -165.300f, 454.847f));
         // pools S <-> chasm
-        addCosmoliner(new(510.304f, -220, 741.527f), new(0, 1.047f, 0), new(405.832f, -230, 253.635f), new(-pi, -0.175f, pi));
-
+        LinkPoints(mesh, new(513.247f, -217.500f, 738.030f), new(410.577f, -227.300f, 252.646f));
+        LinkPoints(mesh, new(401.540f, -227.500f, 252.064f), new(509.612f, -217.300f, 746.324f));
         // chasm <-> pools middle
-        addCosmoliner(new(433.635f, -230, 234.168f), new(pi, 1.396f, pi), new(660, -242, 420), new(0, 0.785f, 0));
+        LinkPoints(mesh, new(432.065f, -227.500f, 238.460f), new(658.089f, -239.300f, 424.454f));
+        LinkPoints(mesh, new(663.749f, -239.500f, 417.385f), new(432.645f, -227.300f, 229.424f));
 
         #endregion
 
-        if (festivalVersion < 0x25)
-            return;
-
         #region southwestern penis
 
-        addCosmoliner(new(-580, 24.5f, 74), new(pi, 0, -pi), new(-363.473f, 11, 375.304f), new(0, 0.524f, 0));
-
-        addCosmoliner(new(-356.527f, 11, 414.696f), new(pi, -0.175f, pi), new(-580, 28, 715), new(0, -hpi, 0));
+        // southwestern penis 1
+        LinkPoints(mesh, new(-584.500f, 27.000f, 73.200f),  new(-366.469f, 13.700f, 379.114f));
+        LinkPoints(mesh, new(-359.177f, 13.500f, 373.745f), new(-575.500f, 27.200f, 72.200f));
+        // southwestern penis 2
+        LinkPoints(mesh, new(-360.819f, 13.500f, 413.125f), new(-581.800f, 30.700f, 710.500f));
+        LinkPoints(mesh, new(-580.800f, 30.500f, 719.500f), new(-351.782f, 13.700f, 413.707f));
 
         #endregion
 

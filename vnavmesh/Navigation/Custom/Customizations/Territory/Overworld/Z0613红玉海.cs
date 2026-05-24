@@ -1,20 +1,21 @@
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Custom.Abstractions;
 using vnavmesh.Navigation.Custom.Attributes;
+using vnavmesh.Navigation.Scene;
 
 namespace vnavmesh.Navigation.Custom.Customizations.Territory.Overworld;
 
 [CustomizationTerritory(613)]
 internal class Z0613红玉海 : NavmeshCustomization
 {
-    public override int Version => 1;
+    public override int Version => 2;
 
-    public Z0613红玉海() =>
-        ApplyAgentRadiusOneSettings();
+    public override void CustomizeBuildSettings(SceneDefinition definition, NavmeshSettings settings) =>
+        settings.AgentRadius = 1f;
 
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
-        // the tunnel into the island containing tamamizu has some floor that is unlandable
-        LinkPoints(mesh, new(643.7f, 3.4f, -58.9f), new(636.6f, 3.9f, -63.3f));
+        LinkPoints(mesh, new(643.7f, 3.5f, -58.9f),              new(636.6f, 3.9611104f, -63.3f),          true);
+        LinkPoints(mesh, new(544.853f, -61.27358f, -163.34909f), new(545.4251f, -61.478912f, -155.09254f), true);
     }
 }
