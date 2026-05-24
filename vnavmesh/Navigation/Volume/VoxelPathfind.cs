@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Common.Navigation.Volume.Map;
-using vnavmesh.Internal;
 using vnavmesh.Navigation.Planning;
 
 namespace vnavmesh.Navigation.Volume;
@@ -77,7 +76,7 @@ public partial class VoxelPathfind
 
     internal FlightPathDebugPayload? LastPathDebug { get; private set; }
 
-    public VoxelPathfind(VoxelMap volume, PluginConfig _)
+    public VoxelPathfind(VoxelMap volume)
     {
         Volume                      = volume;
         l0Desc                      = volume.Levels[0];
@@ -146,7 +145,7 @@ public partial class VoxelPathfind
 
         if (searchRaycast)
         {
-            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, RAYCAST_SEARCH_STEP_BUDGET, 1);
+            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, 1, cancel);
 
             if (lastTermination != VolumeSearchTermination.ReachedGoal)
                 path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
@@ -163,9 +162,9 @@ public partial class VoxelPathfind
                 fromPos,
                 toPos,
                 returnIntermediatePoints,
-                cancel,
                 GUIDED_CORRIDOR_SEARCH_STEP_BUDGET,
                 1,
+                cancel,
                 corridor,
                 GUIDED_CORRIDOR_HEURISTIC_WEIGHT
             );

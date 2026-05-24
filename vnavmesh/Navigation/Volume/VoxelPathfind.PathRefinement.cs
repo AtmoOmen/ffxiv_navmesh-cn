@@ -40,7 +40,7 @@ public partial class VoxelPathfind
         refined.Reverse();
         RelaxInteriorWaypoints(refined, cancel);
         var debugInfos = new FlightPathWaypointDebug?[refined.Count];
-        PushInteriorWaypoints(refined, cancel, debugInfos);
+        PushInteriorWaypoints(refined, debugInfos, cancel);
         var finalPath = SimplifyPath(refined, cancel);
         finalPath     = RestoreSteepDescentWaypoints(refined, finalPath);
         LastPathDebug = BuildFlightPathDebugPayload(refined, debugInfos, finalPath, pendingLongRangeProxyDebug);
@@ -86,7 +86,7 @@ public partial class VoxelPathfind
         }
     }
 
-    private void PushInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel, FlightPathWaypointDebug?[] debugInfos)
+    private void PushInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, FlightPathWaypointDebug?[] debugInfos, CancellationToken cancel)
     {
         if (path.Count <= 2)
             return;
@@ -352,9 +352,8 @@ public partial class VoxelPathfind
                  verticalMagnitude >= FLIGHT_PUSH_MIN_DISTANCE &&
                  verticalImbalance >= FLIGHT_PUSH_MIN_VERTICAL_IMBALANCE)
         {
-            var maxVerticalClearance = downClearance;
             var desiredVerticalPush  = verticalMagnitude * FLIGHT_PUSH_VERTICAL_BIAS_SCALE * FLIGHT_PUSH_DOWNWARD_SCALE;
-            var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, maxVerticalClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
+            var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, downClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
             var verticalPushDistance = MathF.Min(maxVerticalPush,                                       desiredVerticalPush);
             verticalOffset = -Vector3.UnitY * verticalPushDistance;
             verticalMode   = FlightPathVerticalMode.DownwardBias;
@@ -652,24 +651,24 @@ public partial class VoxelPathfind
         if (offset.LengthSquared() <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
             return false;
 
-        const float scale100 = 1.00f;
-        const float scale085 = 0.85f;
-        const float scale070 = 0.70f;
-        const float scale055 = 0.55f;
-        const float scale040 = 0.40f;
-        const float scale025 = 0.25f;
+        const float SCALE100 = 1.00f;
+        const float SCALE085 = 0.85f;
+        const float SCALE070 = 0.70f;
+        const float SCALE055 = 0.55f;
+        const float SCALE040 = 0.40f;
+        const float SCALE025 = 0.25f;
 
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, scale100, out adjusted))
+        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE100, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, scale085, out adjusted))
+        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE085, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, scale070, out adjusted))
+        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE070, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, scale055, out adjusted))
+        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE055, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, scale040, out adjusted))
+        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE040, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, scale025, out adjusted))
+        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE025, out adjusted))
             return true;
 
         adjusted = current;
@@ -802,24 +801,24 @@ public partial class VoxelPathfind
         if (offset.LengthSquared() <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
             return false;
 
-        const float scale100 = 1.00f;
-        const float scale085 = 0.85f;
-        const float scale070 = 0.70f;
-        const float scale055 = 0.55f;
-        const float scale040 = 0.40f;
-        const float scale025 = 0.25f;
+        const float SCALE100 = 1.00f;
+        const float SCALE085 = 0.85f;
+        const float SCALE070 = 0.70f;
+        const float SCALE055 = 0.55f;
+        const float SCALE040 = 0.40f;
+        const float SCALE025 = 0.25f;
 
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, scale100, out adjusted))
+        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE100, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, scale085, out adjusted))
+        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE085, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, scale070, out adjusted))
+        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE070, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, scale055, out adjusted))
+        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE055, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, scale040, out adjusted))
+        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE040, out adjusted))
             return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, scale025, out adjusted))
+        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE025, out adjusted))
             return true;
 
         adjusted = current;
@@ -1022,7 +1021,7 @@ public partial class VoxelPathfind
     private static FlightPathDebugSample BuildFlightDebugSample(FlightPathDebugSampleKind kind, Vector3 start, FlightPushProbeResult sample)
         => new(kind, start, sample.Endpoint, sample.Clearance);
 
-    private List<FlightPushHorizontalCandidate> BuildDirectionalHorizontalCandidates
+    private static List<FlightPushHorizontalCandidate> BuildDirectionalHorizontalCandidates
     (
         Vector3                              origin,
         Vector3                              forward,
@@ -1059,7 +1058,7 @@ public partial class VoxelPathfind
         return candidates;
     }
 
-    private void TryAddDirectionalHorizontalCandidate
+    private static void TryAddDirectionalHorizontalCandidate
     (
         List<FlightPushHorizontalCandidate> candidates,
         Vector3                             origin,
@@ -1115,15 +1114,15 @@ public partial class VoxelPathfind
     )
     {
         List<FlightPathDebugSample> samples        = new(FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT);
-        var                         stepAngle      = 2f * MathF.PI                             / FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT;
-        var                         primaryDivisor = FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT / 8;
+        const float                 STEP_ANGLE     = 2f * MathF.PI                             / FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT;
+        const int                   PRIMARY_DIVISOR = FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT / 8;
 
         for (var i = 0; i < FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT; ++i)
         {
-            if (primaryDivisor > 0 && i % primaryDivisor == 0)
+            if (i % PRIMARY_DIVISOR == 0)
                 continue;
 
-            var angle     = i * stepAngle;
+            var angle     = i * STEP_ANGLE;
             var direction = (forward * MathF.Cos(angle)) + (right * MathF.Sin(angle));
             if (!TryNormalize(direction, out direction))
                 continue;
@@ -1299,7 +1298,7 @@ public partial class VoxelPathfind
                next.p.Y + tolerance < previous.p.Y;
     }
 
-    private bool IsConstrainedTunnelDescent
+    private static bool IsConstrainedTunnelDescent
     (
         (ulong voxel, Vector3 p) previous,
         (ulong voxel, Vector3 p) current,
@@ -1325,7 +1324,7 @@ public partial class VoxelPathfind
     private static float ResolveFlightHeightCatchupHeadroom(float leafVerticalSize)
         => MathF.Max(leafVerticalSize * FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_LEAF_SCALE, FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_MIN);
 
-    private bool TryResolveConstrainedTunnelDescentOffset
+    private static bool TryResolveConstrainedTunnelDescentOffset
     (
         bool                     constrainedTunnelDescent,
         bool                     downhillTunnelTrend,
@@ -1383,7 +1382,7 @@ public partial class VoxelPathfind
         return true;
     }
 
-    private bool IsTunnelDescentTrend
+    private static bool IsTunnelDescentTrend
     (
         (ulong voxel, Vector3 p) previous,
         (ulong voxel, Vector3 p) current,

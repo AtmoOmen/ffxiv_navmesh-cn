@@ -140,9 +140,9 @@ public partial class VoxelPathfind
         Vector3               fromPos,
         Vector3               toPos,
         bool                  returnIntermediatePoints,
-        CancellationToken     cancel,
         int                   maxSteps,
         int                   attempts,
+        CancellationToken     cancel,
         GuidedSearchCorridor? corridor                = null,
         float?                heuristicWeightOverride = null,
         LongRangeLateralBias  lateralBias             = default

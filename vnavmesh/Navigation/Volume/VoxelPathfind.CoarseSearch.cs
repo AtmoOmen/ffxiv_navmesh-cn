@@ -389,79 +389,6 @@ public partial class VoxelPathfind
         }
     }
 
-    private HashSet<ulong> BuildL1LateralExplorationArea(ulong fromVoxel, Vector3 fromPos, Vector3 toPos, int attempt)
-    {
-        var startL1            = ResolveRepresentativeL1Voxel(fromVoxel, fromPos);
-        var horizontalDelta    = new Vector2(toPos.X - fromPos.X, toPos.Z - fromPos.Z);
-        var horizontalDistance = horizontalDelta.Length();
-        var forward            = horizontalDistance > SCORE_EPSILON ? horizontalDelta / horizontalDistance : Vector2.UnitX;
-        var right              = new Vector2(-forward.Y, forward.X);
-        var l1Horizontal       = MathF.Max(l1Desc.CellSize.X, l1Desc.CellSize.Z);
-        var l1Vertical         = l1Desc.CellSize.Y;
-        var distanceInL1Cells  = MathF.Max(1f, horizontalDistance / MathF.Max(l1Horizontal, SCORE_EPSILON));
-        var widthScale         = LONG_RANGE_LATERAL_WIDTH_SCALE_BASE  + (LONG_RANGE_LATERAL_WIDTH_SCALE_STEP  * attempt);
-        var growthScale        = LONG_RANGE_LATERAL_GROWTH_SCALE_BASE + (LONG_RANGE_LATERAL_GROWTH_SCALE_STEP * attempt);
-        var halfWidth = MathF.Max
-        (
-            l1Horizontal       * (LONG_RANGE_LATERAL_MIN_HALF_WIDTH_L1_CELLS + (attempt * LONG_RANGE_LATERAL_MIN_HALF_WIDTH_ATTEMPT_CELLS)),
-            horizontalDistance * widthScale
-        );
-        var forwardLimit = MathF.Max
-        (
-            (horizontalDistance * (1f + (attempt * LONG_RANGE_LATERAL_FORWARD_ATTEMPT_SCALE))) + (l1Horizontal * LONG_RANGE_LATERAL_FORWARD_SLACK_L1_CELLS),
-            l1Horizontal * LONG_RANGE_LATERAL_MIN_FORWARD_L1_CELLS
-        );
-        var backwardLimit = MathF.Max
-        (
-            l1Horizontal       * (LONG_RANGE_LATERAL_BACKWARD_SLACK_L1_CELLS + (attempt * LONG_RANGE_LATERAL_BACKWARD_ATTEMPT_CELLS)),
-            horizontalDistance * (LONG_RANGE_LATERAL_BACKWARD_SCALE          + (attempt * LONG_RANGE_LATERAL_BACKWARD_SCALE_STEP))
-        );
-        var downwardLimit = MathF.Max
-            (MathF.Max(0f, fromPos.Y - toPos.Y) + (l1Vertical * LONG_RANGE_LATERAL_DOWNWARD_SLACK_L1_CELLS), l1Vertical * LONG_RANGE_LATERAL_MIN_VERTICAL_L1_CELLS);
-        var upwardLimit = MathF.Max
-            (MathF.Max(0f, toPos.Y - fromPos.Y) + (l1Vertical * LONG_RANGE_LATERAL_UPWARD_SLACK_L1_CELLS), l1Vertical * LONG_RANGE_LATERAL_MIN_VERTICAL_L1_CELLS);
-        var maxCells = LONG_RANGE_LATERAL_AREA_BASE_CELLS             +
-                       (attempt * LONG_RANGE_LATERAL_AREA_STEP_CELLS) +
-                       (int)(distanceInL1Cells * LONG_RANGE_LATERAL_AREA_DISTANCE_CELLS_SCALE);
-
-        HashSet<ulong> result   = [startL1];
-        Queue<ulong>   frontier = new();
-        frontier.Enqueue(startL1);
-
-        while (frontier.TryDequeue(out var current) && result.Count < maxCells)
-        {
-            VisitL1Neighbours
-            (
-                current,
-                neighbour =>
-                {
-                    if (result.Count >= maxCells || result.Contains(neighbour))
-                        return;
-
-                    if (!IsInsideL1LateralExplorationWindow
-                            (neighbour, fromPos, forward, right, halfWidth, growthScale, forwardLimit, backwardLimit, upwardLimit, downwardLimit))
-                        return;
-
-                    result.Add(neighbour);
-                    frontier.Enqueue(neighbour);
-                }
-            );
-        }
-
-        return result;
-    }
-
-    private void ApplyL1AreaConstraint(HashSet<ulong> area)
-    {
-        currentL1CorridorRadius = 0;
-        l1PathSet               = area;
-        l1CorridorDistance      = null;
-        l0CorridorDistance      = null;
-        l0PathSet               = new();
-        foreach (var l1Voxel in area)
-            l0PathSet.Add(ExtractL0Index(l1Voxel));
-    }
-
     private void ClearL1AreaConstraint()
     {
         currentL1CorridorRadius = 0;
@@ -500,18 +427,6 @@ public partial class VoxelPathfind
                                (MathF.Max(forwardDistance, 0f)             * forwardGrowth) +
                                (MathF.Sqrt(MathF.Max(forwardDistance, 0f)) * LONG_RANGE_LATERAL_FORWARD_SQRT_WIDTH_SCALE);
         return lateralDistance <= allowedHalfWidth;
-    }
-
-    private float ResolveLongRangeHeuristicWeight(int corridorRadius)
-    {
-        var t = Math.Clamp((float)corridorRadius / LONG_RANGE_L1_CORRIDOR_RELAX_STEPS, 0f, 1f);
-        return LONG_RANGE_HEURISTIC_WEIGHT + ((LONG_RANGE_L1_CORRIDOR_MAX_RADIUS_HEURISTIC_WEIGHT - LONG_RANGE_HEURISTIC_WEIGHT) * t);
-    }
-
-    private float ResolveLongRangeLateralHeuristicWeight(int attempt)
-    {
-        var t = Math.Clamp((float)attempt / (LONG_RANGE_LATERAL_EXPLORATION_ATTEMPTS - 1), 0f, 1f);
-        return LONG_RANGE_LATERAL_HEURISTIC_WEIGHT_BASE + ((LONG_RANGE_LATERAL_HEURISTIC_WEIGHT_MIN - LONG_RANGE_LATERAL_HEURISTIC_WEIGHT_BASE) * t);
     }
 
     private LongRangeLateralBias BuildLongRangeLateralBias(Vector3 fromPos, Vector3 toPos, int attempt)
@@ -562,7 +477,7 @@ public partial class VoxelPathfind
     {
         var maxL1Extent   = MathF.Max(l1Desc.CellSize.X, MathF.Max(l1Desc.CellSize.Y, l1Desc.CellSize.Z));
         var gapCells      = bestDistance / MathF.Max(maxL1Extent, SCORE_EPSILON);
-        var dynamicRadius = LONG_RANGE_L1_GUIDED_FULL_SEARCH_BASE_CORRIDOR_RADIUS + (int)MathF.Ceiling(gapCells * LONG_RANGE_L1_GUIDED_FULLSEARCH_GAP_RADIUS_SCALE);
+        var dynamicRadius = LONG_RANGE_L1_GUIDED_FULL_SEARCH_BASE_CORRIDOR_RADIUS + (int)MathF.Ceiling(gapCells * LONG_RANGE_L1_GUIDED_FULL_SEARCH_GAP_RADIUS_SCALE);
         return Math.Clamp(dynamicRadius, LONG_RANGE_L1_GUIDED_FULL_SEARCH_BASE_CORRIDOR_RADIUS, LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS);
     }
 
@@ -678,7 +593,7 @@ public partial class VoxelPathfind
                 if (reachedGoal)
                 {
                     var orderedPath = ReconstructL1OrderedPath(cameFrom, current);
-                    result = new(new HashSet<ulong>(orderedPath), orderedPath, true, expanded, 0f, totalBudget);
+                    result = new([..orderedPath], orderedPath, true, expanded, 0f, totalBudget);
                     return true;
                 }
 
@@ -806,40 +721,7 @@ public partial class VoxelPathfind
         }
 
         var bestOrderedPath = ReconstructL1OrderedPath(cameFrom, bestState);
-        return new(new HashSet<ulong>(bestOrderedPath), bestOrderedPath, false, expanded, bestDistance, totalBudget);
-    }
-
-    private static HashSet<ulong> ReconstructL1PathSet(Dictionary<ulong, ulong> cameFrom, ulong endNode)
-    {
-        HashSet<ulong> pathSet = [];
-        var            node    = endNode;
-
-        while (true)
-        {
-            pathSet.Add(node);
-            if (!cameFrom.TryGetValue(node, out var parent))
-                break;
-            node = parent;
-        }
-
-        return pathSet;
-    }
-
-    private static List<ulong> ReconstructL1OrderedPath(Dictionary<ulong, ulong> cameFrom, ulong endNode)
-    {
-        List<ulong> path = [];
-        var         node = endNode;
-
-        while (true)
-        {
-            path.Add(node);
-            if (!cameFrom.TryGetValue(node, out var parent))
-                break;
-            node = parent;
-        }
-
-        path.Reverse();
-        return path;
+        return new([..bestOrderedPath], bestOrderedPath, false, expanded, bestDistance, totalBudget);
     }
 
     private static List<ulong> ReconstructL1OrderedPath(Dictionary<L1TraversalState, L1TraversalState> cameFrom, L1TraversalState endState)
@@ -875,29 +757,6 @@ public partial class VoxelPathfind
             merged.Add(tail[i]);
 
         return merged;
-    }
-
-    private FlightPathDebugPayload BuildCoarsePathDebugPayload(IReadOnlyList<ulong> orderedPath, Vector3 fromPos, Vector3 toPos, bool reachedGoal)
-    {
-        List<FlightCoarsePathDebugNode> result = new(orderedPath.Count);
-
-        for (var i = 0; i < orderedPath.Count; ++i)
-        {
-            var voxel = orderedPath[i];
-            var point = i == 0
-                            ? fromPos
-                            : i == orderedPath.Count - 1 && reachedGoal
-                                ? toPos
-                                : ResolveVoxelCenter(voxel);
-            result.Add(new(i, voxel, point));
-        }
-
-        return new()
-        {
-            Waypoints  = [],
-            CoarsePath = result,
-            ProxyDebug = pendingLongRangeProxyDebug
-        };
     }
 
     private static bool IsBetterL1BestEffortResult(L1BestEffortSearchResult candidate, L1BestEffortSearchResult current)

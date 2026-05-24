@@ -46,9 +46,9 @@ public partial class VoxelPathfind
             fromPos,
             proxyGoalPos,
             returnIntermediatePoints,
-            cancel,
-            LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
             1,
+            LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+            cancel,
             heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
         );
 
@@ -80,10 +80,10 @@ public partial class VoxelPathfind
                 proxyEndpoint.p,
                 toPos,
                 returnIntermediatePoints,
-                cancel,
                 coarsePath.ReachedGoal,
                 recursionDepth,
-                out var usedLongRangeReentry
+                out var usedLongRangeReentry,
+                cancel
             );
 
             if (lastTermination == VolumeSearchTermination.ReachedGoal)
@@ -126,10 +126,10 @@ public partial class VoxelPathfind
         Vector3           fromPos,
         Vector3           toPos,
         bool              returnIntermediatePoints,
-        CancellationToken cancel,
         bool              coarseReachedGoal,
         int               recursionDepth,
-        out bool          usedLongRangeReentry
+        out bool          usedLongRangeReentry,
+        CancellationToken cancel
     )
     {
         usedLongRangeReentry = false;
@@ -146,15 +146,13 @@ public partial class VoxelPathfind
 
         if (searchRaycast)
         {
-            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, RAYCAST_SEARCH_STEP_BUDGET, 1);
+            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, 1, cancel);
             if (lastTermination != VolumeSearchTermination.ReachedGoal)
                 path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
             return path;
         }
 
-        var allowProxyGuidedCorridor = coarseReachedGoal;
-
-        if (!allowProxyGuidedCorridor)
+        if (!coarseReachedGoal)
         {
             Service.Log.Debug
             (
@@ -170,9 +168,9 @@ public partial class VoxelPathfind
                 fromPos,
                 toPos,
                 returnIntermediatePoints,
-                cancel,
                 GUIDED_CORRIDOR_SEARCH_STEP_BUDGET,
                 1,
+                cancel,
                 corridor,
                 GUIDED_CORRIDOR_HEURISTIC_WEIGHT
             );
@@ -224,9 +222,9 @@ public partial class VoxelPathfind
             fromPos,
             toPos,
             returnIntermediatePoints,
-            cancel,
-            LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
             2,
+            LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+            cancel,
             heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
         );
     }
@@ -252,40 +250,48 @@ public partial class VoxelPathfind
 
         var l1Path = SearchL1CoarsePath(fromVoxel, fromPos, toVoxel, toPos);
 
-        if (l1Path is { Count: > 1 } pathSet)
+        switch (l1Path)
         {
-            BuildL1Corridor(pathSet, 0);
-            var constrainedPath = RunSearchAttempt
-            (
-                fromVoxel,
-                toVoxel,
-                fromPos,
-                toPos,
-                returnIntermediatePoints,
-                cancel,
-                DEFAULT_MAX_SEARCH_STEPS,
-                attempts++,
-                heuristicWeightOverride: fallbackHeuristicWeight
-            );
-
-            if (lastTermination == VolumeSearchTermination.ReachedGoal)
+            case { Count: > 1 }:
             {
+                BuildL1Corridor(l1Path, 0);
+                var constrainedPath = RunSearchAttempt
+                (
+                    fromVoxel,
+                    toVoxel,
+                    fromPos,
+                    toPos,
+                    returnIntermediatePoints,
+                    attempts++,
+                    DEFAULT_MAX_SEARCH_STEPS,
+                    cancel,
+                    heuristicWeightOverride: fallbackHeuristicWeight
+                );
+
+                if (lastTermination == VolumeSearchTermination.ReachedGoal)
+                {
+                    Service.Log.Debug
+                    (
+                        $"[算路] 飞行体素短距 L1 约束搜索完成：访问节点 = {visitedNodes}，L1 路径单元 = {l1Path.Count}，启发式权重 = {heuristicWeight:f2}"
+                    );
+                    return constrainedPath;
+                }
+
                 Service.Log.Debug
                 (
-                    $"[算路] 飞行体素短距 L1 约束搜索完成：访问节点 = {visitedNodes}，L1 路径单元 = {pathSet.Count}，启发式权重 = {heuristicWeight:f2}"
+                    $"[算路] 飞行体素短距 L1 约束搜索未达终点（{lastTermination}），回退 L1 距离场全搜索"
                 );
-                return constrainedPath;
+                l1PathSet = null;
+                l0PathSet = null;
+                break;
             }
-
-            Service.Log.Debug
-            (
-                $"[算路] 飞行体素短距 L1 约束搜索未达终点（{lastTermination}），回退 L1 距离场全搜索"
-            );
-            l1PathSet = null;
-            l0PathSet = null;
+            case { Count: 1 }:
+                Service.Log.Debug("[算路] 飞行体素短距起终点位于同一 L1 单元，跳过 L1 约束，直接使用距离场回退");
+                break;
+            default:
+                Service.Log.Debug("[算路] 飞行体素短距 L1 粗搜索未找到路径，直接使用距离场回退");
+                break;
         }
-        else if (l1Path is { Count: 1 }) Service.Log.Debug("[算路] 飞行体素短距起终点位于同一 L1 单元，跳过 L1 约束，直接使用距离场回退");
-        else Service.Log.Debug("[算路] 飞行体素短距 L1 粗搜索未找到路径，直接使用距离场回退");
 
         if (l1DistanceField is not { Count: > 0 })
             ComputeL1DistanceField(toVoxel, toPos);
@@ -297,9 +303,9 @@ public partial class VoxelPathfind
             fromPos,
             toPos,
             returnIntermediatePoints,
-            cancel,
-            DEFAULT_MAX_SEARCH_STEPS,
             attempts,
+            DEFAULT_MAX_SEARCH_STEPS,
+            cancel,
             heuristicWeightOverride: fallbackHeuristicWeight
         );
     }

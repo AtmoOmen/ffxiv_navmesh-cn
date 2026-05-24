@@ -216,9 +216,24 @@ public partial class VoxelPathfind
 
             for (var dir = 0; dir < 6; ++dir)
             {
-                var dx = dir == L1_FACE_NEG_X ? -1 : dir == L1_FACE_POS_X ? 1 : 0;
-                var dy = dir == L1_FACE_NEG_Y ? -1 : dir == L1_FACE_POS_Y ? 1 : 0;
-                var dz = dir == L1_FACE_NEG_Z ? -1 : dir == L1_FACE_POS_Z ? 1 : 0;
+                var dx = dir switch
+                {
+                    L1_FACE_NEG_X => -1,
+                    L1_FACE_POS_X => 1,
+                    _             => 0
+                };
+                var dy = dir switch
+                {
+                    L1_FACE_NEG_Y => -1,
+                    L1_FACE_POS_Y => 1,
+                    _             => 0
+                };
+                var dz = dir switch
+                {
+                    L1_FACE_NEG_Z => -1,
+                    L1_FACE_POS_Z => 1,
+                    _             => 0
+                };
                 var nx = x + dx;
                 var ny = y + dy;
                 var nz = z + dz;
@@ -407,28 +422,7 @@ public partial class VoxelPathfind
         );
         return true;
     }
-
-    private bool IsInsideGuidedCorridor(Vector3 point)
-    {
-        var relative           = point - guidedCorridor.Start;
-        var relativeHorizontal = new Vector2(relative.X, relative.Z);
-        var advance            = Vector2.Dot(relativeHorizontal, guidedCorridor.HorizontalDirection);
-        if (advance < -guidedCorridor.EndpointSlack || advance > guidedCorridor.HorizontalLength + guidedCorridor.EndpointSlack)
-            return false;
-
-        var lateral = relativeHorizontal - (guidedCorridor.HorizontalDirection * advance);
-        if (lateral.LengthSquared() > guidedCorridor.HorizontalRadius * guidedCorridor.HorizontalRadius)
-            return false;
-
-        var t              = guidedCorridor.HorizontalLength > SCORE_EPSILON ? Math.Clamp(advance / guidedCorridor.HorizontalLength, 0f, 1f) : 0f;
-        var baselineY      = guidedCorridor.Start.Y + (guidedCorridor.VerticalDelta * t);
-        var verticalOffset = point.Y                - baselineY;
-        if (verticalOffset >= 0f)
-            return verticalOffset <= guidedCorridor.UpwardAllowance;
-
-        return -verticalOffset <= guidedCorridor.DownwardAllowance;
-    }
-
+    
     private float CalculateCorridorOverflowPenalty(Vector3 point)
     {
         var relative           = point - guidedCorridor.Start;
@@ -695,8 +689,7 @@ public partial class VoxelPathfind
 
         return false;
     }
-
-
+    
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private float HeuristicDistance(Vector3 position, ulong voxel)
     {

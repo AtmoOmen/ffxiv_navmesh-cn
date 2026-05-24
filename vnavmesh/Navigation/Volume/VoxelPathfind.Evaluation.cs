@@ -228,7 +228,7 @@ public partial class VoxelPathfind
         return ResolveSearchCandidatePosition(voxel, blendedTarget);
     }
 
-    private int DetermineEffectiveLookBackDepth(float currentBestScore, float currentNodeGScore)
+    private static int DetermineEffectiveLookBackDepth(float currentBestScore, float currentNodeGScore)
     {
         if (currentBestScore == float.MaxValue)
             return MAX_ANCESTOR_LOOK_BACK;

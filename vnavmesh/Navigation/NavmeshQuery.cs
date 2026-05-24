@@ -53,7 +53,7 @@ public class NavmeshQuery
     }
 
     internal VoxelPathfind? VolumeQuery =>
-        released ? null : volumeQuery ??= NavmeshData.Volume != null ? new(NavmeshData.Volume, ConfigData) : null;
+        released ? null : volumeQuery ??= NavmeshData.Volume != null ? new(NavmeshData.Volume) : null;
 
     internal List<long> LastPath { get; } = [];
 
