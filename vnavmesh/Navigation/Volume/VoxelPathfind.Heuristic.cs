@@ -2,36 +2,12 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
+using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
 
 public partial class VoxelPathfind
 {
-    private static bool IsCoarseNeighbour(ulong voxel)
-    {
-        var temp = voxel;
-        VoxelMap.DecodeIndex(ref temp);
-        VoxelMap.DecodeIndex(ref temp);
-        return VoxelMap.DecodeIndex(ref temp) == VoxelMap.INDEX_LEVEL_MASK;
-    }
-
-    private static bool TryExtractL1Parent(ulong voxel, out ulong l1Voxel)
-    {
-        var temp = voxel;
-        var l0   = VoxelMap.DecodeIndex(ref temp);
-        var l1   = VoxelMap.DecodeIndex(ref temp);
-
-        if (l1 == VoxelMap.INDEX_LEVEL_MASK)
-        {
-            l1Voxel = VoxelMap.INVALID_VOXEL;
-            return false;
-        }
-
-        l1Voxel = VoxelMap.EncodeIndex(l1);
-        l1Voxel = VoxelMap.EncodeIndex(l0, l1Voxel);
-        return true;
-    }
-
     private bool HasTraversableL1FaceTransition(ulong currentL1, ulong neighbourL1, int dx, int dy, int dz)
     {
         var currentX   = dx > 0 ? l2Desc.NumCellsX     - 1 : 0;
@@ -65,24 +41,6 @@ public partial class VoxelPathfind
         return false;
     }
 
-    private static int OppositeFace(int face) => face ^ 1;
-
-    private static ushort L1FaceBit(int face) => (ushort)(1 << face);
-
-    private static bool HasL1Face(ushort faceMask, int face) => (faceMask & L1FaceBit(face)) != 0;
-
-    private static bool CanTraverseMixedL1Cell(bool includeNonEmpty, ulong candidateL1, ulong goalL1)
-        => includeNonEmpty && candidateL1 == goalL1;
-
-    private static ushort GetPackedReachableL1Faces(ulong packedConnectivity, int face) => (ushort)((packedConnectivity >> (face * 6)) & L1_ALL_FACES_MASK);
-
-    private static ulong SetPackedReachableL1Faces(ulong packedConnectivity, int face, ushort reachableFaces)
-    {
-        var shift = face * 6;
-        packedConnectivity &= ~((ulong)L1_ALL_FACES_MASK << shift);
-        packedConnectivity |= (ulong)(reachableFaces & L1_ALL_FACES_MASK) << shift;
-        return packedConnectivity;
-    }
 
     private ushort GetReachableL1FacesFromEntry(ulong l1Voxel, int entryFace)
     {
@@ -92,7 +50,7 @@ public partial class VoxelPathfind
             return L1_ALL_FACES_MASK;
 
         var packedConnectivity = l1FaceConnectivityCache.GetOrAdd(l1Voxel, BuildPackedL1FaceConnectivity);
-        return GetPackedReachableL1Faces(packedConnectivity, entryFace);
+        return VoxelIndexUtil.GetPackedReachableL1Faces(packedConnectivity, entryFace);
     }
 
     private ushort GetReachableL1FacesFromPoint(ulong l1Voxel, ulong actualVoxel, Vector3 point)
@@ -124,7 +82,7 @@ public partial class VoxelPathfind
         {
             ulong packed = 0;
             for (var face = 0; face < 6; ++face)
-                packed = SetPackedReachableL1Faces(packed, face, L1_ALL_FACES_MASK);
+                packed = VoxelIndexUtil.SetPackedReachableL1Faces(packed, face, L1_ALL_FACES_MASK);
             return packed;
         }
 
@@ -151,11 +109,11 @@ public partial class VoxelPathfind
 
             for (var face = 0; face < 6; ++face)
             {
-                if (!HasL1Face(reachableFaces, face))
+                if (!VoxelIndexUtil.HasL1Face(reachableFaces, face))
                     continue;
 
-                var combinedReachable = (ushort)(GetPackedReachableL1Faces(packedConnectivity, face) | reachableFaces);
-                packedConnectivity = SetPackedReachableL1Faces(packedConnectivity, face, combinedReachable);
+                var combinedReachable = (ushort)(VoxelIndexUtil.GetPackedReachableL1Faces(packedConnectivity, face) | reachableFaces);
+                packedConnectivity = VoxelIndexUtil.SetPackedReachableL1Faces(packedConnectivity, face, combinedReachable);
             }
         }
 
@@ -202,17 +160,17 @@ public partial class VoxelPathfind
 
             var (x, y, z) = l2Desc.IndexToVoxel(currentIndex);
             if (y == 0)
-                reachableFaces |= L1FaceBit(L1_FACE_NEG_Y);
+                reachableFaces |= 1 << L1_FACE_NEG_Y;
             if (y == l2Desc.NumCellsY - 1)
-                reachableFaces |= L1FaceBit(L1_FACE_POS_Y);
+                reachableFaces |= 1 << L1_FACE_POS_Y;
             if (x == 0)
-                reachableFaces |= L1FaceBit(L1_FACE_NEG_X);
+                reachableFaces |= 1 << L1_FACE_NEG_X;
             if (x == l2Desc.NumCellsX - 1)
-                reachableFaces |= L1FaceBit(L1_FACE_POS_X);
+                reachableFaces |= 1 << L1_FACE_POS_X;
             if (z == 0)
-                reachableFaces |= L1FaceBit(L1_FACE_NEG_Z);
+                reachableFaces |= 1 << L1_FACE_NEG_Z;
             if (z == l2Desc.NumCellsZ - 1)
-                reachableFaces |= L1FaceBit(L1_FACE_POS_Z);
+                reachableFaces |= 1 << L1_FACE_POS_Z;
 
             for (var dir = 0; dir < 6; ++dir)
             {
@@ -264,7 +222,7 @@ public partial class VoxelPathfind
     {
         seedIndex = 0;
 
-        if (TryExtractL2IndexWithinL1(actualVoxel, l1Voxel, out seedIndex))
+        if (VoxelIndexUtil.TryExtractL2IndexWithinL1(actualVoxel, l1Voxel, out seedIndex))
             return true;
 
         seedIndex = ResolvePointL2IndexWithinL1(l1Voxel, point);
@@ -272,20 +230,6 @@ public partial class VoxelPathfind
             return true;
 
         return TryFindNearestEmptyL1SeedIndex(l1Voxel, point, out seedIndex);
-    }
-
-    private static bool TryExtractL2IndexWithinL1(ulong voxel, ulong expectedL1, out ushort l2Index)
-    {
-        var temp    = voxel;
-        var l0Index = VoxelMap.DecodeIndex(ref temp);
-        var l1Index = VoxelMap.DecodeIndex(ref temp);
-        l2Index = VoxelMap.DecodeIndex(ref temp);
-        if (l2Index == VoxelMap.INDEX_LEVEL_MASK)
-            return false;
-
-        var l1Voxel = VoxelMap.EncodeIndex(l1Index);
-        l1Voxel = VoxelMap.EncodeIndex(l0Index, l1Voxel);
-        return l1Voxel == expectedL1;
     }
 
     private ushort ResolvePointL2IndexWithinL1(ulong l1Voxel, Vector3 point)
@@ -327,10 +271,10 @@ public partial class VoxelPathfind
 
     private ulong ResolveRepresentativeL1Voxel(ulong voxel, Vector3 referencePoint)
     {
-        if (TryExtractL1Parent(voxel, out var l1Voxel))
+        if (VoxelIndexUtil.TryExtractL1Parent(voxel, out var l1Voxel))
             return l1Voxel;
 
-        var l0Index  = ExtractL0Index(voxel);
+        var l0Index  = VoxelIndexUtil.ExtractL0Index(voxel);
         var bounds   = Volume.VoxelBounds(voxel, 0);
         var span     = bounds.max - bounds.min;
         var clamped  = Vector3.Clamp(referencePoint, bounds.min, bounds.max - new Vector3(SCORE_EPSILON));
@@ -347,10 +291,10 @@ public partial class VoxelPathfind
         if (l1PathSet == null)
             return true;
 
-        if (TryExtractL1Parent(voxel, out var l1Voxel))
+        if (VoxelIndexUtil.TryExtractL1Parent(voxel, out var l1Voxel))
             return l1PathSet.Contains(l1Voxel);
 
-        return l0PathSet?.Contains(ExtractL0Index(voxel)) ?? false;
+        return l0PathSet?.Contains(VoxelIndexUtil.ExtractL0Index(voxel)) ?? false;
     }
 
     private bool TryGetVoxelCorridorDistance(ulong voxel, out int distance)
@@ -359,10 +303,10 @@ public partial class VoxelPathfind
         if (l1CorridorDistance == null)
             return false;
 
-        if (TryExtractL1Parent(voxel, out var l1Voxel))
+        if (VoxelIndexUtil.TryExtractL1Parent(voxel, out var l1Voxel))
             return l1CorridorDistance.TryGetValue(l1Voxel, out distance);
 
-        return l0CorridorDistance?.TryGetValue(ExtractL0Index(voxel), out distance) ?? false;
+        return l0CorridorDistance?.TryGetValue(VoxelIndexUtil.ExtractL0Index(voxel), out distance) ?? false;
     }
 
     private bool TryGetVoxelL1DistanceFloor(ulong voxel, out float distance)
@@ -371,10 +315,10 @@ public partial class VoxelPathfind
         if (l1DistanceField == null)
             return false;
 
-        if (TryExtractL1Parent(voxel, out var l1Voxel))
+        if (VoxelIndexUtil.TryExtractL1Parent(voxel, out var l1Voxel))
             return l1DistanceField.TryGetValue(l1Voxel, out distance);
 
-        return l0DistanceField?.TryGetValue(ExtractL0Index(voxel), out distance) ?? false;
+        return l0DistanceField?.TryGetValue(VoxelIndexUtil.ExtractL0Index(voxel), out distance) ?? false;
     }
 
     private bool TryCreateGuidedCorridor(Vector3 fromPos, Vector3 toPos, out GuidedSearchCorridor corridor)
@@ -422,7 +366,7 @@ public partial class VoxelPathfind
         );
         return true;
     }
-    
+
     private float CalculateCorridorOverflowPenalty(Vector3 point)
     {
         var relative           = point - guidedCorridor.Start;
@@ -519,27 +463,19 @@ public partial class VoxelPathfind
 
         var pressure = 0f;
         if ((wallMask & SEARCH_WALL_NEG_X) != 0)
-            pressure += WallPressure(position.X - min.X, preferredClearance);
+            pressure += VoxelMathUtil.WallPressure(position.X - min.X, preferredClearance);
         if ((wallMask & SEARCH_WALL_POS_X) != 0)
-            pressure += WallPressure(max.X - position.X, preferredClearance);
+            pressure += VoxelMathUtil.WallPressure(max.X - position.X, preferredClearance);
         if ((wallMask & SEARCH_WALL_NEG_Y) != 0)
-            pressure += WallPressure(position.Y - min.Y, preferredClearance);
+            pressure += VoxelMathUtil.WallPressure(position.Y - min.Y, preferredClearance);
         if ((wallMask & SEARCH_WALL_POS_Y) != 0)
-            pressure += WallPressure(max.Y - position.Y, preferredClearance);
+            pressure += VoxelMathUtil.WallPressure(max.Y - position.Y, preferredClearance);
         if ((wallMask & SEARCH_WALL_NEG_Z) != 0)
-            pressure += WallPressure(position.Z - min.Z, preferredClearance);
+            pressure += VoxelMathUtil.WallPressure(position.Z - min.Z, preferredClearance);
         if ((wallMask & SEARCH_WALL_POS_Z) != 0)
-            pressure += WallPressure(max.Z - position.Z, preferredClearance);
+            pressure += VoxelMathUtil.WallPressure(max.Z - position.Z, preferredClearance);
 
         return pressure * minExtent * SEARCH_PATH_WALL_PENALTY_SCALE;
-    }
-
-    private static float WallPressure(float clearance, float preferredClearance)
-    {
-        if (preferredClearance <= SCORE_EPSILON)
-            return 0f;
-
-        return Math.Clamp((preferredClearance - clearance) / preferredClearance, 0f, 1f);
     }
 
     private float ResolveSearchVoxelInset(ulong voxel)
@@ -689,7 +625,7 @@ public partial class VoxelPathfind
 
         return false;
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private float HeuristicDistance(Vector3 position, ulong voxel)
     {
@@ -704,7 +640,7 @@ public partial class VoxelPathfind
 
     private float ComputeLongRangeLateralHeuristic(Vector3 position, ulong voxel, LongRangeLateralBias bias, Vector3 goal)
     {
-        var horizontalGoalDist  = HorizontalDistanceXZ(position, goal);
+        var horizontalGoalDist  = VoxelMathUtil.HorizontalDistanceXZ(position, goal);
         var aboveGoal           = MathF.Max(position.Y - goal.Y,     0f);
         var belowGoal           = MathF.Max(goal.Y     - position.Y, 0f);
         var relativeFromStart   = position - bias.Start;

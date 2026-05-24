@@ -1,6 +1,8 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using vnavmesh.Common.Navigation.Volume.Map;
+using vnavmesh.Navigation.Volume.Models;
+using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
 
@@ -268,7 +270,7 @@ public partial class VoxelPathfind
 
         public VoxelNodeLookup(int capacity)
         {
-            var size = RoundUpPowerOf2(Math.Max(capacity, 16));
+            var size = VoxelMathUtil.RoundUpPowerOf2(Math.Max(capacity, 16));
             keys   = new ulong[size];
             values = new int[size];
             mask   = size - 1;
@@ -348,7 +350,7 @@ public partial class VoxelPathfind
         public void TrimExcess()
         {
             if (keys.Length <= 2048) return;
-            var size = RoundUpPowerOf2(Math.Max(Count * 2, 16));
+            var size = VoxelMathUtil.RoundUpPowerOf2(Math.Max(Count * 2, 16));
             if (size >= keys.Length) return;
             var newKeys   = new ulong[size];
             var newValues = new int[size];
@@ -397,17 +399,6 @@ public partial class VoxelPathfind
             key *= 0xff51afd7ed558ccdUL;
             key ^= key >> 33;
             return (uint)key;
-        }
-
-        private static int RoundUpPowerOf2(int value)
-        {
-            --value;
-            value |= value >> 1;
-            value |= value >> 2;
-            value |= value >> 4;
-            value |= value >> 8;
-            value |= value >> 16;
-            return value + 1;
         }
 
         public ref struct ClosedVoxelEnumerator

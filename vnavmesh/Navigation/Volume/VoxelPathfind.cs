@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Navigation.Planning;
+using vnavmesh.Navigation.Volume.Models;
 
 namespace vnavmesh.Navigation.Volume;
 

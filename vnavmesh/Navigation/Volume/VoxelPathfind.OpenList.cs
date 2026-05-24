@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using vnavmesh.Navigation.Volume.Models;
 
 namespace vnavmesh.Navigation.Volume;
 

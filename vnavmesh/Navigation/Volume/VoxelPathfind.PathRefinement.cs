@@ -2,6 +2,7 @@ using System.Numerics;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Navigation.Planning;
+using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
 
@@ -135,7 +136,7 @@ public partial class VoxelPathfind
                 horizontalForward = new Vector2(current.p.X - previous.p.X, current.p.Z - previous.p.Z);
         }
 
-        horizontalForward = !TryNormalize(horizontalForward, out var normalizedHorizontalForward) ? Vector2.UnitX : normalizedHorizontalForward;
+        horizontalForward = !VoxelMathUtil.TryNormalize(horizontalForward, out var normalizedHorizontalForward) ? Vector2.UnitX : normalizedHorizontalForward;
 
         var horizontalRight      = new Vector2(-horizontalForward.Y, horizontalForward.X);
         var forward3             = new Vector3(horizontalForward.X, 0, horizontalForward.Y);
@@ -250,7 +251,7 @@ public partial class VoxelPathfind
 
         if (horizontalBiasMagnitude >= FLIGHT_PUSH_MIN_DISTANCE             &&
             horizontalImbalance     >= FLIGHT_PUSH_MIN_HORIZONTAL_IMBALANCE &&
-            TryNormalize(horizontalBiasFlat, out var horizontalPushDirection))
+            VoxelMathUtil.TryNormalize(horizontalBiasFlat, out var horizontalPushDirection))
         {
             if (goalAdjacentRearBias)
             {
@@ -259,7 +260,7 @@ public partial class VoxelPathfind
                 if (forwardComponent > FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT)
                 {
                     var rearProjectedDirection = horizontalPushDirection - (normalizedHorizontalForward * forwardComponent);
-                    if (!TryNormalize(rearProjectedDirection, out horizontalPushDirection))
+                    if (!VoxelMathUtil.TryNormalize(rearProjectedDirection, out horizontalPushDirection))
                         horizontalPushDirection = default;
                 }
             }
@@ -277,14 +278,28 @@ public partial class VoxelPathfind
         var     verticalTotal       = upClearance + downClearance;
         var     verticalImbalance   = verticalTotal > SCORE_EPSILON ? verticalMagnitude / verticalTotal : 0f;
         var     goalDescentApproach = IsGoalDescentApproach(previous, current, next, leafVerticalSize);
-        var     downhillTunnelTrend = IsTunnelDescentTrend(previous, current, next, leafVerticalSize);
-        var     heightMatchTarget   = current.p.Y;
+        var downhillTunnelTrend = VoxelPathUtil.IsTunnelDescentTrend
+            (previous, current, next, leafVerticalSize, FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_LEAF_SCALE, FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_MIN);
+        var heightMatchTarget = current.p.Y;
         if (previous.p.Y >= current.p.Y - FLIGHT_PUSH_HEIGHT_MATCH_TOLERANCE)
             heightMatchTarget = MathF.Max(heightMatchTarget, previous.p.Y + FLIGHT_PUSH_HEIGHT_MATCH_BIAS);
-        var constrainedTunnelDescent = IsConstrainedTunnelDescent(previous, current, next, leafVerticalSize, upClearance, heightMatchTarget);
-        var preferredMinHeight       = !goalDescentApproach && !constrainedTunnelDescent ? heightMatchTarget : current.p.Y;
-        var catchupHeight            = MathF.Max(0f, preferredMinHeight - current.p.Y);
-        var catchupHeadroomRequired  = catchupHeight + ResolveFlightHeightCatchupHeadroom(leafVerticalSize);
+        var constrainedTunnelDescent = VoxelPathUtil.IsConstrainedTunnelDescent
+        (
+            previous,
+            current,
+            next,
+            leafVerticalSize,
+            upClearance,
+            heightMatchTarget,
+            FLIGHT_PUSH_MIN_DISTANCE,
+            FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_LEAF_SCALE,
+            FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_MIN,
+            FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_LEAF_SCALE,
+            FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_MIN
+        );
+        var preferredMinHeight      = !goalDescentApproach && !constrainedTunnelDescent ? heightMatchTarget : current.p.Y;
+        var catchupHeight           = MathF.Max(0f, preferredMinHeight - current.p.Y);
+        var catchupHeadroomRequired = catchupHeight + ResolveFlightHeightCatchupHeadroom(leafVerticalSize);
         var shouldCatchUpHeight = !constrainedTunnelDescent                 &&
                                   catchupHeight >= FLIGHT_PUSH_MIN_DISTANCE &&
                                   upClearance   >= catchupHeadroomRequired;
@@ -311,7 +326,7 @@ public partial class VoxelPathfind
         var verticalMode        = FlightPathVerticalMode.None;
         var tunnelDescentAssist = false;
 
-        if (TryResolveConstrainedTunnelDescentOffset
+        if (VoxelPathUtil.TryResolveConstrainedTunnelDescentOffset
             (
                 constrainedTunnelDescent,
                 downhillTunnelTrend,
@@ -323,6 +338,19 @@ public partial class VoxelPathfind
                 verticalScanDistance,
                 upClearance,
                 downClearance,
+                FLIGHT_PUSH_MIN_DISTANCE,
+                FLIGHT_TUNNEL_DESCENT_SOFT_HEADROOM_VOXEL_SCALE,
+                FLIGHT_TUNNEL_DESCENT_SOFT_HEADROOM_LEAF_SCALE,
+                FLIGHT_TUNNEL_DESCENT_DOWNWARD_CLEARANCE_VOXEL_SCALE,
+                FLIGHT_TUNNEL_DESCENT_DOWNWARD_CLEARANCE_LEAF_SCALE,
+                FLIGHT_TUNNEL_DESCENT_CLEARANCE_LEAD_LEAF_SCALE,
+                FLIGHT_TUNNEL_DESCENT_CLEARANCE_LEAD_MIN,
+                FLIGHT_TUNNEL_DESCENT_FOLLOW_NEXT_SCALE,
+                FLIGHT_TUNNEL_DESCENT_PREVIOUS_FOLLOW_SCALE,
+                FLIGHT_TUNNEL_DESCENT_EXTRA_FOLLOW_LEAF_SCALE,
+                FLIGHT_TUNNEL_DESCENT_CLEARANCE_ADVANTAGE_SCALE,
+                FLIGHT_PUSH_SCAN_PUSH_FRACTION,
+                FLIGHT_PUSH_MAX_CLEARANCE_FRACTION,
                 out var tunnelDescentOffset
             ))
         {
@@ -887,7 +915,7 @@ public partial class VoxelPathfind
 
         if (!resolved.empty || resolved.voxel == VoxelMap.INVALID_VOXEL)
         {
-            if (!TryNormalize(directionHint, out var normalizedHint))
+            if (!VoxelMathUtil.TryNormalize(directionHint, out var normalizedHint))
             {
                 waypoint = default;
                 return false;
@@ -932,7 +960,7 @@ public partial class VoxelPathfind
         var directionHint = horizontal.LengthSquared() > SCORE_EPSILON * SCORE_EPSILON
                                 ? (Vector3.Normalize(horizontal) * FLIGHT_PUSH_HEIGHT_RAISE_HORIZONTAL_BLEND) + Vector3.UnitY
                                 : Vector3.UnitY;
-        directionHint = !TryNormalize(directionHint, out var normalizedDirectionHint) ? Vector3.UnitY : normalizedDirectionHint;
+        directionHint = !VoxelMathUtil.TryNormalize(directionHint, out var normalizedDirectionHint) ? Vector3.UnitY : normalizedDirectionHint;
 
         var         attemptLift = requiredLift + FLIGHT_PUSH_HEIGHT_STRICT_BIAS;
         Span<float> scales      = [1.0f, 0.85f, 0.70f, 0.55f];
@@ -994,30 +1022,6 @@ public partial class VoxelPathfind
         totalClearance += contribution;
     }
 
-    private static bool TryNormalize(Vector2 value, out Vector2 normalized)
-    {
-        if (value.LengthSquared() <= SCORE_EPSILON * SCORE_EPSILON)
-        {
-            normalized = default;
-            return false;
-        }
-
-        normalized = Vector2.Normalize(value);
-        return true;
-    }
-
-    private static bool TryNormalize(Vector3 value, out Vector3 normalized)
-    {
-        if (value.LengthSquared() <= SCORE_EPSILON * SCORE_EPSILON)
-        {
-            normalized = default;
-            return false;
-        }
-
-        normalized = Vector3.Normalize(value);
-        return true;
-    }
-
     private static FlightPathDebugSample BuildFlightDebugSample(FlightPathDebugSampleKind kind, Vector3 start, FlightPushProbeResult sample)
         => new(kind, start, sample.Endpoint, sample.Clearance);
 
@@ -1072,7 +1076,7 @@ public partial class VoxelPathfind
 
         var delta = sample.Endpoint - origin;
         delta.Y = 0;
-        if (!TryNormalize(delta, out var direction))
+        if (!VoxelMathUtil.TryNormalize(delta, out var direction))
             return;
 
         var forwardDot = Vector3.Dot(direction, forward);
@@ -1113,8 +1117,8 @@ public partial class VoxelPathfind
         ref float                maxHorizontalClearance
     )
     {
-        List<FlightPathDebugSample> samples        = new(FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT);
-        const float                 STEP_ANGLE     = 2f * MathF.PI                             / FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT;
+        List<FlightPathDebugSample> samples         = new(FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT);
+        const float                 STEP_ANGLE      = 2f * MathF.PI                             / FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT;
         const int                   PRIMARY_DIVISOR = FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT / 8;
 
         for (var i = 0; i < FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT; ++i)
@@ -1124,7 +1128,7 @@ public partial class VoxelPathfind
 
             var angle     = i * STEP_ANGLE;
             var direction = (forward * MathF.Cos(angle)) + (right * MathF.Sin(angle));
-            if (!TryNormalize(direction, out direction))
+            if (!VoxelMathUtil.TryNormalize(direction, out direction))
                 continue;
 
             var sample = MeasureDirectionalClearance(origin, direction, maxDistance, stepDistance);
@@ -1209,19 +1213,19 @@ public partial class VoxelPathfind
         {
             var restoredStart = restored[^1];
             var segmentEnd    = simplified[simplifiedIndex];
-            var startIndex    = FindPathPointIndex(refined, restoredStart, refinedSearchStart);
+            var startIndex    = VoxelPathUtil.FindPathPointIndex(refined, restoredStart, refinedSearchStart, SCORE_EPSILON);
 
             if (startIndex < 0)
             {
-                AppendPathPoint(restored, segmentEnd);
+                VoxelPathUtil.AppendPathPoint(restored, segmentEnd, SCORE_EPSILON);
                 continue;
             }
 
-            var endIndex = FindPathPointIndex(refined, segmentEnd, startIndex + 1);
+            var endIndex = VoxelPathUtil.FindPathPointIndex(refined, segmentEnd, startIndex + 1, SCORE_EPSILON);
 
             if (endIndex < 0)
             {
-                AppendPathPoint(restored, segmentEnd);
+                VoxelPathUtil.AppendPathPoint(restored, segmentEnd, SCORE_EPSILON);
                 continue;
             }
 
@@ -1260,26 +1264,9 @@ public partial class VoxelPathfind
                 }
             }
 
-            AppendPathPoint(output, refined[nextIndex]);
+            VoxelPathUtil.AppendPathPoint(output, refined[nextIndex], SCORE_EPSILON);
             currentIndex = nextIndex;
         }
-    }
-
-    private static void AppendPathPoint(List<(ulong voxel, Vector3 p)> output, (ulong voxel, Vector3 p) point)
-    {
-        if (output.Count > 0 && Vector3.DistanceSquared(output[^1].p, point.p) <= SCORE_EPSILON * SCORE_EPSILON)
-            return;
-
-        output.Add(point);
-    }
-
-    private static int FindPathPointIndex(IReadOnlyList<(ulong voxel, Vector3 p)> path, (ulong voxel, Vector3 p) point, int startIndex)
-    {
-        for (var i = Math.Max(0, startIndex); i < path.Count; ++i)
-            if (Vector3.DistanceSquared(path[i].p, point.p) <= SCORE_EPSILON * SCORE_EPSILON)
-                return i;
-
-        return -1;
     }
 
     private bool IsGoalDescentApproach
@@ -1298,103 +1285,8 @@ public partial class VoxelPathfind
                next.p.Y + tolerance < previous.p.Y;
     }
 
-    private static bool IsConstrainedTunnelDescent
-    (
-        (ulong voxel, Vector3 p) previous,
-        (ulong voxel, Vector3 p) current,
-        (ulong voxel, Vector3 p) next,
-        float                    leafVerticalSize,
-        float                    upClearance,
-        float                    preferredHeightTarget
-    )
-    {
-        var descentTolerance = MathF.Max(leafVerticalSize * FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_LEAF_SCALE, FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_MIN);
-        if (next.p.Y + descentTolerance >= current.p.Y &&
-            next.p.Y + descentTolerance >= previous.p.Y)
-            return false;
-
-        var targetLift = MathF.Max(0f, preferredHeightTarget - current.p.Y);
-        if (targetLift < FLIGHT_PUSH_MIN_DISTANCE)
-            return false;
-
-        var requiredHeadroom = targetLift + ResolveFlightHeightCatchupHeadroom(leafVerticalSize);
-        return upClearance < requiredHeadroom;
-    }
-
     private static float ResolveFlightHeightCatchupHeadroom(float leafVerticalSize)
         => MathF.Max(leafVerticalSize * FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_LEAF_SCALE, FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_MIN);
-
-    private static bool TryResolveConstrainedTunnelDescentOffset
-    (
-        bool                     constrainedTunnelDescent,
-        bool                     downhillTunnelTrend,
-        (ulong voxel, Vector3 p) previous,
-        (ulong voxel, Vector3 p) current,
-        (ulong voxel, Vector3 p) next,
-        float                    leafVerticalSize,
-        float                    voxelVertical,
-        float                    verticalScanDistance,
-        float                    upClearance,
-        float                    downClearance,
-        out Vector3              verticalOffset
-    )
-    {
-        verticalOffset = default;
-        if (!constrainedTunnelDescent && !downhillTunnelTrend)
-            return false;
-
-        var clearanceAdvantage = MathF.Max(0f,       downClearance - upClearance);
-        var nextDrop           = MathF.Max(0f,       current.p.Y   - next.p.Y);
-        var previousDrop       = MathF.Max(0f,       previous.p.Y  - current.p.Y);
-        var trendDrop          = MathF.Max(nextDrop, previousDrop * FLIGHT_TUNNEL_DESCENT_PREVIOUS_FOLLOW_SCALE);
-        var minimumLead        = MathF.Max(leafVerticalSize       * FLIGHT_TUNNEL_DESCENT_CLEARANCE_LEAD_LEAF_SCALE, FLIGHT_TUNNEL_DESCENT_CLEARANCE_LEAD_MIN);
-        if (trendDrop          < FLIGHT_PUSH_MIN_DISTANCE &&
-            clearanceAdvantage < minimumLead)
-            return false;
-
-        var downwardClearanceFloor = MathF.Max
-            (voxelVertical * FLIGHT_TUNNEL_DESCENT_DOWNWARD_CLEARANCE_VOXEL_SCALE, leafVerticalSize * FLIGHT_TUNNEL_DESCENT_DOWNWARD_CLEARANCE_LEAF_SCALE);
-        if (downClearance < downwardClearanceFloor)
-            return false;
-
-        if (!constrainedTunnelDescent)
-        {
-            var softHeadroomLimit = MathF.Max
-                (voxelVertical * FLIGHT_TUNNEL_DESCENT_SOFT_HEADROOM_VOXEL_SCALE, leafVerticalSize * FLIGHT_TUNNEL_DESCENT_SOFT_HEADROOM_LEAF_SCALE);
-            if (upClearance > softHeadroomLimit || clearanceAdvantage < minimumLead)
-                return false;
-        }
-
-        var desiredVerticalPush = MathF.Max
-        (
-            trendDrop          * FLIGHT_TUNNEL_DESCENT_FOLLOW_NEXT_SCALE,
-            clearanceAdvantage * FLIGHT_TUNNEL_DESCENT_CLEARANCE_ADVANTAGE_SCALE
-        );
-        var maxVerticalPush = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, downClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
-        var pushCap = constrainedTunnelDescent
-                          ? Math.Max(nextDrop, trendDrop)
-                          : Math.Max(nextDrop, trendDrop + (leafVerticalSize * FLIGHT_TUNNEL_DESCENT_EXTRA_FOLLOW_LEAF_SCALE));
-        var verticalPushDistance = MathF.Min(pushCap, MathF.Min(maxVerticalPush, desiredVerticalPush));
-        if (verticalPushDistance < FLIGHT_PUSH_MIN_DISTANCE)
-            return false;
-
-        verticalOffset = -Vector3.UnitY * verticalPushDistance;
-        return true;
-    }
-
-    private static bool IsTunnelDescentTrend
-    (
-        (ulong voxel, Vector3 p) previous,
-        (ulong voxel, Vector3 p) current,
-        (ulong voxel, Vector3 p) next,
-        float                    leafVerticalSize
-    )
-    {
-        var descentTolerance = MathF.Max(leafVerticalSize * FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_LEAF_SCALE, FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_MIN);
-        return next.p.Y    + descentTolerance < current.p.Y  ||
-               current.p.Y + descentTolerance < previous.p.Y ||
-               next.p.Y    + descentTolerance < previous.p.Y;
-    }
 
     private bool NeedsFlightDescentSmoothing(Vector3 from, Vector3 to)
     {
@@ -1402,7 +1294,7 @@ public partial class VoxelPathfind
         if (verticalDrop <= ResolveFlightDescentSmoothingMinDrop())
             return false;
 
-        var horizontalDistance = HorizontalDistanceXZ(from, to);
+        var horizontalDistance = VoxelMathUtil.HorizontalDistanceXZ(from, to);
         if (horizontalDistance <= ResolveFlightDescentNearVerticalDistance())
             return true;
 
@@ -1415,13 +1307,6 @@ public partial class VoxelPathfind
     private float ResolveFlightDescentNearVerticalDistance()
         => MathF.Max
             (MathF.Max(l2Desc.CellSize.X, l2Desc.CellSize.Z) * FLIGHT_DESCENT_SMOOTHING_NEAR_VERTICAL_LEAF_SCALE, FLIGHT_DESCENT_SMOOTHING_NEAR_VERTICAL_MIN);
-
-    private static float HorizontalDistanceXZ(Vector3 left, Vector3 right)
-    {
-        var dx = left.X             - right.X;
-        var dz = left.Z             - right.Z;
-        return MathF.Sqrt((dx * dx) + (dz * dz));
-    }
 
     private int FindFurthestVisibleIndex(List<(ulong voxel, Vector3 p)> path, int anchorIndex, CancellationToken cancel)
     {

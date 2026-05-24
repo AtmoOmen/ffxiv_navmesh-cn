@@ -1,5 +1,7 @@
 using System.Numerics;
 using vnavmesh.Navigation.Planning;
+using vnavmesh.Navigation.Volume.Models;
+using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
 
@@ -70,7 +72,7 @@ public partial class VoxelPathfind
             {
                 pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyEndpoint.p, toPos, FlightLongRangeTailKind.DirectToGoal);
                 Service.Log.Debug("[算路] 飞行体素粗层代理搜索后直连终点成功");
-                return MergePathSegments(proxyPath, directTail);
+                return VoxelPathUtil.MergePathSegments(proxyPath, directTail, SCORE_EPSILON);
             }
 
             var tailPath = RunTailSearchFromProxy
@@ -96,7 +98,7 @@ public partial class VoxelPathfind
                         ? $"[算路] 飞行体素粗层代理搜索后二次粗搜接力完成：访问节点 = {visitedNodes}，路径点 = {tailPath.Count}"
                         : $"[算路] 飞行体素粗层代理搜索后短程接力完成：访问节点 = {visitedNodes}，路径点 = {tailPath.Count}"
                 );
-                return MergePathSegments(proxyPath, tailPath);
+                return VoxelPathUtil.MergePathSegments(proxyPath, tailPath, SCORE_EPSILON);
             }
 
             if (!(usedLongRangeReentry && pendingLongRangeProxyDebug is not null))
@@ -107,7 +109,7 @@ public partial class VoxelPathfind
                     ? $"[算路] 飞行体素粗层代理搜索后二次粗搜接力未达终点（{lastTermination}），访问节点 = {visitedNodes}"
                     : $"[算路] 飞行体素粗层代理搜索后短程接力未达终点（{lastTermination}），访问节点 = {visitedNodes}"
             );
-            return MergePathSegments(proxyPath, tailPath);
+            return VoxelPathUtil.MergePathSegments(proxyPath, tailPath, SCORE_EPSILON);
         }
 
         pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyPath.Count > 0 ? proxyPath[^1].p : fromPos, toPos, FlightLongRangeTailKind.None);

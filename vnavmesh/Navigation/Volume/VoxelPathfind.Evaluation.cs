@@ -1,7 +1,7 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
-using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
+using vnavmesh.Navigation.Volume.Models;
+using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
 
@@ -58,7 +58,7 @@ public partial class VoxelPathfind
         bestPosition    = default;
         bestScore       = float.MaxValue;
 
-        var requireDirectVisibility = IsCoarseNeighbour(neighbourVoxel);
+        var requireDirectVisibility = VoxelIndexUtil.IsCoarseNeighbour(neighbourVoxel);
         if (!TryEvaluateCandidate(currentIndex, neighbourVoxel, requireDirectVisibility, ref bestParentIndex, ref bestPosition, ref bestScore))
             return false;
 
@@ -68,10 +68,10 @@ public partial class VoxelPathfind
         if (bestScore <= earlyStopThreshold)
             return true;
 
-        var ancestorIndex      = nodeSpan[currentIndex].ParentIndex;
-        var effectiveLookBack  = DetermineEffectiveLookBackDepth(bestScore, currentGScore);
-        var lookBackCount      = 0;
-        var lastEvaluated      = -1;
+        var ancestorIndex     = nodeSpan[currentIndex].ParentIndex;
+        var effectiveLookBack = VoxelPathUtil.DetermineEffectiveLookBackDepth(bestScore, currentGScore, SCORE_EPSILON);
+        var lookBackCount     = 0;
+        var lastEvaluated     = -1;
 
         while (ancestorIndex >= 0 && lookBackCount < effectiveLookBack)
         {
@@ -136,6 +136,7 @@ public partial class VoxelPathfind
         candidatePositions[1] = ResolveGoalAlignedPosition(voxel);
         candidateKinds[1]     = VolumePathCandidateKind.GoalAligned;
         var goalAlignedScore = CalculateNodeScore(parentIndex, voxel, candidatePositions[1]);
+
         if (bestParentIndex >= 0 && goalAlignedScore > bestScore + SCORE_EPSILON)
         {
             candidatePositions[2] = ResolveCenterBiasedPosition(voxel, parentIndex);
@@ -228,24 +229,11 @@ public partial class VoxelPathfind
         return ResolveSearchCandidatePosition(voxel, blendedTarget);
     }
 
-    private static int DetermineEffectiveLookBackDepth(float currentBestScore, float currentNodeGScore)
-    {
-        if (currentBestScore == float.MaxValue)
-            return MAX_ANCESTOR_LOOK_BACK;
-
-        var improvementRatio = (currentNodeGScore - currentBestScore) / MathF.Max(currentNodeGScore, SCORE_EPSILON);
-        if (improvementRatio < 0.05f)
-            return 2;
-        if (improvementRatio < 0.15f)
-            return 4;
-
-        return MAX_ANCESTOR_LOOK_BACK;
-    }
 
     private float CalculateMinimumEdgeCost(Vector3 fromPos, ulong toVoxel)
     {
         var (voxelMin, voxelMax) = Volume.VoxelBounds(toVoxel, 0);
-        var voxelCenter          = (voxelMin + voxelMax) * 0.5f;
+        var voxelCenter = (voxelMin + voxelMax) * 0.5f;
         return Vector3.Distance(fromPos, voxelCenter) * 0.8f;
     }
 
@@ -278,7 +266,7 @@ public partial class VoxelPathfind
     private float CalculateNodeScore(int parentIndex, ulong voxel, Vector3 destination)
     {
         var nodeSpan = NodeSpan;
-        var edgeCost = CalculateEdgeCost(nodeSpan[parentIndex].Position, destination);
+        var edgeCost = Vector3.Distance(nodeSpan[parentIndex].Position, destination);
         var score = nodeSpan[parentIndex].GScore                                                                                               +
                     edgeCost                                                                                                                   +
                     CalculateLongRangeLateralTraversalPenalty(nodeSpan[parentIndex].Voxel, nodeSpan[parentIndex].Position, voxel, destination) +
@@ -289,9 +277,6 @@ public partial class VoxelPathfind
 
         return score;
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float CalculateEdgeCost(Vector3 from, Vector3 to) => Vector3.Distance(from, to);
 
     private bool TryLineOfSight(int fromNodeIndex, ulong toVoxel, Vector3 toPosition, VolumePathCandidateKind candidateKind)
     {
@@ -309,11 +294,5 @@ public partial class VoxelPathfind
         if (visible)
             Interlocked.Increment(ref lineOfSightHits);
         return visible;
-    }
-
-    private static ushort ExtractL0Index(ulong voxel)
-    {
-        var temp = voxel;
-        return VoxelMap.DecodeIndex(ref temp);
     }
 }

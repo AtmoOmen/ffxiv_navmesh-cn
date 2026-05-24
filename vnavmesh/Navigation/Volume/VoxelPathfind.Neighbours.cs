@@ -1,5 +1,6 @@
 using System.Numerics;
 using vnavmesh.Common.Navigation.Volume.Map;
+using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
 
@@ -103,21 +104,23 @@ public partial class VoxelPathfind
                 neighbourVoxel = VoxelMap.EncodeIndex(l0Index, neighbourVoxel);
 
                 if (Volume.IsEmpty(neighbourVoxel)) AddNeighbourIfEmpty(neighbourVoxel);
-                else 
-                    switch (longRangeLateralBias.Enabled)
+                else
                 {
-                    case false when l2Index != VoxelMap.INDEX_LEVEL_MASK:
+                    switch (longRangeLateralBias.Enabled)
                     {
-                        var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
-                        var l2Y              = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
-                        var l2Z              = dz == 0 ? l2Coords.z : dz > 0 ? 0 : l2Desc.NumCellsZ - 1;
-                        var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(neighbourVoxel, l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
-                        AddNeighbourIfEmpty(l2NeighbourVoxel);
-                        break;
+                        case false when l2Index != VoxelMap.INDEX_LEVEL_MASK:
+                        {
+                            var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
+                            var l2Y              = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
+                            var l2Z              = dz == 0 ? l2Coords.z : dz > 0 ? 0 : l2Desc.NumCellsZ - 1;
+                            var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(neighbourVoxel, l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
+                            AddNeighbourIfEmpty(l2NeighbourVoxel);
+                            break;
+                        }
+                        case false:
+                            CollectBorder(neighbourVoxel, l2Desc, 2, dx, dy, dz);
+                            break;
                     }
-                    case false:
-                        CollectBorder(neighbourVoxel, l2Desc, 2, dx, dy, dz);
-                        break;
                 }
 
                 return;
@@ -144,28 +147,31 @@ public partial class VoxelPathfind
             var l1NeighbourVoxel = VoxelMap.EncodeSubIndex(l0NeighbourVoxel, l1Desc.VoxelToIndex(l1X, l1Y, l1Z), 1);
 
             if (Volume.IsEmpty(l1NeighbourVoxel)) AddNeighbourIfEmpty(l1NeighbourVoxel);
-            else switch (longRangeLateralBias.Enabled)
+            else
             {
-                case false when l2Index != VoxelMap.INDEX_LEVEL_MASK:
+                switch (longRangeLateralBias.Enabled)
                 {
-                    var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
-                    var l2Y              = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
-                    var l2Z              = dz == 0 ? l2Coords.z : dz > 0 ? 0 : l2Desc.NumCellsZ - 1;
-                    var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(l1NeighbourVoxel, l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
-                    AddNeighbourIfEmpty(l2NeighbourVoxel);
-                    break;
+                    case false when l2Index != VoxelMap.INDEX_LEVEL_MASK:
+                    {
+                        var l2X              = dx == 0 ? l2Coords.x : dx > 0 ? 0 : l2Desc.NumCellsX - 1;
+                        var l2Y              = dy == 0 ? l2Coords.y : dy > 0 ? 0 : l2Desc.NumCellsY - 1;
+                        var l2Z              = dz == 0 ? l2Coords.z : dz > 0 ? 0 : l2Desc.NumCellsZ - 1;
+                        var l2NeighbourVoxel = VoxelMap.EncodeSubIndex(l1NeighbourVoxel, l2Desc.VoxelToIndex(l2X, l2Y, l2Z), 2);
+                        AddNeighbourIfEmpty(l2NeighbourVoxel);
+                        break;
+                    }
+                    case false:
+                        CollectBorder(l1NeighbourVoxel, l2Desc, 2, dx, dy, dz);
+                        break;
                 }
-                case false:
-                    CollectBorder(l1NeighbourVoxel, l2Desc, 2, dx, dy, dz);
-                    break;
             }
 
             return;
         }
 
-        if (longRangeLateralBias.Enabled) 
+        if (longRangeLateralBias.Enabled)
             CollectBorderWithSubdivisionsL1Only(l0NeighbourVoxel, dx, dy, dz);
-        else 
+        else
             CollectBorderWithSubdivisions(l0NeighbourVoxel, dx, dy, dz);
     }
 
@@ -221,7 +227,7 @@ public partial class VoxelPathfind
             return true;
 
         var horizontal = new Vector2(dx, dz);
-        if (!TryNormalize(horizontal, out var direction))
+        if (!VoxelMathUtil.TryNormalize(horizontal, out var direction))
             return false;
 
         return Vector2.Dot(direction, longRangeLateralBias.Forward) >= LONG_RANGE_LATERAL_COARSE_PROMOTION_MIN_FORWARD_DOT;
@@ -234,7 +240,7 @@ public partial class VoxelPathfind
 
         return dy < 0 ? HasVerifiedTopEntry(voxel) : HasDownwardOpening(voxel);
     }
-    
+
     private void CollectBorder(ulong voxel, VolumeLevel levelDesc, int level, int dx, int dy, int dz)
     {
         var (xMin, xMax) = dx == 0 ? (0, levelDesc.NumCellsX - 1) : dx > 0 ? (0, 0) : (levelDesc.NumCellsX - 1, levelDesc.NumCellsX - 1);

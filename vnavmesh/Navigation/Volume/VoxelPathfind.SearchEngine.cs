@@ -1,6 +1,8 @@
 using System.Numerics;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
+using vnavmesh.Navigation.Volume.Models;
+using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
 
@@ -169,7 +171,7 @@ public partial class VoxelPathfind
         if (!TryLineOfSight(currentIndex, goalVoxel, goalPos, VolumePathCandidateKind.GoalAligned))
             return false;
 
-        var goalScore = current.GScore + CalculateEdgeCost(current.Position, goalPos);
+        var goalScore = current.GScore + Vector3.Distance(current.Position, goalPos);
         var goalIndex = GetOrCreateNode(goalVoxel, currentIndex);
         nodeSpan = NodeSpan;
         ref var goal = ref nodeSpan[goalIndex];
@@ -363,7 +365,7 @@ public partial class VoxelPathfind
     {
         var leafHorizontalSize = MathF.Max(l2Desc.CellSize.X, l2Desc.CellSize.Z);
         var leafVerticalSize   = l2Desc.CellSize.Y;
-        var horizontalDistance = HorizontalDistanceXZ(fromPos, toPos);
+        var horizontalDistance = VoxelMathUtil.HorizontalDistanceXZ(fromPos, toPos);
         var verticalDrop       = fromPos.Y - toPos.Y;
         var minHorizontal      = MathF.Max(leafHorizontalSize * SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_LEAF_CELLS, SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_DISTANCE);
         var minDrop            = MathF.Max(leafVerticalSize   * SHORT_RANGE_EXPLORATION_MIN_DROP_LEAF_CELLS,       SHORT_RANGE_EXPLORATION_MIN_DROP_DISTANCE);

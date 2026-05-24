@@ -5,6 +5,7 @@ using vnavmesh.Common.Utilities;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Navigation.Planning;
 using vnavmesh.Navigation.Volume;
+using vnavmesh.Navigation.Volume.Models;
 
 namespace vnavmesh.Navigation;
 
