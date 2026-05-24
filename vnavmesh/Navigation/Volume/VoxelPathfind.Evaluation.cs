@@ -62,25 +62,40 @@ public partial class VoxelPathfind
         if (!TryEvaluateCandidate(currentIndex, neighbourVoxel, requireDirectVisibility, ref bestParentIndex, ref bestPosition, ref bestScore))
             return false;
 
-        var nodeSpan      = NodeSpan;
-        var ancestorIndex = nodeSpan[currentIndex].ParentIndex;
-        var lookBackCount = 0;
-        var lastEvaluated = -1;
+        var nodeSpan           = NodeSpan;
+        var currentGScore      = nodeSpan[currentIndex].GScore;
+        var earlyStopThreshold = currentGScore + CalculateMinimumEdgeCost(nodeSpan[currentIndex].Position, neighbourVoxel);
+        if (bestScore <= earlyStopThreshold)
+            return true;
 
-        while (ancestorIndex >= 0 && lookBackCount < MAX_ANCESTOR_LOOK_BACK)
+        var ancestorIndex      = nodeSpan[currentIndex].ParentIndex;
+        var effectiveLookBack  = DetermineEffectiveLookBackDepth(bestScore, currentGScore);
+        var lookBackCount      = 0;
+        var lastEvaluated      = -1;
+
+        while (ancestorIndex >= 0 && lookBackCount < effectiveLookBack)
         {
-            TryEvaluateCandidate(ancestorIndex, neighbourVoxel, true, ref bestParentIndex, ref bestPosition, ref bestScore);
+            if (!TryEvaluateCandidate(ancestorIndex, neighbourVoxel, true, ref bestParentIndex, ref bestPosition, ref bestScore))
+            {
+                ancestorIndex = nodeSpan[ancestorIndex].ParentIndex;
+                ++lookBackCount;
+                continue;
+            }
+
             lastEvaluated = ancestorIndex;
 
             ref var ancestor = ref nodeSpan[ancestorIndex];
             if (ancestor.ParentIndex == ancestorIndex)
                 return bestParentIndex >= 0;
 
+            if (bestScore <= earlyStopThreshold)
+                return true;
+
             ancestorIndex = ancestor.ParentIndex;
             ++lookBackCount;
         }
 
-        if (ancestorIndex >= 0)
+        if (ancestorIndex >= 0 && effectiveLookBack >= MAX_ANCESTOR_LOOK_BACK)
         {
             var rootIndex = ancestorIndex;
 
@@ -120,8 +135,20 @@ public partial class VoxelPathfind
 
         candidatePositions[1] = ResolveGoalAlignedPosition(voxel);
         candidateKinds[1]     = VolumePathCandidateKind.GoalAligned;
-        candidatePositions[2] = ResolveCenterBiasedPosition(voxel, parentIndex);
-        candidateKinds[2]     = VolumePathCandidateKind.CenterBiased;
+        var goalAlignedScore = CalculateNodeScore(parentIndex, voxel, candidatePositions[1]);
+        if (bestParentIndex >= 0 && goalAlignedScore > bestScore + SCORE_EPSILON)
+        {
+            candidatePositions[2] = ResolveCenterBiasedPosition(voxel, parentIndex);
+            candidateKinds[2]     = VolumePathCandidateKind.CenterBiased;
+            var centerBiasedScore = CalculateNodeScore(parentIndex, voxel, candidatePositions[2]);
+            if (centerBiasedScore > bestScore + SCORE_EPSILON)
+                return false;
+        }
+        else
+        {
+            candidatePositions[2] = ResolveCenterBiasedPosition(voxel, parentIndex);
+            candidateKinds[2]     = VolumePathCandidateKind.CenterBiased;
+        }
 
         var found = false;
 
@@ -158,7 +185,7 @@ public partial class VoxelPathfind
                     continue;
             }
 
-            var candidateScore = (i == 0 ? projectedScore : CalculateNodeScore(parentIndex, voxel, candidatePosition)) + corridorPenalty;
+            var candidateScore = (i == 0 ? projectedScore : i == 1 ? goalAlignedScore : CalculateNodeScore(parentIndex, voxel, candidatePosition)) + corridorPenalty;
             if (!IsBetterCandidate(parentIndex, candidatePosition, candidateScore, bestParentIndex, bestPosition, bestScore, voxel))
                 continue;
 
@@ -199,6 +226,27 @@ public partial class VoxelPathfind
         var blendedTarget = Vector3.Lerp(projected, goalAligned, SEARCH_PATH_GOAL_BLEND);
         blendedTarget = Vector3.Lerp(blendedTarget, voxelCenter, SEARCH_PATH_CENTER_BIAS);
         return ResolveSearchCandidatePosition(voxel, blendedTarget);
+    }
+
+    private int DetermineEffectiveLookBackDepth(float currentBestScore, float currentNodeGScore)
+    {
+        if (currentBestScore == float.MaxValue)
+            return MAX_ANCESTOR_LOOK_BACK;
+
+        var improvementRatio = (currentNodeGScore - currentBestScore) / MathF.Max(currentNodeGScore, SCORE_EPSILON);
+        if (improvementRatio < 0.05f)
+            return 2;
+        if (improvementRatio < 0.15f)
+            return 4;
+
+        return MAX_ANCESTOR_LOOK_BACK;
+    }
+
+    private float CalculateMinimumEdgeCost(Vector3 fromPos, ulong toVoxel)
+    {
+        var (voxelMin, voxelMax) = Volume.VoxelBounds(toVoxel, 0);
+        var voxelCenter          = (voxelMin + voxelMax) * 0.5f;
+        return Vector3.Distance(fromPos, voxelCenter) * 0.8f;
     }
 
     private bool IsBetterCandidate
