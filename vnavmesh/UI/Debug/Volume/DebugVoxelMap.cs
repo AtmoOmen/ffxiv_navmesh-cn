@@ -87,17 +87,21 @@ public class DebugVoxelMap : IDisposable
         if (!nr.Opened)
             return;
 
-        var playerPosition = Service.ObjectTable.LocalPlayer?.Position ?? default;
-        var playerVoxel = _vm.FindLeafVoxel(playerPosition);
         EnsureTileStatsInitialized();
-        if (_tree.LeafNode($"玩家原始叶体素：{playerVoxel.voxel:X} (是否为空={playerVoxel.empty})").SelectedOrHovered && playerVoxel.voxel != VoxelMap.INVALID_VOXEL)
-            VisualizeVoxel(playerVoxel.voxel);
-        if (_navQuery != null)
+        var player = Service.ObjectTable.LocalPlayer;
+        if (player != null)
         {
-            var resolved = _navQuery.FindNearestVolumeVoxelSurfaceAware(playerPosition);
-            if (_tree.LeafNode($"玩家飞行定位体素：{resolved.Voxel:X} (地表锚定={resolved.UsedSurfaceAnchor}，搜索点={resolved.SearchPoint:f3}，安全点={resolved.SafePoint:f3})").SelectedOrHovered &&
-                resolved.Voxel != VoxelMap.INVALID_VOXEL)
-                VisualizeVoxel(resolved.Voxel);
+            var playerPosition = player.Position;
+            var playerVoxel = _vm.FindLeafVoxel(playerPosition);
+            if (_tree.LeafNode($"玩家原始叶体素：{playerVoxel.voxel:X} (是否为空={playerVoxel.empty})").SelectedOrHovered && playerVoxel.voxel != VoxelMap.INVALID_VOXEL)
+                VisualizeVoxel(playerVoxel.voxel);
+            if (_navQuery != null)
+            {
+                var resolved = _navQuery.FindNearestVolumeVoxelSurfaceAware(playerPosition);
+                if (_tree.LeafNode($"玩家飞行定位体素：{resolved.Voxel:X} (地表锚定={resolved.UsedSurfaceAnchor}，搜索点={resolved.SearchPoint:f3}，安全点={resolved.SafePoint:f3})").SelectedOrHovered &&
+                    resolved.Voxel != VoxelMap.INVALID_VOXEL)
+                    VisualizeVoxel(resolved.Voxel);
+            }
         }
         ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
         ImGui.SliderFloat("Voxel 水平渲染距离###voxelRenderHorizontalDistance", ref _renderHorizontalDistance, 2f, 500f, "%.0f");

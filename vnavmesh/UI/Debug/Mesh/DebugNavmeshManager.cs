@@ -203,10 +203,18 @@ internal class DebugNavmeshManager : IDisposable
             if (ImGui.Button("导出位图 (玩家中心)"))
                 ExportBitmap(player?.Position ?? default);
             
-            DrawPosition("玩家", player?.Position ?? default);
-            DrawPosition("目标", target);
-            DrawPosition("标点", MapUtil.FlagToPoint(manager.Query)                          ?? default);
-            DrawPosition("地面", manager.Query.FindPointOnFloor(player?.Position ?? default) ?? default);
+            if (player != null)
+            {
+                DrawPosition("玩家", player.Position);
+                var floor = manager.Query.FindPointOnFloor(player.Position);
+                if (floor != null)
+                    DrawPosition("地面", floor.Value);
+            }
+            if (target != Vector3.Zero)
+                DrawPosition("目标", target);
+            var flag = MapUtil.FlagToPoint(manager.Query);
+            if (flag != null)
+                DrawPosition("标点", flag.Value);
         }
 
         if (ImGui.CollapsingHeader("统计", ImGuiTreeNodeFlags.DefaultOpen))
@@ -242,6 +250,9 @@ internal class DebugNavmeshManager : IDisposable
 
     private void DrawPosition(string tag, Vector3 position)
     {
+        if (position == Vector3.Zero)
+            return;
+
         manager.Navmesh!.Mesh.CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
         var nearestAll       = manager.Query!.FindNearestMeshPoly(position);
         var nearestReachable = manager.Query.FindNearestMeshPoly(position, allowUnreachable: false);
