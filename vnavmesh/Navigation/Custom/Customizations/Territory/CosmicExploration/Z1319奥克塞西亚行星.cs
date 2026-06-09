@@ -17,8 +17,7 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
     {
         if (scene.Meshes.TryGetValue("bg/ffxiv/cos_c1/hou/c1w4/collision/c1w4_t0_rck03f.pcb", out var mesh0))
         {
-            // 挖宝点1-石头加高
-            if (ResolveInstance(mesh0, 0xBF844300000000ul, 293) is { } instance0)
+            if (ResolveInstance(mesh0, 0xBF844300000000ul, 297) is { } instance0)
             {
                 instance0.WorldTransform = new()
                 {
@@ -30,8 +29,15 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
                 instance0.WorldBounds = TransformBounds(instance0.WorldTransform, mesh0.LocalBounds);
             }
         }
-
-        // 交错路口到太母神柱的池子
+        scene.InsertAABoxCollider
+        (
+            new AABB
+            {
+                Min = new(13.586f, 181.09999f, -0.30716705f),
+                Max = new(18.786001f, 189.7f, 4.3928328f)
+            },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
         scene.InsertCylinderCollider
         (
             new AABB
@@ -41,13 +47,12 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
             },
             SceneExtractor.PrimitiveFlags.ForceUnwalkable
         );
-        // 藏宝路线1
         scene.InsertAABoxCollider
         (
             new AABB
             {
-                Min = new(13.586f, 181.09999f, -0.30716705f),
-                Max = new(18.786001f, 189.7f, 4.3928328f)
+                Min = new(543.34247f, 240.5433f, 464.7541f),
+                Max = new(568.1495f, 248.57132f, 475.38806f)
             },
             SceneExtractor.PrimitiveFlags.ForceUnwalkable
         );
