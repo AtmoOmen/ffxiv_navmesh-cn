@@ -454,7 +454,7 @@ public sealed class NavmeshManager : IDisposable
         var buildSnapshot = await CreateBuildSnapshot(scene, customization, cancel);
         var cache         = new FileInfo(Path.Combine(cacheDirectory.FullName, $"{cacheKey}.navmesh"));
 
-        if (allowLoadFromCache && TryLoadFromCache(cache, customization, buildSnapshot.Settings, buildSnapshot.BuildSignature, layers, totalTimer, out var cachedResult))
+        if (allowLoadFromCache && TryLoadFromCache(cache, cacheKey, customization, buildSnapshot.Settings, buildSnapshot.BuildSignature, layers, totalTimer, out var cachedResult))
             return cachedResult;
 
         cancel.ThrowIfCancellationRequested();
@@ -473,6 +473,11 @@ public sealed class NavmeshManager : IDisposable
             LogCacheSegment("外置构建读取", cacheTelemetry.Mesh);
             LogCacheSegment("外置构建读取", cacheTelemetry.Volume);
             mesh.RegisterBuildTimeOffMeshConnections(buildSnapshot.Settings.OffMeshConnections);
+
+            var cacheWriteTimer = StopWatchTimer.Create();
+            WriteCache(cacheKey, cache, mesh);
+            Log($"缓存写入耗时: {cacheWriteTimer.Value().TotalMilliseconds:f1} 毫秒");
+
             customization.CustomizeMesh(mesh, layers);
             runtimeMesh = mesh with { CustomizationApplied = true };
         }
@@ -486,12 +491,13 @@ public sealed class NavmeshManager : IDisposable
 
         Log($"总构建耗时: {totalTimer.Value().TotalMilliseconds:f1} 毫秒");
         Interlocked.Add(ref loadTaskProgress, 0.01f);
-        return new(runtimeMesh, cache);
+        return new(runtimeMesh, null);
     }
 
     private static bool TryLoadFromCache
     (
         FileInfo               cache,
+        string                 cacheKey,
         NavmeshCustomization   customization,
         NavmeshBuildSettings   buildSettings,
         string                 buildSignature,
@@ -521,11 +527,21 @@ public sealed class NavmeshManager : IDisposable
             LogCacheSegment("读取", cacheTelemetry.Volume);
 
             mesh.RegisterBuildTimeOffMeshConnections(buildSettings.OffMeshConnections);
-            if (!mesh.CustomizationApplied)
-                customization.CustomizeMesh(mesh, layers);
+
+            if (mesh.CustomizationApplied)
+            {
+                Log("缓存为旧格式（含定制数据），触发冷构建以迁移到新版缓存格式");
+                result = new(null!, null);
+                return false;
+            }
+
+            if (requiresRewrite)
+                WriteCache(cacheKey, cache, mesh);
+
+            customization.CustomizeMesh(mesh, layers);
 
             Log($"缓存命中。总耗时: {totalTimer.Value().TotalMilliseconds:f1} ms");
-            result = new(mesh, requiresRewrite ? cache : null);
+            result = new(mesh, null); // 缓存已在需要时同步写入
             return true;
         }
         catch (Exception ex)

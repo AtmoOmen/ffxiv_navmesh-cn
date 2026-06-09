@@ -213,7 +213,7 @@ public class NavmeshCustomization
         var offMeshConnection = new DtOffMeshConnection
         {
             poly   = polyIndex,
-            rad    = 0.1f,
+            rad    = 0.5f,
             flags  = bidirectional ? DT_OFFMESH_CON_BIDIR : 0,
             side   = DtNavMeshBuilder.ClassifyOffMeshPoint(projectedEnd, startTile.data.header.bmin, startTile.data.header.bmax),
             userId = 0,
