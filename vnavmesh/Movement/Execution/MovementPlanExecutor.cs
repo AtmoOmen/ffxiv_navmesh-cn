@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.SubKinds;
@@ -46,12 +47,13 @@ public sealed class MovementPlanExecutor : IDisposable
 
     public MovementPlanExecutor(PluginConfig config, NavmeshManager manager)
     {
-        this.config                   =  config;
-        this.manager                  =  manager;
-        unstuck                       =  new(config, manager);
-        sharedPathIsRunning           =  Service.PluginInterface.GetOrCreateData<bool[]>(SHARED_PATH_TAG, () => [false]);
-        activeDestinationTolerance    =  this.config.PathTolerance;
-        this.manager.OnNavmeshChanged += OnNavmeshChanged;
+        this.config                       =  config;
+        this.manager                      =  manager;
+        unstuck                           =  new(config, manager);
+        sharedPathIsRunning               =  Service.PluginInterface.GetOrCreateData<bool[]>(SHARED_PATH_TAG, () => [false]);
+        activeDestinationTolerance        =  this.config.PathTolerance;
+        this.manager.OnNavmeshChanged     += OnNavmeshChanged;
+        Service.Condition.ConditionChange += OnConditionChange;
         OnNavmeshChanged(this.manager.Navmesh, this.manager.Query);
     }
 
@@ -60,7 +62,8 @@ public sealed class MovementPlanExecutor : IDisposable
         ResetControllers();
         UpdateSharedState(false);
         Service.PluginInterface.RelinquishData(SHARED_PATH_TAG);
-        manager.OnNavmeshChanged -= OnNavmeshChanged;
+        manager.OnNavmeshChanged          -= OnNavmeshChanged;
+        Service.Condition.ConditionChange -= OnConditionChange;
         camera.Dispose();
         movement.Dispose();
     }
@@ -420,6 +423,7 @@ public sealed class MovementPlanExecutor : IDisposable
             activePlan.DestinationTolerance,
             activeWaypoint
         );
+        
         Stop();
         OnMovementFailure?.Invoke(context);
     }
@@ -473,10 +477,26 @@ public sealed class MovementPlanExecutor : IDisposable
     private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query) =>
         Stop();
 
-    private void UpdateSharedState(bool isRunning) => sharedPathIsRunning[0] = isRunning;
+    private void OnConditionChange(ConditionFlag flag, bool value)
+    {
+        if (value || !RepathConditions.Contains(flag) || activePlan == null) return;
+        
+        Service.Log.Debug("检测到 Condition 变化，重新算路");
+        Fail(MovementFailureReason.RepathRequired);
+    }
+
+    private void UpdateSharedState(bool isRunning) => 
+        sharedPathIsRunning[0] = isRunning;
 
     private bool SuspendsUnstuck() =>
         ReferenceEquals(activeDriver, takeoffDriver) || activePlan == null || activeSegmentIndex >= activePlan.Segments.Count;
 
-    private static bool IsAirborne => Service.Condition[ConditionFlag.InFlight] || Service.Condition[ConditionFlag.Diving];
+    private static bool IsAirborne => 
+        Service.Condition.Any(ConditionFlag.InFlight, ConditionFlag.Diving);
+
+    private static readonly FrozenSet<ConditionFlag> RepathConditions =
+    [
+        ConditionFlag.WatchingCutscene,
+        ConditionFlag.Unknown101
+    ];
 }

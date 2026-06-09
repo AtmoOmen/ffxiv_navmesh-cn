@@ -3,5 +3,6 @@ namespace vnavmesh.Movement.Planning;
 internal enum MovementFailureReason
 {
     RepathRequiredAfterUnstuck,
-    TakeoffUnavailable
+    TakeoffUnavailable,
+    RepathRequired
 }

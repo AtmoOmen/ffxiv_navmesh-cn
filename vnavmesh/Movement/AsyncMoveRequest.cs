@@ -28,17 +28,28 @@ public class AsyncMoveRequest : IDisposable
         this.executor = executor;
         this.executor.OnMovementFailure += failure =>
         {
-            if (failure.Reason != MovementFailureReason.RepathRequiredAfterUnstuck)
-                return;
-
-            Service.Log.Information($"[自动防卡] 随机位移结束，开始重新算路：目标 = {failure.RequestedDestination:f3}");
-            MoveToInternal
-            (
-                failure.RequestedDestination,
-                failure.RequestedMode == MovementMode.Flight,
-                failure.DestinationTolerance,
-                PathRequestOrigin.RepathAfterUnstuck
-            );
+            if (failure.Reason == MovementFailureReason.RepathRequiredAfterUnstuck)
+            {
+                Service.Log.Information($"[自动防卡] 随机位移结束，开始重新算路：目标 = {failure.RequestedDestination:f3}");
+                MoveToInternal
+                (
+                    failure.RequestedDestination,
+                    failure.RequestedMode == MovementMode.Flight,
+                    failure.DestinationTolerance,
+                    PathRequestOrigin.RepathAfterUnstuck
+                );
+            }
+            else if (failure.Reason == MovementFailureReason.RepathRequired)
+            {
+                Service.Log.Information($"[自动算路] 检测到 ConditionFlag.Unknown101 消失，开始重新算路：目标 = {failure.RequestedDestination:f3}");
+                MoveToInternal
+                (
+                    failure.RequestedDestination,
+                    failure.RequestedMode == MovementMode.Flight,
+                    failure.DestinationTolerance,
+                    PathRequestOrigin.RepathAfterConditionChange
+                );
+            }
         };
     }
 
@@ -86,7 +97,7 @@ public class AsyncMoveRequest : IDisposable
                 {
                     executor.Execute(BuildPlan(result));
                     activeMoveRequest = request;
-                    activeExternalMoveRequest = request is { Origin: PathRequestOrigin.Normal }
+                    activeExternalMoveRequest = request is { Origin: PathRequestOrigin.Normal } || request is { Origin: PathRequestOrigin.RepathAfterConditionChange }
                                                     ? new(request.Value.Destination, request.Value.Fly, request.Value.Range)
                                                     : null;
                     recoveryRetry = null;
@@ -186,7 +197,7 @@ public class AsyncMoveRequest : IDisposable
         if (existing is not { } current)
             return false;
 
-        return current.Origin == PathRequestOrigin.Normal &&
+        return (current.Origin == PathRequestOrigin.Normal || current.Origin == PathRequestOrigin.RepathAfterConditionChange) &&
                IsEquivalentExternalRequest(new ExternalMoveRequest(current.Destination, current.Fly, current.Range), request);
     }
 
@@ -228,7 +239,8 @@ public class AsyncMoveRequest : IDisposable
     private enum PathRequestOrigin
     {
         Normal,
-        RepathAfterUnstuck
+        RepathAfterUnstuck,
+        RepathAfterConditionChange
     }
 
     private readonly record struct ExternalMoveRequest
