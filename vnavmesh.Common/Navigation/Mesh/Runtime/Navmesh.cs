@@ -15,8 +15,21 @@ namespace vnavmesh.Common.Navigation.Mesh.Runtime;
 // full set of data needed for navigation in the zone
 public record class Navmesh
 {
-    public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 36;         // 更新后触发一次全量重构建
+    public enum AreaID
+    {
+        None = 0,
+        Warp = 0x01, // direct teleportation, i.e. aetheryte (not implemented)
+        ClientPath = 0x02, // predefined path activated by walking into a triggerbox (e.g. cosmoliner, some transitions in dungeons, etc)
+        Shortcut = 0x04, // regular shortcut followed at normal movement speed, faster due to a shorter overall path (e.g. dropping down from a ledge or walking through a gap that recast thinks is too narrow)
+
+        Endpoint      = 0x10, // these need to be marked for FollowPath logic and heuristic purposes
+        ClientPathEnd = ClientPath | Endpoint,
+
+        Default = 0x3F
+    }
+    
+    public const uint MAGIC   = 0x444D564E; // 'NVMD'
+    public const uint VERSION = 36;         // 更新后触发一次全量重构建
 
     public int       CustomizationVersion { get; init; }
     public string    BuildSignature       { get; init; }
@@ -96,7 +109,7 @@ public record class Navmesh
 
         var magic   = reader.ReadUInt32();
         var version = reader.ReadUInt32();
-        if (magic != Magic || version != Version)
+        if (magic != MAGIC || version != VERSION)
             throw new Exception("缓存头无效");
 
         var customizationVersion = reader.ReadInt32();
@@ -155,8 +168,8 @@ public record class Navmesh
             () => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.FastLz, volumeWriter => SerializeVolume(volumeWriter, Volume))
         );
 
-        writer.Write(Magic);
-        writer.Write(Version);
+        writer.Write(MAGIC);
+        writer.Write(VERSION);
         writer.Write(CustomizationVersion);
         writer.Write(BuildSignature);
         writer.Write(CustomizationApplied);
