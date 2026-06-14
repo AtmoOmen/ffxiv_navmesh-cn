@@ -6,3 +6,5 @@ bin/
 docs/
 outputs/
 .claude
+.codegraph
+.reasonix
