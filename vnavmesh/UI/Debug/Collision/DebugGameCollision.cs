@@ -341,7 +341,6 @@ public unsafe partial class DebugGameCollision : IDisposable
                     {
                         var entry    = cast->Entries  + i;
                         var elem     = cast->Elements + i;
-                        var entryRaw = (uint*)entry;
                         using var mn = _tree.Node
                             ($"Mesh {i}: file=tr{entry->MeshId:d4}.pcb, bounds={AABBStr(entry->Bounds)} == {(nint)elem->Mesh:X}###mesh_{i}", elem->Mesh == null);
                         if (mn.SelectedOrHovered && elem->Mesh != null)
@@ -407,6 +406,18 @@ public unsafe partial class DebugGameCollision : IDisposable
     private void DrawColliderMesh(ColliderMesh* coll)
     {
         DrawResource(coll->Resource);
+        
+        if (ImGui.Button("复制 translation"))
+        {
+            var t = coll->Translation;
+            var r = coll->Rotation;
+
+            if (MathF.Abs(MathF.Abs(r.X) - MathF.PI) < 0.1f)
+                r.Y *= -1;
+
+            ImGui.SetClipboardText($"{LayoutUtil.Vec3ToSource(t)}, {LayoutUtil.Vec3ToSource(r)}");
+        }
+        
         _tree.LeafNode($"Translation: {Vec3Str(coll->Translation)}");
         _tree.LeafNode($"Rotation: {Vec3Str(coll->Rotation)}");
         _tree.LeafNode($"Scale: {Vec3Str(coll->Scale)}");

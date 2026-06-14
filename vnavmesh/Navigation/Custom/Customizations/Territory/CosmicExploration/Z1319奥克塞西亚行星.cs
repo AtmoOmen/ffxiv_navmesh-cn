@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using System.Runtime.InteropServices;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Common.Navigation.Mesh.Runtime;
 using vnavmesh.Navigation.Custom.Abstractions;
@@ -11,10 +12,34 @@ namespace vnavmesh.Navigation.Custom.Customizations.Territory.CosmicExploration;
 [CustomizationTerritory(1319)]
 internal class Z1319奥克塞西亚行星 : NavmeshCustomization
 {
-    public override int Version => 1;
+    public override int Version => 2;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
+        string[] doubleLiners =
+        [
+            "bg/ffxiv/cos_c1/hou/c1w4/collision/c1w4_03_t200a.pcb", "bg/ffxiv/cos_c1/hou/c1w4/collision/c1w4_03_t300a.pcb"
+        ];
+
+        // 避免被飞线旁边卡脚
+        foreach (var liner in doubleLiners)
+        {
+            if (scene.Meshes.TryGetValue(liner, out var mesh))
+            {
+                var departVerts = CollectionsMarshal.AsSpan(mesh.Parts[49].Vertices);
+                departVerts[81].Y += 1;
+                departVerts[85].Y += 1;
+
+                var box = SceneExtractor.BuildBoxMesh()[0];
+                foreach (ref var vert in CollectionsMarshal.AsSpan(box.Vertices))
+                {
+                    vert *= new Vector3(1.5f, 3.75f, 1.5f);
+                    vert += new Vector3(4.5f, 6.25f, -1);
+                }
+                mesh.Parts.Add(box);
+            }
+        }
+        
         if (scene.Meshes.TryGetValue("bg/ffxiv/cos_c1/hou/c1w4/collision/c1w4_t0_rck03f.pcb", out var mesh0))
         {
             if (ResolveInstance(mesh0, 0xBF844300000000ul, 297) is { } instance0)
