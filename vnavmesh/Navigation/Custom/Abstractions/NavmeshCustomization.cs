@@ -55,6 +55,16 @@ public class NavmeshCustomization
     ) =>
         LinkPoints(meshData, startPos, endPos, NavmeshArea.Teleport, NavmeshPolyFlags.Teleport, NavmeshOffMeshKind.Teleport, bidirectional, traversalProfile);
 
+    protected static void LinkShortcut
+    (
+        Navmesh                      meshData,
+        Vector3                      startPos,
+        Vector3                      endPos,
+        bool                         bidirectional = false,
+        NavmeshLinkTraversalProfile? traversalProfile = null
+    ) =>
+        LinkPoints(meshData, startPos, endPos, NavmeshArea.Shortcut, NavmeshPolyFlags.Shortcut, NavmeshOffMeshKind.Shortcut, bidirectional, traversalProfile);
+
     protected static void LinkClientPath
     (
         Navmesh                      meshData,

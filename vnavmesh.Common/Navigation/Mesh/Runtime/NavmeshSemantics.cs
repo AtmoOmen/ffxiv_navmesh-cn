@@ -33,11 +33,14 @@ public enum NavmeshPolyFlags
     /// <summary>客户端侧轨迹路径，由客户端自行插值计算移动轨迹。</summary>
     ClientPath = 1 << 5,
 
+    /// <summary>普通移动捷径，用于连接 Recast 未识别但角色可正常通过的位置。</summary>
+    Shortcut = 1 << 6,
+
     /// <summary>不可达区域，路径搜索时直接跳过。</summary>
     Unreachable = 1 << 8,
 
     /// <summary>所有可穿越方式的组合，用于允许任意移动类型的查询。</summary>
-    AllTraversable = Ground | GeneratedClimbDown | GeneratedEdgeJump | ManualOffMesh | Teleport | ClientPath
+    AllTraversable = Ground | GeneratedClimbDown | GeneratedEdgeJump | ManualOffMesh | Shortcut | Teleport | ClientPath
 }
 
 /// <summary>
@@ -68,7 +71,10 @@ public enum NavmeshArea
     Teleport = 5,
 
     /// <summary>客户端插值路径区域，服务器不参与该段的移动验证。</summary>
-    ClientPath = 6
+    ClientPath = 6,
+
+    /// <summary>普通移动捷径，作为可用但不应过度偏好的人工连接。</summary>
+    Shortcut = 7
 }
 
 /// <summary>
@@ -93,7 +99,10 @@ public enum NavmeshOffMeshKind
     Teleport,
 
     /// <summary>客户端插值路径连接。</summary>
-    ClientPath
+    ClientPath,
+
+    /// <summary>普通移动捷径。</summary>
+    Shortcut
 }
 
 /// <summary>
@@ -113,6 +122,7 @@ public static class NavmeshLinkTraversalProfiles
     public static readonly NavmeshLinkTraversalProfile GeneratedClimbDown = new(1f, 1.5f);
     public static readonly NavmeshLinkTraversalProfile GeneratedEdgeJump  = new(1f, 3f);
     public static readonly NavmeshLinkTraversalProfile ManualOffMesh      = new(1f, 0.5f);
+    public static readonly NavmeshLinkTraversalProfile Shortcut           = new(8f, 0f);
     public static readonly NavmeshLinkTraversalProfile Teleport           = new(0f, 1f);
     public static readonly NavmeshLinkTraversalProfile ClientPath         = new(0f, 3f);
 
@@ -122,6 +132,7 @@ public static class NavmeshLinkTraversalProfiles
             NavmeshOffMeshKind.GeneratedClimbDown => GeneratedClimbDown,
             NavmeshOffMeshKind.GeneratedEdgeJump  => GeneratedEdgeJump,
             NavmeshOffMeshKind.ManualOffMesh      => ManualOffMesh,
+            NavmeshOffMeshKind.Shortcut           => Shortcut,
             NavmeshOffMeshKind.Teleport           => Teleport,
             NavmeshOffMeshKind.ClientPath         => ClientPath,
             _                                     => Ground
@@ -133,6 +144,7 @@ public static class NavmeshLinkTraversalProfiles
             NavmeshArea.GeneratedClimbDown => NavmeshOffMeshKind.GeneratedClimbDown,
             NavmeshArea.GeneratedEdgeJump  => NavmeshOffMeshKind.GeneratedEdgeJump,
             NavmeshArea.ManualOffMesh      => NavmeshOffMeshKind.ManualOffMesh,
+            NavmeshArea.Shortcut           => NavmeshOffMeshKind.Shortcut,
             NavmeshArea.Teleport           => NavmeshOffMeshKind.Teleport,
             NavmeshArea.ClientPath         => NavmeshOffMeshKind.ClientPath,
             _                              => null

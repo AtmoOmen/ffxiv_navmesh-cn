@@ -1936,6 +1936,7 @@ internal sealed class PathPostprocessor
             NavmeshArea.GeneratedClimbDown => NavmeshOffMeshKind.GeneratedClimbDown,
             NavmeshArea.GeneratedEdgeJump  => NavmeshOffMeshKind.GeneratedEdgeJump,
             NavmeshArea.ManualOffMesh      => NavmeshOffMeshKind.ManualOffMesh,
+            NavmeshArea.Shortcut           => NavmeshOffMeshKind.Shortcut,
             NavmeshArea.Teleport           => NavmeshOffMeshKind.Teleport,
             NavmeshArea.ClientPath         => NavmeshOffMeshKind.ClientPath,
             _                              => null

@@ -296,6 +296,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
             case PickKind.LinkPoints:
                 onAddMeshLink(first, point, DraftMeshLinkKind.Points);
                 break;
+            case PickKind.LinkShortcut:
+                onAddMeshLink(first, point, DraftMeshLinkKind.Shortcut);
+                break;
             case PickKind.LinkClientPath:
                 onAddMeshLink(first, point, DraftMeshLinkKind.ClientPath);
                 break;
@@ -1652,6 +1655,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 break;
             }
             case PickKind.LinkPoints:
+            case PickKind.LinkShortcut:
             case PickKind.LinkClientPath:
                 dd.DrawWorldLine(first, current, 0xFFAAFF00, 2);
                 break;
@@ -1711,6 +1715,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             PickKind.Aabb           => "AABB 障碍",
             PickKind.Cylinder       => "圆柱障碍",
             PickKind.LinkPoints     => "网格连线",
+            PickKind.LinkShortcut   => "普通移动捷径",
             PickKind.LinkClientPath => "客户端路径",
             PickKind.OffMesh        => "离网连接",
             _                       => "浏览"

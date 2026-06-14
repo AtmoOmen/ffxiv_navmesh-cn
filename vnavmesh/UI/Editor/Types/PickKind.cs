@@ -8,6 +8,7 @@ internal enum PickKind
     Aabb,
     Cylinder,
     LinkPoints,
+    LinkShortcut,
     LinkClientPath,
     OffMesh
 }

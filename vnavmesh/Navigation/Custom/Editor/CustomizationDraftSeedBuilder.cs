@@ -39,11 +39,13 @@ internal static class CustomizationDraftSeedBuilder
             if (link.Kind is NavmeshOffMeshKind.GeneratedClimbDown or NavmeshOffMeshKind.GeneratedEdgeJump or NavmeshOffMeshKind.ManualOffMesh)
                 continue;
 
-            if (link.Kind is not (NavmeshOffMeshKind.Teleport or NavmeshOffMeshKind.ClientPath))
+            if (link.Kind is not (NavmeshOffMeshKind.Shortcut or NavmeshOffMeshKind.Teleport or NavmeshOffMeshKind.ClientPath))
                 continue;
 
             var kind = link.Kind == NavmeshOffMeshKind.ClientPath
                            ? DraftMeshLinkKind.ClientPath
+                           : link.Kind == NavmeshOffMeshKind.Shortcut
+                               ? DraftMeshLinkKind.Shortcut
                            : DraftMeshLinkKind.Points;
 
             draft.MeshLinks.Add

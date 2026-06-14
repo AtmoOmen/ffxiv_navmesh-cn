@@ -29,7 +29,8 @@ public enum DraftSceneColliderInsertionKind
 public enum DraftMeshLinkKind
 {
     Points = 0,
-    ClientPath = 2
+    ClientPath = 2,
+    Shortcut = 3
 }
 
 public sealed class DraftSceneMeshRemoval

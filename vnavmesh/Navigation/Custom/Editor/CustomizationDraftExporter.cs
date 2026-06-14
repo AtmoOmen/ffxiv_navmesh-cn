@@ -409,6 +409,7 @@ internal static class CustomizationDraftExporter
             var call = link.Kind switch
             {
                 DraftMeshLinkKind.Points     => "LinkPoints",
+                DraftMeshLinkKind.Shortcut   => "LinkShortcut",
                 DraftMeshLinkKind.ClientPath => "LinkClientPath",
                 _                            => "LinkPoints"
             };

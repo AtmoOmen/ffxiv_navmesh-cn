@@ -32,6 +32,28 @@ public static class CreateParamsExtension
                 traversalProfile
             );
 
+        public void AddShortcutConnection
+        (
+            Vector3                      ptA,
+            Vector3                      ptB,
+            float                        radius            = 0.5f,
+            bool                         bidirectional     = false,
+            int                          userID            = 0,
+            NavmeshLinkTraversalProfile? traversalProfile  = null
+        ) =>
+            config.AddOffMeshConnection
+            (
+                ptA,
+                ptB,
+                radius,
+                bidirectional,
+                userID,
+                NavmeshArea.Shortcut,
+                NavmeshPolyFlags.Shortcut,
+                NavmeshOffMeshKind.Shortcut,
+                traversalProfile
+            );
+
         public void AddOffMeshConnection
         (
             Vector3                      ptA,

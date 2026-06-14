@@ -119,7 +119,7 @@ internal sealed class CustomizationDraftPersistence
 
         workspace.Draft.TerritoryID = territoryId;
         workspace.Draft.TerritoryName = string.IsNullOrWhiteSpace(workspace.Draft.TerritoryName) ? territoryId.ToString() : workspace.Draft.TerritoryName;
-        workspace.Draft.MeshLinks.RemoveAll(static x => !Enum.IsDefined(x.Kind) || x.Kind == (DraftMeshLinkKind)1);
+        workspace.Draft.MeshLinks.RemoveAll(static x => !Enum.IsDefined(x.Kind));
     }
 
     private static CustomizationEditorTerritoryStore CreateEmptyStore(uint territoryId)

@@ -84,6 +84,9 @@ public sealed class CustomizationDraftCustomization
                 case DraftMeshLinkKind.Points:
                     LinkPoints(mesh, link.Start, link.End, link.Bidirectional, link.TraversalProfile);
                     break;
+                case DraftMeshLinkKind.Shortcut:
+                    LinkShortcut(mesh, link.Start, link.End, link.Bidirectional, link.TraversalProfile);
+                    break;
                 case DraftMeshLinkKind.ClientPath:
                     LinkClientPath(mesh, link.Start, link.End, link.Bidirectional, link.TraversalProfile);
                     break;

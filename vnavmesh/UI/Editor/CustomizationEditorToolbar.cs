@@ -145,6 +145,21 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
+                "捷径",
+                PickKind.LinkShortcut,
+                "在画面点两个世界点生成普通移动捷径",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            ImGui.SameLine();
+            DrawModeButton
+            (
                 "客户端路径",
                 PickKind.LinkClientPath,
                 "在画面点两个世界点生成客户端路径连接",
@@ -366,6 +381,7 @@ internal static class CustomizationEditorToolbar
         {
             PickKind.SelectCollider => "点击游戏画面中的碰撞体以选中",
             PickKind.SelectTriangle => "点击游戏画面中的三角形以选中",
+            PickKind.LinkShortcut => "点击游戏画面中的两个世界点以生成普通移动捷径",
             _                       => $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)}: 在画面点击第 1 个世界点"
         };
     }

@@ -59,6 +59,7 @@ public class DebugLinks
         NavmeshOffMeshKind.GeneratedClimbDown => 0xFF2ECC71,
         NavmeshOffMeshKind.GeneratedEdgeJump  => 0xFF3498DB,
         NavmeshOffMeshKind.ManualOffMesh      => 0xFFF39C12,
+        NavmeshOffMeshKind.Shortcut           => 0xFF1ABC9C,
         NavmeshOffMeshKind.Teleport           => 0xFFE74C3C,
         NavmeshOffMeshKind.ClientPath         => 0xFF9B59B6,
         _                                     => 0xFFFFFFFF
