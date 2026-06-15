@@ -330,7 +330,7 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
-            value = enabled ? fallback : null;
+            value = enabled ? fallback.GetValueOrDefault() : null;
             return true;
         }
 
@@ -417,7 +417,7 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
-            value = enabled ? fallback : null;
+            value = enabled ? fallback.GetValueOrDefault() : null;
             return true;
         }
 

@@ -264,7 +264,7 @@ internal static class CustomizationEditorInspector
         if (ImGui.TreeNodeEx("区域", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableEnum
-                ("分区算法", ref workspace.Draft.BuildProfile.PartitioningOverride, profileDefaults.PartitioningOverride,
+                ("分区算法", ref workspace.Draft.BuildProfile.PartitioningOverride, settingsDefaults.Partitioning,
                     "Watershed = 质量最高最慢, Monotone = 最快, Layer = 折中");
             changed |= CustomizationEditorWidgets.DrawNullableFloat
                 ("区域最小尺寸", ref workspace.Draft.BuildProfile.RegionMinSizeOverride, settingsDefaults.RegionMinSize,
