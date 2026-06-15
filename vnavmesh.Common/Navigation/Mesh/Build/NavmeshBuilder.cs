@@ -1163,13 +1163,11 @@ public class NavmeshBuilder
 
             var flags           = primitive.Flags & ~instance.ForceClearPrimFlags | instance.ForceSetPrimFlags;
             var realSolid       = !flags.HasFlag(SceneExtractor.PrimitiveFlags.FlyThrough);
+            var forceWalkable   = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < walkableNormalThresholdSq * lenSq;
-            var unwalkable = flags.HasFlag
-                                 (SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
-                             unwalkableSlope                                     ||
-                             includeVolume                                           &&
-                             flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable) &&
-                             !flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
+            var unwalkable = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
+                             !forceWalkable                                               &&
+                             (unwalkableSlope || includeVolume && flags.HasFlag(SceneExtractor.PrimitiveFlags.Unlandable));
             var projected  = crossY != 0 && (!includeVolume || crossY * crossY >= projectionNormalThresholdSq * lenSq);
             var planeGradX = projected ? -crossX / crossY : 0;
             var planeGradZ = projected ? -crossZ / crossY : 0;

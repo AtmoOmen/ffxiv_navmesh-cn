@@ -146,14 +146,14 @@ public class NavmeshRasterizer
                 _touchedCells.Clear();
             }
 
-            internal void Add(int cellIndex, int y0, int y1, int areaId, int minSpanGap, int walkableClimbThreshold)
+            internal void Add(int cellIndex, int y0, int y1, int areaId, int walkableClimbThreshold)
             {
                 ref var head = ref _cellHeads[cellIndex];
                 if (head == 0)
                     _touchedCells.Add(cellIndex);
 
-                var prevMaxY = y0 - minSpanGap - 1;
-                var nextMinY = y1 + minSpanGap + 1;
+                var prevMaxY = y0;
+                var nextMinY = y1;
                 var prev     = 0;
                 var curr     = head;
 
@@ -743,9 +743,10 @@ public class NavmeshRasterizer
 
             var flags           = p.Flags & ~instance.ForceClearPrimFlags | instance.ForceSetPrimFlags;
             var realSolid       = !flags.HasFlag(SceneExtractor.PrimitiveFlags.FlyThrough);
+            var forceWalkable   = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
             var unwalkable = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
-                             unwalkableSlope;
+                             !forceWalkable && unwalkableSlope;
             var areaId        = unwalkable ? 0 : RC_WALKABLE_AREA;
             var inverseCrossY = _iset != null && crossY != 0 ? -1.0f / crossY : 0;
             var normalUp      = crossY > 0;
@@ -1122,9 +1123,10 @@ public class NavmeshRasterizer
 
             var flags           = p.Flags & ~instance.ForceClearPrimFlags | instance.ForceSetPrimFlags;
             var realSolid       = !flags.HasFlag(SceneExtractor.PrimitiveFlags.FlyThrough);
+            var forceWalkable   = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
             var unwalkable = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
-                             unwalkableSlope;
+                             !forceWalkable && unwalkableSlope;
             var areaId = unwalkable ? 0 : RC_WALKABLE_AREA;
             if (_voxelizer != null && realSolid)
                 RasterizeVolumeThinWallStrip(v1, v2, v3, v12cross13.X, crossY, v12cross13.Z);
@@ -1215,14 +1217,14 @@ public class NavmeshRasterizer
         }
     }
 
-    private void AddSpan(int x, int z, int y0, int y1, int areaId, bool includeInVolume, bool mergeBelow = true)
+    private void AddSpan(int x, int z, int y0, int y1, int areaId, bool includeInVolume, bool mergeFromLowerBound = true)
     {
         var     yOrig    = (y0, y1);
         ref var cellHead = ref _heightfield.spans[z * _heightfield.width + x];
 
         // find insert position for new span: skip any existing spans that end before new span start
-        var     prevMaxY = mergeBelow ? y0 - _minSpanGap - 1 : y1; // any spans that have smax >= prevMaxY are merged
-        var     nextMinY = y1 + _minSpanGap + 1;                   // any spans that have smin <= nextMinY are merged
+        var     prevMaxY = y0;
+        var     nextMinY = y1;
         uint prevSpanIndex = 0;
         var  currSpanIndex = cellHead;
 
@@ -1249,7 +1251,7 @@ public class NavmeshRasterizer
             var heightDiff = currSpan.smax - y1;
             if (heightDiff > _walkableClimbThreshold || heightDiff >= -_walkableClimbThreshold && currSpan.area > areaId)
                 areaId = currSpan.area;
-            y0 = mergeBelow ? Math.Min(y0, currSpan.smin) : Math.Max(y0, currSpan.smax);
+            y0 = mergeFromLowerBound ? Math.Min(y0, currSpan.smin) : Math.Max(y0, currSpan.smax);
             y1 = Math.Max(y1, currSpan.smax);
 
             var nextSpanIndex = currSpan.next;
@@ -1285,7 +1287,7 @@ public class NavmeshRasterizer
         if (_terrainSpans != null)
         {
             var cellIndex = z * _heightfield.width + x;
-            _terrainSpans.Add(cellIndex, y0, y1, areaId, _minSpanGap, _walkableClimbThreshold);
+            _terrainSpans.Add(cellIndex, y0, y1, areaId, _walkableClimbThreshold);
             return;
         }
 
@@ -1611,7 +1613,7 @@ public class NavmeshRasterizer
                 // non-manifold mesh, assume everything below is interior
                 while (idx + 1 < cnt && solidVoxel[idx + 1] > yBelowNonManifold)
                     ++idx; // well i dunno, some terrain (eg south thanalan) is really _that_ fucked
-                AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, true, false);
+                AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, true, mergeFromLowerBound: false);
                 ++idx;
             }
 
