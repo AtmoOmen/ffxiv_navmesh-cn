@@ -299,6 +299,8 @@ public partial class VoxelPathfind
             verifiedTopEntryCache.Clear();
         if (l1FaceConnectivityCache.Count > L1_FACE_CACHE_MAX_SIZE)
             l1FaceConnectivityCache.Clear();
+        if (visibilityCache.Count > VISIBILITY_CACHE_MAX_SIZE)
+            visibilityCache.Clear();
     }
 
     private void RetainClosedSetKnowledge()
@@ -332,6 +334,8 @@ public partial class VoxelPathfind
         l0CorridorDistance = null;
         l1DistanceField    = null;
         l0DistanceField    = null;
+        visibilityCache.Clear();
+        voxelWallMaskCache.Clear();
         verifiedDownwardOpeningCache.Clear();
         verifiedTopEntryCache.Clear();
         l1FaceConnectivityCache.Clear();

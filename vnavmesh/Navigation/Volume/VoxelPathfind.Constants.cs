@@ -129,6 +129,7 @@ public partial class VoxelPathfind
     private const int    WALL_MASK_CACHE_MAX_SIZE                                        = 500_000;
     private const int    VERTICAL_ACCESS_CACHE_MAX_SIZE                                  = 200_000;
     private const int    L1_FACE_CACHE_MAX_SIZE                                          = 200_000;
+    private const int    VISIBILITY_CACHE_MAX_SIZE                                       = 1_000_000;
     private const int    L1_DISTANCE_FIELD_PRECOMPUTE_BUDGET                             = 200_000;
     private const float  REVISIT_PENALTY_SCALE                                           = 0.15f;
     private const int    MAX_PREVIOUSLY_VISITED                                          = 500_000;

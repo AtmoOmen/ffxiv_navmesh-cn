@@ -35,12 +35,23 @@ public partial class VoxelPathfind
         );
 
         var guidedCorridorRadius = ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance);
+        if (coarsePath.ReachedGoal)
+            guidedCorridorRadius = Math.Min(guidedCorridorRadius * 2, LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS * 2);
         var proxyGoalVoxel       = coarsePath.ReachedGoal ? toVoxel : coarsePath.OrderedPath[^1];
         var proxyGoalPos         = ResolveSearchCandidatePosition(proxyGoalVoxel, ResolveVoxelCenter(proxyGoalVoxel));
+
+        // 粗搜索未达终点时，尝试把 L1-only 代理目标解析为真实 L2 体素
+        if (!coarsePath.ReachedGoal)
+        {
+            var (resolvedLeaf, leafEmpty) = Volume.FindLeafVoxel(proxyGoalPos);
+            if (leafEmpty)
+                proxyGoalVoxel = resolvedLeaf;
+        }
 
         BuildL1Corridor(coarsePath.PathSet, guidedCorridorRadius);
         ComputeL1DistanceFieldFromCoarsePath(coarsePath.OrderedPath, 0f);
 
+        var proxySearchBudget = coarsePath.ReachedGoal ? LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET * 2 : LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET;
         var proxyPath = RunSearchAttempt
         (
             fromVoxel,
@@ -48,10 +59,10 @@ public partial class VoxelPathfind
             fromPos,
             proxyGoalPos,
             returnIntermediatePoints,
-            LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+            proxySearchBudget,
             1,
             cancel,
-            heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
+            heuristicWeightOverride: coarsePath.ReachedGoal ? GUIDED_CORRIDOR_HEURISTIC_WEIGHT : LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
         );
 
         if (lastTermination == VolumeSearchTermination.ReachedGoal)
@@ -118,6 +129,27 @@ public partial class VoxelPathfind
             $"[算路] 飞行体素粗层代理搜索未达终点（{lastTermination}），粗路径单元 = {coarsePath.PathSet.Count}，引导半径 = {guidedCorridorRadius}，访问节点 = {visitedNodes}"
         );
         ClearL1AreaConstraint();
+
+        // 最终兜底：代理搜索穷尽时，去掉走廊约束用真实目标做全搜索
+        if (!coarsePath.ReachedGoal && lastTermination == VolumeSearchTermination.SearchExhausted)
+        {
+            Service.Log.Debug("[算路] 飞行体素兜底全搜索：代理搜索穷尽，回退无约束距离场全搜索");
+            ComputeL1DistanceField(toVoxel, toPos);
+            var fallbackPath = RunSearchAttempt
+            (
+                fromVoxel,
+                toVoxel,
+                fromPos,
+                toPos,
+                returnIntermediatePoints,
+                LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+                2,
+                cancel,
+                heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
+            );
+            return fallbackPath.Count > 0 ? fallbackPath : proxyPath;
+        }
+
         return proxyPath;
     }
 
