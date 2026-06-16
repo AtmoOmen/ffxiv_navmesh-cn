@@ -278,7 +278,6 @@ public partial class VoxelPathfind
         longRangeLateralBias                 = default;
         debugReturnedLongRangeBestEffortPath = false;
         guidedCorridorEarlyAbortTriggered    = false;
-        currentL1CorridorRadius              = 0;
         lastTermination                      = VolumeSearchTermination.SearchExhausted;
         lastSearchAttempts                   = 0;
         LastPathDebug                        = null;

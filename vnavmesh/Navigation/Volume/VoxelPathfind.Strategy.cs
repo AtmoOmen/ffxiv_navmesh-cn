@@ -35,7 +35,7 @@ public partial class VoxelPathfind
         );
 
         var guidedCorridorRadius = ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance);
-        var proxyGoalVoxel       = coarsePath.OrderedPath[^1];
+        var proxyGoalVoxel       = coarsePath.ReachedGoal ? toVoxel : coarsePath.OrderedPath[^1];
         var proxyGoalPos         = ResolveSearchCandidatePosition(proxyGoalVoxel, ResolveVoxelCenter(proxyGoalVoxel));
 
         BuildL1Corridor(coarsePath.PathSet, guidedCorridorRadius);
@@ -48,8 +48,8 @@ public partial class VoxelPathfind
             fromPos,
             proxyGoalPos,
             returnIntermediatePoints,
-            1,
             LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+            1,
             cancel,
             heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
         );
@@ -224,8 +224,8 @@ public partial class VoxelPathfind
             fromPos,
             toPos,
             returnIntermediatePoints,
-            2,
             LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
+            2,
             cancel,
             heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
         );
@@ -264,8 +264,8 @@ public partial class VoxelPathfind
                     fromPos,
                     toPos,
                     returnIntermediatePoints,
-                    attempts++,
                     DEFAULT_MAX_SEARCH_STEPS,
+                    attempts++,
                     cancel,
                     heuristicWeightOverride: fallbackHeuristicWeight
                 );
@@ -305,8 +305,8 @@ public partial class VoxelPathfind
             fromPos,
             toPos,
             returnIntermediatePoints,
-            attempts,
             DEFAULT_MAX_SEARCH_STEPS,
+            attempts,
             cancel,
             heuristicWeightOverride: fallbackHeuristicWeight
         );
