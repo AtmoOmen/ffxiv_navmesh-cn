@@ -54,13 +54,6 @@ public partial class VoxelPathfind
         Vector3 Endpoint
     );
 
-    private readonly record struct FlightPushHorizontalCandidate
-    (
-        Vector3 Direction,
-        float   Clearance,
-        float   Score
-    );
-
     private const float  SCORE_EPSILON                                                   = 0.00001f;
     private const int    DEFAULT_MAX_SEARCH_STEPS                                        = 1_0000_0000;
     private const int    RAYCAST_SEARCH_STEP_BUDGET                                      = 200000;
@@ -185,81 +178,23 @@ public partial class VoxelPathfind
     private const float  FLIGHT_PUSH_SAMPLE_STEP_MAX_SCALE                               = 1.50f;
     private const float  FLIGHT_PUSH_SCAN_DISTANCE_SCALE                                 = 6.00f;
     private const float  FLIGHT_PUSH_SCAN_DISTANCE_MAX_IN_LEAF_CELLS                     = 18.00f;
-    private const float  FLIGHT_PUSH_HORIZONTAL_BIAS_SCALE                               = 0.95f;
-    private const float  FLIGHT_PUSH_VERTICAL_BIAS_SCALE                                 = 0.40f;
     private const float  FLIGHT_PUSH_SCAN_PUSH_FRACTION                                  = 0.62f;
     private const float  FLIGHT_PUSH_MAX_CLEARANCE_FRACTION                              = 0.72f;
-    private const float  FLIGHT_PUSH_MIN_HORIZONTAL_IMBALANCE                            = 0.05f;
-    private const float  FLIGHT_PUSH_MIN_VERTICAL_IMBALANCE                              = 0.10f;
-    private const float  FLIGHT_PUSH_FORWARD_WEIGHT                                      = 0.85f;
-    private const float  FLIGHT_PUSH_BACKWARD_WEIGHT                                     = 0.55f;
-    private const float  FLIGHT_PUSH_DIAGONAL_WEIGHT                                     = 1.05f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_WEIGHT                        = 0.10f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_BACKWARD_WEIGHT                       = 1.10f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_DIAGONAL_WEIGHT               = 0.45f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_BACKWARD_DIAGONAL_WEIGHT              = 1.20f;
     private const float  FLIGHT_PUSH_MIN_DISTANCE                                        = 0.02f;
     private const float  FLIGHT_PUSH_VOXEL_INSET_RATIO                                   = 0.10f;
     private const float  FLIGHT_PUSH_VOXEL_INSET_MIN                                     = 0.01f;
     private const float  FLIGHT_PUSH_VOXEL_INSET_MAX                                     = 0.08f;
-    private const int    FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT                       = 24;
-    private const float  FLIGHT_PUSH_HORIZONTAL_SWEEP_WEIGHT                             = 0.70f;
-    private const float  FLIGHT_PUSH_HORIZONTAL_SWEEP_FORWARD_BONUS                      = 0.20f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_FORWARD_PENALTY                 = 0.90f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_FORWARD_MIN_SCALE               = 0.12f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_BACKWARD_BONUS                  = 0.60f;
-    private const float  FLIGHT_PUSH_DIRECTIONAL_FORWARD_BONUS                           = 0.85f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_FORWARD_PENALTY           = 0.95f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_BACKWARD_BONUS            = 0.70f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_MIN_SCALE                 = 0.10f;
-    private const float  FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT                 = 0.05f;
-    private const float  FLIGHT_PUSH_DIRECTIONAL_CLEARANCE_FRACTION                      = 0.85f;
-    private const float  FLIGHT_PUSH_DIRECTIONAL_DUPLICATE_DOT                           = 0.96f;
-    private const int    FLIGHT_PUSH_DIRECTIONAL_CANDIDATE_LIMIT                         = 10;
+    private const float  FLIGHT_PUSH_PREFERRED_CLEARANCE_VOXEL_SCALE                     = 0.85f;
+    private const float  FLIGHT_PUSH_PREFERRED_CLEARANCE_LEAF_SCALE                      = 1.60f;
+    private const float  FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE               = 0.85f;
+    private const float  FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE                = 1.60f;
+    private const float  FLIGHT_PUSH_RELIEF_SCALE                                        = 0.90f;
+    private const int    REFINE_RELAX_ITERATION_LIMIT                                    = 3;
     private const float  FLIGHT_DESCENT_SMOOTHING_MAX_SLOPE                              = 0.90f;
     private const float  FLIGHT_DESCENT_SMOOTHING_MIN_DROP_LEAF_SCALE                    = 2.50f;
     private const float  FLIGHT_DESCENT_SMOOTHING_MIN_DROP_MIN                           = 1.00f;
     private const float  FLIGHT_DESCENT_SMOOTHING_NEAR_VERTICAL_LEAF_SCALE               = 2.00f;
     private const float  FLIGHT_DESCENT_SMOOTHING_NEAR_VERTICAL_MIN                      = 1.20f;
-    private const float  FLIGHT_GOAL_DESCENT_HEIGHT_TOLERANCE_LEAF_SCALE                 = 1.00f;
-    private const float  FLIGHT_GOAL_DESCENT_HEIGHT_TOLERANCE_MIN                        = 0.35f;
-    private const float  FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_LEAF_SCALE                = 0.75f;
-    private const float  FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_MIN                       = 0.20f;
-    private const float  FLIGHT_TUNNEL_DESCENT_SOFT_HEADROOM_VOXEL_SCALE                 = 1.20f;
-    private const float  FLIGHT_TUNNEL_DESCENT_SOFT_HEADROOM_LEAF_SCALE                  = 3.00f;
-    private const float  FLIGHT_TUNNEL_DESCENT_DOWNWARD_CLEARANCE_VOXEL_SCALE            = 1.00f;
-    private const float  FLIGHT_TUNNEL_DESCENT_DOWNWARD_CLEARANCE_LEAF_SCALE             = 1.50f;
-    private const float  FLIGHT_TUNNEL_DESCENT_CLEARANCE_LEAD_LEAF_SCALE                 = 1.20f;
-    private const float  FLIGHT_TUNNEL_DESCENT_CLEARANCE_LEAD_MIN                        = 0.60f;
-    private const float  FLIGHT_TUNNEL_DESCENT_FOLLOW_NEXT_SCALE                         = 0.65f;
-    private const float  FLIGHT_TUNNEL_DESCENT_PREVIOUS_FOLLOW_SCALE                     = 0.75f;
-    private const float  FLIGHT_TUNNEL_DESCENT_EXTRA_FOLLOW_LEAF_SCALE                   = 0.75f;
-    private const float  FLIGHT_TUNNEL_DESCENT_CLEARANCE_ADVANTAGE_SCALE                 = 0.35f;
-    private const float  FLIGHT_TUNNEL_DESCENT_HORIZONTAL_BLEND_STRONG                   = 0.85f;
-    private const float  FLIGHT_TUNNEL_DESCENT_HORIZONTAL_BLEND_MEDIUM                   = 0.50f;
-    private const float  FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE               = 0.85f;
-    private const float  FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE                = 1.60f;
-    private const float  FLIGHT_PUSH_DOWNWARD_UPWARD_BLOCKED_VOXEL_SCALE                 = 0.45f;
-    private const float  FLIGHT_PUSH_DOWNWARD_UPWARD_BLOCKED_LEAF_SCALE                  = 0.90f;
-    private const float  FLIGHT_PUSH_DOWNWARD_MIN_CLEARANCE_VOXEL_SCALE                  = 1.20f;
-    private const float  FLIGHT_PUSH_DOWNWARD_MIN_CLEARANCE_LEAF_SCALE                   = 2.20f;
-    private const float  FLIGHT_PUSH_DOWNWARD_MIN_LEAD_LEAF_SCALE                        = 0.90f;
-    private const float  FLIGHT_PUSH_DOWNWARD_SCALE                                      = 0.65f;
-    private const float  FLIGHT_PUSH_FLOOR_AVOIDANCE_SCALE                               = 0.85f;
-    private const float  FLIGHT_PUSH_HEIGHT_MATCH_TOLERANCE                              = 0.05f;
-    private const float  FLIGHT_PUSH_HEIGHT_MATCH_BIAS                                   = 0.08f;
-    private const float  FLIGHT_PUSH_HEIGHT_CATCHUP_SCALE                                = 1.20f;
-    private const float  FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_LEAF_SCALE                  = 0.90f;
-    private const float  FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_MIN                         = 0.25f;
-    private const float  FLIGHT_PUSH_HEIGHT_STRICT_TOLERANCE                             = 0.02f;
-    private const float  FLIGHT_PUSH_HEIGHT_STRICT_BIAS                                  = 0.06f;
-    private const float  FLIGHT_PUSH_HEIGHT_RAISE_HORIZONTAL_BLEND                       = 0.20f;
-    private const float  FLIGHT_PUSH_VERTICAL_FIRST_HORIZONTAL_BLEND                     = 0.40f;
-    private const float  FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_STRONG                    = 1.60f;
-    private const float  FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_HIGH                      = 1.35f;
-    private const float  FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_MEDIUM                    = 1.15f;
-    private const float  FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_LIGHT                     = 0.90f;
-    private const float  FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_MIN                       = 0.65f;
 
     private struct VoxelNodeLookup
     {

@@ -13,13 +13,12 @@ public partial class VoxelPathfind
         if (path.Count <= 2)
             return path;
 
-        List<(ulong voxel, Vector3 p)> simplified  = [path[0]];
+        List<(ulong voxel, Vector3 p)> simplified = [path[0]];
         var                            anchorIndex = 0;
 
         while (anchorIndex < path.Count - 1)
         {
             var furthestVisibleIndex = FindFurthestVisibleIndex(path, anchorIndex, cancel);
-
             simplified.Add(path[furthestVisibleIndex]);
             anchorIndex = furthestVisibleIndex;
         }
@@ -39,16 +38,32 @@ public partial class VoxelPathfind
         refined.Reverse();
         refined = SimplifyPath(refined, cancel);
         refined.Reverse();
-        RelaxInteriorWaypoints(refined, cancel);
+
+        for (var iteration = 0; iteration < REFINE_RELAX_ITERATION_LIMIT; ++iteration)
+        {
+            ProjectInteriorWaypoints(refined, cancel);
+            RelaxTowardOpenSpace(refined, debugInfos: null, cancel);
+            var straightened = SimplifyPath(refined, cancel);
+            if (straightened.Count == refined.Count)
+            {
+                refined = straightened;
+                break;
+            }
+
+            refined = straightened;
+        }
+
         var debugInfos = new FlightPathWaypointDebug?[refined.Count];
-        PushInteriorWaypoints(refined, debugInfos, cancel);
+        ProjectInteriorWaypoints(refined, cancel);
+        RelaxTowardOpenSpace(refined, debugInfos, cancel);
+
         var finalPath = SimplifyPath(refined, cancel);
         finalPath     = RestoreSteepDescentWaypoints(refined, finalPath);
         LastPathDebug = BuildFlightPathDebugPayload(refined, debugInfos, finalPath, pendingLongRangeProxyDebug);
         return finalPath;
     }
 
-    private void RelaxInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
+    private void ProjectInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
     {
         if (path.Count <= 2)
             return;
@@ -58,23 +73,21 @@ public partial class VoxelPathfind
             if ((i & 0x3f) == 0)
                 cancel.ThrowIfCancellationRequested();
 
-            var     previous = path[i - 1];
-            var     current  = path[i];
-            var     next     = path[i + 1];
-            Vector3 relaxed;
+            var previous = path[i - 1];
+            var current  = path[i];
+            var next     = path[i + 1];
 
-            if (current.voxel == goalVoxel) relaxed = goalPos;
-            else
-            {
-                var segment       = next.p - previous.p;
-                var lengthSquared = segment.LengthSquared();
-                if (lengthSquared <= SCORE_EPSILON * SCORE_EPSILON)
-                    continue;
+            if (current.voxel == goalVoxel)
+                continue;
 
-                var progress  = Math.Clamp(Vector3.Dot(current.p - previous.p, segment) / lengthSquared, 0f, 1f);
-                var projected = previous.p + (progress * segment);
-                relaxed = Volume.ClampPointToVoxel(current.voxel, projected);
-            }
+            var segment       = next.p - previous.p;
+            var lengthSquared = segment.LengthSquared();
+            if (lengthSquared <= SCORE_EPSILON * SCORE_EPSILON)
+                continue;
+
+            var progress  = Math.Clamp(Vector3.Dot(current.p - previous.p, segment) / lengthSquared, 0f, 1f);
+            var projected = previous.p + (progress * segment);
+            var relaxed   = Volume.ClampPointToVoxel(current.voxel, projected);
 
             if (Vector3.DistanceSquared(relaxed, current.p) <= SCORE_EPSILON * SCORE_EPSILON)
                 continue;
@@ -87,7 +100,7 @@ public partial class VoxelPathfind
         }
     }
 
-    private void PushInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, FlightPathWaypointDebug?[] debugInfos, CancellationToken cancel)
+    private void RelaxTowardOpenSpace(List<(ulong voxel, Vector3 p)> path, FlightPathWaypointDebug?[]? debugInfos, CancellationToken cancel)
     {
         if (path.Count <= 2)
             return;
@@ -101,16 +114,15 @@ public partial class VoxelPathfind
             var current  = path[i];
             var next     = path[i + 1];
 
-            var pushed = TryPushInteriorWaypoint(previous, current, next, i, out var adjusted, out var debugInfo);
-            debugInfos[i] = debugInfo;
-            if (!pushed)
-                continue;
+            if (TryRelaxWaypoint(previous, current, next, i, out var adjusted, out var debugInfo))
+                path[i] = adjusted;
 
-            path[i] = adjusted;
+            if (debugInfos != null)
+                debugInfos[i] = debugInfo;
         }
     }
 
-    private bool TryPushInteriorWaypoint
+    private bool TryRelaxWaypoint
     (
         (ulong voxel, Vector3 p)     previous,
         (ulong voxel, Vector3 p)     current,
@@ -128,24 +140,22 @@ public partial class VoxelPathfind
             return false;
 
         var horizontalForward = new Vector2(overallDirection.X, overallDirection.Z);
-
-        if (horizontalForward.LengthSquared() <= SCORE_EPSILON * SCORE_EPSILON)
+        if (!VoxelMathUtil.TryNormalize(horizontalForward, out var normalizedForward))
         {
             horizontalForward = new Vector2(next.p.X - current.p.X, next.p.Z - current.p.Z);
-            if (horizontalForward.LengthSquared() <= SCORE_EPSILON * SCORE_EPSILON)
+            if (!VoxelMathUtil.TryNormalize(horizontalForward, out normalizedForward))
+            {
                 horizontalForward = new Vector2(current.p.X - previous.p.X, current.p.Z - previous.p.Z);
+                normalizedForward = VoxelMathUtil.TryNormalize(horizontalForward, out var fallback) ? fallback : Vector2.UnitX;
+            }
         }
 
-        horizontalForward = !VoxelMathUtil.TryNormalize(horizontalForward, out var normalizedHorizontalForward) ? Vector2.UnitX : normalizedHorizontalForward;
-
-        var horizontalRight      = new Vector2(-horizontalForward.Y, horizontalForward.X);
-        var forward3             = new Vector3(horizontalForward.X, 0, horizontalForward.Y);
-        var right3               = new Vector3(horizontalRight.X,   0, horizontalRight.Y);
-        var forwardRight3        = Vector3.Normalize(forward3  + right3);
-        var forwardLeft3         = Vector3.Normalize(forward3  - right3);
-        var backwardRight3       = Vector3.Normalize(-forward3 + right3);
-        var backwardLeft3        = Vector3.Normalize(-forward3 - right3);
-        var goalAdjacentRearBias = next.voxel == goalVoxel;
+        var forward3       = new Vector3(normalizedForward.X, 0, normalizedForward.Y);
+        var right3         = new Vector3(-normalizedForward.Y, 0, normalizedForward.X);
+        var forwardRight3  = Vector3.Normalize(forward3 + right3);
+        var forwardLeft3   = Vector3.Normalize(forward3 - right3);
+        var backwardRight3 = Vector3.Normalize(-forward3 + right3);
+        var backwardLeft3  = Vector3.Normalize(-forward3 - right3);
 
         var voxelSize          = GetVoxelSize(current.voxel);
         var leafHorizontalSize = MathF.Max(l2Desc.CellSize.X, l2Desc.CellSize.Z);
@@ -163,11 +173,16 @@ public partial class VoxelPathfind
             FLIGHT_PUSH_MIN_DISTANCE,
             MathF.Max(leafVerticalSize * FLIGHT_PUSH_SAMPLE_STEP_SCALE, MathF.Min(voxelVertical * 0.5f, leafVerticalSize * FLIGHT_PUSH_SAMPLE_STEP_MAX_SCALE))
         );
-
-        var horizontalScanDistance = MathF.Max(voxelHorizontal, leafHorizontalSize * FLIGHT_PUSH_SCAN_DISTANCE_SCALE);
-        horizontalScanDistance = MathF.Min(horizontalScanDistance, leafHorizontalSize * FLIGHT_PUSH_SCAN_DISTANCE_MAX_IN_LEAF_CELLS);
-        var verticalScanDistance = MathF.Max(voxelVertical, leafVerticalSize * FLIGHT_PUSH_SCAN_DISTANCE_SCALE);
-        verticalScanDistance = MathF.Min(verticalScanDistance, leafVerticalSize * FLIGHT_PUSH_SCAN_DISTANCE_MAX_IN_LEAF_CELLS);
+        var horizontalScanDistance = MathF.Min
+        (
+            MathF.Max(voxelHorizontal, leafHorizontalSize * FLIGHT_PUSH_SCAN_DISTANCE_SCALE),
+            leafHorizontalSize * FLIGHT_PUSH_SCAN_DISTANCE_MAX_IN_LEAF_CELLS
+        );
+        var verticalScanDistance = MathF.Min
+        (
+            MathF.Max(voxelVertical, leafVerticalSize * FLIGHT_PUSH_SCAN_DISTANCE_SCALE),
+            leafVerticalSize * FLIGHT_PUSH_SCAN_DISTANCE_MAX_IN_LEAF_CELLS
+        );
 
         var forwardSample       = MeasureDirectionalClearance(current, forward3,       horizontalScanDistance, horizontalSampleStep);
         var backwardSample      = MeasureDirectionalClearance(current, -forward3,      horizontalScanDistance, horizontalSampleStep);
@@ -191,386 +206,108 @@ public partial class VoxelPathfind
         var upClearance            = upSample.Clearance;
         var downClearance          = downSample.Clearance;
 
-        var horizontalBias           = Vector3.Zero;
-        var horizontalTotalClearance = 0f;
-        var maxHorizontalClearance   = 0f;
-        var forwardWeight            = goalAdjacentRearBias ? FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_WEIGHT : FLIGHT_PUSH_FORWARD_WEIGHT;
-        var backwardWeight           = goalAdjacentRearBias ? FLIGHT_PUSH_GOAL_ADJACENT_BACKWARD_WEIGHT : FLIGHT_PUSH_BACKWARD_WEIGHT;
-        var forwardDiagonalWeight    = goalAdjacentRearBias ? FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_DIAGONAL_WEIGHT : FLIGHT_PUSH_DIAGONAL_WEIGHT;
-        var backwardDiagonalWeight   = goalAdjacentRearBias ? FLIGHT_PUSH_GOAL_ADJACENT_BACKWARD_DIAGONAL_WEIGHT : FLIGHT_PUSH_DIAGONAL_WEIGHT;
+        var preferredHorizontal = MathF.Max(voxelHorizontal * FLIGHT_PUSH_PREFERRED_CLEARANCE_VOXEL_SCALE, leafHorizontalSize * FLIGHT_PUSH_PREFERRED_CLEARANCE_LEAF_SCALE);
+        var preferredVertical   = MathF.Max(voxelVertical   * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE, leafVerticalSize   * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE);
 
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forward3, forwardClearance, forwardWeight);
-        maxHorizontalClearance = MathF.Max(maxHorizontalClearance, forwardClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -forward3, backwardClearance, backwardWeight);
-        maxHorizontalClearance = MathF.Max(maxHorizontalClearance, backwardClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, right3, rightClearance, 1f);
-        maxHorizontalClearance = MathF.Max(maxHorizontalClearance, rightClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -right3, leftClearance, 1f);
-        maxHorizontalClearance = MathF.Max(maxHorizontalClearance, leftClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardRight3, forwardRightClearance, forwardDiagonalWeight);
-        maxHorizontalClearance = MathF.Max(maxHorizontalClearance, forwardRightClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardLeft3, forwardLeftClearance, forwardDiagonalWeight);
-        maxHorizontalClearance = MathF.Max(maxHorizontalClearance, forwardLeftClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardRight3, backwardRightClearance, backwardDiagonalWeight);
-        maxHorizontalClearance = MathF.Max(maxHorizontalClearance, backwardRightClearance);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardLeft3, backwardLeftClearance, backwardDiagonalWeight);
-        maxHorizontalClearance = MathF.Max(maxHorizontalClearance, backwardLeftClearance);
-        var sweepSamples = BuildHorizontalSweepSamples
-        (
-            current,
-            forward3,
-            right3,
-            horizontalScanDistance,
-            horizontalSampleStep,
-            goalAdjacentRearBias,
-            ref horizontalBias,
-            ref horizontalTotalClearance,
-            ref maxHorizontalClearance
-        );
-        var directionalHorizontalCandidates = BuildDirectionalHorizontalCandidates
-        (
-            current.p,
-            forward3,
-            forwardSample,
-            backwardSample,
-            rightSample,
-            leftSample,
-            forwardRightSample,
-            forwardLeftSample,
-            backwardRightSample,
-            backwardLeftSample,
-            sweepSamples,
-            goalAdjacentRearBias
-        );
+        var minHorizontalClearance =
+            MathF.Min(MathF.Min(forwardClearance, backwardClearance),
+            MathF.Min(MathF.Min(rightClearance, leftClearance),
+            MathF.Min(MathF.Min(forwardRightClearance, forwardLeftClearance),
+                      MathF.Min(backwardRightClearance, backwardLeftClearance))));
+        var maxHorizontalClearance =
+            MathF.Max(MathF.Max(forwardClearance, backwardClearance),
+            MathF.Max(MathF.Max(rightClearance, leftClearance),
+            MathF.Max(MathF.Max(forwardRightClearance, forwardLeftClearance),
+                      MathF.Max(backwardRightClearance, backwardLeftClearance))));
 
-        Vector3 horizontalOffset = default;
-        var     maxHorizontalPush = MathF.Min(horizontalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, maxHorizontalClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
-        var     horizontalBiasFlat = new Vector2(horizontalBias.X, horizontalBias.Z);
-        var     horizontalBiasMagnitude = horizontalBiasFlat.Length();
-        var     horizontalImbalance = horizontalTotalClearance > SCORE_EPSILON ? horizontalBiasMagnitude / horizontalTotalClearance : 0f;
+        var horizontalCramped = minHorizontalClearance < preferredHorizontal;
+        var floorCramped      = downClearance < preferredVertical && upClearance > FLIGHT_PUSH_MIN_DISTANCE;
+        var ceilingCramped    = upClearance   < preferredVertical && downClearance > FLIGHT_PUSH_MIN_DISTANCE;
 
-        if (horizontalBiasMagnitude >= FLIGHT_PUSH_MIN_DISTANCE             &&
-            horizontalImbalance     >= FLIGHT_PUSH_MIN_HORIZONTAL_IMBALANCE &&
-            VoxelMathUtil.TryNormalize(horizontalBiasFlat, out var horizontalPushDirection))
+        Vector3 horizontalBias           = Vector3.Zero;
+        var     horizontalTotalClearance = 0f;
+
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forward3,        forwardClearance,       1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -forward3,       backwardClearance,      1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, right3,          rightClearance,         1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -right3,         leftClearance,          1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardRight3,   forwardRightClearance,  1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardLeft3,    forwardLeftClearance,   1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardRight3,  backwardRightClearance, 1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardLeft3,   backwardLeftClearance,  1f);
+
+        Vector3 horizontalOffset = Vector3.Zero;
+        if (horizontalCramped && VoxelMathUtil.TryNormalize(new Vector2(horizontalBias.X, horizontalBias.Z), out var horizontalPushDirection))
         {
-            if (goalAdjacentRearBias)
-            {
-                var forwardComponent = Vector2.Dot(horizontalPushDirection, normalizedHorizontalForward);
-
-                if (forwardComponent > FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT)
-                {
-                    var rearProjectedDirection = horizontalPushDirection - (normalizedHorizontalForward * forwardComponent);
-                    if (!VoxelMathUtil.TryNormalize(rearProjectedDirection, out horizontalPushDirection))
-                        horizontalPushDirection = default;
-                }
-            }
-
-            var desiredHorizontalPush  = horizontalBiasMagnitude * FLIGHT_PUSH_HORIZONTAL_BIAS_SCALE;
-            var horizontalPushDistance = MathF.Min(maxHorizontalPush, desiredHorizontalPush);
-            if (horizontalPushDistance                  >= FLIGHT_PUSH_MIN_DISTANCE &&
-                horizontalPushDirection.LengthSquared() > SCORE_EPSILON * SCORE_EPSILON)
+            var deficit               = preferredHorizontal - minHorizontalClearance;
+            var maxHorizontalPush     = MathF.Min(horizontalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, maxHorizontalClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
+            var horizontalPushDistance = MathF.Min(maxHorizontalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
+            if (horizontalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
                 horizontalOffset = new Vector3(horizontalPushDirection.X * horizontalPushDistance, 0, horizontalPushDirection.Y * horizontalPushDistance);
         }
 
-        Vector3 verticalOffset      = default;
-        var     verticalBias        = upClearance - downClearance;
-        var     verticalMagnitude   = MathF.Abs(verticalBias);
-        var     verticalTotal       = upClearance + downClearance;
-        var     verticalImbalance   = verticalTotal > SCORE_EPSILON ? verticalMagnitude / verticalTotal : 0f;
-        var     goalDescentApproach = IsGoalDescentApproach(previous, current, next, leafVerticalSize);
-        var downhillTunnelTrend = VoxelPathUtil.IsTunnelDescentTrend
-            (previous, current, next, leafVerticalSize, FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_LEAF_SCALE, FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_MIN);
-        var heightMatchTarget = current.p.Y;
-        if (previous.p.Y >= current.p.Y - FLIGHT_PUSH_HEIGHT_MATCH_TOLERANCE)
-            heightMatchTarget = MathF.Max(heightMatchTarget, previous.p.Y + FLIGHT_PUSH_HEIGHT_MATCH_BIAS);
-        var constrainedTunnelDescent = VoxelPathUtil.IsConstrainedTunnelDescent
-        (
-            previous,
-            current,
-            next,
-            leafVerticalSize,
-            upClearance,
-            heightMatchTarget,
-            FLIGHT_PUSH_MIN_DISTANCE,
-            FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_LEAF_SCALE,
-            FLIGHT_TUNNEL_DESCENT_TREND_TOLERANCE_MIN,
-            FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_LEAF_SCALE,
-            FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_MIN
-        );
-        var preferredMinHeight      = !goalDescentApproach && !constrainedTunnelDescent ? heightMatchTarget : current.p.Y;
-        var catchupHeight           = MathF.Max(0f, preferredMinHeight - current.p.Y);
-        var catchupHeadroomRequired = catchupHeight + ResolveFlightHeightCatchupHeadroom(leafVerticalSize);
-        var shouldCatchUpHeight = !constrainedTunnelDescent                 &&
-                                  catchupHeight >= FLIGHT_PUSH_MIN_DISTANCE &&
-                                  upClearance   >= catchupHeadroomRequired;
+        Vector3                 verticalOffset = Vector3.Zero;
+        FlightPathVerticalMode verticalMode    = FlightPathVerticalMode.None;
 
-        if (downhillTunnelTrend && next.p.Y + FLIGHT_PUSH_HEIGHT_MATCH_TOLERANCE < current.p.Y)
+        if (floorCramped)
         {
-            preferredMinHeight      = current.p.Y;
-            catchupHeight           = 0f;
-            catchupHeadroomRequired = ResolveFlightHeightCatchupHeadroom(leafVerticalSize);
-            shouldCatchUpHeight     = false;
-        }
-
-        var preferredFloorClearance = MathF.Max
-            (voxelVertical * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE, leafVerticalSize * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE);
-        var downwardHeadroomLimit = MathF.Max
-            (voxelVertical * FLIGHT_PUSH_DOWNWARD_UPWARD_BLOCKED_VOXEL_SCALE, leafVerticalSize * FLIGHT_PUSH_DOWNWARD_UPWARD_BLOCKED_LEAF_SCALE);
-        var downwardClearanceFloor = MathF.Max
-            (voxelVertical * FLIGHT_PUSH_DOWNWARD_MIN_CLEARANCE_VOXEL_SCALE, leafVerticalSize * FLIGHT_PUSH_DOWNWARD_MIN_CLEARANCE_LEAF_SCALE);
-        var downwardLeadRequired = MathF.Max(leafVerticalSize * FLIGHT_PUSH_DOWNWARD_MIN_LEAD_LEAF_SCALE, FLIGHT_PUSH_MIN_DISTANCE * 2f);
-        var allowDownwardPush = verticalBias                < 0                       &&
-                                upClearance                 < downwardHeadroomLimit   &&
-                                downClearance               >= downwardClearanceFloor &&
-                                downClearance - upClearance >= downwardLeadRequired;
-        var verticalMode        = FlightPathVerticalMode.None;
-        var tunnelDescentAssist = false;
-
-        if (VoxelPathUtil.TryResolveConstrainedTunnelDescentOffset
-            (
-                constrainedTunnelDescent,
-                downhillTunnelTrend,
-                previous,
-                current,
-                next,
-                leafVerticalSize,
-                voxelVertical,
-                verticalScanDistance,
-                upClearance,
-                downClearance,
-                FLIGHT_PUSH_MIN_DISTANCE,
-                FLIGHT_TUNNEL_DESCENT_SOFT_HEADROOM_VOXEL_SCALE,
-                FLIGHT_TUNNEL_DESCENT_SOFT_HEADROOM_LEAF_SCALE,
-                FLIGHT_TUNNEL_DESCENT_DOWNWARD_CLEARANCE_VOXEL_SCALE,
-                FLIGHT_TUNNEL_DESCENT_DOWNWARD_CLEARANCE_LEAF_SCALE,
-                FLIGHT_TUNNEL_DESCENT_CLEARANCE_LEAD_LEAF_SCALE,
-                FLIGHT_TUNNEL_DESCENT_CLEARANCE_LEAD_MIN,
-                FLIGHT_TUNNEL_DESCENT_FOLLOW_NEXT_SCALE,
-                FLIGHT_TUNNEL_DESCENT_PREVIOUS_FOLLOW_SCALE,
-                FLIGHT_TUNNEL_DESCENT_EXTRA_FOLLOW_LEAF_SCALE,
-                FLIGHT_TUNNEL_DESCENT_CLEARANCE_ADVANTAGE_SCALE,
-                FLIGHT_PUSH_SCAN_PUSH_FRACTION,
-                FLIGHT_PUSH_MAX_CLEARANCE_FRACTION,
-                out var tunnelDescentOffset
-            ))
-        {
-            verticalOffset      = tunnelDescentOffset;
-            tunnelDescentAssist = true;
-            verticalMode        = FlightPathVerticalMode.TunnelDescentAssist;
-        }
-        else if ((verticalBias      > 0                         &&
-                  verticalMagnitude >= FLIGHT_PUSH_MIN_DISTANCE &&
-                  verticalImbalance >= FLIGHT_PUSH_MIN_VERTICAL_IMBALANCE) ||
-                 shouldCatchUpHeight)
-        {
-            var maxVerticalClearance = MathF.Max(upClearance, downClearance);
-            var desiredVerticalPush = verticalBias > 0
-                                          ? verticalMagnitude * FLIGHT_PUSH_VERTICAL_BIAS_SCALE
-                                          : 0f;
-            if (shouldCatchUpHeight)
-                desiredVerticalPush = MathF.Max(desiredVerticalPush, catchupHeight * FLIGHT_PUSH_HEIGHT_CATCHUP_SCALE);
-            var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, maxVerticalClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
-            var verticalPushDistance = MathF.Min(maxVerticalPush,                                       desiredVerticalPush);
-            verticalOffset = Vector3.UnitY * verticalPushDistance;
-            verticalMode = shouldCatchUpHeight && verticalBias <= 0
-                               ? FlightPathVerticalMode.HeightCatchUp
-                               : FlightPathVerticalMode.UpwardBias;
-        }
-        else if (allowDownwardPush                             &&
-                 verticalMagnitude >= FLIGHT_PUSH_MIN_DISTANCE &&
-                 verticalImbalance >= FLIGHT_PUSH_MIN_VERTICAL_IMBALANCE)
-        {
-            var desiredVerticalPush  = verticalMagnitude * FLIGHT_PUSH_VERTICAL_BIAS_SCALE * FLIGHT_PUSH_DOWNWARD_SCALE;
-            var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, downClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
-            var verticalPushDistance = MathF.Min(maxVerticalPush,                                       desiredVerticalPush);
-            verticalOffset = -Vector3.UnitY * verticalPushDistance;
-            verticalMode   = FlightPathVerticalMode.DownwardBias;
-        }
-        else if (downClearance < preferredFloorClearance && upClearance > FLIGHT_PUSH_MIN_DISTANCE)
-        {
-            var floorPressure        = preferredFloorClearance - downClearance;
-            var desiredVerticalPush  = floorPressure * FLIGHT_PUSH_FLOOR_AVOIDANCE_SCALE;
-            var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, upClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
-            var verticalPushDistance = MathF.Min(maxVerticalPush,                                       desiredVerticalPush);
-
+            var deficit             = preferredVertical - downClearance;
+            var maxVerticalPush     = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, upClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
+            var verticalPushDistance = MathF.Min(maxVerticalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
             if (verticalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
             {
                 verticalOffset = Vector3.UnitY * verticalPushDistance;
                 verticalMode   = FlightPathVerticalMode.FloorAvoidance;
             }
         }
-
-        var combinedOffset         = horizontalOffset + verticalOffset;
-        var adjustedResolved       = current;
-        var baseAdjustedResolved   = current;
-        var upwardPreferred        = verticalOffset.Y > FLIGHT_PUSH_MIN_DISTANCE;
-        var downwardPreferred      = verticalOffset.Y < -FLIGHT_PUSH_MIN_DISTANCE;
-        var selectedAdjustmentKind = FlightPathAdjustmentKind.None;
-
-        if (upwardPreferred)
+        else if (ceilingCramped)
         {
-            if (TryAcceptAdjustedWaypoint(previous, current, next, combinedOffset, out adjusted))
+            var deficit             = preferredVertical - upClearance;
+            var maxVerticalPush     = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, downClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
+            var verticalPushDistance = MathF.Min(maxVerticalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
+            if (verticalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
             {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.UpwardCombined;
+                verticalOffset = -Vector3.UnitY * verticalPushDistance;
+                verticalMode   = FlightPathVerticalMode.DownwardBias;
             }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.UpwardVerticalOnly;
-            }
-            else if (TryAcceptAdjustedWaypoint
-                         (previous, current, next, verticalOffset + (horizontalOffset * FLIGHT_PUSH_VERTICAL_FIRST_HORIZONTAL_BLEND), out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.UpwardVerticalBlend;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, horizontalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.UpwardHorizontalOnly;
-            }
-            else adjusted = current;
-        }
-        else if (tunnelDescentAssist)
-        {
-            var tunnelCombinedStrong = verticalOffset + (horizontalOffset * FLIGHT_TUNNEL_DESCENT_HORIZONTAL_BLEND_STRONG);
-            var tunnelCombinedMedium = verticalOffset + (horizontalOffset * FLIGHT_TUNNEL_DESCENT_HORIZONTAL_BLEND_MEDIUM);
-
-            if (TryAcceptAdjustedWaypoint(previous, current, next, tunnelCombinedStrong, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelCombinedStrong;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelVerticalOnly;
-            }
-            else if (TryAcceptDirectionalHorizontalCandidatesWithFixedVertical
-                         (previous, current, next, directionalHorizontalCandidates, maxHorizontalPush, verticalOffset, forward3, goalAdjacentRearBias, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelDirectionalFixedVertical;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, tunnelCombinedMedium, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelCombinedMedium;
-            }
-            else if (TryAcceptAdjustedWaypointAfterVerticalDrop(previous, current, next, horizontalOffset, verticalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelAfterVerticalDrop;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, combinedOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelCombined;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, horizontalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.TunnelHorizontalOnly;
-            }
-            else adjusted = current;
-        }
-        else if (downwardPreferred)
-        {
-            var downwardStrongOffset = verticalOffset + (horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_STRONG);
-            var downwardMediumOffset = verticalOffset + (horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_MEDIUM);
-
-            if (TryAcceptAdjustedWaypointWithFixedVertical(previous, current, next, horizontalOffset, verticalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardFixedVertical;
-            }
-            else if (TryAcceptDirectionalHorizontalCandidatesWithFixedVertical
-                         (previous, current, next, directionalHorizontalCandidates, maxHorizontalPush, verticalOffset, forward3, goalAdjacentRearBias, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardDirectionalFixedVertical;
-            }
-            else if (TryAcceptAdjustedWaypointAfterVerticalDrop(previous, current, next, horizontalOffset, verticalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardAfterVerticalDrop;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, downwardStrongOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardStrongBlend;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, combinedOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardCombined;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, downwardMediumOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardMediumBlend;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, horizontalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardHorizontalOnly;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.DownwardVerticalOnly;
-            }
-            else adjusted = current;
-        }
-        else
-        {
-            if (TryAcceptAdjustedWaypoint(previous, current, next, combinedOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.NeutralCombined;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, horizontalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.NeutralHorizontalOnly;
-            }
-            else if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset, out adjusted))
-            {
-                adjustedResolved       = adjusted;
-                selectedAdjustmentKind = FlightPathAdjustmentKind.NeutralVerticalOnly;
-            }
-            else adjusted = current;
         }
 
-        baseAdjustedResolved = adjustedResolved;
-        var finalRaiseApplied = false;
+        var combinedOffset   = horizontalOffset + verticalOffset;
+        var selectedKind     = FlightPathAdjustmentKind.None;
+        var accepted         = false;
 
-        if (!goalDescentApproach                                                                           &&
-            !constrainedTunnelDescent                                                                      &&
-            !(downhillTunnelTrend && next.p.Y + FLIGHT_PUSH_HEIGHT_MATCH_TOLERANCE < adjustedResolved.p.Y) &&
-            preferredMinHeight > adjustedResolved.p.Y + FLIGHT_PUSH_HEIGHT_STRICT_TOLERANCE                &&
-            TryRaiseWaypointToPreferredHeight(previous, adjustedResolved, next, preferredMinHeight, out var lifted))
+        if (TryAcceptScaledOffset(previous, current, next, combinedOffset, out adjusted))
         {
-            adjusted          = lifted;
-            adjustedResolved  = lifted;
-            finalRaiseApplied = true;
+            selectedKind = FlightPathAdjustmentKind.NeutralCombined;
+            accepted     = true;
         }
+        else if (TryAcceptScaledOffset(previous, current, next, horizontalOffset, out adjusted))
+        {
+            selectedKind = FlightPathAdjustmentKind.NeutralHorizontalOnly;
+            accepted     = true;
+        }
+        else if (TryAcceptScaledOffset(previous, current, next, verticalOffset, out adjusted))
+        {
+            selectedKind = FlightPathAdjustmentKind.NeutralVerticalOnly;
+            accepted     = true;
+        }
+        else adjusted = current;
 
-        var maxClearance = MathF.Max
+        var horizontalImbalance = horizontalTotalClearance > SCORE_EPSILON
+                                      ? new Vector2(horizontalBias.X, horizontalBias.Z).Length() / horizontalTotalClearance
+                                      : 0f;
+        var verticalTotal     = upClearance + downClearance;
+        var verticalImbalance = verticalTotal > SCORE_EPSILON ? MathF.Abs(upClearance - downClearance) / verticalTotal : 0f;
+        var maxClearance      = MathF.Max
         (
             MathF.Max(horizontalScanDistance, verticalScanDistance),
             MathF.Max
             (
-                MathF.Max(forwardClearance, backwardClearance),
+                MathF.Max(MathF.Max(forwardClearance, backwardClearance), MathF.Max(rightClearance, leftClearance)),
                 MathF.Max
                 (
-                    MathF.Max(leftClearance, rightClearance),
-                    MathF.Max
-                    (
-                        MathF.Max(forwardLeftClearance,                                     forwardRightClearance),
-                        MathF.Max(MathF.Max(backwardLeftClearance, backwardRightClearance), MathF.Max(upClearance, downClearance))
-                    )
+                    MathF.Max(MathF.Max(forwardRightClearance, forwardLeftClearance), MathF.Max(backwardRightClearance, backwardLeftClearance)),
+                    MathF.Max(upClearance, downClearance)
                 )
             )
         );
@@ -588,21 +325,22 @@ public partial class VoxelPathfind
             BuildFlightDebugSample(FlightPathDebugSampleKind.Up,            current.p, upSample),
             BuildFlightDebugSample(FlightPathDebugSampleKind.Down,          current.p, downSample)
         ];
-        samples.AddRange(sweepSamples);
+
+        var goalDescentApproach = next.voxel == goalVoxel && next.p.Y + preferredVertical < current.p.Y;
 
         debugInfo = new FlightPathWaypointDebug
         (
             pathIndex,
             current.voxel,
-            adjustedResolved.voxel,
+            adjusted.voxel,
             current.p,
-            adjustedResolved.p,
+            adjusted.p,
             current.p + horizontalOffset,
             current.p + verticalOffset,
             current.p + combinedOffset,
             horizontalOffset.Length(),
             MathF.Abs(verticalOffset.Y),
-            Vector3.Distance(current.p, adjustedResolved.p),
+            Vector3.Distance(current.p, adjusted.p),
             horizontalImbalance,
             verticalImbalance,
             forwardClearance,
@@ -617,21 +355,21 @@ public partial class VoxelPathfind
             downClearance,
             maxClearance,
             verticalMode,
-            selectedAdjustmentKind,
+            selectedKind,
             goalDescentApproach,
-            downhillTunnelTrend,
-            constrainedTunnelDescent,
-            tunnelDescentAssist,
-            shouldCatchUpHeight,
-            allowDownwardPush,
-            finalRaiseApplied,
-            heightMatchTarget,
-            preferredMinHeight,
-            baseAdjustedResolved.p,
+            DownhillTunnelTrend: false,
+            ConstrainedTunnelDescent: false,
+            TunnelDescentAssist: false,
+            HeightCatchUpRequested: false,
+            AllowDownwardPush: ceilingCramped,
+            FinalRaiseApplied: false,
+            HeightMatchTarget: current.p.Y,
+            PreferredMinHeight: current.p.Y,
+            BaseAdjustedPosition: adjusted.p,
             samples
         );
 
-        return debugInfo.Value.PushApplied;
+        return accepted && Vector3.DistanceSquared(current.p, adjusted.p) > SCORE_EPSILON * SCORE_EPSILON;
     }
 
     private FlightPushProbeResult MeasureDirectionalClearance
@@ -666,7 +404,7 @@ public partial class VoxelPathfind
         return new(clearance, endpoint);
     }
 
-    private bool TryAcceptAdjustedWaypoint
+    private bool TryAcceptScaledOffset
     (
         (ulong voxel, Vector3 p)     previous,
         (ulong voxel, Vector3 p)     current,
@@ -679,209 +417,19 @@ public partial class VoxelPathfind
         if (offset.LengthSquared() <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
             return false;
 
-        const float SCALE100 = 1.00f;
-        const float SCALE085 = 0.85f;
-        const float SCALE070 = 0.70f;
-        const float SCALE055 = 0.55f;
-        const float SCALE040 = 0.40f;
-        const float SCALE025 = 0.25f;
+        Span<float> scales = [1f, 0.85f, 0.70f, 0.55f, 0.40f, 0.25f];
 
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE100, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE085, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE070, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE055, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE040, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, offset, SCALE025, out adjusted))
-            return true;
-
-        adjusted = current;
-        return false;
-    }
-
-    private bool TryAcceptAdjustedWaypointAfterVerticalDrop
-    (
-        (ulong voxel, Vector3 p)     previous,
-        (ulong voxel, Vector3 p)     current,
-        (ulong voxel, Vector3 p)     next,
-        Vector3                      horizontalOffset,
-        Vector3                      verticalOffset,
-        out (ulong voxel, Vector3 p) adjusted
-    )
-    {
-        adjusted = current;
-        if (verticalOffset.LengthSquared()   <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE ||
-            horizontalOffset.LengthSquared() <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
-            return false;
-
-        if (!TryResolveEmptyWaypoint(current.p + verticalOffset, verticalOffset, out var lowered))
-            return false;
-        if (Vector3.DistanceSquared(lowered.p, current.p) <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
-            return false;
-
-        if (TryAcceptAdjustedWaypointFromBase(previous, lowered, next, horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_STRONG, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, lowered, next, horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_HIGH, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, lowered, next, horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_MEDIUM, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, lowered, next, horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_LIGHT, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, lowered, next, horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_MIN, out adjusted))
-            return true;
-
-        return false;
-    }
-
-    private bool TryAcceptAdjustedWaypointWithFixedVertical
-    (
-        (ulong voxel, Vector3 p)     previous,
-        (ulong voxel, Vector3 p)     current,
-        (ulong voxel, Vector3 p)     next,
-        Vector3                      horizontalOffset,
-        Vector3                      verticalOffset,
-        out (ulong voxel, Vector3 p) adjusted
-    )
-    {
-        adjusted = current;
-        if (verticalOffset.LengthSquared()   <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE ||
-            horizontalOffset.LengthSquared() <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
-            return false;
-
-        if (TryAcceptAdjustedWaypoint
-                (previous, current, next, verticalOffset + (horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_STRONG), 1.00f, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint
-                (previous, current, next, verticalOffset + (horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_HIGH), 1.00f, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint
-                (previous, current, next, verticalOffset + (horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_MEDIUM), 1.00f, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint
-                (previous, current, next, verticalOffset + (horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_LIGHT), 1.00f, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset + (horizontalOffset * FLIGHT_PUSH_DOWNWARD_HORIZONTAL_BLEND_MIN), 1.00f, out adjusted))
-            return true;
-
-        return false;
-    }
-
-    private bool TryAcceptDirectionalHorizontalCandidatesWithFixedVertical
-    (
-        (ulong voxel, Vector3 p)                     previous,
-        (ulong voxel, Vector3 p)                     current,
-        (ulong voxel, Vector3 p)                     next,
-        IReadOnlyList<FlightPushHorizontalCandidate> candidates,
-        float                                        maxHorizontalPush,
-        Vector3                                      verticalOffset,
-        Vector3                                      forward,
-        bool                                         goalAdjacentRearBias,
-        out (ulong voxel, Vector3 p)                 adjusted
-    )
-    {
-        adjusted = current;
-        if (verticalOffset.LengthSquared() <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE ||
-            maxHorizontalPush              <= FLIGHT_PUSH_MIN_DISTANCE                            ||
-            candidates.Count               == 0)
-            return false;
-
-        foreach (var candidate in candidates)
+        foreach (var t in scales)
         {
-            if (goalAdjacentRearBias &&
-                Vector3.Dot(candidate.Direction, forward) > FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT)
-                continue;
-
-            var horizontalDistance = MathF.Min(maxHorizontalPush, candidate.Clearance * FLIGHT_PUSH_DIRECTIONAL_CLEARANCE_FRACTION);
-            if (horizontalDistance <= FLIGHT_PUSH_MIN_DISTANCE)
-                continue;
-
-            if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset + (candidate.Direction * horizontalDistance), 1.00f, out adjusted))
-                return true;
-            if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset + (candidate.Direction * horizontalDistance * 0.85f), 1.00f, out adjusted))
-                return true;
-            if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset + (candidate.Direction * horizontalDistance * 0.70f), 1.00f, out adjusted))
-                return true;
-            if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset + (candidate.Direction * horizontalDistance * 0.55f), 1.00f, out adjusted))
-                return true;
-            if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset + (candidate.Direction * horizontalDistance * 0.40f), 1.00f, out adjusted))
-                return true;
-            if (TryAcceptAdjustedWaypoint(previous, current, next, verticalOffset + (candidate.Direction * horizontalDistance * 0.25f), 1.00f, out adjusted))
+            if (TryAcceptScaledOffset(previous, current, next, offset, t, out adjusted))
                 return true;
         }
 
-        return false;
-    }
-
-    private bool TryAcceptAdjustedWaypointFromBase
-    (
-        (ulong voxel, Vector3 p)     previous,
-        (ulong voxel, Vector3 p)     current,
-        (ulong voxel, Vector3 p)     next,
-        Vector3                      offset,
-        out (ulong voxel, Vector3 p) adjusted
-    )
-    {
-        adjusted = current;
-        if (offset.LengthSquared() <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
-            return false;
-
-        const float SCALE100 = 1.00f;
-        const float SCALE085 = 0.85f;
-        const float SCALE070 = 0.70f;
-        const float SCALE055 = 0.55f;
-        const float SCALE040 = 0.40f;
-        const float SCALE025 = 0.25f;
-
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE100, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE085, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE070, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE055, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE040, out adjusted))
-            return true;
-        if (TryAcceptAdjustedWaypointFromBase(previous, current, next, offset, SCALE025, out adjusted))
-            return true;
-
         adjusted = current;
         return false;
     }
 
-    private bool TryAcceptAdjustedWaypointFromBase
-    (
-        (ulong voxel, Vector3 p)     previous,
-        (ulong voxel, Vector3 p)     current,
-        (ulong voxel, Vector3 p)     next,
-        Vector3                      offset,
-        float                        scale,
-        out (ulong voxel, Vector3 p) adjusted
-    )
-    {
-        adjusted = current;
-        if (scale <= 0)
-            return false;
-
-        var candidatePoint = current.p + (offset * scale);
-        if (!TryResolveEmptyWaypoint(candidatePoint, offset, out var candidate))
-            return false;
-        if (Vector3.DistanceSquared(candidate.p, current.p) <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
-            return false;
-        if (!HasLineOfSight(previous, candidate.voxel, candidate.p))
-            return false;
-        if (!HasLineOfSight(candidate, next.voxel, next.p))
-            return false;
-
-        adjusted = candidate;
-        return true;
-    }
-
-    private bool TryAcceptAdjustedWaypoint
+    private bool TryAcceptScaledOffset
     (
         (ulong voxel, Vector3 p)     previous,
         (ulong voxel, Vector3 p)     current,
@@ -937,53 +485,6 @@ public partial class VoxelPathfind
         return true;
     }
 
-    private bool TryRaiseWaypointToPreferredHeight
-    (
-        (ulong voxel, Vector3 p)     previous,
-        (ulong voxel, Vector3 p)     current,
-        (ulong voxel, Vector3 p)     next,
-        float                        preferredMinHeight,
-        out (ulong voxel, Vector3 p) adjusted
-    )
-    {
-        adjusted = current;
-        var requiredLift = preferredMinHeight - current.p.Y;
-        if (requiredLift <= FLIGHT_PUSH_HEIGHT_STRICT_TOLERANCE)
-            return false;
-
-        var horizontal = new Vector3
-        (
-            current.p.X - previous.p.X,
-            0,
-            current.p.Z - previous.p.Z
-        );
-        var directionHint = horizontal.LengthSquared() > SCORE_EPSILON * SCORE_EPSILON
-                                ? (Vector3.Normalize(horizontal) * FLIGHT_PUSH_HEIGHT_RAISE_HORIZONTAL_BLEND) + Vector3.UnitY
-                                : Vector3.UnitY;
-        directionHint = !VoxelMathUtil.TryNormalize(directionHint, out var normalizedDirectionHint) ? Vector3.UnitY : normalizedDirectionHint;
-
-        var         attemptLift = requiredLift + FLIGHT_PUSH_HEIGHT_STRICT_BIAS;
-        Span<float> scales      = [1.0f, 0.85f, 0.70f, 0.55f];
-
-        for (var i = 0; i < 4; ++i)
-        {
-            var candidatePoint = current.p + (Vector3.UnitY * (attemptLift * scales[i]));
-            if (!TryResolveEmptyWaypoint(candidatePoint, directionHint, out var candidate))
-                continue;
-            if (candidate.p.Y + FLIGHT_PUSH_HEIGHT_STRICT_TOLERANCE < preferredMinHeight)
-                continue;
-            if (!HasLineOfSight(previous, candidate.voxel, candidate.p))
-                continue;
-            if (!HasLineOfSight(candidate, next.voxel, next.p))
-                continue;
-
-            adjusted = candidate;
-            return true;
-        }
-
-        return false;
-    }
-
     private Vector3 GetVoxelSize(ulong voxel)
     {
         var (min, max) = Volume.VoxelBounds(voxel, 0);
@@ -1024,135 +525,6 @@ public partial class VoxelPathfind
 
     private static FlightPathDebugSample BuildFlightDebugSample(FlightPathDebugSampleKind kind, Vector3 start, FlightPushProbeResult sample)
         => new(kind, start, sample.Endpoint, sample.Clearance);
-
-    private static List<FlightPushHorizontalCandidate> BuildDirectionalHorizontalCandidates
-    (
-        Vector3                              origin,
-        Vector3                              forward,
-        FlightPushProbeResult                forwardSample,
-        FlightPushProbeResult                backwardSample,
-        FlightPushProbeResult                rightSample,
-        FlightPushProbeResult                leftSample,
-        FlightPushProbeResult                forwardRightSample,
-        FlightPushProbeResult                forwardLeftSample,
-        FlightPushProbeResult                backwardRightSample,
-        FlightPushProbeResult                backwardLeftSample,
-        IReadOnlyList<FlightPathDebugSample> sweepSamples,
-        bool                                 goalAdjacentRearBias
-    )
-    {
-        List<FlightPushHorizontalCandidate> candidates = new(FLIGHT_PUSH_DIRECTIONAL_CANDIDATE_LIMIT);
-
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardSample,       goalAdjacentRearBias);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardSample,      goalAdjacentRearBias);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, rightSample,         goalAdjacentRearBias);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, leftSample,          goalAdjacentRearBias);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardRightSample,  goalAdjacentRearBias);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, forwardLeftSample,   goalAdjacentRearBias);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardRightSample, goalAdjacentRearBias);
-        TryAddDirectionalHorizontalCandidate(candidates, origin, forward, backwardLeftSample,  goalAdjacentRearBias);
-
-        foreach (var sample in sweepSamples)
-            TryAddDirectionalHorizontalCandidate(candidates, origin, forward, new(sample.Clearance, sample.Endpoint), goalAdjacentRearBias);
-
-        candidates.Sort(static (left, right) => right.Score.CompareTo(left.Score));
-        if (candidates.Count > FLIGHT_PUSH_DIRECTIONAL_CANDIDATE_LIMIT)
-            candidates.RemoveRange(FLIGHT_PUSH_DIRECTIONAL_CANDIDATE_LIMIT, candidates.Count - FLIGHT_PUSH_DIRECTIONAL_CANDIDATE_LIMIT);
-
-        return candidates;
-    }
-
-    private static void TryAddDirectionalHorizontalCandidate
-    (
-        List<FlightPushHorizontalCandidate> candidates,
-        Vector3                             origin,
-        Vector3                             forward,
-        FlightPushProbeResult               sample,
-        bool                                goalAdjacentRearBias
-    )
-    {
-        if (sample.Clearance <= FLIGHT_PUSH_MIN_DISTANCE)
-            return;
-
-        var delta = sample.Endpoint - origin;
-        delta.Y = 0;
-        if (!VoxelMathUtil.TryNormalize(delta, out var direction))
-            return;
-
-        var forwardDot = Vector3.Dot(direction, forward);
-        var scoreScale = goalAdjacentRearBias
-                             ? MathF.Max
-                             (
-                                 FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_MIN_SCALE,
-                                 1f -
-                                 (MathF.Max(0f, forwardDot) * FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_FORWARD_PENALTY) +
-                                 (MathF.Max(0f, -forwardDot) * FLIGHT_PUSH_GOAL_ADJACENT_DIRECTIONAL_BACKWARD_BONUS)
-                             )
-                             : 1f + (MathF.Max(0f, forwardDot) * FLIGHT_PUSH_DIRECTIONAL_FORWARD_BONUS);
-        var score = sample.Clearance * scoreScale;
-
-        for (var i = 0; i < candidates.Count; ++i)
-        {
-            if (Vector3.Dot(candidates[i].Direction, direction) < FLIGHT_PUSH_DIRECTIONAL_DUPLICATE_DOT)
-                continue;
-
-            if (score > candidates[i].Score)
-                candidates[i] = new(direction, sample.Clearance, score);
-            return;
-        }
-
-        candidates.Add(new(direction, sample.Clearance, score));
-    }
-
-    private List<FlightPathDebugSample> BuildHorizontalSweepSamples
-    (
-        (ulong voxel, Vector3 p) origin,
-        Vector3                  forward,
-        Vector3                  right,
-        float                    maxDistance,
-        float                    stepDistance,
-        bool                     goalAdjacentRearBias,
-        ref Vector3              horizontalBias,
-        ref float                horizontalTotalClearance,
-        ref float                maxHorizontalClearance
-    )
-    {
-        List<FlightPathDebugSample> samples         = new(FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT);
-        const float                 STEP_ANGLE      = 2f * MathF.PI                             / FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT;
-        const int                   PRIMARY_DIVISOR = FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT / 8;
-
-        for (var i = 0; i < FLIGHT_PUSH_HORIZONTAL_SWEEP_SAMPLE_COUNT; ++i)
-        {
-            if (i % PRIMARY_DIVISOR == 0)
-                continue;
-
-            var angle     = i * STEP_ANGLE;
-            var direction = (forward * MathF.Cos(angle)) + (right * MathF.Sin(angle));
-            if (!VoxelMathUtil.TryNormalize(direction, out direction))
-                continue;
-
-            var sample = MeasureDirectionalClearance(origin, direction, maxDistance, stepDistance);
-            maxHorizontalClearance = MathF.Max(maxHorizontalClearance, sample.Clearance);
-
-            var forwardDot = Vector3.Dot(direction, forward);
-            var weight     = FLIGHT_PUSH_HORIZONTAL_SWEEP_WEIGHT;
-
-            if (goalAdjacentRearBias)
-            {
-                if (forwardDot > FLIGHT_PUSH_GOAL_ADJACENT_FORWARD_ALLOWANCE_DOT)
-                    weight *= MathF.Max(FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_FORWARD_MIN_SCALE, 1f - (forwardDot * FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_FORWARD_PENALTY));
-                else
-                    weight += MathF.Max(0f, -forwardDot) * FLIGHT_PUSH_GOAL_ADJACENT_SWEEP_BACKWARD_BONUS;
-            }
-            else if (forwardDot > 0f)
-                weight += forwardDot * FLIGHT_PUSH_HORIZONTAL_SWEEP_FORWARD_BONUS;
-
-            AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, direction, sample.Clearance, weight);
-            samples.Add(BuildFlightDebugSample(FlightPathDebugSampleKind.Sweep, origin.p, sample));
-        }
-
-        return samples;
-    }
 
     private static FlightPathDebugPayload? BuildFlightPathDebugPayload
     (
@@ -1268,25 +640,6 @@ public partial class VoxelPathfind
             currentIndex = nextIndex;
         }
     }
-
-    private bool IsGoalDescentApproach
-    (
-        (ulong voxel, Vector3 p) previous,
-        (ulong voxel, Vector3 p) current,
-        (ulong voxel, Vector3 p) next,
-        float                    leafVerticalSize
-    )
-    {
-        if (next.voxel != goalVoxel)
-            return false;
-
-        var tolerance = MathF.Max(leafVerticalSize * FLIGHT_GOAL_DESCENT_HEIGHT_TOLERANCE_LEAF_SCALE, FLIGHT_GOAL_DESCENT_HEIGHT_TOLERANCE_MIN);
-        return next.p.Y + tolerance < current.p.Y &&
-               next.p.Y + tolerance < previous.p.Y;
-    }
-
-    private static float ResolveFlightHeightCatchupHeadroom(float leafVerticalSize)
-        => MathF.Max(leafVerticalSize * FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_LEAF_SCALE, FLIGHT_PUSH_HEIGHT_CATCHUP_HEADROOM_MIN);
 
     private bool NeedsFlightDescentSmoothing(Vector3 from, Vector3 to)
     {
