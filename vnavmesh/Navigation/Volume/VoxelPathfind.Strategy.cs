@@ -288,7 +288,7 @@ public partial class VoxelPathfind
         {
             case { Count: > 1 }:
             {
-                BuildL1Corridor(l1Path, 0);
+                BuildL1Corridor(l1Path, 4);
                 var constrainedPath = RunSearchAttempt
                 (
                     fromVoxel,

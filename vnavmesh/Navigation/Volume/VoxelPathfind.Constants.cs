@@ -56,13 +56,13 @@ public partial class VoxelPathfind
 
     private const float  SCORE_EPSILON                                                   = 0.00001f;
     private const int    DEFAULT_MAX_SEARCH_STEPS                                        = 1_0000_0000;
-    private const int    RAYCAST_SEARCH_STEP_BUDGET                                      = 200000;
+    private const int    RAYCAST_SEARCH_STEP_BUDGET                                      = 400000;
     private const int    GUIDED_CORRIDOR_SEARCH_STEP_BUDGET                              = 2_000_000;
     private const int    GUIDED_CORRIDOR_EARLY_ABORT_MIN_VISITED                         = 100_000;
     private const int    GUIDED_CORRIDOR_EARLY_ABORT_HARD_VISITED_THRESHOLD              = 220_000;
     private const int    GUIDED_CORRIDOR_EARLY_ABORT_STALL_WINDOW                        = 120_000;
-    private const int    GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_HARD_VISITED_THRESHOLD      = 120_000;
-    private const int    GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_STALL_WINDOW                = 60_000;
+    private const int    GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_HARD_VISITED_THRESHOLD      = 220_000;
+    private const int    GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_STALL_WINDOW                = 120_000;
     private const int    MAX_ANCESTOR_LOOK_BACK                                          = 6;
     private const int    RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD                            = 12;
     private const float  MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS                       = 96f;
@@ -93,7 +93,6 @@ public partial class VoxelPathfind
     private const float  LONG_RANGE_LATERAL_DESCENT_BELOW_GOAL_HEURISTIC_WEIGHT          = 0.55f;
     private const float  LONG_RANGE_LATERAL_ASCENT_BELOW_GOAL_HEURISTIC_WEIGHT           = 1.35f;
     private const float  LONG_RANGE_LATERAL_ASCENT_ABOVE_GOAL_HEURISTIC_WEIGHT           = 0.65f;
-    private const float  LONG_RANGE_LATERAL_CLIMB_STEP_PENALTY                           = 1.25f;
     private const float  LONG_RANGE_LATERAL_REVERSE_STEP_PENALTY                         = 0.80f;
     private const float  LONG_RANGE_LATERAL_LATERAL_STALL_PENALTY                        = 0.48f;
     private const float  LONG_RANGE_LATERAL_FORWARD_PROGRESS_CREDIT                      = 0.70f;
@@ -134,10 +133,10 @@ public partial class VoxelPathfind
     private const float  GUIDED_CORRIDOR_HORIZONTAL_RADIUS_MAX_DISTANCE_SCALE            = 0.35f;
     private const float  GUIDED_CORRIDOR_HORIZONTAL_RADIUS_MIN_LEAF_CELLS                = 6.00f;
     private const float  GUIDED_CORRIDOR_HORIZONTAL_RADIUS_MAX_LEAF_CELLS                = 20.00f;
-    private const float  GUIDED_CORRIDOR_UPWARD_ALLOWANCE_DISTANCE_SCALE                 = 0.35f;
-    private const float  GUIDED_CORRIDOR_DOWNWARD_ALLOWANCE_DISTANCE_SCALE               = 0.15f;
-    private const float  GUIDED_CORRIDOR_UPWARD_ALLOWANCE_MIN_LEAF_CELLS                 = 8.00f;
-    private const float  GUIDED_CORRIDOR_DOWNWARD_ALLOWANCE_MIN_LEAF_CELLS               = 4.00f;
+    private const float  GUIDED_CORRIDOR_UPWARD_ALLOWANCE_DISTANCE_SCALE                 = 0.40f;
+    private const float  GUIDED_CORRIDOR_DOWNWARD_ALLOWANCE_DISTANCE_SCALE               = 0.40f;
+    private const float  GUIDED_CORRIDOR_UPWARD_ALLOWANCE_MIN_LEAF_CELLS                 = 12.00f;
+    private const float  GUIDED_CORRIDOR_DOWNWARD_ALLOWANCE_MIN_LEAF_CELLS               = 12.00f;
     private const float  GUIDED_CORRIDOR_ENDPOINT_SLACK_RADIUS_SCALE                     = 0.65f;
     private const float  GUIDED_CORRIDOR_ENDPOINT_SLACK_MIN_LEAF_CELLS                   = 3.00f;
     private const float  GUIDED_CORRIDOR_HARD_CUTOFF_MULTIPLIER                          = 3.0f;

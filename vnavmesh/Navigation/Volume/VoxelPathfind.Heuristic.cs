@@ -625,7 +625,6 @@ public partial class VoxelPathfind
 
         if (bias.PreferDescending)
         {
-            var climbStep            = MathF.Max(step.Y,                                  0f);
             var descentStep          = MathF.Max(-step.Y,                                 0f);
             var parentAboveGoal      = MathF.Max(parentPosition.Y - goal.Y,               0f);
             var destinationAboveGoal = MathF.Max(destination.Y    - goal.Y,               0f);
@@ -633,8 +632,6 @@ public partial class VoxelPathfind
             var progressRoom = (MathF.Max(forwardStep, 0f) * LONG_RANGE_LATERAL_FORWARD_PROGRESS_CREDIT) +
                                (descentStep                * LONG_RANGE_LATERAL_DESCENT_PROGRESS_CREDIT);
 
-            if (climbStep > SCORE_EPSILON)
-                penalty += climbStep * LONG_RANGE_LATERAL_CLIMB_STEP_PENALTY * bias.HeightPriority;
             if (lateralStep > progressRoom + SCORE_EPSILON)
                 penalty += (lateralStep - progressRoom) * LONG_RANGE_LATERAL_LATERAL_STALL_PENALTY * bias.DirectionalPenaltyScale;
 
