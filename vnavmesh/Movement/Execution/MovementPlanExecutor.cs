@@ -159,7 +159,14 @@ public sealed class MovementPlanExecutor : IDisposable
         EnterCurrentSegment(previousPosition);
     }
 
-    public void Move(List<Vector3> waypoints, bool ignoreDeltaY, float destTolerance = 0, Vector3? goalPosition = null, float? tolerance = null)
+    public void Move
+    (
+        List<Vector3> waypoints,
+        bool          ignoreDeltaY,
+        float         destTolerance = 0,
+        Vector3?      goalPosition  = null,
+        float?        tolerance     = null
+    )
     {
         if (waypoints.Count == 0)
         {
@@ -175,8 +182,6 @@ public sealed class MovementPlanExecutor : IDisposable
                                       ? FlightWaypointNormalizer.NormalizeForTakeoff(waypoints, Service.ObjectTable.LocalPlayer?.Position ?? waypoints[0])
                                       : waypoints.ToList();
 
-        Service.Log.Debug("收到执行器原始路径输入：该入口会绕过算路层与后处理层");
-
         if (requestedMode == MovementMode.Flight && !IsAirborne)
         {
             segments.Add
@@ -185,8 +190,6 @@ public sealed class MovementPlanExecutor : IDisposable
                 {
                     Kind                = MovementSegmentKind.Takeoff,
                     MovementMode        = MovementMode.Flight,
-                    GeometryOwnership   = PathGeometryOwnership.None,
-                    ReachabilitySource  = PathReachabilitySource.Volume,
                     CompletionTolerance = 0
                 }
             );
@@ -201,8 +204,6 @@ public sealed class MovementPlanExecutor : IDisposable
                     MovementMode        = MovementMode.Flight,
                     CompletionTolerance = 0,
                     StartPosition       = Service.ObjectTable.LocalPlayer?.Position ?? normalizedWaypoints[0],
-                    GeometryOwnership   = PathGeometryOwnership.ExternalInput,
-                    ReachabilitySource  = PathReachabilitySource.ExternalInput,
                     Waypoints           = normalizedWaypoints
                 }
                 : new MovementSegment
@@ -211,8 +212,6 @@ public sealed class MovementPlanExecutor : IDisposable
                     MovementMode        = MovementMode.Ground,
                     CompletionTolerance = 0,
                     StartPosition       = Service.ObjectTable.LocalPlayer?.Position ?? normalizedWaypoints[0],
-                    GeometryOwnership   = PathGeometryOwnership.ExternalInput,
-                    ReachabilitySource  = PathReachabilitySource.ExternalInput,
                     Waypoints           = normalizedWaypoints
                 }
         );

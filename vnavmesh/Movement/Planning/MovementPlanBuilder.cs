@@ -18,8 +18,6 @@ internal sealed class MovementPlanBuilder
                 {
                     Kind                = MovementSegmentKind.Takeoff,
                     MovementMode        = MovementMode.Flight,
-                    GeometryOwnership   = PathGeometryOwnership.None,
-                    ReachabilitySource  = PathReachabilitySource.Volume,
                     CompletionTolerance = 0
                 }
             );
@@ -60,8 +58,6 @@ internal sealed class MovementPlanBuilder
             AllowVerticalControl = segment.AllowVerticalControl,
             StartPosition        = segment.StartPosition,
             CompletionTolerance  = segment.CompletionTolerance,
-            GeometryOwnership    = segment.GeometryOwnership,
-            ReachabilitySource   = segment.ReachabilitySource,
             Waypoints            = normalizedWaypoints,
             GroundCorridor       = segment.GroundCorridor
         };
@@ -73,8 +69,6 @@ internal sealed class MovementPlanBuilder
             Kind                = segment.SegmentKind,
             MovementMode        = segment.MovementMode,
             StartPosition       = segment.StartPosition,
-            GeometryOwnership   = segment.GeometryOwnership,
-            ReachabilitySource  = segment.ReachabilitySource,
             CompletionTolerance = segment.CompletionTolerance,
             Waypoints           = [.. segment.Waypoints],
             GroundCorridor      = segment.GroundCorridor

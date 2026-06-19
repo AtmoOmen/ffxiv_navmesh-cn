@@ -250,7 +250,6 @@ internal sealed class NavmeshGroundQuery
             MovementMode           = MovementMode.Ground,
             SegmentKind            = MovementSegmentKind.GroundTraverse,
             AllowVerticalControl   = false,
-            ReachabilitySource     = PathReachabilitySource.Mesh,
             GeometryKind           = PlannerSegmentGeometryKind.MeshCorridor,
             TraversalStartPosition = traversalStartPosition,
             StartPosition          = projectedStart,

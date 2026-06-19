@@ -77,8 +77,6 @@ internal sealed class PathPostprocessor
             AllowVerticalControl = segment.AllowVerticalControl,
             StartPosition        = segment.StartPosition,
             CompletionTolerance  = 0,
-            GeometryOwnership    = PathGeometryOwnership.Postprocessor,
-            ReachabilitySource   = segment.ReachabilitySource,
             Waypoints            = waypoints,
             GroundCorridor       = groundCorridor,
             FlightPathDebug      = flightPathDebug
@@ -106,8 +104,6 @@ internal sealed class PathPostprocessor
             AllowVerticalControl = segment.AllowVerticalControl,
             StartPosition        = segment.StartPosition,
             CompletionTolerance  = 0,
-            GeometryOwnership    = PathGeometryOwnership.Postprocessor,
-            ReachabilitySource   = segment.ReachabilitySource,
             Waypoints            = waypoints,
             GroundCorridor       = groundCorridor,
             FlightPathDebug      = flightPathDebug
