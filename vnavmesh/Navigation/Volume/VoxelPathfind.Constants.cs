@@ -81,7 +81,6 @@ public partial class VoxelPathfind
     private const int    LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS            = 18;
     private const int    LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH                       = 1;
     private const int    LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET                            = 1_500_000;
-    private const float  LONG_RANGE_LATERAL_FORWARD_SQRT_WIDTH_SCALE                     = 0.90f;
     private const float  LONG_RANGE_LATERAL_DESCENT_ENABLE_MIN_DROP_LEAF_CELLS           = 2f;
     private const float  LONG_RANGE_LATERAL_DESCENT_PRIORITY_DROP_LEAF_CELLS             = 18f;
     private const float  LONG_RANGE_LATERAL_DESCENT_PRIORITY_MAX_BONUS                   = 1.40f;
@@ -189,7 +188,7 @@ public partial class VoxelPathfind
     private const float  FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE               = 0.85f;
     private const float  FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE                = 1.60f;
     private const float  FLIGHT_PUSH_RELIEF_SCALE                                        = 0.90f;
-    private const int    REFINE_RELAX_ITERATION_LIMIT                                    = 3;
+    private const int    REFINE_RELAX_ITERATION_LIMIT                                    = 6;
     private const float  FLIGHT_DESCENT_SMOOTHING_MAX_SLOPE                              = 0.90f;
     private const float  FLIGHT_DESCENT_SMOOTHING_MIN_DROP_LEAF_SCALE                    = 2.50f;
     private const float  FLIGHT_DESCENT_SMOOTHING_MIN_DROP_MIN                           = 1.00f;
