@@ -168,7 +168,7 @@ public partial class VoxelPathfind
         ref var current  = ref nodeSpan[currentIndex];
         if (current.HScore > goalVisibilityProbeDistance)
             return false;
-        if (!TryLineOfSight(currentIndex, goalVoxel, goalPos, VolumePathCandidateKind.GoalAligned))
+        if (!TryLineOfSight(currentIndex, goalVoxel, goalPos))
             return false;
 
         var goalScore = current.GScore + Vector3.Distance(current.Position, goalPos);

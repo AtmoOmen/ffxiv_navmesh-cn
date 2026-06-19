@@ -164,15 +164,6 @@ public partial class VoxelPathfind
     private const byte   SEARCH_WALL_POS_Y                                               = 1 << 3;
     private const byte   SEARCH_WALL_NEG_Z                                               = 1 << 4;
     private const byte   SEARCH_WALL_POS_Z                                               = 1 << 5;
-    private const float  SEARCH_PATH_GOAL_BLEND                                          = 0.50f;
-    private const float  SEARCH_PATH_CENTER_BIAS                                         = 0.35f;
-    private const float  SEARCH_PATH_WALL_INSET_RATIO                                    = 0.18f;
-    private const float  SEARCH_PATH_WALL_INSET_MIN                                      = 0.03f;
-    private const float  SEARCH_PATH_WALL_INSET_MAX_FRACTION                             = 0.40f;
-    private const float  SEARCH_PATH_WALL_PREFERRED_CLEARANCE_RATIO                      = 0.28f;
-    private const float  SEARCH_PATH_WALL_PREFERRED_CLEARANCE_MIN                        = 0.05f;
-    private const float  SEARCH_PATH_WALL_PREFERRED_CLEARANCE_MAX_FRACTION               = 0.45f;
-    private const float  SEARCH_PATH_WALL_PENALTY_SCALE                                  = 0.22f;
     private const float  FLIGHT_PUSH_SAMPLE_STEP_SCALE                                   = 0.75f;
     private const float  FLIGHT_PUSH_SAMPLE_STEP_MAX_SCALE                               = 1.50f;
     private const float  FLIGHT_PUSH_SCAN_DISTANCE_SCALE                                 = 6.00f;

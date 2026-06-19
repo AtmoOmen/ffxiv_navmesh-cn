@@ -38,7 +38,7 @@ public partial class VoxelPathfind
         if (coarsePath.ReachedGoal)
             guidedCorridorRadius = Math.Min(guidedCorridorRadius * 2, LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS * 2);
         var proxyGoalVoxel       = coarsePath.ReachedGoal ? toVoxel : coarsePath.OrderedPath[^1];
-        var proxyGoalPos         = ResolveSearchCandidatePosition(proxyGoalVoxel, ResolveVoxelCenter(proxyGoalVoxel));
+        var proxyGoalPos         = ResolveVoxelCenter(proxyGoalVoxel);
 
         // 粗搜索未达终点时，尝试把 L1-only 代理目标解析为真实 L2 体素
         if (!coarsePath.ReachedGoal)

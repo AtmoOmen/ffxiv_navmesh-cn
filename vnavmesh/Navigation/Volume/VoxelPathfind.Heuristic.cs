@@ -403,89 +403,10 @@ public partial class VoxelPathfind
         return normalizedOverflow * normalizedOverflow * GUIDED_CORRIDOR_OVERFLOW_PENALTY_SCALE;
     }
 
-    private Vector3 ResolveSearchCandidatePosition(ulong voxel, Vector3 point)
-    {
-        point = Volume.ClampPointToVoxel(voxel, point);
-        return ApplyWallAwareInset(voxel, point);
-    }
-
     private Vector3 ResolveVoxelCenter(ulong voxel)
     {
         var (min, max) = Volume.VoxelBounds(voxel, 0);
         return (min + max) * 0.5f;
-    }
-
-    private Vector3 ApplyWallAwareInset(ulong voxel, Vector3 point)
-    {
-        var wallMask = GetVoxelWallMask(voxel);
-        if (wallMask == 0)
-            return point;
-
-        var (min, max) = Volume.VoxelBounds(voxel, 0);
-        var inset = ResolveSearchVoxelInset(voxel);
-
-        if ((wallMask & SEARCH_WALL_NEG_X) != 0)
-            point.X = MathF.Max(point.X, min.X + inset);
-        if ((wallMask & SEARCH_WALL_POS_X) != 0)
-            point.X = MathF.Min(point.X, max.X - inset);
-        if ((wallMask & SEARCH_WALL_NEG_Y) != 0)
-            point.Y = MathF.Max(point.Y, min.Y + inset);
-        if ((wallMask & SEARCH_WALL_POS_Y) != 0)
-            point.Y = MathF.Min(point.Y, max.Y - inset);
-        if ((wallMask & SEARCH_WALL_NEG_Z) != 0)
-            point.Z = MathF.Max(point.Z, min.Z + inset);
-        if ((wallMask & SEARCH_WALL_POS_Z) != 0)
-            point.Z = MathF.Min(point.Z, max.Z - inset);
-
-        return point;
-    }
-
-    private float CalculateWallProximityPenalty(ulong voxel, Vector3 position)
-    {
-        if (voxel == goalVoxel)
-            return 0f;
-
-        var wallMask = GetVoxelWallMask(voxel);
-        if (wallMask == 0)
-            return 0f;
-
-        var (min, max) = Volume.VoxelBounds(voxel, 0);
-        var voxelSize = max - min;
-        var minExtent = MathF.Min(voxelSize.X, MathF.Min(voxelSize.Y, voxelSize.Z));
-        var preferredClearance = Math.Clamp
-        (
-            minExtent * SEARCH_PATH_WALL_PREFERRED_CLEARANCE_RATIO,
-            SEARCH_PATH_WALL_PREFERRED_CLEARANCE_MIN,
-            minExtent * SEARCH_PATH_WALL_PREFERRED_CLEARANCE_MAX_FRACTION
-        );
-        if (preferredClearance <= SCORE_EPSILON)
-            return 0f;
-
-        var pressure = 0f;
-        if ((wallMask & SEARCH_WALL_NEG_X) != 0)
-            pressure += VoxelMathUtil.WallPressure(position.X - min.X, preferredClearance);
-        if ((wallMask & SEARCH_WALL_POS_X) != 0)
-            pressure += VoxelMathUtil.WallPressure(max.X - position.X, preferredClearance);
-        if ((wallMask & SEARCH_WALL_NEG_Y) != 0)
-            pressure += VoxelMathUtil.WallPressure(position.Y - min.Y, preferredClearance);
-        if ((wallMask & SEARCH_WALL_POS_Y) != 0)
-            pressure += VoxelMathUtil.WallPressure(max.Y - position.Y, preferredClearance);
-        if ((wallMask & SEARCH_WALL_NEG_Z) != 0)
-            pressure += VoxelMathUtil.WallPressure(position.Z - min.Z, preferredClearance);
-        if ((wallMask & SEARCH_WALL_POS_Z) != 0)
-            pressure += VoxelMathUtil.WallPressure(max.Z - position.Z, preferredClearance);
-
-        return pressure * minExtent * SEARCH_PATH_WALL_PENALTY_SCALE;
-    }
-
-    private float ResolveSearchVoxelInset(ulong voxel)
-    {
-        var voxelSize   = GetVoxelSize(voxel);
-        var minExtent   = MathF.Min(voxelSize.X, MathF.Min(voxelSize.Y, voxelSize.Z));
-        var scaledInset = minExtent * SEARCH_PATH_WALL_INSET_RATIO;
-        var maxInset    = minExtent * SEARCH_PATH_WALL_INSET_MAX_FRACTION;
-        var minInset    = MathF.Min(SEARCH_PATH_WALL_INSET_MIN, maxInset);
-        return Math.Clamp(scaledInset, minInset, maxInset);
     }
 
     private byte GetVoxelWallMask(ulong voxel)
