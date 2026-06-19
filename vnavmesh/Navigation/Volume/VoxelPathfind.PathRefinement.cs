@@ -43,7 +43,6 @@ public partial class VoxelPathfind
         var debugInfos = new FlightPathWaypointDebug?[refined.Count];
         PushInteriorWaypoints(refined, debugInfos, cancel);
         var finalPath = SimplifyPath(refined, cancel);
-        finalPath     = MergeCollinearSegments(finalPath, cancel);
         finalPath     = RestoreSteepDescentWaypoints(refined, finalPath);
         LastPathDebug = BuildFlightPathDebugPayload(refined, debugInfos, finalPath, pendingLongRangeProxyDebug);
         return finalPath;
