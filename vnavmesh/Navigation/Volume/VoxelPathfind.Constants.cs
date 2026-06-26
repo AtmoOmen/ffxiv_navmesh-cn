@@ -79,7 +79,7 @@ public partial class VoxelPathfind
     private const int    LONG_RANGE_L1_GOAL_CAPTURE_BASE_STEP_BUDGET                     = 300_000;
     private const int    LONG_RANGE_L1_GOAL_CAPTURE_MAX_STEP_BUDGET                      = 1_200_000;
     private const int    LONG_RANGE_L1_GUIDED_FULL_SEARCH_BASE_CORRIDOR_RADIUS           = 6;
-    private const int    LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS            = 18;
+    private const int    LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS            = 12;
     private const int    LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH                       = 1;
     private const int    LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET                            = 1_500_000;
     private const float  LONG_RANGE_LATERAL_DESCENT_ENABLE_MIN_DROP_LEAF_CELLS           = 2f;

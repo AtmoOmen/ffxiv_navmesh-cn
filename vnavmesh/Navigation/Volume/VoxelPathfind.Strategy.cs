@@ -36,7 +36,7 @@ public partial class VoxelPathfind
 
         var guidedCorridorRadius = ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance);
         if (coarsePath.ReachedGoal)
-            guidedCorridorRadius = Math.Min(guidedCorridorRadius * 2, LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS * 2);
+            guidedCorridorRadius = Math.Min(guidedCorridorRadius * 2, LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS);
         var proxyGoalVoxel       = coarsePath.ReachedGoal ? toVoxel : coarsePath.OrderedPath[^1];
         var proxyGoalPos         = ResolveVoxelCenter(proxyGoalVoxel);
 
@@ -51,7 +51,7 @@ public partial class VoxelPathfind
         BuildL1Corridor(coarsePath.PathSet, guidedCorridorRadius);
         ComputeL1DistanceFieldFromCoarsePath(coarsePath.OrderedPath, 0f);
 
-        var proxySearchBudget = coarsePath.ReachedGoal ? LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET * 2 : LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET;
+        var proxySearchBudget = LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET;
         var proxyPath = RunSearchAttempt
         (
             fromVoxel,
