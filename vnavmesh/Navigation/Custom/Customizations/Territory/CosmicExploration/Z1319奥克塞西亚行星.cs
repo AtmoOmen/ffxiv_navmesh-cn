@@ -12,7 +12,7 @@ namespace vnavmesh.Navigation.Custom.Customizations.Territory.CosmicExploration;
 [CustomizationTerritory(1319)]
 internal class Z1319奥克塞西亚行星 : NavmeshCustomization
 {
-    public override int Version => 2;
+    public override int Version => 3;
 
     public override void CustomizeScene(SceneExtractor scene)
     {
@@ -79,6 +79,25 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
                 Min = new(543.34247f, 240.5433f, 464.7541f),
                 Max = new(568.1495f, 248.57132f, 475.38806f)
             },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
+
+        scene.InsertCylinderCollider
+        (
+            new Vector3(1, 10, 1),
+            new(-572.3f, 200, -480),
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
+        scene.InsertCylinderCollider
+        (
+            new Vector3(3, 10, 3),
+            new(-556.5f, 200, -498.4f),
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
+        scene.InsertCylinderCollider
+        (
+            new Vector3(3, 10, 3),
+            new(-559, 200, -448.5f),
             SceneExtractor.PrimitiveFlags.ForceUnwalkable
         );
     }
