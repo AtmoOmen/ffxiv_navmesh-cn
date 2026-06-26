@@ -67,6 +67,11 @@ internal class PluginIPC : IDisposable
         );
         RegisterFunc
         (
+            "Query.Mesh.IsPointOnMesh",
+            (Vector3 p, float halfExtentY, bool allowUnreachable) => navmeshManager.Query?.IsPointOnMesh(p, halfExtentY, allowUnreachable) == true
+        );
+        RegisterFunc
+        (
             "Query.Mesh.NearestPointReachable",
             (Vector3 p, float halfExtentXZ, float halfExtentY) => navmeshManager.Query?.FindNearestPointOnMesh(p, halfExtentXZ, halfExtentY, false)
         );

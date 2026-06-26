@@ -65,8 +65,8 @@ public class NavmeshQuery
 
     public NavmeshQuery(Navmesh navmesh, PluginConfig config)
     {
-        this.NavmeshData = navmesh;
-        this.ConfigData  = config;
+        NavmeshData      = navmesh;
+        ConfigData       = config;
         GroundAreaFilter = new(navmesh);
         postprocessor    = new(() => MeshQuery, () => GroundAreaFilter);
         GroundQuery      = new(this);
@@ -107,9 +107,23 @@ public class NavmeshQuery
     internal (Vector3 Min, Vector3 Max) GetMeshTileBounds(int tileX, int tileZ)
     {
         ref readonly var param = ref MeshQuery.GetAttachedNavMesh().GetParams();
-        var              min   = new Vector3(param.orig.X + tileX * param.tileWidth, param.orig.Y, param.orig.Z + tileZ * param.tileHeight);
-        var              max   = new Vector3(min.X        + param.tileWidth,         min.Y,        min.Z        + param.tileHeight);
+        var              min   = new Vector3(param.orig.X + (tileX * param.tileWidth), param.orig.Y, param.orig.Z + (tileZ * param.tileHeight));
+        var              max   = new Vector3(min.X        + param.tileWidth,           min.Y,        min.Z        + param.tileHeight);
         return (min, max);
+    }
+    
+    public bool IsPointOnMesh(Vector3 p, float halfExtentY = 5, bool allowUnreachable = true)
+    {
+        MeshQuery.FindNearestPoly
+        (
+            p.SystemToRecast(),
+            new(0, halfExtentY, 0),
+            allowUnreachable ? AllTraversableFilter : GroundAreaFilter,
+            out _,
+            out _,
+            out var isOverPoly
+        );
+        return isOverPoly;
     }
 
     internal long FindNearestMeshPoly(Vector3 p, float halfExtentXZ = 5, float halfExtentY = 5, bool allowUnreachable = true)
@@ -173,7 +187,7 @@ public class NavmeshQuery
         if (maxRadius <= 0)
             return null;
 
-        var filter   = allowUnreachable ? this.AllTraversableFilter : GroundAreaFilter;
+        var filter   = allowUnreachable ? AllTraversableFilter : GroundAreaFilter;
         var startRef = FindNearestMeshPoly(center, 8, 8, allowUnreachable);
         if (startRef == 0)
             return null;
@@ -189,20 +203,19 @@ public class NavmeshQuery
         if (floor is { } strictFloor)
             return strictFloor;
 
-        var searchRadius = MathF.Max(halfExtentXZ, MathF.Max(ConfigData.PathTolerance, 0.5f));
-        Span<float> extraRadii = stackalloc float[3];
+        var         searchRadius = MathF.Max(halfExtentXZ, MathF.Max(ConfigData.PathTolerance, 0.5f));
+        Span<float> extraRadii   = stackalloc float[3];
         extraRadii[0] = searchRadius * 1.5f;
         extraRadii[1] = searchRadius * 2.0f;
         extraRadii[2] = searchRadius + MathF.Max(4f, searchRadius);
 
-        for (var i = 0; i < extraRadii.Length; ++i)
+        foreach (var t in extraRadii)
         {
-            var radius = MathF.Max(searchRadius, extraRadii[i]);
+            var radius = MathF.Max(searchRadius, t);
             floor = FindPointOnFloorStrict(p, radius, allowUnreachable);
             if (floor is not { } expandedFloor)
                 continue;
 
-            // Service.Log.Debug($"[算路] 地板投影触发扩搜：原始位置 = {p:f3}，原始范围 = {halfExtentXZ:f2}，命中范围 = {radius:f2}，投影点 = {expandedFloor:f3}");
             return expandedFloor;
         }
 
@@ -215,48 +228,48 @@ public class NavmeshQuery
         if (horizontalDistance > fallbackRadius + MathF.Max(ConfigData.PathTolerance, 0.25f))
             return null;
 
-        // Service.Log.Debug($"[算路] 地板投影改用最近点回退：原始位置 = {p:f3}，范围 = {fallbackRadius:f2}，投影点 = {fallbackFloor:f3}");
         return fallbackFloor;
     }
 
-    internal SurfaceAwareVolumeVoxelResolution FindNearestVolumeVoxelSurfaceAware(Vector3 point, float halfExtentXZ = 5, float halfExtentY = 5)
+    internal SurfaceAwareVolumeVoxelResolution FindNearestVolumeVoxelSurfaceAware
+    (
+        Vector3 point,
+        float   halfExtentXZ = 5,
+        float   halfExtentY  = 5
+    )
     {
         if (VolumeQuery == null)
             return new(VoxelMap.INVALID_VOXEL, point, point, null, false);
 
-        var volume            = VolumeQuery.Volume;
-        var leafCellSize      = volume.Levels[^1].CellSize;
-        var surfaceSnapHeight = MathF.Max(leafCellSize.Y * 2f, 0.75f);
-        var probeLift         = MathF.Max(surfaceSnapHeight, MathF.Min(halfExtentY, leafCellSize.Y * 4f));
-        var floorProbe        = point + Vector3.UnitY * probeLift;
-        var floor             = FindPointOnFloor(floorProbe, halfExtentXZ);
-        var searchPoint       = point;
-        float? minCandidateY  = null;
-        var usedSurfaceAnchor = false;
+        var    volume            = VolumeQuery.Volume;
+        var    leafCellSize      = volume.Levels[^1].CellSize;
+        var    surfaceSnapHeight = MathF.Max(leafCellSize.Y * 2f, 0.75f);
+        var    probeLift         = MathF.Max(surfaceSnapHeight,   MathF.Min(halfExtentY, leafCellSize.Y * 4f));
+        var    floorProbe        = point + (Vector3.UnitY * probeLift);
+        var    floor             = FindPointOnFloor(floorProbe, halfExtentXZ);
+        var    searchPoint       = point;
+        float? minCandidateY     = null;
+        var    usedSurfaceAnchor = false;
 
-        if (floor is { } floorPoint &&
+        if (floor is { } floorPoint                     &&
             point.Y >= floorPoint.Y - surfaceSnapHeight &&
             point.Y <= floorPoint.Y + surfaceSnapHeight)
         {
             minCandidateY = floorPoint.Y + MathF.Max(leafCellSize.Y * 0.35f, 0.2f);
 
             var requestedLeaf = volume.FindLeafVoxel(point);
-            if (!requestedLeaf.empty ||
+
+            if (!requestedLeaf.empty                          ||
                 requestedLeaf.voxel == VoxelMap.INVALID_VOXEL ||
                 IsVoxelLikelyBelowSurface(requestedLeaf.voxel, minCandidateY.Value))
             {
                 var searchLift = MathF.Max(MathF.Max(leafCellSize.Y * 0.85f, 0.45f), minCandidateY.Value - floorPoint.Y);
-                searchPoint       = new(point.X, MathF.Max(point.Y, floorPoint.Y + searchLift), point.Z);
+                searchPoint       = point with { Y = MathF.Max(point.Y,              floorPoint.Y        + searchLift) };
                 usedSurfaceAnchor = true;
-
-                // Service.Log.Debug
-                // (
-                //     $"[算路] 飞行体素选点改用地表锚点：原始位置 = {point:f3}，地表 = {floorPoint:f3}，搜索点 = {searchPoint:f3}，最低合法高度 = {minCandidateY:f3}"
-                // );
             }
         }
 
-        var voxel     = FindNearestVolumeVoxel(searchPoint, halfExtentXZ, halfExtentY, preferNonBelow: true, minCandidateY: minCandidateY);
+        var voxel     = FindNearestVolumeVoxel(searchPoint, halfExtentXZ, halfExtentY, true, minCandidateY);
         var safePoint = voxel != VoxelMap.INVALID_VOXEL ? VoxelSearch.FindClosestVoxelPoint(volume, voxel, searchPoint) : searchPoint;
         return new(voxel, searchPoint, safePoint, minCandidateY, usedSurfaceAnchor);
     }
@@ -264,10 +277,10 @@ public class NavmeshQuery
     internal ulong FindNearestVolumeVoxel
     (
         Vector3 p,
-        float   halfExtentXZ    = 5,
-        float   halfExtentY     = 5,
-        bool    preferNonBelow  = false,
-        float?  minCandidateY   = null
+        float   halfExtentXZ   = 5,
+        float   halfExtentY    = 5,
+        bool    preferNonBelow = false,
+        float?  minCandidateY  = null
     )
     {
         if (VolumeQuery == null)
@@ -282,7 +295,13 @@ public class NavmeshQuery
 
         var leafCellSize = volume.Levels[^1].CellSize;
         var clampPadding = new Vector3
-            (MathF.Max(MathF.Min(leafCellSize.X, MathF.Min(leafCellSize.Y, leafCellSize.Z)) * 0.5f, MathF.Max(ConfigData.PathTolerance, float.Epsilon)));
+        (
+            MathF.Max
+            (
+                MathF.Min(leafCellSize.X, MathF.Min(leafCellSize.Y, leafCellSize.Z)) * 0.5f,
+                MathF.Max(ConfigData.PathTolerance, float.Epsilon)
+            )
+        );
         var boundsMin = volume.RootTile.BoundsMin + clampPadding;
         var boundsMax = volume.RootTile.BoundsMax - clampPadding;
         var clamped   = Vector3.Clamp(p, boundsMin, boundsMax);
@@ -354,9 +373,9 @@ public class NavmeshQuery
 
     private static float HorizontalDistanceXZ(Vector3 left, Vector3 right)
     {
-        var dx = left.X - right.X;
-        var dz = left.Z - right.Z;
-        return MathF.Sqrt(dx * dx + dz * dz);
+        var dx = left.X             - right.X;
+        var dz = left.Z             - right.Z;
+        return MathF.Sqrt((dx * dx) + (dz * dz));
     }
 
     internal HashSet<long> FindReachableMeshPolys(params long[] starting)
