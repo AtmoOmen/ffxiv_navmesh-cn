@@ -55,7 +55,7 @@ public partial class VoxelPathfind
                 return goalReached ? VolumeSearchTermination.ReachedGoal : VolumeSearchTermination.SearchExhausted;
             if (ShouldAbortGuidedCorridorEarly())
                 return VolumeSearchTermination.SearchExhausted;
-            if ((i & 0x3ff) == 0)
+            if ((i & 0xff) == 0)
                 cancel.ThrowIfCancellationRequested();
         }
 

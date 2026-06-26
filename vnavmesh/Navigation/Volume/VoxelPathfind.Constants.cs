@@ -69,8 +69,9 @@ public partial class VoxelPathfind
     private const float  SHORT_RANGE_HEURISTIC_WEIGHT                                    = 1.05f;
     private const float  SHORT_RANGE_EXPLORATORY_HEURISTIC_WEIGHT                        = 0.80f;
     private const float  LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT                     = 0.85f;
-    private const float  GUIDED_CORRIDOR_HEURISTIC_WEIGHT                                = 1.90f;
+    private const float  GUIDED_CORRIDOR_HEURISTIC_WEIGHT                                = 1.15f;
     private const float  GOAL_VISIBILITY_PROBE_DISTANCE_IN_LEAF_CELLS                    = 48f;
+    private const float  BEST_NODE_RELATIVE_H_TOLERANCE_LEAF_CELLS                       = 2.50f;
     private const int    L1_A_STAR_MAX_EXPANSIONS                                        = 200_000;
     private const int    L1_DISTANCE_FIELD_BUDGET                                        = 500_000;
     private const int    LONG_RANGE_L1_BEST_EFFORT_STEP_BUDGET                           = 750_000;

@@ -15,6 +15,7 @@ public partial class VoxelPathfind
 
     private readonly float       maxSearchRaycastDistance;
     private readonly float       goalVisibilityProbeDistance;
+    private readonly float       bestNodeRelativeHTolerance;
     private readonly List<ulong> neighbourScratch = new(64);
 
     private readonly List<VolumePathfindNode>                        nodes                        = new(1024);
@@ -85,6 +86,7 @@ public partial class VoxelPathfind
         l2Desc                      = volume.Levels[2];
         maxSearchRaycastDistance    = MathF.Max(l2Desc.CellSize.X, MathF.Max(l2Desc.CellSize.Y, l2Desc.CellSize.Z)) * MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS;
         goalVisibilityProbeDistance = MathF.Max(l2Desc.CellSize.X, MathF.Max(l2Desc.CellSize.Y, l2Desc.CellSize.Z)) * GOAL_VISIBILITY_PROBE_DISTANCE_IN_LEAF_CELLS;
+        bestNodeRelativeHTolerance  = MathF.Max(l2Desc.CellSize.X, MathF.Max(l2Desc.CellSize.Y, l2Desc.CellSize.Z)) * BEST_NODE_RELATIVE_H_TOLERANCE_LEAF_CELLS;
     }
 
     public List<(ulong voxel, Vector3 p)> FindPath

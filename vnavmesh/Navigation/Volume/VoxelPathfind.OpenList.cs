@@ -20,10 +20,14 @@ public partial class VoxelPathfind
         ref var candidate = ref nodeSpan[candidateIndex];
         ref var current   = ref nodeSpan[currentIndex];
 
-        if (candidate.HScore + SCORE_EPSILON < current.HScore)
+        var candidateH = candidate.HScore;
+        var currentH   = current.HScore;
+
+        if (candidateH + bestNodeRelativeHTolerance < currentH)
             return true;
-        if (current.HScore + SCORE_EPSILON < candidate.HScore)
+        if (currentH + bestNodeRelativeHTolerance < candidateH)
             return false;
+
         return candidate.GScore + SCORE_EPSILON < current.GScore;
     }
 
