@@ -365,14 +365,14 @@ public partial class VoxelPathfind
     {
         var fromL1       = ResolveRepresentativeL1Voxel(fromVoxel, fromPoint);
         var toL1         = ResolveRepresentativeL1Voxel(toVoxel,   toPoint);
-        var strictResult = TrySearchL1BestEffortPath(fromL1, toL1, fromVoxel, fromPoint, toVoxel, toPoint, false);
+        var strictResult = TrySearchL1BestEffortPath(fromL1, toL1, fromVoxel, fromPoint, toVoxel, toPoint, false, false);
         if (strictResult.ReachedGoal)
             return strictResult;
 
         if (Volume.IsEmpty(toL1))
             return strictResult;
 
-        var relaxedResult = TrySearchL1BestEffortPath(fromL1, toL1, fromVoxel, fromPoint, toVoxel, toPoint, true);
+        var relaxedResult = TrySearchL1BestEffortPath(fromL1, toL1, fromVoxel, fromPoint, toVoxel, toPoint, true, true);
         return IsBetterL1BestEffortResult(relaxedResult, strictResult) ? relaxedResult : strictResult;
     }
 
@@ -503,7 +503,8 @@ public partial class VoxelPathfind
         Vector3 fromPoint,
         ulong   toVoxel,
         Vector3 toPoint,
-        bool    includeNonEmpty
+        bool    includeNonEmpty,
+        bool    allowGoalCaptureExtension
     )
     {
         var tGoal               = toL1;
@@ -719,7 +720,7 @@ public partial class VoxelPathfind
 
         var goalCaptureThreshold = ResolveLongRangeL1GoalCaptureDistanceThreshold(fromPoint, toPoint);
 
-        if (expanded >= stepBudget && openQ.Count > 0 && bestDistance <= goalCaptureThreshold)
+        if (allowGoalCaptureExtension && expanded >= stepBudget && openQ.Count > 0 && bestDistance <= goalCaptureThreshold)
         {
             var extraBudget = ResolveLongRangeL1GoalCaptureStepBudget(bestDistance);
             totalBudget += extraBudget;
