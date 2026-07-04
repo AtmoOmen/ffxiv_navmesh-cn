@@ -124,6 +124,9 @@ public static class VoxelSearch
         if (Vector3.DistanceSquared(fromPos, toPos) <= float.Epsilon)
             return false;
 
+        if (volume.TryLineOfSightDDA(fromPos, toPos, out var ddaResult))
+            return ddaResult;
+
         var line       = CreateLineState(fromVoxel, toPos - fromPos);
         var iterations = 0;
         var prevVoxel  = fromVoxel;
