@@ -133,11 +133,7 @@ public partial class VoxelPathfind
         var corridorPenalty = 0f;
 
         if (useGuidedCorridor && voxel != goalVoxel)
-        {
             corridorPenalty = CalculateCorridorOverflowPenalty(position);
-            if (corridorPenalty < 0f)
-                return false;
-        }
 
         var score = CalculateNodeScore(parentIndex, voxel, position) + corridorPenalty;
         if (!IsBetterCandidate(parentIndex, score, bestParentIndex, bestScore))

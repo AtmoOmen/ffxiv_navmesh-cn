@@ -6,34 +6,22 @@ namespace vnavmesh.Navigation.Volume;
 
 public partial class VoxelPathfind
 {
-    private void VisitL1Neighbours(ulong voxel, Action<ulong> visitor)
+    private readonly record struct L1Neighbour(ulong Voxel, int Dir, int Dx, int Dy, int Dz, int L0X, int L0Y, int L0Z, int L1X, int L1Y, int L1Z);
+
+    private int EnumerateL1Neighbours(ulong voxel, Span<L1Neighbour> output)
     {
         var t     = voxel;
         var l0Idx = VoxelMap.DecodeIndex(ref t);
         var l1Idx = VoxelMap.DecodeIndex(ref t);
         var l0C   = l0Desc.IndexToVoxel(l0Idx);
         var l1C   = l1Desc.IndexToVoxel(l1Idx);
+        var count = 0;
 
         for (var dir = 0; dir < 6; dir++)
         {
-            var dx = dir switch
-            {
-                2 => -1,
-                3 => 1,
-                _ => 0
-            };
-            var dy = dir switch
-            {
-                0 => -1,
-                1 => 1,
-                _ => 0
-            };
-            var dz = dir switch
-            {
-                4 => -1,
-                5 => 1,
-                _ => 0
-            };
+            var dx = dir switch { 2 => -1, 3 => 1, _ => 0 };
+            var dy = dir switch { 0 => -1, 1 => 1, _ => 0 };
+            var dz = dir switch { 4 => -1, 5 => 1, _ => 0 };
 
             var nl1X = l1C.x + dx;
             var nl1Y = l1C.y + dy;
@@ -42,46 +30,32 @@ public partial class VoxelPathfind
             var nl0Y = l0C.y;
             var nl0Z = l0C.z;
 
-            if (nl1X < 0)
-            {
-                nl0X--;
-                nl1X = l1Desc.NumCellsX - 1;
-            }
-            else if (nl1X >= l1Desc.NumCellsX)
-            {
-                nl0X++;
-                nl1X = 0;
-            }
+            if (nl1X < 0) { nl0X--; nl1X = l1Desc.NumCellsX - 1; }
+            else if (nl1X >= l1Desc.NumCellsX) { nl0X++; nl1X = 0; }
 
-            if (nl1Y < 0)
-            {
-                nl0Y--;
-                nl1Y = l1Desc.NumCellsY - 1;
-            }
-            else if (nl1Y >= l1Desc.NumCellsY)
-            {
-                nl0Y++;
-                nl1Y = 0;
-            }
+            if (nl1Y < 0) { nl0Y--; nl1Y = l1Desc.NumCellsY - 1; }
+            else if (nl1Y >= l1Desc.NumCellsY) { nl0Y++; nl1Y = 0; }
 
-            if (nl1Z < 0)
-            {
-                nl0Z--;
-                nl1Z = l1Desc.NumCellsZ - 1;
-            }
-            else if (nl1Z >= l1Desc.NumCellsZ)
-            {
-                nl0Z++;
-                nl1Z = 0;
-            }
+            if (nl1Z < 0) { nl0Z--; nl1Z = l1Desc.NumCellsZ - 1; }
+            else if (nl1Z >= l1Desc.NumCellsZ) { nl0Z++; nl1Z = 0; }
 
             if (!l0Desc.InBounds(nl0X, nl0Y, nl0Z))
                 continue;
 
             var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1X, nl1Y, nl1Z));
             neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0X, nl0Y, nl0Z), neighbour);
-            visitor(neighbour);
+            output[count++] = new(neighbour, dir, dx, dy, dz, nl0X, nl0Y, nl0Z, nl1X, nl1Y, nl1Z);
         }
+
+        return count;
+    }
+
+    private void VisitL1Neighbours(ulong voxel, Action<ulong> visitor)
+    {
+        Span<L1Neighbour> buffer = stackalloc L1Neighbour[6];
+        var count = EnumerateL1Neighbours(voxel, buffer);
+        for (var i = 0; i < count; i++)
+            visitor(buffer[i].Voxel);
     }
 
     private void ComputeL1DistanceField(ulong goalVoxel, Vector3 goalPoint, int budget = L1_DISTANCE_FIELD_BUDGET)
@@ -91,93 +65,26 @@ public partial class VoxelPathfind
         var frontier = new Queue<ulong>();
         frontier.Enqueue(goalL1);
         var expanded = 0;
+        Span<L1Neighbour> buffer = stackalloc L1Neighbour[6];
 
         while (frontier.TryDequeue(out var current) && expanded < budget)
         {
             expanded++;
             var currentDist = l1DistanceField[current];
 
-            var t     = current;
-            var l0Idx = VoxelMap.DecodeIndex(ref t);
-            var l1Idx = VoxelMap.DecodeIndex(ref t);
-            var l0C   = l0Desc.IndexToVoxel(l0Idx);
-            var l1C   = l1Desc.IndexToVoxel(l1Idx);
+            var count = EnumerateL1Neighbours(current, buffer);
 
-            for (var dir = 0; dir < 6; dir++)
+            for (var i = 0; i < count; i++)
             {
-                var dx = dir switch
-                {
-                    2 => -1,
-                    3 => 1,
-                    _ => 0
-                };
-                var dy = dir switch
-                {
-                    0 => -1,
-                    1 => 1,
-                    _ => 0
-                };
-                var dz = dir switch
-                {
-                    4 => -1,
-                    5 => 1,
-                    _ => 0
-                };
-
-                var nl1X = l1C.x + dx;
-                var nl1Y = l1C.y + dy;
-                var nl1Z = l1C.z + dz;
-                var nl0X = l0C.x;
-                var nl0Y = l0C.y;
-                var nl0Z = l0C.z;
-
-                if (nl1X < 0)
-                {
-                    nl0X--;
-                    nl1X = l1Desc.NumCellsX - 1;
-                }
-                else if (nl1X >= l1Desc.NumCellsX)
-                {
-                    nl0X++;
-                    nl1X = 0;
-                }
-
-                if (nl1Y < 0)
-                {
-                    nl0Y--;
-                    nl1Y = l1Desc.NumCellsY - 1;
-                }
-                else if (nl1Y >= l1Desc.NumCellsY)
-                {
-                    nl0Y++;
-                    nl1Y = 0;
-                }
-
-                if (nl1Z < 0)
-                {
-                    nl0Z--;
-                    nl1Z = l1Desc.NumCellsZ - 1;
-                }
-                else if (nl1Z >= l1Desc.NumCellsZ)
-                {
-                    nl0Z++;
-                    nl1Z = 0;
-                }
-
-                if (!l0Desc.InBounds(nl0X, nl0Y, nl0Z))
+                ref readonly var n = ref buffer[i];
+                if (!Volume.IsEmpty(n.Voxel) || l1DistanceField.ContainsKey(n.Voxel))
+                    continue;
+                if (!HasTraversableL1FaceTransition(current, n.Voxel, n.Dx, n.Dy, n.Dz))
                     continue;
 
-                var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1X, nl1Y, nl1Z));
-                neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0X, nl0Y, nl0Z), neighbour);
-
-                if (!Volume.IsEmpty(neighbour) || l1DistanceField.ContainsKey(neighbour))
-                    continue;
-                if (!HasTraversableL1FaceTransition(current, neighbour, dx, dy, dz))
-                    continue;
-
-                var edgeCost = dx != 0 ? l1Desc.CellSize.X : dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
-                l1DistanceField[neighbour] = currentDist + edgeCost;
-                frontier.Enqueue(neighbour);
+                var edgeCost = n.Dx != 0 ? l1Desc.CellSize.X : n.Dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
+                l1DistanceField[n.Voxel] = currentDist + edgeCost;
+                frontier.Enqueue(n.Voxel);
             }
         }
 
@@ -218,6 +125,7 @@ public partial class VoxelPathfind
             frontier.Enqueue(seedVoxel, seedDistance);
 
         var expanded = 0;
+        Span<L1Neighbour> buffer = stackalloc L1Neighbour[6];
 
         while (frontier.TryDequeue(out var current, out var queuedDistance) && expanded < L1_DISTANCE_FIELD_BUDGET)
         {
@@ -225,91 +133,23 @@ public partial class VoxelPathfind
                 continue;
             expanded++;
 
-            var t     = current;
-            var l0Idx = VoxelMap.DecodeIndex(ref t);
-            var l1Idx = VoxelMap.DecodeIndex(ref t);
-            var l0C   = l0Desc.IndexToVoxel(l0Idx);
-            var l1C   = l1Desc.IndexToVoxel(l1Idx);
+            var count = EnumerateL1Neighbours(current, buffer);
 
-            for (var dir = 0; dir < 6; dir++)
+            for (var i = 0; i < count; i++)
             {
-                var dx = dir switch
-                {
-                    2 => -1,
-                    3 => 1,
-                    _ => 0
-                };
-                var dy = dir switch
-                {
-                    0 => -1,
-                    1 => 1,
-                    _ => 0
-                };
-                var dz = dir switch
-                {
-                    4 => -1,
-                    5 => 1,
-                    _ => 0
-                };
-
-                var nl1X = l1C.x + dx;
-                var nl1Y = l1C.y + dy;
-                var nl1Z = l1C.z + dz;
-                var nl0X = l0C.x;
-                var nl0Y = l0C.y;
-                var nl0Z = l0C.z;
-
-                if (nl1X < 0)
-                {
-                    nl0X--;
-                    nl1X = l1Desc.NumCellsX - 1;
-                }
-                else if (nl1X >= l1Desc.NumCellsX)
-                {
-                    nl0X++;
-                    nl1X = 0;
-                }
-
-                if (nl1Y < 0)
-                {
-                    nl0Y--;
-                    nl1Y = l1Desc.NumCellsY - 1;
-                }
-                else if (nl1Y >= l1Desc.NumCellsY)
-                {
-                    nl0Y++;
-                    nl1Y = 0;
-                }
-
-                if (nl1Z < 0)
-                {
-                    nl0Z--;
-                    nl1Z = l1Desc.NumCellsZ - 1;
-                }
-                else if (nl1Z >= l1Desc.NumCellsZ)
-                {
-                    nl0Z++;
-                    nl1Z = 0;
-                }
-
-                if (!l0Desc.InBounds(nl0X, nl0Y, nl0Z))
+                ref readonly var n = ref buffer[i];
+                if (!Volume.IsEmpty(n.Voxel))
+                    continue;
+                if (!HasTraversableL1FaceTransition(current, n.Voxel, n.Dx, n.Dy, n.Dz))
                     continue;
 
-                var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1X, nl1Y, nl1Z));
-                neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0X, nl0Y, nl0Z), neighbour);
-
-                if (!Volume.IsEmpty(neighbour))
-                    continue;
-                if (!HasTraversableL1FaceTransition(current, neighbour, dx, dy, dz))
-                    continue;
-
-                var edgeCost          = dx != 0 ? l1Desc.CellSize.X : dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
+                var edgeCost          = n.Dx != 0 ? l1Desc.CellSize.X : n.Dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
                 var neighbourDistance = currentDistance + edgeCost;
-                if (l1DistanceField.TryGetValue(neighbour, out var existingDistance) && existingDistance <= neighbourDistance + SCORE_EPSILON)
+                if (l1DistanceField.TryGetValue(n.Voxel, out var existingDistance) && existingDistance <= neighbourDistance + SCORE_EPSILON)
                     continue;
 
-                l1DistanceField[neighbour] = neighbourDistance;
-                frontier.Enqueue(neighbour, neighbourDistance);
+                l1DistanceField[n.Voxel] = neighbourDistance;
+                frontier.Enqueue(n.Voxel, neighbourDistance);
             }
         }
 
@@ -572,6 +412,7 @@ public partial class VoxelPathfind
 
         bool TryRunSearchPhase(int phaseBudget, out L1BestEffortSearchResult result)
         {
+            Span<L1Neighbour> nbBuffer = stackalloc L1Neighbour[6];
             var phaseExpanded = 0;
 
             while (openQ.TryDequeue(out var current, out _) && phaseExpanded < phaseBudget)
@@ -618,87 +459,40 @@ public partial class VoxelPathfind
                 if (exitFaceMask == 0)
                     continue;
 
-                for (var dir = 0; dir < 6; dir++)
+                var nbCount = EnumerateL1Neighbours(current.Voxel, nbBuffer);
+
+                for (var i = 0; i < nbCount; i++)
                 {
-                    if (!VoxelIndexUtil.HasL1Face(exitFaceMask, dir))
+                    ref readonly var n = ref nbBuffer[i];
+                    if (!VoxelIndexUtil.HasL1Face(exitFaceMask, n.Dir))
                         continue;
 
-                    var dx = dir == 2 ? -1 : dir == 3 ? 1 : 0;
-                    var dy = dir == 0 ? -1 : dir == 1 ? 1 : 0;
-                    var dz = dir == 4 ? -1 : dir == 5 ? 1 : 0;
-
-                    var nl1x = l1c.x + dx;
-                    var nl1y = l1c.y + dy;
-                    var nl1z = l1c.z + dz;
-                    var nl0x = l0c.x;
-                    var nl0y = l0c.y;
-                    var nl0z = l0c.z;
-
-                    if (nl1x < 0)
-                    {
-                        nl0x--;
-                        nl1x = l1Desc.NumCellsX - 1;
-                    }
-                    else if (nl1x >= l1Desc.NumCellsX)
-                    {
-                        nl0x++;
-                        nl1x = 0;
-                    }
-
-                    if (nl1y < 0)
-                    {
-                        nl0y--;
-                        nl1y = l1Desc.NumCellsY - 1;
-                    }
-                    else if (nl1y >= l1Desc.NumCellsY)
-                    {
-                        nl0y++;
-                        nl1y = 0;
-                    }
-
-                    if (nl1z < 0)
-                    {
-                        nl0z--;
-                        nl1z = l1Desc.NumCellsZ - 1;
-                    }
-                    else if (nl1z >= l1Desc.NumCellsZ)
-                    {
-                        nl0z++;
-                        nl1z = 0;
-                    }
-
-                    if (!l0Desc.InBounds(nl0x, nl0y, nl0z))
-                        continue;
-
-                    var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1x, nl1y, nl1z));
-                    neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0x, nl0y, nl0z), neighbour);
-
-                    var nextState = new L1TraversalState(neighbour, (byte)(dir ^ 1));
+                    var nextState = new L1TraversalState(n.Voxel, (byte)(n.Dir ^ 1));
                     if (closed.Contains(nextState))
                         continue;
-                    if (!HasTraversableL1FaceTransition(current.Voxel, neighbour, dx, dy, dz))
+                    if (!HasTraversableL1FaceTransition(current.Voxel, n.Voxel, n.Dx, n.Dy, n.Dz))
                         continue;
 
-                    var isEmpty = Volume.IsEmpty(neighbour);
-                    if (!isEmpty && !VoxelIndexUtil.CanTraverseMixedL1Cell(includeNonEmpty, neighbour, toL1))
+                    var isEmpty = Volume.IsEmpty(n.Voxel);
+                    if (!isEmpty && !VoxelIndexUtil.CanTraverseMixedL1Cell(includeNonEmpty, n.Voxel, toL1))
                         continue;
 
                     if (!isEmpty)
                     {
-                        var entryReachableFaces = GetReachableL1FacesFromEntry(neighbour, nextState.EntryFace);
-                        var canReachGoal        = neighbour == toL1 && VoxelIndexUtil.HasL1Face(goalReachableFaces, nextState.EntryFace);
+                        var entryReachableFaces = GetReachableL1FacesFromEntry(n.Voxel, nextState.EntryFace);
+                        var canReachGoal        = n.Voxel == toL1 && VoxelIndexUtil.HasL1Face(goalReachableFaces, nextState.EntryFace);
                         if (entryReachableFaces == 0 && !canReachGoal)
                             continue;
                     }
 
-                    var neighbourPosition = neighbour == toL1
+                    var neighbourPosition = n.Voxel == toL1
                                                 ? toPoint
-                                                : CoarseCellCenter((nl0x, nl0y, nl0z), (nl1x, nl1y, nl1z));
-                    var edgeCost     = dx != 0 ? l1Desc.CellSize.X : dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
+                                                : CoarseCellCenter((n.L0X, n.L0Y, n.L0Z), (n.L1X, n.L1Y, n.L1Z));
+                    var edgeCost     = n.Dx != 0 ? l1Desc.CellSize.X : n.Dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
                     var mixedPenalty = isEmpty ? 0f : edgeCost * LONG_RANGE_L1_BEST_EFFORT_MIXED_CELL_PENALTY_SCALE;
                     var traversalPenalty = coarseBias.Enabled
                                                ? CalculateLongRangeLateralTraversalPenalty
-                                                   (current.Voxel, currentPosition, neighbour, neighbourPosition, coarseBias, toPoint)
+                                                   (current.Voxel, currentPosition, n.Voxel, neighbourPosition, coarseBias, toPoint)
                                                : 0f;
                     var tentativeG = cg + edgeCost + mixedPenalty + traversalPenalty;
 
@@ -787,6 +581,7 @@ public partial class VoxelPathfind
         var openQ    = new PriorityQueue<ulong, float>();
         openQ.Enqueue(fromL1, 0);
         var expanded = 0;
+        Span<L1Neighbour> buffer = stackalloc L1Neighbour[6];
 
         while (openQ.TryDequeue(out var current, out _) && expanded < L1_A_STAR_MAX_EXPANSIONS)
         {
@@ -810,82 +605,30 @@ public partial class VoxelPathfind
                 return pathSet;
             }
 
-            var t     = current;
-            var l0Idx = VoxelMap.DecodeIndex(ref t);
-            var l1Idx = VoxelMap.DecodeIndex(ref t);
-            var l0c   = l0Desc.IndexToVoxel(l0Idx);
-            var l1c   = l1Desc.IndexToVoxel(l1Idx);
-            var cg    = gScore[current];
+            var cg = gScore[current];
 
-            for (var dir = 0; dir < 6; dir++)
+            var count = EnumerateL1Neighbours(current, buffer);
+
+            for (var i = 0; i < count; i++)
             {
-                var dx = dir == 2 ? -1 : dir == 3 ? 1 : 0;
-                var dy = dir == 0 ? -1 : dir == 1 ? 1 : 0;
-                var dz = dir == 4 ? -1 : dir == 5 ? 1 : 0;
-
-                var nl1x = l1c.x + dx;
-                var nl1y = l1c.y + dy;
-                var nl1z = l1c.z + dz;
-                var nl0x = l0c.x;
-                var nl0y = l0c.y;
-                var nl0z = l0c.z;
-
-                if (nl1x < 0)
-                {
-                    nl0x--;
-                    nl1x = l1Desc.NumCellsX - 1;
-                }
-                else if (nl1x >= l1Desc.NumCellsX)
-                {
-                    nl0x++;
-                    nl1x = 0;
-                }
-
-                if (nl1y < 0)
-                {
-                    nl0y--;
-                    nl1y = l1Desc.NumCellsY - 1;
-                }
-                else if (nl1y >= l1Desc.NumCellsY)
-                {
-                    nl0y++;
-                    nl1y = 0;
-                }
-
-                if (nl1z < 0)
-                {
-                    nl0z--;
-                    nl1z = l1Desc.NumCellsZ - 1;
-                }
-                else if (nl1z >= l1Desc.NumCellsZ)
-                {
-                    nl0z++;
-                    nl1z = 0;
-                }
-
-                if (!l0Desc.InBounds(nl0x, nl0y, nl0z))
+                ref readonly var n = ref buffer[i];
+                if (closed.Contains(n.Voxel))
+                    continue;
+                if (!HasTraversableL1FaceTransition(current, n.Voxel, n.Dx, n.Dy, n.Dz))
+                    continue;
+                var isEmpty = Volume.IsEmpty(n.Voxel);
+                if (!isEmpty && !VoxelIndexUtil.CanTraverseMixedL1Cell(includeNonEmpty, n.Voxel, toL1))
                     continue;
 
-                var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1x, nl1y, nl1z));
-                neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0x, nl0y, nl0z), neighbour);
-
-                if (closed.Contains(neighbour))
-                    continue;
-                if (!HasTraversableL1FaceTransition(current, neighbour, dx, dy, dz))
-                    continue;
-                var isEmpty = Volume.IsEmpty(neighbour);
-                if (!isEmpty && !VoxelIndexUtil.CanTraverseMixedL1Cell(includeNonEmpty, neighbour, toL1))
-                    continue;
-
-                var edgeCost   = dx != 0 ? l1Desc.CellSize.X : dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
+                var edgeCost   = n.Dx != 0 ? l1Desc.CellSize.X : n.Dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
                 var tentativeG = cg + edgeCost;
 
-                if (gScore.TryGetValue(neighbour, out var existingG) && tentativeG >= existingG)
+                if (gScore.TryGetValue(n.Voxel, out var existingG) && tentativeG >= existingG)
                     continue;
 
-                gScore[neighbour]   = tentativeG;
-                cameFrom[neighbour] = current;
-                openQ.Enqueue(neighbour, tentativeG + H((nl0x, nl0y, nl0z), (nl1x, nl1y, nl1z)));
+                gScore[n.Voxel]   = tentativeG;
+                cameFrom[n.Voxel] = current;
+                openQ.Enqueue(n.Voxel, tentativeG + H((n.L0X, n.L0Y, n.L0Z), (n.L1X, n.L1Y, n.L1Z)));
             }
         }
 

@@ -60,7 +60,7 @@ public partial class VoxelPathfind
             proxySearchBudget,
             1,
             cancel,
-            heuristicWeightOverride: coarsePath.ReachedGoal ? GUIDED_CORRIDOR_HEURISTIC_WEIGHT : LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
+            heuristicWeightOverride: coarsePath.ReachedGoal ? SHORT_RANGE_HEURISTIC_WEIGHT : LONG_RANGE_HEURISTIC_WEIGHT
         );
 
         if (lastTermination == VolumeSearchTermination.ReachedGoal)
@@ -125,6 +125,7 @@ public partial class VoxelPathfind
         if (!coarsePath.ReachedGoal && lastTermination == VolumeSearchTermination.SearchExhausted)
         {
             Service.Log.Debug("[算路] 飞行体素兜底全搜索：代理搜索穷尽，回退无约束距离场全搜索");
+            RetainClosedSetKnowledge();
             ComputeL1DistanceField(toVoxel, toPos);
             var fallbackPath = RunSearchAttempt
             (
@@ -136,7 +137,7 @@ public partial class VoxelPathfind
                 LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
                 2,
                 cancel,
-                heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
+                heuristicWeightOverride: LONG_RANGE_HEURISTIC_WEIGHT
             );
             return fallbackPath.Count > 0 ? fallbackPath : proxyPath;
         }
@@ -197,7 +198,7 @@ public partial class VoxelPathfind
                 1,
                 cancel,
                 corridor,
-                GUIDED_CORRIDOR_HEURISTIC_WEIGHT
+                SHORT_RANGE_HEURISTIC_WEIGHT
             );
 
             if (lastTermination == VolumeSearchTermination.ReachedGoal)
@@ -250,7 +251,7 @@ public partial class VoxelPathfind
             LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
             2,
             cancel,
-            heuristicWeightOverride: LONG_RANGE_GLOBAL_FALLBACK_HEURISTIC_WEIGHT
+            heuristicWeightOverride: LONG_RANGE_HEURISTIC_WEIGHT
         );
     }
 
@@ -266,7 +267,7 @@ public partial class VoxelPathfind
     {
         var attempts                = 2;
         var useExploratoryHeuristic = ShouldUseShortRangeExploratoryHeuristic(fromPos, toPos);
-        var fallbackHeuristicWeight = useExploratoryHeuristic ? SHORT_RANGE_EXPLORATORY_HEURISTIC_WEIGHT : SHORT_RANGE_HEURISTIC_WEIGHT;
+        var fallbackHeuristicWeight = useExploratoryHeuristic ? LONG_RANGE_HEURISTIC_WEIGHT : SHORT_RANGE_HEURISTIC_WEIGHT;
 
         Service.Log.Debug
         (

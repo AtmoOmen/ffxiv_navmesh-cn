@@ -10,6 +10,23 @@ public partial class VoxelPathfind
 {
     private bool HasTraversableL1FaceTransition(ulong currentL1, ulong neighbourL1, int dx, int dy, int dz)
     {
+        var cacheKey = (currentL1, neighbourL1);
+        lock (cacheLock)
+        {
+            if (l1FaceTransitionCache.TryGetValue(cacheKey, out var cached))
+                return cached;
+        }
+
+        var result = ComputeL1FaceTransition(currentL1, neighbourL1, dx, dy, dz);
+        lock (cacheLock)
+        {
+            l1FaceTransitionCache.TryAdd(cacheKey, result);
+        }
+        return result;
+    }
+
+    private bool ComputeL1FaceTransition(ulong currentL1, ulong neighbourL1, int dx, int dy, int dz)
+    {
         var currentX   = dx > 0 ? l2Desc.NumCellsX     - 1 : 0;
         var currentY   = dy > 0 ? l2Desc.NumCellsY     - 1 : 0;
         var currentZ   = dz > 0 ? l2Desc.NumCellsZ     - 1 : 0;
@@ -456,10 +473,6 @@ public partial class VoxelPathfind
         var totalOverflow = advanceOverflow + lateralOverflow + verticalOverflow;
         if (totalOverflow <= SCORE_EPSILON)
             return 0f;
-
-        var hardCutoff = guidedCorridor.HorizontalRadius * GUIDED_CORRIDOR_HARD_CUTOFF_MULTIPLIER;
-        if (totalOverflow > hardCutoff)
-            return -1f;
 
         var normalizedOverflow = totalOverflow / guidedCorridor.HorizontalRadius;
         return normalizedOverflow * normalizedOverflow * GUIDED_CORRIDOR_OVERFLOW_PENALTY_SCALE;

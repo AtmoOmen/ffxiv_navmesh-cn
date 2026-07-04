@@ -22,6 +22,7 @@ public partial class VoxelPathfind
     private readonly Dictionary<ulong, byte>                         verifiedDownwardOpeningCache = new(2048);
     private readonly Dictionary<ulong, byte>                         verifiedTopEntryCache        = new(2048);
     private readonly Dictionary<ulong, ulong>                        l1FaceConnectivityCache      = new(2048);
+    private readonly Dictionary<(ulong, ulong), bool>                l1FaceTransitionCache        = new(2048);
     private readonly List<int>                                       openList                     = new(256);
     private readonly Dictionary<VolumeVisibilityKey, bool>           visibilityCache              = new(4096);
     private readonly object                                          cacheLock                    = new();
@@ -147,10 +148,13 @@ public partial class VoxelPathfind
         {
             var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, 1, cancel);
 
-            if (lastTermination != VolumeSearchTermination.ReachedGoal)
-                path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
+        if (lastTermination != VolumeSearchTermination.ReachedGoal)
+        {
+            RetainClosedSetKnowledge();
+            path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
+        }
 
-            return RefineSimplifiedPath(path, cancel);
+        return RefineSimplifiedPath(path, cancel);
         }
 
         if (TryCreateGuidedCorridor(fromPos, toPos, out var corridor))
@@ -166,7 +170,7 @@ public partial class VoxelPathfind
                 1,
                 cancel,
                 corridor,
-                GUIDED_CORRIDOR_HEURISTIC_WEIGHT
+                SHORT_RANGE_HEURISTIC_WEIGHT
             );
 
             if (lastTermination == VolumeSearchTermination.ReachedGoal)
@@ -186,6 +190,7 @@ public partial class VoxelPathfind
             );
         }
 
+        RetainClosedSetKnowledge();
         var longRangePath = RunLongRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
 
         if (lastTermination == VolumeSearchTermination.ReachedGoal)

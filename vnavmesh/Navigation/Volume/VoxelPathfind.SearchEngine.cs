@@ -74,51 +74,26 @@ public partial class VoxelPathfind
         var bestNode      = NodeSpan[bestNodeIndex];
         var bestDistance  = bestNode.HScore;
         var bestAboveGoal = MathF.Max(bestNode.Position.Y - goalPos.Y, 0f);
-        var descendingCaseMinDrop = MathF.Max
-        (
-            l2Desc.CellSize.Y * GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_MIN_DROP_LEAF_CELLS,
-            GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_MIN_DROP_DISTANCE
-        );
 
-        if (guidedCorridorInitialAboveGoal >= descendingCaseMinDrop)
-        {
-            var verticalProgressThreshold = MathF.Max
-            (
-                l2Desc.CellSize.Y * GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_PROGRESS_LEAF_CELLS,
-                GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_PROGRESS_MIN_DISTANCE
-            );
-
-            if (guidedCorridorLastProgressAboveGoal - bestAboveGoal >= verticalProgressThreshold)
-            {
-                guidedCorridorLastProgressAboveGoal = bestAboveGoal;
-                guidedCorridorLastProgressDistance  = bestDistance;
-                guidedCorridorLastProgressVisited   = visitedNodes;
-                return false;
-            }
-
-            if (bestAboveGoal <= guidedCorridorInitialAboveGoal * GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_SUFFICIENT_PROGRESS_RATIO)
-                return false;
-
-            if (visitedNodes < GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_HARD_VISITED_THRESHOLD)
-                return false;
-
-            if (visitedNodes - guidedCorridorLastProgressVisited < GUIDED_CORRIDOR_EARLY_ABORT_DESCENT_STALL_WINDOW)
-                return false;
-
-            guidedCorridorEarlyAbortTriggered = true;
-            return true;
-        }
-
-        var progressThreshold = MathF.Max
+        var horizontalProgressThreshold = MathF.Max
         (
             GUIDED_CORRIDOR_EARLY_ABORT_PROGRESS_MIN_DISTANCE,
             guidedCorridorInitialGoalDistance * GUIDED_CORRIDOR_EARLY_ABORT_PROGRESS_RATIO
         );
+        var verticalProgressThreshold = MathF.Max
+        (
+            l2Desc.CellSize.Y * GUIDED_CORRIDOR_EARLY_ABORT_VERTICAL_PROGRESS_LEAF_CELLS,
+            GUIDED_CORRIDOR_EARLY_ABORT_VERTICAL_PROGRESS_MIN_DISTANCE
+        );
 
-        if (guidedCorridorLastProgressDistance - bestDistance >= progressThreshold)
+        var horizontalProgress = guidedCorridorLastProgressDistance - bestDistance;
+        var verticalProgress   = guidedCorridorLastProgressAboveGoal - bestAboveGoal;
+
+        if (horizontalProgress >= horizontalProgressThreshold || verticalProgress >= verticalProgressThreshold)
         {
-            guidedCorridorLastProgressDistance = bestDistance;
-            guidedCorridorLastProgressVisited  = visitedNodes;
+            guidedCorridorLastProgressDistance  = bestDistance;
+            guidedCorridorLastProgressAboveGoal = bestAboveGoal;
+            guidedCorridorLastProgressVisited   = visitedNodes;
             return false;
         }
 
@@ -150,8 +125,6 @@ public partial class VoxelPathfind
         LongRangeLateralBias  lateralBias             = default
     )
     {
-        if (attempts > 1 && nodes.Count > 0)
-            RetainClosedSetKnowledge();
         Start(fromVoxel, toVoxel, fromPos, toPos, lateralBias);
         allowCoarseL1Stepping = maxSteps > RAYCAST_SEARCH_STEP_BUDGET;
         useGuidedCorridor     = corridor.HasValue;
@@ -306,6 +279,8 @@ public partial class VoxelPathfind
                 verifiedTopEntryCache.Clear();
             if (l1FaceConnectivityCache.Count > L1_FACE_CACHE_MAX_SIZE)
                 l1FaceConnectivityCache.Clear();
+            if (l1FaceTransitionCache.Count > L1_FACE_TRANSITION_CACHE_MAX_SIZE)
+                l1FaceTransitionCache.Clear();
             if (visibilityCache.Count > VISIBILITY_CACHE_MAX_SIZE)
                 visibilityCache.Clear();
         }
@@ -352,6 +327,7 @@ public partial class VoxelPathfind
             verifiedDownwardOpeningCache.Clear();
             verifiedTopEntryCache.Clear();
             l1FaceConnectivityCache.Clear();
+            l1FaceTransitionCache.Clear();
         }
     }
 
