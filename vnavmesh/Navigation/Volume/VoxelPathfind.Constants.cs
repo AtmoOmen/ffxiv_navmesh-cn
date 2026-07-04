@@ -54,7 +54,7 @@ public partial class VoxelPathfind
     private const int    GUIDED_CORRIDOR_SEARCH_STEP_BUDGET                              = 2_000_000;
     private const int    GUIDED_CORRIDOR_EARLY_ABORT_MIN_VISITED                         = 100_000;
     private const int    GUIDED_CORRIDOR_EARLY_ABORT_HARD_VISITED_THRESHOLD              = 150_000;
-    private const int    GUIDED_CORRIDOR_EARLY_ABORT_STALL_WINDOW                        = 40_000;
+    private const int    GUIDED_CORRIDOR_EARLY_ABORT_STALL_WINDOW                        = 80_000;
     private const int    MAX_ANCESTOR_LOOK_BACK                                          = 6;
     private const int    RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD                            = 12;
     private const float  MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS                       = 96f;

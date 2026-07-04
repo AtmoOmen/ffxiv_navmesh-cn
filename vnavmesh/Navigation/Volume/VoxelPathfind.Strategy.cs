@@ -32,9 +32,7 @@ public partial class VoxelPathfind
             $"[算路] 飞行体素粗层 best-effort 完成：到达终点 = {(coarsePath.ReachedGoal ? 1 : 0)}，粗路径单元 = {coarsePath.PathSet.Count}，扩展节点 = {coarsePath.ExpandedNodes}/{coarsePath.StepBudget}，最佳粗距离 = {coarsePath.BestDistance:f3}"
         );
 
-        var guidedCorridorRadius = coarsePath.ReachedGoal
-                                       ? ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance)
-                                       : LONG_RANGE_L1_GUIDED_FULL_SEARCH_BASE_CORRIDOR_RADIUS;
+        var guidedCorridorRadius = ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance);
         var proxyGoalVoxel       = coarsePath.ReachedGoal ? toVoxel : coarsePath.OrderedPath[^1];
         var proxyGoalPos         = ResolveVoxelCenter(proxyGoalVoxel);
 
@@ -138,7 +136,8 @@ public partial class VoxelPathfind
                 LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
                 2,
                 cancel,
-                heuristicWeightOverride: LONG_RANGE_HEURISTIC_WEIGHT
+                heuristicWeightOverride: LONG_RANGE_HEURISTIC_WEIGHT,
+                disableAncestorLookBack: true
             );
             return fallbackPath.Count > 0 ? fallbackPath : proxyPath;
         }

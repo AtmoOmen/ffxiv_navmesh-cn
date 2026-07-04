@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Navigation.Volume.Models;
+using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
 
@@ -110,6 +111,18 @@ public partial class VoxelPathfind
         bool              returnIntermediatePoints,
         CancellationToken cancel
     )
+        => FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, allowRelay: true);
+
+    private List<(ulong voxel, Vector3 p)> FindPathInternal
+    (
+        ulong             fromVoxel,
+        ulong             toVoxel,
+        Vector3           fromPos,
+        Vector3           toPos,
+        bool              returnIntermediatePoints,
+        CancellationToken cancel,
+        bool              allowRelay
+    )
     {
         l1PathSet                  = null;
         l0PathSet                  = null;
@@ -207,6 +220,25 @@ public partial class VoxelPathfind
 
         if (lastTermination == VolumeSearchTermination.ReachedGoal)
             return RefineSimplifiedPath(longRangePath, cancel);
+
+        // Partial 接力：用当前路径终点作为新起点重新搜索
+        if (allowRelay && longRangePath.Count > 0)
+        {
+            var relayPoint    = longRangePath[^1];
+            var (relayVoxel, relayEmpty) = Volume.FindLeafVoxel(relayPoint.p);
+            if (relayEmpty && relayVoxel != VoxelMap.INVALID_VOXEL && relayVoxel != fromVoxel)
+            {
+                var remainingDistance = Vector3.Distance(relayPoint.p, toPos);
+                Service.Log.Debug($"[算路] 飞行体素 Partial 接力搜索：接力点 = {relayPoint.p:f3}，剩余距离 = {remainingDistance:f3}");
+
+                var relayPath = FindPathInternal(relayVoxel, toVoxel, relayPoint.p, toPos, returnIntermediatePoints, cancel, allowRelay: false);
+                if (relayPath.Count > 0)
+                {
+                    var mergedPath = VoxelPathUtil.MergePathSegments(longRangePath, relayPath, SCORE_EPSILON);
+                    return RefineSimplifiedPath(mergedPath, cancel);
+                }
+            }
+        }
 
         return longRangePath.Count > 0 ? RefineSimplifiedPath(longRangePath, cancel) : [];
     }
