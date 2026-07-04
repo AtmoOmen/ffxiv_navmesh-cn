@@ -328,6 +328,8 @@ public partial class VoxelPathfind
             verifiedTopEntryCache.Clear();
             l1FaceConnectivityCache.Clear();
             l1FaceTransitionCache.Clear();
+            pathLoSCache.Clear();
+            clearanceCache.Clear();
         }
     }
 

@@ -30,15 +30,34 @@ public partial class VoxelPathfind
         if (path.Count <= 2)
             return path;
 
+        pathLoSCache.Clear();
+        clearanceCache.Clear();
+
         var refined = SimplifyPath(path, cancel);
         refined.Reverse();
         refined = SimplifyPath(refined, cancel);
         refined.Reverse();
 
+        // 路径已经很短时跳过松弛迭代
+        if (refined.Count <= 3)
+        {
+            pathLoSCache.Clear();
+            clearanceCache.Clear();
+            return refined;
+        }
+
+        HashSet<int>? dirtyIndices = null;
+
         for (var iteration = 0; iteration < REFINE_RELAX_ITERATION_LIMIT; ++iteration)
         {
-            ProjectInteriorWaypoints(refined, cancel);
-            var changed      = RelaxTowardOpenSpace(refined, cancel);
+            var projModified = new HashSet<int>();
+            ProjectInteriorWaypoints(refined, cancel, projModified);
+
+            // 合并投影修改到脏集
+            if (dirtyIndices != null)
+                dirtyIndices.UnionWith(projModified);
+
+            var changed = RelaxTowardOpenSpace(refined, cancel, dirtyIndices, out var relaxDirty);
             var straightened = SimplifyPath(refined, cancel);
 
             if (!changed && straightened.Count == refined.Count)
@@ -47,16 +66,20 @@ public partial class VoxelPathfind
                 break;
             }
 
+            // SimplifyPath 改变路径结构时重置脏集
+            dirtyIndices = straightened.Count != refined.Count ? null : relaxDirty;
             refined = straightened;
         }
 
-        ProjectInteriorWaypoints(refined, cancel);
-        RelaxTowardOpenSpace(refined, cancel);
+        ProjectInteriorWaypoints(refined, cancel, null);
+        RelaxTowardOpenSpace(refined, cancel, null, out _);
 
+        pathLoSCache.Clear();
+        clearanceCache.Clear();
         return SimplifyPath(refined, cancel);
     }
 
-    private void ProjectInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
+    private void ProjectInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel, HashSet<int>? modifiedIndices)
     {
         if (path.Count <= 2)
             return;
@@ -90,11 +113,20 @@ public partial class VoxelPathfind
                 continue;
 
             path[i] = (current.voxel, relaxed);
+            modifiedIndices?.Add(i);
         }
     }
 
-    private bool RelaxTowardOpenSpace(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
+    private bool RelaxTowardOpenSpace
+    (
+        List<(ulong voxel, Vector3 p)> path,
+        CancellationToken               cancel,
+        HashSet<int>?                   dirtyIndices,
+        out HashSet<int>                newDirty
+    )
     {
+        newDirty = new HashSet<int>();
+
         if (path.Count <= 2)
             return false;
 
@@ -104,6 +136,10 @@ public partial class VoxelPathfind
             if ((i & 0x1f) == 0)
                 cancel.ThrowIfCancellationRequested();
 
+            // null 表示全部需要处理；非 null 则跳过未标记的索引
+            if (dirtyIndices != null && !dirtyIndices.Contains(i))
+                continue;
+
             var previous = path[i - 1];
             var current  = path[i];
             var next     = path[i + 1];
@@ -112,6 +148,9 @@ public partial class VoxelPathfind
             {
                 path[i] = adjusted;
                 changed = true;
+                newDirty.Add(Math.Max(1, i - 1));
+                newDirty.Add(i);
+                newDirty.Add(Math.Min(path.Count - 2, i + 1));
             }
         }
 
@@ -249,6 +288,12 @@ public partial class VoxelPathfind
             maxDistance               <= FLIGHT_PUSH_MIN_DISTANCE)
             return 0;
 
+        var dirQuantized = QuantizeDirection(direction);
+        var cacheKey     = (origin.voxel, dirQuantized);
+
+        if (clearanceCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
         var dirNorm = Vector3.Normalize(direction);
         var endPos  = origin.p + (dirNorm * maxDistance);
         var endLeaf = Volume.FindLeafVoxel(endPos);
@@ -266,7 +311,19 @@ public partial class VoxelPathfind
             clearance = t * maxDistance;
         }
 
+        if (clearanceCache.Count < CLEARANCE_CACHE_MAX_SIZE)
+            clearanceCache[cacheKey] = clearance;
+
         return clearance;
+    }
+
+    private static int QuantizeDirection(Vector3 dir)
+    {
+        // 将方向分量量化到 -4..4 范围，打包为 int 键
+        var x = Math.Clamp((int)MathF.Round(dir.X * 4f) + 4, 0, 8);
+        var y = Math.Clamp((int)MathF.Round(dir.Y * 4f) + 4, 0, 8);
+        var z = Math.Clamp((int)MathF.Round(dir.Z * 4f) + 4, 0, 8);
+        return (x << 8) | (y << 4) | z;
     }
 
     private bool TryAcceptScaledOffset
@@ -464,22 +521,36 @@ public partial class VoxelPathfind
 
         var anchor = path[anchorIndex];
         var probe  = path[probeIndex];
-        ++lineOfSightChecks;
-        if (!VoxelSearch.LineOfSight(Volume, anchor.voxel, probe.voxel, anchor.p, probe.p))
-            return false;
+        var cacheKey = (anchor.voxel, probe.voxel);
 
-        ++lineOfSightHits;
-        return true;
+        if (pathLoSCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        ++lineOfSightChecks;
+        var visible = VoxelSearch.LineOfSight(Volume, anchor.voxel, probe.voxel, anchor.p, probe.p);
+        if (visible)
+            ++lineOfSightHits;
+
+        if (pathLoSCache.Count < PATH_LOS_CACHE_MAX_SIZE)
+            pathLoSCache[cacheKey] = visible;
+        return visible;
     }
 
     private bool HasLineOfSight((ulong voxel, Vector3 p) from, ulong toVoxel, Vector3 toPosition)
     {
-        ++lineOfSightChecks;
-        if (!VoxelSearch.LineOfSight(Volume, from.voxel, toVoxel, from.p, toPosition))
-            return false;
+        var cacheKey = (from.voxel, toVoxel);
 
-        ++lineOfSightHits;
-        return true;
+        if (pathLoSCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        ++lineOfSightChecks;
+        var visible = VoxelSearch.LineOfSight(Volume, from.voxel, toVoxel, from.p, toPosition);
+        if (visible)
+            ++lineOfSightHits;
+
+        if (pathLoSCache.Count < PATH_LOS_CACHE_MAX_SIZE)
+            pathLoSCache[cacheKey] = visible;
+        return visible;
     }
 
     private List<(ulong voxel, Vector3 p)> BuildPathToVisitedNode(int nodeIndex, bool returnIntermediatePoints)
