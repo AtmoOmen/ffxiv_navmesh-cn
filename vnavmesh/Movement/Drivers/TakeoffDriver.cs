@@ -2,7 +2,6 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using vnavmesh.Common.Models;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Movement.Planning;
 
 namespace vnavmesh.Movement.Drivers;
 
@@ -28,19 +27,8 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
 
         if (!Service.Condition[ConditionFlag.Mounted])
         {
-            return new
-            (
-                CreateIdleCommand(context.Player.Position),
-                Failure: new
-                (
-                    MovementFailureReason.TakeoffUnavailable,
-                    context.Plan.RequestedMode,
-                    context.Segment.Kind,
-                    context.Plan.RequestedDestination,
-                    context.Plan.DestinationTolerance,
-                    ResolveTakeoffWaypoint(context)
-                )
-            );
+            TransitionTo(TakeoffState.Align);
+            return new(CreateIdleCommand(context.Player.Position));
         }
 
         var target        = ResolveTakeoffWaypoint(context);
