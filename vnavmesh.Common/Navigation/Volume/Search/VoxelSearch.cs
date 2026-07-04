@@ -164,7 +164,9 @@ public static class VoxelSearch
         out bool  nextEmpty
     )
     {
-        var (vMin, vMax) = volume.VoxelBounds(fromVoxel, 0);
+        var (vMin, vMax) = volume.TryGetLeafVoxelBounds(fromVoxel, out var leafBounds)
+                               ? leafBounds
+                               : volume.VoxelBounds(fromVoxel, 0);
 
         var tx = ab.X == 0 ? float.MaxValue : ((ab.X > 0 ? vMax.X : vMin.X) - fromPos.X) / ab.X;
         var ty = ab.Y == 0 ? float.MaxValue : ((ab.Y > 0 ? vMax.Y : vMin.Y) - fromPos.Y) / ab.Y;
@@ -174,6 +176,12 @@ public static class VoxelSearch
 
         var tAdj = MathF.Min(t + eps, 1);
         var proj = fromPos + tAdj * ab;
+
+        if (volume.TryFindLeafVoxelFast(proj, out var fastVoxel, out var fastEmpty))
+        {
+            (nextVoxel, nextEmpty) = (fastVoxel, fastEmpty);
+            return nextVoxel != fromVoxel;
+        }
 
         (nextVoxel, nextEmpty) = volume.FindLeafVoxel(proj);
         return nextVoxel != fromVoxel;

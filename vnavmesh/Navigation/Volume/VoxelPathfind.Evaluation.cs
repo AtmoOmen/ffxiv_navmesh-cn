@@ -68,44 +68,63 @@ public partial class VoxelPathfind
         if (bestScore <= earlyStopThreshold)
             return true;
 
-        var ancestorIndex     = nodeSpan[currentIndex].ParentIndex;
+        // 预取祖先索引链，避免评估循环中反复 nodeSpan[...].ParentIndex 指针追逐
+        Span<int> ancestorChain = stackalloc int[MAX_ANCESTOR_LOOK_BACK];
+        var       ancestorCount = 0;
+        var       walkIndex     = nodeSpan[currentIndex].ParentIndex;
+
+        while (ancestorCount < MAX_ANCESTOR_LOOK_BACK && walkIndex >= 0)
+        {
+            ancestorChain[ancestorCount++] = walkIndex;
+            ref var node = ref nodeSpan[walkIndex];
+            if (node.ParentIndex == walkIndex)
+                break;
+            walkIndex = node.ParentIndex;
+        }
+
         var effectiveLookBack = VoxelPathUtil.DetermineEffectiveLookBackDepth(bestScore, currentGScore, SCORE_EPSILON);
         var lookBackCount     = 0;
         var lastEvaluated     = -1;
 
-        while (ancestorIndex >= 0 && lookBackCount < effectiveLookBack)
+        for (var i = 0; i < ancestorCount && lookBackCount < effectiveLookBack; ++i)
         {
+            var ancestorIndex = ancestorChain[i];
+
             if (!TryEvaluateCandidate(ancestorIndex, neighbourVoxel, true, ref bestParentIndex, ref bestPosition, ref bestScore))
             {
-                ancestorIndex = nodeSpan[ancestorIndex].ParentIndex;
                 ++lookBackCount;
                 continue;
             }
 
             lastEvaluated = ancestorIndex;
 
-            ref var ancestor = ref nodeSpan[ancestorIndex];
-            if (ancestor.ParentIndex == ancestorIndex)
-                return bestParentIndex >= 0;
+            if (i == ancestorCount - 1)
+            {
+                ref var ancestor = ref nodeSpan[ancestorIndex];
+                if (ancestor.ParentIndex == ancestorIndex)
+                    return bestParentIndex >= 0;
+            }
 
             if (bestScore <= earlyStopThreshold)
                 return true;
 
-            ancestorIndex = ancestor.ParentIndex;
             ++lookBackCount;
         }
 
-        if (ancestorIndex >= 0 && effectiveLookBack >= MAX_ANCESTOR_LOOK_BACK)
+        if (ancestorCount > 0 && effectiveLookBack >= MAX_ANCESTOR_LOOK_BACK)
         {
-            var rootIndex = ancestorIndex;
+            var rootIndex = ancestorChain[ancestorCount - 1];
 
-            while (true)
+            ref var rootNode = ref nodeSpan[rootIndex];
+            if (rootNode.ParentIndex != rootIndex)
             {
-                ref var ancestor = ref nodeSpan[rootIndex];
-                if (ancestor.ParentIndex == rootIndex)
-                    break;
-
-                rootIndex = ancestor.ParentIndex;
+                while (true)
+                {
+                    ref var node = ref nodeSpan[rootIndex];
+                    if (node.ParentIndex == rootIndex)
+                        break;
+                    rootIndex = node.ParentIndex;
+                }
             }
 
             if (rootIndex != lastEvaluated)
@@ -147,7 +166,9 @@ public partial class VoxelPathfind
 
     private float CalculateMinimumEdgeCost(Vector3 fromPos, ulong toVoxel)
     {
-        var (voxelMin, voxelMax) = Volume.VoxelBounds(toVoxel, 0);
+        var (voxelMin, voxelMax) = Volume.TryGetLeafVoxelBounds(toVoxel, out var bounds)
+                                       ? bounds
+                                       : Volume.VoxelBounds(toVoxel, 0);
         var voxelCenter = (voxelMin + voxelMax) * 0.5f;
         return Vector3.Distance(fromPos, voxelCenter) * 0.8f;
     }
@@ -180,19 +201,20 @@ public partial class VoxelPathfind
         var     nodeSpan = NodeSpan;
         ref var fromNode = ref nodeSpan[fromNodeIndex];
         var     cacheKey = new VolumeVisibilityKey(fromNode.Voxel, toVoxel);
+        var     stripe   = (int)((uint)cacheKey.GetHashCode() & (VISIBILITY_CACHE_STRIPES - 1));
 
-        lock (cacheLock)
+        lock (visibilityLocks[stripe])
         {
-            if (visibilityCache.TryGetValue(cacheKey, out var cached))
+            if (visibilityCaches[stripe].TryGetValue(cacheKey, out var cached))
                 return cached;
         }
 
         Interlocked.Increment(ref lineOfSightChecks);
         var visible = VoxelSearch.LineOfSight(Volume, fromNode.Voxel, toVoxel, fromNode.Position, toPosition);
 
-        lock (cacheLock)
+        lock (visibilityLocks[stripe])
         {
-            visibilityCache.TryAdd(cacheKey, visible);
+            visibilityCaches[stripe].TryAdd(cacheKey, visible);
         }
 
         if (visible)

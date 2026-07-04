@@ -480,6 +480,8 @@ public partial class VoxelPathfind
 
     private Vector3 ResolveVoxelCenter(ulong voxel)
     {
+        if (Volume.TryGetLeafVoxelBounds(voxel, out var bounds))
+            return (bounds.min + bounds.max) * 0.5f;
         var (min, max) = Volume.VoxelBounds(voxel, 0);
         return (min + max) * 0.5f;
     }

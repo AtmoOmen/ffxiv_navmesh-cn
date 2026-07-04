@@ -241,10 +241,7 @@ public partial class VoxelPathfind
         nodes.Clear();
         nodeLookup.Clear();
         openList.Clear();
-        lock (cacheLock)
-        {
-            visibilityCache.Clear();
-        }
+        ClearVisibilityCaches();
         TrimCachesIfNeeded();
         bestNodeIndex                        = 0;
         goalReached                          = false;
@@ -281,8 +278,24 @@ public partial class VoxelPathfind
                 l1FaceConnectivityCache.Clear();
             if (l1FaceTransitionCache.Count > L1_FACE_TRANSITION_CACHE_MAX_SIZE)
                 l1FaceTransitionCache.Clear();
-            if (visibilityCache.Count > VISIBILITY_CACHE_MAX_SIZE)
-                visibilityCache.Clear();
+        }
+
+        var totalVisibility = 0;
+        for (var i = 0; i < VISIBILITY_CACHE_STRIPES; ++i)
+        {
+            lock (visibilityLocks[i])
+                totalVisibility += visibilityCaches[i].Count;
+        }
+        if (totalVisibility > VISIBILITY_CACHE_MAX_SIZE)
+            ClearVisibilityCaches();
+    }
+
+    private void ClearVisibilityCaches()
+    {
+        for (var i = 0; i < VISIBILITY_CACHE_STRIPES; ++i)
+        {
+            lock (visibilityLocks[i])
+                visibilityCaches[i].Clear();
         }
     }
 
@@ -320,9 +333,9 @@ public partial class VoxelPathfind
         l1FloodFillVisited      = null;
         l1BfsQueue              = null;
         parallelEvaluationBuffer = Array.Empty<VolumeNeighbourEvaluation?>();
+        ClearVisibilityCaches();
         lock (cacheLock)
         {
-            visibilityCache.Clear();
             voxelWallMaskCache.Clear();
             verifiedDownwardOpeningCache.Clear();
             verifiedTopEntryCache.Clear();

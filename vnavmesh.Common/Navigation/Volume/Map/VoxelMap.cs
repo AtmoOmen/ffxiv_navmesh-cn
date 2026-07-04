@@ -12,6 +12,8 @@ public class VoxelMap
     private readonly int[]         leafScaleX;
     private readonly int[]         leafScaleY;
     private readonly int[]         leafScaleZ;
+    private readonly int           l2ShiftZ;
+    private readonly int           l1ShiftZ;
     private readonly SemaphoreSlim materializationGate = new(1, 1);
 
     private byte[]?           deferredTreePayload;
@@ -127,6 +129,9 @@ public class VoxelMap
             leafScaleY[i] = leafScaleY[i + 1] * Levels[i + 1].NumCellsY;
             leafScaleZ[i] = leafScaleZ[i + 1] * Levels[i + 1].NumCellsZ;
         }
+
+        l2ShiftZ = BitOperations.Log2((uint)Levels[2].NumCellsZ);
+        l1ShiftZ = BitOperations.Log2((uint)Levels[1].NumCellsZ);
     }
 
     public bool IsEmpty(ulong voxel)
@@ -178,6 +183,135 @@ public class VoxelMap
 
             tile = tile.GetSubdivision(id);
         }
+    }
+
+    public bool TryGetLeafVoxelBounds(ulong voxel, out (Vector3 min, Vector3 max) bounds)
+    {
+        if (Levels.Length != 3)
+        {
+            bounds = default;
+            return false;
+        }
+
+        var l0Index = (ushort)(voxel & INDEX_LEVEL_MASK);
+        var l1Index = (ushort)((voxel >> INDEX_LEVEL_SHIFT) & INDEX_LEVEL_MASK);
+        var l2Index = (ushort)((voxel >> (INDEX_LEVEL_SHIFT * 2)) & INDEX_LEVEL_MASK);
+
+        if (l1Index == INDEX_LEVEL_MASK || l2Index == INDEX_LEVEL_MASK)
+        {
+            bounds = default;
+            return false;
+        }
+
+        ref var l0 = ref Levels[0];
+        ref var l1 = ref Levels[1];
+        ref var l2 = ref Levels[2];
+
+        var l0C = l0.IndexToVoxel(l0Index);
+        var l1C = l1.IndexToVoxel(l1Index);
+        var l2C = l2.IndexToVoxel(l2Index);
+
+        var min = RootTile.BoundsMin
+            + new Vector3
+               (
+                   l0C.x * l0.CellSize.X + l1C.x * l1.CellSize.X + l2C.x * l2.CellSize.X,
+                   l0C.y * l0.CellSize.Y + l1C.y * l1.CellSize.Y + l2C.y * l2.CellSize.Y,
+                   l0C.z * l0.CellSize.Z + l1C.z * l1.CellSize.Z + l2C.z * l2.CellSize.Z
+               );
+
+        bounds = (min, min + l2.CellSize);
+        return true;
+    }
+
+    public bool TryFindLeafVoxelFast(Vector3 p, out ulong voxel, out bool empty)
+    {
+        if (Levels.Length != 3)
+        {
+            voxel = INVALID_VOXEL;
+            empty = false;
+            return false;
+        }
+
+        ref var l0 = ref Levels[0];
+        ref var l1 = ref Levels[1];
+        ref var l2 = ref Levels[2];
+
+        var rel = p - RootTile.BoundsMin;
+        var gx  = (int)(rel.X * l2.InvCellSize.X);
+        var gy  = (int)(rel.Y * l2.InvCellSize.Y);
+        var gz  = (int)(rel.Z * l2.InvCellSize.Z);
+
+        if ((uint)gx >= (uint)leafScaleX[0] ||
+            (uint)gy >= (uint)leafScaleY[0] ||
+            (uint)gz >= (uint)leafScaleZ[0])
+        {
+            voxel = INVALID_VOXEL;
+            empty = false;
+            return false;
+        }
+
+        var l2x = gx & (l2.NumCellsX - 1);
+        var l2y = gy & (l2.NumCellsY - 1);
+        var l2z = gz & (l2.NumCellsZ - 1);
+
+        var l1x = (gx >> l2.ShiftXZ) & (l1.NumCellsX - 1);
+        var l1y = (gy >> l2.ShiftYX) & (l1.NumCellsY - 1);
+        var l1z = (gz >> l2ShiftZ)   & (l1.NumCellsZ - 1);
+
+        var l0x = gx >> (l2.ShiftXZ + l1.ShiftXZ);
+        var l0y = gy >> (l2.ShiftYX + l1.ShiftYX);
+        var l0z = gz >> (l2ShiftZ   + l1ShiftZ);
+
+        var l0Index = l0.VoxelToIndex(l0x, l0y, l0z);
+        var l1Index = l1.VoxelToIndex(l1x, l1y, l1z);
+        var l2Index = l2.VoxelToIndex(l2x, l2y, l2z);
+
+        var tile = RootTile;
+        var data = tile.GetCell(l0Index);
+
+        if ((data & VOXEL_OCCUPIED_BIT) == 0)
+        {
+            voxel = EncodeIndex(l0Index);
+            empty = true;
+            return true;
+        }
+
+        var id = data & VOXEL_ID_MASK;
+        if (id == VOXEL_ID_MASK)
+        {
+            voxel = EncodeIndex(l0Index);
+            empty = false;
+            return true;
+        }
+
+        tile = tile.GetSubdivision(id);
+        data = tile.GetCell(l1Index);
+
+        if ((data & VOXEL_OCCUPIED_BIT) == 0)
+        {
+            voxel = EncodeIndex(l1Index);
+            voxel = EncodeIndex(l0Index, voxel);
+            empty = true;
+            return true;
+        }
+
+        id = data & VOXEL_ID_MASK;
+        if (id == VOXEL_ID_MASK)
+        {
+            voxel = EncodeIndex(l1Index);
+            voxel = EncodeIndex(l0Index, voxel);
+            empty = false;
+            return true;
+        }
+
+        tile = tile.GetSubdivision(id);
+        data = tile.GetCell(l2Index);
+
+        voxel = EncodeIndex(l2Index);
+        voxel = EncodeIndex(l1Index, voxel);
+        voxel = EncodeIndex(l0Index, voxel);
+        empty = (data & VOXEL_OCCUPIED_BIT) == 0;
+        return true;
     }
 
     public Vector3 ClampPointToVoxel(ulong voxel, Vector3 p, float eps = 0.1f)

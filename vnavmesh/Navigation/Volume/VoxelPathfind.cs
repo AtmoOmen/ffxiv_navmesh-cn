@@ -24,7 +24,8 @@ public partial class VoxelPathfind
     private readonly Dictionary<ulong, ulong>                        l1FaceConnectivityCache      = new(2048);
     private readonly Dictionary<(ulong, ulong), bool>                l1FaceTransitionCache        = new(2048);
     private readonly List<int>                                       openList                     = new(256);
-    private readonly Dictionary<VolumeVisibilityKey, bool>           visibilityCache              = new(4096);
+    private readonly Dictionary<VolumeVisibilityKey, bool>[]         visibilityCaches;
+    private readonly object[]                                        visibilityLocks;
     private readonly Dictionary<(ulong, ulong), bool>               pathLoSCache                 = new(1024);
     private readonly Dictionary<(ulong, int), float>                clearanceCache               = new(1024);
     private readonly object                                          cacheLock                    = new();
@@ -89,6 +90,14 @@ public partial class VoxelPathfind
         maxSearchRaycastDistance    = MathF.Max(l2Desc.CellSize.X, MathF.Max(l2Desc.CellSize.Y, l2Desc.CellSize.Z)) * MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS;
         goalVisibilityProbeDistance = MathF.Max(l2Desc.CellSize.X, MathF.Max(l2Desc.CellSize.Y, l2Desc.CellSize.Z)) * GOAL_VISIBILITY_PROBE_DISTANCE_IN_LEAF_CELLS;
         bestNodeRelativeHTolerance  = MathF.Max(l2Desc.CellSize.X, MathF.Max(l2Desc.CellSize.Y, l2Desc.CellSize.Z)) * BEST_NODE_RELATIVE_H_TOLERANCE_LEAF_CELLS;
+
+        visibilityCaches = new Dictionary<VolumeVisibilityKey, bool>[VISIBILITY_CACHE_STRIPES];
+        visibilityLocks  = new object[VISIBILITY_CACHE_STRIPES];
+        for (var i = 0; i < VISIBILITY_CACHE_STRIPES; ++i)
+        {
+            visibilityCaches[i] = new(256);
+            visibilityLocks[i]  = new();
+        }
     }
 
     public List<(ulong voxel, Vector3 p)> FindPath
