@@ -15,5 +15,4 @@ internal sealed class PlannerPathSegment
     public          IReadOnlyList<long>        Corridor             { get; init; } = [];
     public          IReadOnlyList<Vector3>     Points               { get; init; } = [];
     public          GroundCorridorPayload?     GroundCorridor       { get; init; }
-    public          FlightPathDebugPayload?    FlightPathDebug      { get; init; }
 }

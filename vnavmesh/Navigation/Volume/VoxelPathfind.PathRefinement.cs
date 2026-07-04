@@ -1,7 +1,6 @@
 using System.Numerics;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
-using vnavmesh.Navigation.Planning;
 using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
@@ -29,10 +28,7 @@ public partial class VoxelPathfind
     private List<(ulong voxel, Vector3 p)> RefineSimplifiedPath(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
     {
         if (path.Count <= 2)
-        {
-            LastPathDebug = null;
             return path;
-        }
 
         var refined = SimplifyPath(path, cancel);
         refined.Reverse();
@@ -42,9 +38,10 @@ public partial class VoxelPathfind
         for (var iteration = 0; iteration < REFINE_RELAX_ITERATION_LIMIT; ++iteration)
         {
             ProjectInteriorWaypoints(refined, cancel);
-            RelaxTowardOpenSpace(refined, debugInfos: null, cancel);
+            var changed      = RelaxTowardOpenSpace(refined, cancel);
             var straightened = SimplifyPath(refined, cancel);
-            if (straightened.Count == refined.Count)
+
+            if (!changed && straightened.Count == refined.Count)
             {
                 refined = straightened;
                 break;
@@ -53,14 +50,10 @@ public partial class VoxelPathfind
             refined = straightened;
         }
 
-        var debugInfos = new FlightPathWaypointDebug?[refined.Count];
         ProjectInteriorWaypoints(refined, cancel);
-        RelaxTowardOpenSpace(refined, debugInfos, cancel);
+        RelaxTowardOpenSpace(refined, cancel);
 
-        var finalPath = SimplifyPath(refined, cancel);
-        finalPath     = RestoreSteepDescentWaypoints(refined, finalPath);
-        LastPathDebug = BuildFlightPathDebugPayload(refined, debugInfos, finalPath, pendingLongRangeProxyDebug);
-        return finalPath;
+        return SimplifyPath(refined, cancel);
     }
 
     private void ProjectInteriorWaypoints(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
@@ -100,11 +93,12 @@ public partial class VoxelPathfind
         }
     }
 
-    private void RelaxTowardOpenSpace(List<(ulong voxel, Vector3 p)> path, FlightPathWaypointDebug?[]? debugInfos, CancellationToken cancel)
+    private bool RelaxTowardOpenSpace(List<(ulong voxel, Vector3 p)> path, CancellationToken cancel)
     {
         if (path.Count <= 2)
-            return;
+            return false;
 
+        var changed = false;
         for (var i = 1; i < path.Count - 1; ++i)
         {
             if ((i & 0x1f) == 0)
@@ -114,12 +108,14 @@ public partial class VoxelPathfind
             var current  = path[i];
             var next     = path[i + 1];
 
-            if (TryRelaxWaypoint(previous, current, next, i, out var adjusted, out var debugInfo))
+            if (TryRelaxWaypoint(previous, current, next, out var adjusted))
+            {
                 path[i] = adjusted;
-
-            if (debugInfos != null)
-                debugInfos[i] = debugInfo;
+                changed = true;
+            }
         }
+
+        return changed;
     }
 
     private bool TryRelaxWaypoint
@@ -127,13 +123,10 @@ public partial class VoxelPathfind
         (ulong voxel, Vector3 p)     previous,
         (ulong voxel, Vector3 p)     current,
         (ulong voxel, Vector3 p)     next,
-        int                          pathIndex,
-        out (ulong voxel, Vector3 p) adjusted,
-        out FlightPathWaypointDebug? debugInfo
+        out (ulong voxel, Vector3 p) adjusted
     )
     {
-        adjusted  = current;
-        debugInfo = null;
+        adjusted = current;
 
         var overallDirection = next.p - previous.p;
         if (overallDirection.LengthSquared() <= SCORE_EPSILON * SCORE_EPSILON)
@@ -150,12 +143,8 @@ public partial class VoxelPathfind
             }
         }
 
-        var forward3       = new Vector3(normalizedForward.X, 0, normalizedForward.Y);
-        var right3         = new Vector3(-normalizedForward.Y, 0, normalizedForward.X);
-        var forwardRight3  = Vector3.Normalize(forward3 + right3);
-        var forwardLeft3   = Vector3.Normalize(forward3 - right3);
-        var backwardRight3 = Vector3.Normalize(-forward3 + right3);
-        var backwardLeft3  = Vector3.Normalize(-forward3 - right3);
+        var forward3 = new Vector3(normalizedForward.X, 0, normalizedForward.Y);
+        var right3   = new Vector3(-normalizedForward.Y, 0, normalizedForward.X);
 
         var voxelSize          = GetVoxelSize(current.voxel);
         var leafHorizontalSize = MathF.Max(l2Desc.CellSize.X, l2Desc.CellSize.Z);
@@ -163,16 +152,6 @@ public partial class VoxelPathfind
         var voxelHorizontal    = MathF.Max(voxelSize.X, voxelSize.Z);
         var voxelVertical      = voxelSize.Y;
 
-        var horizontalSampleStep = MathF.Max
-        (
-            FLIGHT_PUSH_MIN_DISTANCE,
-            MathF.Max(leafHorizontalSize * FLIGHT_PUSH_SAMPLE_STEP_SCALE, MathF.Min(voxelHorizontal * 0.5f, leafHorizontalSize * FLIGHT_PUSH_SAMPLE_STEP_MAX_SCALE))
-        );
-        var verticalSampleStep = MathF.Max
-        (
-            FLIGHT_PUSH_MIN_DISTANCE,
-            MathF.Max(leafVerticalSize * FLIGHT_PUSH_SAMPLE_STEP_SCALE, MathF.Min(voxelVertical * 0.5f, leafVerticalSize * FLIGHT_PUSH_SAMPLE_STEP_MAX_SCALE))
-        );
         var horizontalScanDistance = MathF.Min
         (
             MathF.Max(voxelHorizontal, leafHorizontalSize * FLIGHT_PUSH_SCAN_DISTANCE_SCALE),
@@ -184,41 +163,26 @@ public partial class VoxelPathfind
             leafVerticalSize * FLIGHT_PUSH_SCAN_DISTANCE_MAX_IN_LEAF_CELLS
         );
 
-        var forwardSample       = MeasureDirectionalClearance(current, forward3,       horizontalScanDistance, horizontalSampleStep);
-        var backwardSample      = MeasureDirectionalClearance(current, -forward3,      horizontalScanDistance, horizontalSampleStep);
-        var rightSample         = MeasureDirectionalClearance(current, right3,         horizontalScanDistance, horizontalSampleStep);
-        var leftSample          = MeasureDirectionalClearance(current, -right3,        horizontalScanDistance, horizontalSampleStep);
-        var forwardRightSample  = MeasureDirectionalClearance(current, forwardRight3,  horizontalScanDistance, horizontalSampleStep);
-        var forwardLeftSample   = MeasureDirectionalClearance(current, forwardLeft3,   horizontalScanDistance, horizontalSampleStep);
-        var backwardRightSample = MeasureDirectionalClearance(current, backwardRight3, horizontalScanDistance, horizontalSampleStep);
-        var backwardLeftSample  = MeasureDirectionalClearance(current, backwardLeft3,  horizontalScanDistance, horizontalSampleStep);
-        var upSample            = MeasureDirectionalClearance(current, Vector3.UnitY,  verticalScanDistance,   verticalSampleStep);
-        var downSample          = MeasureDirectionalClearance(current, -Vector3.UnitY, verticalScanDistance,   verticalSampleStep);
+        var forwardClearance  = MeasureDirectionalClearance(current, forward3,       horizontalScanDistance);
+        var backwardClearance = MeasureDirectionalClearance(current, -forward3,      horizontalScanDistance);
+        var rightClearance    = MeasureDirectionalClearance(current, right3,         horizontalScanDistance);
+        var leftClearance     = MeasureDirectionalClearance(current, -right3,        horizontalScanDistance);
+        var upClearance       = MeasureDirectionalClearance(current, Vector3.UnitY,  verticalScanDistance);
+        var downClearance     = MeasureDirectionalClearance(current, -Vector3.UnitY, verticalScanDistance);
 
-        var forwardClearance       = forwardSample.Clearance;
-        var backwardClearance      = backwardSample.Clearance;
-        var rightClearance         = rightSample.Clearance;
-        var leftClearance          = leftSample.Clearance;
-        var forwardRightClearance  = forwardRightSample.Clearance;
-        var forwardLeftClearance   = forwardLeftSample.Clearance;
-        var backwardRightClearance = backwardRightSample.Clearance;
-        var backwardLeftClearance  = backwardLeftSample.Clearance;
-        var upClearance            = upSample.Clearance;
-        var downClearance          = downSample.Clearance;
+        var preferredHorizontal = MathF.Max
+        (
+            voxelHorizontal * FLIGHT_PUSH_PREFERRED_CLEARANCE_VOXEL_SCALE,
+            leafHorizontalSize * FLIGHT_PUSH_PREFERRED_CLEARANCE_LEAF_SCALE
+        );
+        var preferredVertical = MathF.Max
+        (
+            voxelVertical * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE,
+            leafVerticalSize * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE
+        );
 
-        var preferredHorizontal = MathF.Max(voxelHorizontal * FLIGHT_PUSH_PREFERRED_CLEARANCE_VOXEL_SCALE, leafHorizontalSize * FLIGHT_PUSH_PREFERRED_CLEARANCE_LEAF_SCALE);
-        var preferredVertical   = MathF.Max(voxelVertical   * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE, leafVerticalSize   * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE);
-
-        var minHorizontalClearance =
-            MathF.Min(MathF.Min(forwardClearance, backwardClearance),
-            MathF.Min(MathF.Min(rightClearance, leftClearance),
-            MathF.Min(MathF.Min(forwardRightClearance, forwardLeftClearance),
-                      MathF.Min(backwardRightClearance, backwardLeftClearance))));
-        var maxHorizontalClearance =
-            MathF.Max(MathF.Max(forwardClearance, backwardClearance),
-            MathF.Max(MathF.Max(rightClearance, leftClearance),
-            MathF.Max(MathF.Max(forwardRightClearance, forwardLeftClearance),
-                      MathF.Max(backwardRightClearance, backwardLeftClearance))));
+        var minHorizontalClearance = MathF.Min(MathF.Min(forwardClearance, backwardClearance), MathF.Min(rightClearance, leftClearance));
+        var maxHorizontalClearance = MathF.Max(MathF.Max(forwardClearance, backwardClearance), MathF.Max(rightClearance, leftClearance));
 
         var horizontalCramped = minHorizontalClearance < preferredHorizontal;
         var floorCramped      = downClearance < preferredVertical && upClearance > FLIGHT_PUSH_MIN_DISTANCE;
@@ -227,181 +191,82 @@ public partial class VoxelPathfind
         Vector3 horizontalBias           = Vector3.Zero;
         var     horizontalTotalClearance = 0f;
 
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forward3,        forwardClearance,       1f);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -forward3,       backwardClearance,      1f);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, right3,          rightClearance,         1f);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -right3,         leftClearance,          1f);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardRight3,   forwardRightClearance,  1f);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forwardLeft3,    forwardLeftClearance,   1f);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardRight3,  backwardRightClearance, 1f);
-        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, backwardLeft3,   backwardLeftClearance,  1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, forward3,  forwardClearance,  1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -forward3, backwardClearance, 1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, right3,    rightClearance,    1f);
+        AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -right3,   leftClearance,     1f);
 
         Vector3 horizontalOffset = Vector3.Zero;
         if (horizontalCramped && VoxelMathUtil.TryNormalize(new Vector2(horizontalBias.X, horizontalBias.Z), out var horizontalPushDirection))
         {
-            var deficit               = preferredHorizontal - minHorizontalClearance;
-            var maxHorizontalPush     = MathF.Min(horizontalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, maxHorizontalClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
+            var deficit                = preferredHorizontal - minHorizontalClearance;
+            var maxHorizontalPush      = MathF.Min(horizontalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, maxHorizontalClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
             var horizontalPushDistance = MathF.Min(maxHorizontalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
             if (horizontalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
                 horizontalOffset = new Vector3(horizontalPushDirection.X * horizontalPushDistance, 0, horizontalPushDirection.Y * horizontalPushDistance);
         }
 
-        Vector3                 verticalOffset = Vector3.Zero;
-        FlightPathVerticalMode verticalMode    = FlightPathVerticalMode.None;
+        Vector3 verticalOffset = Vector3.Zero;
 
         if (floorCramped)
         {
-            var deficit             = preferredVertical - downClearance;
-            var maxVerticalPush     = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, upClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
+            var deficit              = preferredVertical - downClearance;
+            var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, upClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
             var verticalPushDistance = MathF.Min(maxVerticalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
             if (verticalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
-            {
                 verticalOffset = Vector3.UnitY * verticalPushDistance;
-                verticalMode   = FlightPathVerticalMode.FloorAvoidance;
-            }
         }
         else if (ceilingCramped)
         {
-            var deficit             = preferredVertical - upClearance;
-            var maxVerticalPush     = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, downClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
+            var deficit              = preferredVertical - upClearance;
+            var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, downClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
             var verticalPushDistance = MathF.Min(maxVerticalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
             if (verticalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
-            {
                 verticalOffset = -Vector3.UnitY * verticalPushDistance;
-                verticalMode   = FlightPathVerticalMode.DownwardBias;
-            }
         }
 
-        var combinedOffset   = horizontalOffset + verticalOffset;
-        var selectedKind     = FlightPathAdjustmentKind.None;
-        var accepted         = false;
+        var combinedOffset = horizontalOffset + verticalOffset;
 
         if (TryAcceptScaledOffset(previous, current, next, combinedOffset, out adjusted))
-        {
-            selectedKind = FlightPathAdjustmentKind.NeutralCombined;
-            accepted     = true;
-        }
-        else if (TryAcceptScaledOffset(previous, current, next, horizontalOffset, out adjusted))
-        {
-            selectedKind = FlightPathAdjustmentKind.NeutralHorizontalOnly;
-            accepted     = true;
-        }
-        else if (TryAcceptScaledOffset(previous, current, next, verticalOffset, out adjusted))
-        {
-            selectedKind = FlightPathAdjustmentKind.NeutralVerticalOnly;
-            accepted     = true;
-        }
-        else adjusted = current;
+            return true;
+        if (TryAcceptScaledOffset(previous, current, next, horizontalOffset, out adjusted))
+            return true;
+        if (TryAcceptScaledOffset(previous, current, next, verticalOffset, out adjusted))
+            return true;
 
-        var horizontalImbalance = horizontalTotalClearance > SCORE_EPSILON
-                                      ? new Vector2(horizontalBias.X, horizontalBias.Z).Length() / horizontalTotalClearance
-                                      : 0f;
-        var verticalTotal     = upClearance + downClearance;
-        var verticalImbalance = verticalTotal > SCORE_EPSILON ? MathF.Abs(upClearance - downClearance) / verticalTotal : 0f;
-        var maxClearance      = MathF.Max
-        (
-            MathF.Max(horizontalScanDistance, verticalScanDistance),
-            MathF.Max
-            (
-                MathF.Max(MathF.Max(forwardClearance, backwardClearance), MathF.Max(rightClearance, leftClearance)),
-                MathF.Max
-                (
-                    MathF.Max(MathF.Max(forwardRightClearance, forwardLeftClearance), MathF.Max(backwardRightClearance, backwardLeftClearance)),
-                    MathF.Max(upClearance, downClearance)
-                )
-            )
-        );
-
-        List<FlightPathDebugSample> samples =
-        [
-            BuildFlightDebugSample(FlightPathDebugSampleKind.Forward,       current.p, forwardSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.Backward,      current.p, backwardSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.Right,         current.p, rightSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.Left,          current.p, leftSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.ForwardRight,  current.p, forwardRightSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.ForwardLeft,   current.p, forwardLeftSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.BackwardRight, current.p, backwardRightSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.BackwardLeft,  current.p, backwardLeftSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.Up,            current.p, upSample),
-            BuildFlightDebugSample(FlightPathDebugSampleKind.Down,          current.p, downSample)
-        ];
-
-        var goalDescentApproach = next.voxel == goalVoxel && next.p.Y + preferredVertical < current.p.Y;
-
-        debugInfo = new FlightPathWaypointDebug
-        (
-            pathIndex,
-            current.voxel,
-            adjusted.voxel,
-            current.p,
-            adjusted.p,
-            current.p + horizontalOffset,
-            current.p + verticalOffset,
-            current.p + combinedOffset,
-            horizontalOffset.Length(),
-            MathF.Abs(verticalOffset.Y),
-            Vector3.Distance(current.p, adjusted.p),
-            horizontalImbalance,
-            verticalImbalance,
-            forwardClearance,
-            backwardClearance,
-            leftClearance,
-            rightClearance,
-            forwardLeftClearance,
-            forwardRightClearance,
-            backwardLeftClearance,
-            backwardRightClearance,
-            upClearance,
-            downClearance,
-            maxClearance,
-            verticalMode,
-            selectedKind,
-            goalDescentApproach,
-            DownhillTunnelTrend: false,
-            ConstrainedTunnelDescent: false,
-            TunnelDescentAssist: false,
-            HeightCatchUpRequested: false,
-            AllowDownwardPush: ceilingCramped,
-            FinalRaiseApplied: false,
-            HeightMatchTarget: current.p.Y,
-            PreferredMinHeight: current.p.Y,
-            BaseAdjustedPosition: adjusted.p,
-            samples
-        );
-
-        return accepted && Vector3.DistanceSquared(current.p, adjusted.p) > SCORE_EPSILON * SCORE_EPSILON;
+        adjusted = current;
+        return false;
     }
 
-    private FlightPushProbeResult MeasureDirectionalClearance
+    private float MeasureDirectionalClearance
     (
         (ulong voxel, Vector3 p) origin,
         Vector3                  direction,
-        float                    maxDistance,
-        float                    stepDistance
+        float                    maxDistance
     )
     {
         if (direction.LengthSquared() <= SCORE_EPSILON * SCORE_EPSILON ||
-            maxDistance               <= FLIGHT_PUSH_MIN_DISTANCE      ||
-            stepDistance              <= FLIGHT_PUSH_MIN_DISTANCE)
-            return new(0, origin.p);
+            maxDistance               <= FLIGHT_PUSH_MIN_DISTANCE)
+            return 0;
 
-        direction = Vector3.Normalize(direction);
+        var dirNorm = Vector3.Normalize(direction);
+        var endPos  = origin.p + (dirNorm * maxDistance);
+        var endLeaf = Volume.FindLeafVoxel(endPos);
+
+        if (endLeaf.voxel == VoxelMap.INVALID_VOXEL)
+            return 0;
+
         var clearance = 0f;
-        var endpoint  = origin.p;
 
-        for (var distance = stepDistance; distance <= maxDistance + SCORE_EPSILON; distance += stepDistance)
+        foreach (var (_, t, empty) in VoxelSearch.EnumerateVoxelsInLine(Volume, origin.voxel, endLeaf.voxel, origin.p, endPos))
         {
-            var probePoint = origin.p + (direction * distance);
-            if (!TryResolveEmptyWaypoint(probePoint, direction, out var probe))
-                break;
-            if (!HasLineOfSight(origin, probe.voxel, probe.p))
+            if (!empty)
                 break;
 
-            clearance = distance;
-            endpoint  = probe.p;
+            clearance = t * maxDistance;
         }
 
-        return new(clearance, endpoint);
+        return clearance;
     }
 
     private bool TryAcceptScaledOffset
@@ -417,7 +282,7 @@ public partial class VoxelPathfind
         if (offset.LengthSquared() <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
             return false;
 
-        Span<float> scales = [1f, 0.85f, 0.70f, 0.55f, 0.40f, 0.25f];
+        Span<float> scales = [1f, 0.5f, 0.25f];
 
         foreach (var t in scales)
         {
@@ -523,124 +388,6 @@ public partial class VoxelPathfind
         totalClearance += contribution;
     }
 
-    private static FlightPathDebugSample BuildFlightDebugSample(FlightPathDebugSampleKind kind, Vector3 start, FlightPushProbeResult sample)
-        => new(kind, start, sample.Endpoint, sample.Clearance);
-
-    private static FlightPathDebugPayload? BuildFlightPathDebugPayload
-    (
-        IReadOnlyList<(ulong voxel, Vector3 p)> refinedPath,
-        IReadOnlyList<FlightPathWaypointDebug?> debugInfos,
-        IReadOnlyList<(ulong voxel, Vector3 p)> finalPath,
-        FlightLongRangeProxyDebug?              proxyDebug = null
-    )
-    {
-        if (refinedPath.Count == 0 || debugInfos.Count == 0 || finalPath.Count == 0)
-            return null;
-
-        List<FlightPathWaypointDebug> remapped    = [];
-        var                           searchStart = 0;
-
-        for (var finalIndex = 0; finalIndex < finalPath.Count; ++finalIndex)
-        {
-            var finalPoint = finalPath[finalIndex];
-
-            for (var refinedIndex = searchStart; refinedIndex < refinedPath.Count; ++refinedIndex)
-            {
-                var refinedPoint = refinedPath[refinedIndex];
-                if (Vector3.DistanceSquared(refinedPoint.p, finalPoint.p) > SCORE_EPSILON * SCORE_EPSILON)
-                    continue;
-
-                if (refinedIndex < debugInfos.Count && debugInfos[refinedIndex] is { } debug)
-                    remapped.Add(debug with { PathIndex = finalIndex });
-
-                searchStart = refinedIndex + 1;
-                break;
-            }
-        }
-
-        if (remapped.Count == 0 && proxyDebug == null)
-            return null;
-
-        return new()
-        {
-            Waypoints  = remapped,
-            CoarsePath = [],
-            ProxyDebug = proxyDebug
-        };
-    }
-
-    private List<(ulong voxel, Vector3 p)> RestoreSteepDescentWaypoints
-    (
-        IReadOnlyList<(ulong voxel, Vector3 p)> refined,
-        IReadOnlyList<(ulong voxel, Vector3 p)> simplified
-    )
-    {
-        if (refined.Count == 0 || simplified.Count <= 1)
-            return [.. simplified];
-
-        List<(ulong voxel, Vector3 p)> restored           = [simplified[0]];
-        var                            refinedSearchStart = 0;
-
-        for (var simplifiedIndex = 1; simplifiedIndex < simplified.Count; ++simplifiedIndex)
-        {
-            var restoredStart = restored[^1];
-            var segmentEnd    = simplified[simplifiedIndex];
-            var startIndex    = VoxelPathUtil.FindPathPointIndex(refined, restoredStart, refinedSearchStart, SCORE_EPSILON);
-
-            if (startIndex < 0)
-            {
-                VoxelPathUtil.AppendPathPoint(restored, segmentEnd, SCORE_EPSILON);
-                continue;
-            }
-
-            var endIndex = VoxelPathUtil.FindPathPointIndex(refined, segmentEnd, startIndex + 1, SCORE_EPSILON);
-
-            if (endIndex < 0)
-            {
-                VoxelPathUtil.AppendPathPoint(restored, segmentEnd, SCORE_EPSILON);
-                continue;
-            }
-
-            AppendSteepDescentAwareSegment(restored, refined, startIndex, endIndex);
-            refinedSearchStart = endIndex;
-        }
-
-        return restored;
-    }
-
-    private void AppendSteepDescentAwareSegment
-    (
-        List<(ulong voxel, Vector3 p)>          output,
-        IReadOnlyList<(ulong voxel, Vector3 p)> refined,
-        int                                     startIndex,
-        int                                     endIndex
-    )
-    {
-        var currentIndex = startIndex;
-
-        while (currentIndex < endIndex)
-        {
-            var nextIndex = endIndex;
-
-            if (NeedsFlightDescentSmoothing(refined[currentIndex].p, refined[endIndex].p))
-            {
-                nextIndex = currentIndex + 1;
-
-                for (var probeIndex = endIndex - 1; probeIndex > currentIndex; --probeIndex)
-                {
-                    if (NeedsFlightDescentSmoothing(refined[currentIndex].p, refined[probeIndex].p))
-                        continue;
-
-                    nextIndex = probeIndex;
-                    break;
-                }
-            }
-
-            VoxelPathUtil.AppendPathPoint(output, refined[nextIndex], SCORE_EPSILON);
-            currentIndex = nextIndex;
-        }
-    }
-
     private bool NeedsFlightDescentSmoothing(Vector3 from, Vector3 to)
     {
         var verticalDrop = from.Y - to.Y;
@@ -675,11 +422,18 @@ public partial class VoxelPathfind
         {
             var probeIndex = Math.Min(furthestVisibleIndex + step, pathLastIndex);
             if (!HasLineOfSight(path, anchorIndex, probeIndex, cancel))
-                return FindVisibleBoundary(path, anchorIndex, furthestVisibleIndex, probeIndex - 1, cancel);
+            {
+                furthestVisibleIndex = FindVisibleBoundary(path, anchorIndex, furthestVisibleIndex, probeIndex - 1, cancel);
+                break;
+            }
 
             furthestVisibleIndex =   probeIndex;
             step                 <<= 1;
         }
+
+        while (furthestVisibleIndex > anchorIndex + 1 &&
+               NeedsFlightDescentSmoothing(path[anchorIndex].p, path[furthestVisibleIndex].p))
+            --furthestVisibleIndex;
 
         return furthestVisibleIndex;
     }

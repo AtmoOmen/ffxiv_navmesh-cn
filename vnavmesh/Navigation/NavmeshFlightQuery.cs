@@ -62,35 +62,6 @@ internal sealed class NavmeshFlightQuery
         (
             $"[算路] 飞行路径查询完成：空体素定位耗时 = {locateDuration.TotalSeconds:f3} 秒，主体搜索耗时 = {searchTimer.Value().TotalSeconds:f3} 秒，访问节点 = {telemetry.VisitedNodes}，生成节点 = {telemetry.GeneratedNodes}，LoS 检查 = {telemetry.LineOfSightChecks}，LoS 命中 = {telemetry.LineOfSightHits}，开放表峰值 = {telemetry.PeakOpenListSize}，终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，搜索轮次 = {telemetry.SearchAttempts}，启发式权重 = {telemetry.HeuristicWeight:f2}，路径点 = {voxelPath.Count}，起点修正 = {(Vector3.DistanceSquared(safeStart, from) > 0.000001f ? "是" : "否")}，安全终点修正 = {(safeDestinationAdjusted ? "是" : "否")}"
         );
-        var flightDebug = volumeQuery.LastPathDebug;
-
-        if (voxelPath.Count == 0 && flightDebug is { CoarsePath.Count: > 0 })
-        {
-            Service.Log.Warning("[算路] 飞行体素调试：返回粗层 best-effort 叠加，不生成正式路线");
-            return new()
-            {
-                Status               = PathfindStatus.Partial,
-                RequestedMode        = MovementMode.Flight,
-                RequestedDestination = to,
-                FinalDestination     = to,
-                DestinationTolerance = 0,
-                Segments =
-                [
-                    new()
-                    {
-                        MovementMode           = MovementMode.Flight,
-                        SegmentKind            = MovementSegmentKind.FlightTraverse,
-                        AllowVerticalControl   = true,
-                        GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
-                        TraversalStartPosition = from,
-                        StartPosition          = from,
-                        EndPosition            = to,
-                        Points                 = [],
-                        FlightPathDebug        = flightDebug
-                    }
-                ]
-            };
-        }
 
         if (voxelPath.Count == 0)
         {
@@ -143,8 +114,7 @@ internal sealed class NavmeshFlightQuery
                             TraversalStartPosition = from,
                             StartPosition        = from,
                             EndPosition          = partialDestination,
-                            Points               = [.. rawWaypoints],
-                            FlightPathDebug      = flightDebug
+                            Points               = [.. rawWaypoints]
                         }
                     ]
                 };
@@ -195,8 +165,7 @@ internal sealed class NavmeshFlightQuery
                     TraversalStartPosition = from,
                     StartPosition        = from,
                     EndPosition          = finalDestination,
-                    Points               = [.. rawWaypoints],
-                    FlightPathDebug      = flightDebug
+                    Points               = [.. rawWaypoints]
                 }
             ]
         };
@@ -345,8 +314,7 @@ internal sealed class NavmeshFlightQuery
                 TraversalStartPosition = requestedStart,
                 StartPosition        = requestedStart,
                 EndPosition          = transitionPoint,
-                Points               = flightWaypoints,
-                FlightPathDebug      = query.VolumeQuery?.LastPathDebug
+                Points               = flightWaypoints
             }
         ];
         foreach (var segment in groundResult.Segments)

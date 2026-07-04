@@ -276,12 +276,9 @@ public partial class VoxelPathfind
         useGuidedCorridor                    = false;
         guidedCorridor                       = default;
         longRangeLateralBias                 = default;
-        debugReturnedLongRangeBestEffortPath = false;
         guidedCorridorEarlyAbortTriggered    = false;
         lastTermination                      = VolumeSearchTermination.SearchExhausted;
         lastSearchAttempts                   = 0;
-        LastPathDebug                        = null;
-        pendingLongRangeProxyDebug           = null;
         guidedCorridorInitialAboveGoal       = 0;
         guidedCorridorInitialGoalDistance    = 0;
         guidedCorridorLastProgressAboveGoal  = 0;

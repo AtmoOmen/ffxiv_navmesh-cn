@@ -12,5 +12,4 @@ internal sealed class PostprocessedPathSegment
     public required float                  CompletionTolerance  { get; init; }
     public          IReadOnlyList<Vector3> Waypoints            { get; init; } = [];
     public          GroundCorridorPayload? GroundCorridor       { get; init; }
-    public          FlightPathDebugPayload? FlightPathDebug     { get; init; }
 }

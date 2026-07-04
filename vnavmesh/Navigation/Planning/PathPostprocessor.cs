@@ -63,9 +63,9 @@ internal sealed class PathPostprocessor
         var groundCorridor = segment is { MovementMode: MovementMode.Ground, GeometryKind: PlannerSegmentGeometryKind.MeshCorridor }
                                  ? BuildGroundCorridor(segment)
                                  : segment.GroundCorridor;
-        var (waypoints, flightPathDebug) = segment.GeometryKind switch
+        var waypoints = segment.GeometryKind switch
         {
-            PlannerSegmentGeometryKind.MeshCorridor   => (BuildMeshWaypoints(segment, groundCorridor), segment.FlightPathDebug),
+            PlannerSegmentGeometryKind.MeshCorridor   => BuildMeshWaypoints(segment, groundCorridor),
             PlannerSegmentGeometryKind.DiscretePoints => BuildDiscreteWaypoints(segment),
             _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
         };
@@ -78,8 +78,7 @@ internal sealed class PathPostprocessor
             StartPosition        = segment.StartPosition,
             CompletionTolerance  = 0,
             Waypoints            = waypoints,
-            GroundCorridor       = groundCorridor,
-            FlightPathDebug      = flightPathDebug
+            GroundCorridor       = groundCorridor
         };
     }
 
@@ -90,9 +89,9 @@ internal sealed class PathPostprocessor
         var groundCorridor = segment is { MovementMode: MovementMode.Ground, GeometryKind: PlannerSegmentGeometryKind.MeshCorridor }
                                  ? BuildGroundCorridor(segment, straightPathOptions)
                                  : segment.GroundCorridor;
-        var (waypoints, flightPathDebug) = segment.GeometryKind switch
+        var waypoints = segment.GeometryKind switch
         {
-            PlannerSegmentGeometryKind.MeshCorridor => (BuildRawStraightPathWaypoints(segment, [.. segment.Corridor], straightPathOptions), segment.FlightPathDebug),
+            PlannerSegmentGeometryKind.MeshCorridor => BuildRawStraightPathWaypoints(segment, [.. segment.Corridor], straightPathOptions),
             PlannerSegmentGeometryKind.DiscretePoints => BuildRawDiscreteWaypoints(segment),
             _ => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
         };
@@ -105,8 +104,7 @@ internal sealed class PathPostprocessor
             StartPosition        = segment.StartPosition,
             CompletionTolerance  = 0,
             Waypoints            = waypoints,
-            GroundCorridor       = groundCorridor,
-            FlightPathDebug      = flightPathDebug
+            GroundCorridor       = groundCorridor
         };
     }
 
@@ -1957,19 +1955,15 @@ internal sealed class PathPostprocessor
     private static Vector3 ResolveLinkEndPosition(IReadOnlyList<Vector3> positions, int index) =>
         index + 1 < positions.Count ? positions[index + 1] : positions[index];
 
-    private static (List<Vector3> Waypoints, FlightPathDebugPayload? Debug) BuildRawDiscreteWaypoints(PlannerPathSegment segment)
-        => ([.. segment.Points], segment.FlightPathDebug);
+    private static List<Vector3> BuildRawDiscreteWaypoints(PlannerPathSegment segment)
+        => [.. segment.Points];
 
-    private static (List<Vector3> Waypoints, FlightPathDebugPayload? Debug) BuildDiscreteWaypoints(PlannerPathSegment segment)
+    private static List<Vector3> BuildDiscreteWaypoints(PlannerPathSegment segment)
     {
         if (segment.MovementMode != MovementMode.Flight)
-            return (DeduplicateWaypoints(segment.Points), segment.FlightPathDebug);
+            return DeduplicateWaypoints(segment.Points);
 
-        var           rawDebugLookup            = segment.FlightPathDebug?.Waypoints.ToDictionary(d => d.PathIndex);
-        var           coarsePath                = segment.FlightPathDebug?.CoarsePath ?? [];
-        var           proxyDebug                = segment.FlightPathDebug?.ProxyDebug;
-        List<Vector3> deduplicated              = [];
-        List<int>     deduplicatedSourceIndices = [];
+        List<Vector3> deduplicated = [];
 
         for (var i = 0; i < segment.Points.Count; ++i)
         {
@@ -1978,25 +1972,17 @@ internal sealed class PathPostprocessor
                 continue;
 
             deduplicated.Add(point);
-            deduplicatedSourceIndices.Add(i);
         }
 
-        var deduplicatedDebugLookup = RemapFlightDebugLookup(rawDebugLookup, deduplicatedSourceIndices);
-        var (simplifiedPoints, simplifiedDebugLookup) = SimplifyFlightWaypoints(deduplicated, deduplicatedDebugLookup);
-        return (simplifiedPoints, BuildFlightPathDebugPayload(simplifiedDebugLookup, coarsePath, proxyDebug));
+        return SimplifyFlightWaypoints(deduplicated);
     }
 
-    private static (List<Vector3> Waypoints, Dictionary<int, FlightPathWaypointDebug>? DebugLookup) SimplifyFlightWaypoints
-    (
-        List<Vector3>                             points,
-        Dictionary<int, FlightPathWaypointDebug>? debugLookup
-    )
+    private static List<Vector3> SimplifyFlightWaypoints(List<Vector3> points)
     {
         if (points.Count <= 2)
-            return ([.. points], RemapFlightDebugLookup(debugLookup, Enumerable.Range(0, points.Count)));
+            return [.. points];
 
-        List<Vector3> simplified      = [points[0]];
-        List<int>     retainedIndices = [0];
+        List<Vector3> simplified = [points[0]];
 
         for (var i = 1; i < points.Count - 1; i++)
         {
@@ -2007,54 +1993,10 @@ internal sealed class PathPostprocessor
                 continue;
 
             simplified.Add(current);
-            retainedIndices.Add(i);
         }
 
         simplified.Add(points[^1]);
-        retainedIndices.Add(points.Count - 1);
-        return (simplified, RemapFlightDebugLookup(debugLookup, retainedIndices));
-    }
-
-    private static Dictionary<int, FlightPathWaypointDebug>? RemapFlightDebugLookup
-    (
-        IReadOnlyDictionary<int, FlightPathWaypointDebug>? source,
-        IEnumerable<int>                                   retainedIndices
-    )
-    {
-        if (source == null || source.Count == 0)
-            return null;
-
-        Dictionary<int, FlightPathWaypointDebug> remapped      = [];
-        var                                      nextPathIndex = 0;
-
-        foreach (var sourceIndex in retainedIndices)
-        {
-            if (source.TryGetValue(sourceIndex, out var debug))
-                remapped[nextPathIndex] = debug with { PathIndex = nextPathIndex };
-
-            ++nextPathIndex;
-        }
-
-        return remapped.Count > 0 ? remapped : null;
-    }
-
-    private static FlightPathDebugPayload? BuildFlightPathDebugPayload
-    (
-        Dictionary<int, FlightPathWaypointDebug>?      debugLookup,
-        IReadOnlyList<FlightCoarsePathDebugNode>?      coarsePath = null,
-        FlightLongRangeProxyDebug?                     proxyDebug = null
-    )
-    {
-        var resolvedCoarsePath = coarsePath ?? [];
-        if ((debugLookup == null || debugLookup.Count == 0) && resolvedCoarsePath.Count == 0 && proxyDebug == null)
-            return null;
-
-        return new()
-        {
-            Waypoints  = debugLookup != null ? [.. debugLookup.OrderBy(pair => pair.Key).Select(pair => pair.Value)] : [],
-            CoarsePath = resolvedCoarsePath,
-            ProxyDebug = proxyDebug
-        };
+        return simplified;
     }
 
     private static bool IsRedundantFlightWaypoint(Vector3 previous, Vector3 current, Vector3 next)

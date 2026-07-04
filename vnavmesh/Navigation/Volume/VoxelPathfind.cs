@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Common.Navigation.Volume.Map;
-using vnavmesh.Navigation.Planning;
 using vnavmesh.Navigation.Volume.Models;
 
 namespace vnavmesh.Navigation.Volume;
@@ -40,7 +39,6 @@ public partial class VoxelPathfind
     private int                        peakOpenListSize;
     private VolumeSearchTermination    lastTermination;
     private int                        lastSearchAttempts;
-    private bool                       debugReturnedLongRangeBestEffortPath;
     private bool                       guidedCorridorEarlyAbortTriggered;
     private int                        currentL1CorridorRadius;
     private HashSet<ulong>?            l1PathSet;
@@ -49,7 +47,6 @@ public partial class VoxelPathfind
     private Dictionary<ushort, int>?   l0CorridorDistance;
     private Dictionary<ulong, float>?  l1DistanceField;
     private Dictionary<ushort, float>? l0DistanceField;
-    private FlightLongRangeProxyDebug? pendingLongRangeProxyDebug;
     private GuidedSearchCorridor       guidedCorridor;
     private LongRangeLateralBias       longRangeLateralBias;
     private float                      guidedCorridorInitialGoalDistance;
@@ -75,8 +72,6 @@ public partial class VoxelPathfind
         lastSearchAttempts,
         heuristicWeight
     );
-
-    internal FlightPathDebugPayload? LastPathDebug { get; private set; }
 
     public VoxelPathfind(VoxelMap volume)
     {
@@ -105,8 +100,6 @@ public partial class VoxelPathfind
         l0CorridorDistance         = null;
         l1DistanceField            = null;
         l0DistanceField            = null;
-        LastPathDebug              = null;
-        pendingLongRangeProxyDebug = null;
         previouslyVisitedVoxels    = null;
 
         if (fromVoxel == toVoxel)
@@ -190,12 +183,6 @@ public partial class VoxelPathfind
         }
 
         var longRangePath = RunLongRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
-
-        if (debugReturnedLongRangeBestEffortPath)
-        {
-            Service.Log.Debug("[算路] 飞行体素调试：best-effort 后直接停止，并返回粗路径调试叠加");
-            return [];
-        }
 
         if (lastTermination == VolumeSearchTermination.ReachedGoal)
             return RefineSimplifiedPath(longRangePath, cancel);

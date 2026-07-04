@@ -33,17 +33,6 @@ internal class DebugNavmeshManager : IDisposable
     private const uint  PathRequestedStartLinkColor      = 0xFFEC407Au;
     private const uint  PathActualStartColor             = 0xFF8E24AAu;
     private const uint  PathConsumedPrefixColor          = 0xFF757575u;
-    private const uint  PathFlightOriginalColor          = 0xFF8E24AAu;
-    private const uint  PathFlightHorizontalColor        = 0xFF42A5F5u;
-    private const uint  PathFlightVerticalColor          = 0xFF26A69Au;
-    private const uint  PathFlightCombinedColor          = 0xFFFFB300u;
-    private const uint  PathFlightCoarseLineColor        = 0xFF7CFC00u;
-    private const uint  PathFlightCoarsePointColor       = 0xFFB2FF59u;
-    private const uint  PathFlightCoarseBoxColor         = 0x442EE6A6u;
-    private const uint  PathFlightProxyPointColor        = 0xFF00E5FFu;
-    private const uint  PathFlightProxyLineColor         = 0xFF00BCD4u;
-    private const uint  PathFlightProxyTailDirectColor   = 0xFF00E676u;
-    private const uint  PathFlightProxyTailRelayColor    = 0xFFFFC107u;
 
     private sealed record RenderedPath(Vector3 RequestStart, PostprocessedPath Result, uint LineColor, uint PointColor, uint StartColor, uint EndColor, string Label);
 
@@ -293,8 +282,7 @@ internal class DebugNavmeshManager : IDisposable
             if (showCornerPushDebug)
             {
                 DrawRenderedPathCornerDebug(renderedPath);
-                DrawRenderedPathFlightDebug(renderedPath);
-            }
+                    }
         }
     }
 
@@ -377,20 +365,16 @@ internal class DebugNavmeshManager : IDisposable
 
     private void DrawRenderedPath(RenderedPath renderedPath)
     {
-        var coarseDebugOnly = HasCoarseOnlyFlightDebug(renderedPath.Result);
         List<Vector3> points = [];
         var firstSegment = renderedPath.Result.Segments.FirstOrDefault();
         var actualStart = firstSegment?.StartPosition
                        ?? (renderedPath.Result.Waypoints.Count > 0 ? renderedPath.Result.Waypoints[0] : renderedPath.Result.FinalDestination);
         var initialWaypointIndex = firstSegment?.GroundCorridor?.InitialWaypointIndex ?? 0;
 
-        if (!coarseDebugOnly)
-            DrawConsumedPrefix(firstSegment, actualStart, initialWaypointIndex);
+        DrawConsumedPrefix(firstSegment, actualStart, initialWaypointIndex);
 
-        if (!coarseDebugOnly)
-            points.Add(initialWaypointIndex > 0 ? renderedPath.RequestStart : actualStart);
+        points.Add(initialWaypointIndex > 0 ? renderedPath.RequestStart : actualStart);
 
-        if (!coarseDebugOnly)
         {
             var firstWaypointSkipped = false;
             foreach (var segment in renderedPath.Result.Segments)
@@ -420,7 +404,7 @@ internal class DebugNavmeshManager : IDisposable
         dd.DrawWorldPointFilled(actualStart, 4, PathActualStartColor);
         dd.DrawWorldPointFilled(renderedPath.Result.FinalDestination, 4, renderedPath.EndColor);
 
-        if (!coarseDebugOnly && Vector3.DistanceSquared(renderedPath.RequestStart, actualStart) > DuplicateRenderedPointDistanceSq)
+        if (Vector3.DistanceSquared(renderedPath.RequestStart, actualStart) > DuplicateRenderedPointDistanceSq)
             dd.DrawWorldLine(renderedPath.RequestStart, actualStart, PathRequestedStartLinkColor, 2);
     }
 
@@ -467,97 +451,6 @@ internal class DebugNavmeshManager : IDisposable
         }
     }
 
-    private void DrawRenderedPathFlightDebug(RenderedPath renderedPath)
-    {
-        foreach (var segment in renderedPath.Result.Segments)
-        {
-            if (segment.FlightPathDebug == null)
-                continue;
-
-            if (segment.FlightPathDebug.CoarsePath.Count > 0)
-                DrawFlightCoarsePath(segment.FlightPathDebug.CoarsePath);
-            if (segment.FlightPathDebug.ProxyDebug is { } proxyDebug)
-                DrawFlightProxyDebug(proxyDebug);
-
-            foreach (var debug in segment.FlightPathDebug.Waypoints)
-            {
-                foreach (var sample in debug.Samples)
-                    dd.DrawWorldLine(sample.Start, sample.Endpoint, ColorForClearance(sample.Clearance, debug.MaxClearance), 1);
-
-                if (Vector3.DistanceSquared(debug.OriginalPosition, debug.HorizontalBiasEndpoint) > DuplicateRenderedPointDistanceSq)
-                    dd.DrawWorldLine(debug.OriginalPosition, debug.HorizontalBiasEndpoint, PathFlightHorizontalColor, 2);
-                if (Vector3.DistanceSquared(debug.OriginalPosition, debug.VerticalBiasEndpoint) > DuplicateRenderedPointDistanceSq)
-                    dd.DrawWorldLine(debug.OriginalPosition, debug.VerticalBiasEndpoint, PathFlightVerticalColor, 2);
-                if (Vector3.DistanceSquared(debug.OriginalPosition, debug.CombinedBiasEndpoint) > DuplicateRenderedPointDistanceSq)
-                    dd.DrawWorldLine(debug.OriginalPosition, debug.CombinedBiasEndpoint, PathFlightCombinedColor, 1);
-                if (debug.PushApplied)
-                    dd.DrawWorldLine(debug.OriginalPosition, debug.AdjustedPosition, PathCornerMoveColor, 3);
-
-                dd.DrawWorldPointFilled(debug.OriginalPosition, 3, PathFlightOriginalColor);
-                dd.DrawWorldPointFilled(debug.AdjustedPosition, 4, debug.PushApplied ? PathCornerAdjustedColor : renderedPath.PointColor);
-
-                dd.DrawWorldText
-                (
-                    debug.AdjustedPosition + new Vector3(0, 0.12f, 0),
-                    $"idx={debug.PathIndex} push={debug.PushDistance:F2} h={debug.HorizontalPushDistance:F2} v={debug.VerticalPushDistance:F2} hi={debug.HorizontalImbalance:F2} vi={debug.VerticalImbalance:F2} F={debug.ForwardClearance:F2} B={debug.BackwardClearance:F2} L={debug.LeftClearance:F2} R={debug.RightClearance:F2} FL={debug.ForwardLeftClearance:F2} FR={debug.ForwardRightClearance:F2} BL={debug.BackwardLeftClearance:F2} BR={debug.BackwardRightClearance:F2} U={debug.UpClearance:F2} D={debug.DownClearance:F2} vm={debug.VerticalMode} sel={debug.SelectedAdjustmentKind} gd={(debug.GoalDescentApproach ? 1 : 0)} dt={(debug.DownhillTunnelTrend ? 1 : 0)} ct={(debug.ConstrainedTunnelDescent ? 1 : 0)} td={(debug.TunnelDescentAssist ? 1 : 0)} cu={(debug.HeightCatchUpRequested ? 1 : 0)} ad={(debug.AllowDownwardPush ? 1 : 0)} raise={(debug.FinalRaiseApplied ? 1 : 0)} hm={debug.HeightMatchTarget:F2} pm={debug.PreferredMinHeight:F2} baseY={debug.BaseAdjustedPosition.Y:F2} vox={debug.OriginalVoxel:X}->{debug.AdjustedVoxel:X}",
-                    0xFFFFFFFFu
-                );
-            }
-        }
-    }
-
-    private void DrawFlightCoarsePath(IReadOnlyList<FlightCoarsePathDebugNode> coarsePath)
-    {
-        var volume = manager.Navmesh?.Volume;
-        for (var i = 0; i < coarsePath.Count; ++i)
-        {
-            var node = coarsePath[i];
-            if (volume != null && node.Voxel != VoxelMap.INVALID_VOXEL)
-            {
-                var bounds = volume.VoxelBounds(node.Voxel, 0);
-                dd.DrawWorldAABB((bounds.min + bounds.max) * 0.5f, (bounds.max - bounds.min) * 0.5f, PathFlightCoarseBoxColor, 1);
-            }
-
-            dd.DrawWorldPointFilled(node.Position, 4, PathFlightCoarsePointColor);
-            dd.DrawWorldText(node.Position + new Vector3(0, 0.12f, 0), $"L1[{node.PathIndex}] {node.Voxel:X}", 0xFFFFFFFFu);
-
-            if (i > 0)
-                dd.DrawWorldLine(coarsePath[i - 1].Position, node.Position, PathFlightCoarseLineColor, 2);
-        }
-    }
-
-    private void DrawFlightProxyDebug(FlightLongRangeProxyDebug proxyDebug)
-    {
-        var volume = manager.Navmesh?.Volume;
-        if (volume != null && proxyDebug.ProxyVoxel != VoxelMap.INVALID_VOXEL)
-        {
-            var bounds = volume.VoxelBounds(proxyDebug.ProxyVoxel, 0);
-            dd.DrawWorldAABB((bounds.min + bounds.max) * 0.5f, (bounds.max - bounds.min) * 0.5f, PathFlightProxyLineColor, 1);
-        }
-
-        dd.DrawWorldPointFilled(proxyDebug.ProxyPosition, 5, PathFlightProxyPointColor);
-        dd.DrawWorldLine(proxyDebug.ProxyPosition, proxyDebug.TailStartPosition, PathFlightProxyLineColor, 2);
-
-        var tailColor = proxyDebug.TailKind switch
-        {
-            FlightLongRangeTailKind.DirectToGoal       => PathFlightProxyTailDirectColor,
-            FlightLongRangeTailKind.ShortRangeRelay    => PathFlightProxyTailRelayColor,
-            FlightLongRangeTailKind.ShortRangeRelayPartial => PathFlightProxyTailRelayColor,
-            _                                          => PathFlightProxyLineColor
-        };
-
-        if (Vector3.DistanceSquared(proxyDebug.TailStartPosition, proxyDebug.TailTargetPosition) > DuplicateRenderedPointDistanceSq)
-            dd.DrawWorldLine(proxyDebug.TailStartPosition, proxyDebug.TailTargetPosition, tailColor, 2);
-
-        dd.DrawWorldPointFilled(proxyDebug.TailStartPosition, 4, tailColor);
-        dd.DrawWorldText
-        (
-            proxyDebug.ProxyPosition + new Vector3(0, 0.16f, 0),
-            $"proxy {proxyDebug.ProxyVoxel:X} tail={proxyDebug.TailKind}",
-            0xFFFFFFFFu
-        );
-    }
-
     private void DrawConsumedPrefix(PostprocessedPathSegment? firstSegment, Vector3 actualStart, int initialWaypointIndex)
     {
         if (firstSegment == null || initialWaypointIndex <= 0 || firstSegment.Waypoints.Count == 0)
@@ -586,6 +479,4 @@ internal class DebugNavmeshManager : IDisposable
         return 0x66000000u | red | ((uint)green << 8);
     }
 
-    private static bool HasCoarseOnlyFlightDebug(PostprocessedPath result)
-        => result.Segments.Any(segment => segment is { Waypoints.Count: 0, FlightPathDebug.CoarsePath.Count: > 0 });
 }

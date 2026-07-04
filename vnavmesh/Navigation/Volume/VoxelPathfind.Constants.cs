@@ -48,12 +48,6 @@ public partial class VoxelPathfind
         int                  StepBudget
     );
 
-    private readonly record struct FlightPushProbeResult
-    (
-        float   Clearance,
-        Vector3 Endpoint
-    );
-
     private const float  SCORE_EPSILON                                                   = 0.00001f;
     private const int    DEFAULT_MAX_SEARCH_STEPS                                        = 1_0000_0000;
     private const int    RAYCAST_SEARCH_STEP_BUDGET                                      = 400000;
@@ -164,8 +158,6 @@ public partial class VoxelPathfind
     private const byte   SEARCH_WALL_POS_Y                                               = 1 << 3;
     private const byte   SEARCH_WALL_NEG_Z                                               = 1 << 4;
     private const byte   SEARCH_WALL_POS_Z                                               = 1 << 5;
-    private const float  FLIGHT_PUSH_SAMPLE_STEP_SCALE                                   = 0.75f;
-    private const float  FLIGHT_PUSH_SAMPLE_STEP_MAX_SCALE                               = 1.50f;
     private const float  FLIGHT_PUSH_SCAN_DISTANCE_SCALE                                 = 6.00f;
     private const float  FLIGHT_PUSH_SCAN_DISTANCE_MAX_IN_LEAF_CELLS                     = 18.00f;
     private const float  FLIGHT_PUSH_SCAN_PUSH_FRACTION                                  = 0.62f;

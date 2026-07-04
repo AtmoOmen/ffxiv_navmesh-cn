@@ -18,8 +18,6 @@ public partial class VoxelPathfind
         int               recursionDepth = 0
     )
     {
-        if (recursionDepth == 0)
-            pendingLongRangeProxyDebug = null;
         var coarsePath = SearchL1BestEffortPath(fromVoxel, fromPos, toVoxel, toPos);
 
         if (coarsePath.PathSet.Count == 0)
@@ -67,7 +65,6 @@ public partial class VoxelPathfind
 
         if (lastTermination == VolumeSearchTermination.ReachedGoal)
         {
-            pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyPath[^1].p, toPos, FlightLongRangeTailKind.None);
             Service.Log.Debug
             (
                 $"[算路] 飞行体素粗层代理搜索完成：访问节点 = {visitedNodes}，粗路径单元 = {coarsePath.PathSet.Count}，引导半径 = {guidedCorridorRadius}，启发式权重 = {heuristicWeight:f2}"
@@ -81,7 +78,6 @@ public partial class VoxelPathfind
 
             if (TryBuildDirectPath(proxyEndpoint.voxel, toVoxel, proxyEndpoint.p, toPos, out var directTail))
             {
-                pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyEndpoint.p, toPos, FlightLongRangeTailKind.DirectToGoal);
                 Service.Log.Debug("[算路] 飞行体素粗层代理搜索后直连终点成功");
                 return VoxelPathUtil.MergePathSegments(proxyPath, directTail, SCORE_EPSILON);
             }
@@ -101,8 +97,6 @@ public partial class VoxelPathfind
 
             if (lastTermination == VolumeSearchTermination.ReachedGoal)
             {
-                if (!(usedLongRangeReentry && pendingLongRangeProxyDebug is not null))
-                    pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyEndpoint.p, toPos, FlightLongRangeTailKind.ShortRangeRelay);
                 Service.Log.Debug
                 (
                     usedLongRangeReentry
@@ -112,8 +106,6 @@ public partial class VoxelPathfind
                 return VoxelPathUtil.MergePathSegments(proxyPath, tailPath, SCORE_EPSILON);
             }
 
-            if (!(usedLongRangeReentry && pendingLongRangeProxyDebug is not null))
-                pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyEndpoint.p, toPos, FlightLongRangeTailKind.ShortRangeRelayPartial);
             Service.Log.Debug
             (
                 usedLongRangeReentry
@@ -123,7 +115,6 @@ public partial class VoxelPathfind
             return VoxelPathUtil.MergePathSegments(proxyPath, tailPath, SCORE_EPSILON);
         }
 
-        pendingLongRangeProxyDebug = new(proxyGoalVoxel, proxyGoalPos, proxyPath.Count > 0 ? proxyPath[^1].p : fromPos, toPos, FlightLongRangeTailKind.None);
         Service.Log.Debug
         (
             $"[算路] 飞行体素粗层代理搜索未达终点（{lastTermination}），粗路径单元 = {coarsePath.PathSet.Count}，引导半径 = {guidedCorridorRadius}，访问节点 = {visitedNodes}"
