@@ -14,16 +14,16 @@ internal static class OffMeshConnectionMetadataRegistry
 
     public static void Record
     (
-        DtNavMeshCreateParams          config,
-        Vector3                        start,
-        Vector3                        end,
-        float                          radius,
-        bool                           bidirectional,
-        int                            userId,
-        NavmeshArea                    area,
-        NavmeshPolyFlags               flags,
-        NavmeshOffMeshKind             kind,
-        NavmeshLinkTraversalProfile?   traversalProfile
+        DtNavMeshCreateParams        config,
+        Vector3                      start,
+        Vector3                      end,
+        float                        radius,
+        bool                         bidirectional,
+        int                          userId,
+        NavmeshArea                  area,
+        NavmeshPolyFlags             flags,
+        NavmeshOffMeshKind           kind,
+        NavmeshLinkTraversalProfile? traversalProfile
     )
     {
         Entries.GetOrCreateValue(config).Add
@@ -44,14 +44,16 @@ internal static class OffMeshConnectionMetadataRegistry
     }
 
     public static IReadOnlyList<NavmeshBuildOffMeshConnection> Read(DtNavMeshCreateParams config) =>
-        Entries.TryGetValue(config, out var entries) ? entries : [];
+        Entries.TryGetValue(config, out var entries) ?
+            entries :
+            [];
 
     public static List<NavmeshBuildOffMeshConnection> Collect(NavmeshCustomization customization)
     {
         var config = new DtNavMeshCreateParams
         {
             bmin = new RcVec3f(-1_000_000f, -1_000_000f, -1_000_000f),
-            bmax = new RcVec3f(1_000_000f, 1_000_000f, 1_000_000f)
+            bmax = new RcVec3f(1_000_000f,  1_000_000f,  1_000_000f)
         };
         customization.CustomizeSettings(config);
         return [.. Read(config)];

@@ -14,7 +14,7 @@ namespace vnavmesh.UI.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private readonly PluginConfig                  config;
+    private readonly PluginConfig            config;
     private readonly MovementPlanExecutor    movementExecutor;
     private readonly DebugDrawer             debugDrawer = new();
     private readonly DebugGameCollision      debugGameColl;
@@ -24,7 +24,7 @@ public class MainWindow : Window, IDisposable
 
     public MainWindow
     (
-        PluginConfig               config,
+        PluginConfig         config,
         PluginPaths          paths,
         NavmeshManager       manager,
         MovementPlanExecutor movementExecutor,
@@ -60,6 +60,7 @@ public class MainWindow : Window, IDisposable
         if (config.ShowWaypoints)
         {
             var player = Service.ObjectTable.LocalPlayer;
+
             if (player != null)
             {
                 var from  = player.Position;

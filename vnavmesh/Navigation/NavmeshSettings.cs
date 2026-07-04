@@ -8,17 +8,17 @@ namespace vnavmesh.Navigation;
 
 public class NavmeshSettings
 {
-    public float         CellSize         = 0.25f;
-    public float         CellHeight       = 0.25f;
-    public float         AgentHeight      = 2f;
-    public float         AgentRadius      = 0.5f;
-    public float         AgentMaxClimb    = 0.5f;
-    public float         AgentMaxSlopeDeg = 55f;
-    public NavmeshFilter Filtering        = NavmeshFilter.LowHangingObstacles | NavmeshFilter.WalkableLowHeightSpans;
-    public float         RegionMinSize    = 8;
-    public float         RegionMergeSize  = 20;
-    public RcPartition   Partitioning     = RcPartition.WATERSHED;
-    public float         PolyMaxEdgeLen   = 12;
+    public float         CellSize                   = 0.25f;
+    public float         CellHeight                 = 0.25f;
+    public float         AgentHeight                = 2f;
+    public float         AgentRadius                = 0.5f;
+    public float         AgentMaxClimb              = 0.5f;
+    public float         AgentMaxSlopeDeg           = 55f;
+    public NavmeshFilter Filtering                  = NavmeshFilter.LowHangingObstacles | NavmeshFilter.WalkableLowHeightSpans;
+    public float         RegionMinSize              = 8;
+    public float         RegionMergeSize            = 20;
+    public RcPartition   Partitioning               = RcPartition.WATERSHED;
+    public float         PolyMaxEdgeLen             = 12;
     public float         PolyMaxSimplificationError = 1.5f;
     public int           PolyMaxVerts               = 6;
     public float         DetailSampleDist           = 6f;
@@ -96,7 +96,12 @@ public class NavmeshSettings
 
         void AppendBool(string key, bool value)
         {
-            sb.Append(key).Append('=').Append(value ? '1' : '0').Append(';');
+            sb.Append(key).Append('=').Append
+            (
+                value ?
+                    '1' :
+                    '0'
+            ).Append(';');
         }
 
         void AppendText(string key, string value)

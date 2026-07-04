@@ -25,9 +25,13 @@ public class DebugCompactHeightfield : DebugRecast
     private static Vector4 _colAreaNull     = new(0, 0, 0, 0.5f);
     private static Vector4 _colAreaWalkable = new(0, 0.75f, 1.0f, 0.5f);
 
-    private static Vector4 AreaColor(int area) => area == 0 ? _colAreaNull : _colAreaWalkable; // TODO: other colors for other areas
+    private static Vector4 AreaColor(int area) => area == 0 ?
+                                                      _colAreaNull :
+                                                      _colAreaWalkable; // TODO: other colors for other areas
 
-    private static Vector4 RegionColor(int region) => region != 0 ? IntColor(region, 0.75f) : _colAreaNull;
+    private static Vector4 RegionColor(int region) => region != 0 ?
+                                                          IntColor(region, 0.75f) :
+                                                          _colAreaNull;
 
     public DebugCompactHeightfield(RcCompactHeightfield chf, UITree tree, DebugDrawer dd)
     {

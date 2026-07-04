@@ -191,6 +191,7 @@ internal static class CustomizationDraftApplier
             return;
 
         var instance = mesh.Instances[targetIndex];
+
         if (patch.Kind == DraftSceneInstancePatchKind.Transform)
         {
             instance.WorldTransform = patch.WorldTransform.ToRuntime();
@@ -212,6 +213,7 @@ internal static class CustomizationDraftApplier
             return;
 
         var part = mesh.Parts[patch.PartIndex];
+
         switch (patch.Kind)
         {
             case DraftScenePartPatchKind.Vertex:
@@ -220,7 +222,7 @@ internal static class CustomizationDraftApplier
                     return;
 
                 part.Vertices[patch.VertexIndex] = patch.Position;
-                part.LocalBounds                = CalculateLocalBounds(part.Vertices);
+                part.LocalBounds                 = CalculateLocalBounds(part.Vertices);
                 RecalculateMeshBounds(mesh);
                 return;
             }
@@ -230,7 +232,7 @@ internal static class CustomizationDraftApplier
                     return;
 
                 var primitive = part.Primitives[patch.PrimitiveIndex];
-                primitive.Flags = patch.Flags;
+                primitive.Flags                       = patch.Flags;
                 part.Primitives[patch.PrimitiveIndex] = primitive;
                 return;
             }
@@ -277,16 +279,19 @@ internal static class CustomizationDraftApplier
     }
 
     private static FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB TransformBounds
-        (FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.Matrix4x3 worldTransform, FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB localBounds)
+    (
+        FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.Matrix4x3 worldTransform,
+        FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB      localBounds
+    )
     {
         var localCenter = (localBounds.Min + localBounds.Max) * 0.5f;
-        var localExtent  = (localBounds.Max - localBounds.Min) * 0.5f;
+        var localExtent = (localBounds.Max - localBounds.Min) * 0.5f;
         var axisX       = worldTransform.Row0;
         var axisY       = worldTransform.Row1;
         var axisZ       = worldTransform.Row2;
-        var center      = axisX * localCenter.X + axisY * localCenter.Y + axisZ * localCenter.Z + worldTransform.Row3;
+        var center      = axisX      * localCenter.X + axisY      * localCenter.Y + axisZ      * localCenter.Z + worldTransform.Row3;
         var extent      = Abs(axisX) * localExtent.X + Abs(axisY) * localExtent.Y + Abs(axisZ) * localExtent.Z;
-        return new() { Min = center - extent, Max = center + extent };
+        return new() { Min = center                  - extent, Max = center       + extent };
     }
 
     private static Vector3 Abs(Vector3 value) => new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));

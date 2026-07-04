@@ -60,12 +60,26 @@ public struct ExdZoneSharedGroup
         RequirementType4          = sg.RequirementType[4],
         RequirementType5          = sg.RequirementType[5],
         Unknown8                  = sg.Unknown8,
-        Unknown9                  = sg.Unknown9 ? (byte)1 : (byte)0,
-        Unknown10                 = sg.Unknown10 ? (byte)1 : (byte)0,
-        Unknown11                 = sg.Unknown11 ? (byte)1 : (byte)0,
-        Unknown12                 = sg.Unknown12 ? (byte)1 : (byte)0,
-        Unknown13                 = sg.Unknown13 ? (byte)1 : (byte)0,
-        Unknown14                 = sg.Unknown14 ? (byte)1 : (byte)0,
-        Unknown15                 = sg.Unknown15 ? (byte)1 : (byte)0
+        Unknown9 = sg.Unknown9 ?
+                       (byte)1 :
+                       (byte)0,
+        Unknown10 = sg.Unknown10 ?
+                        (byte)1 :
+                        (byte)0,
+        Unknown11 = sg.Unknown11 ?
+                        (byte)1 :
+                        (byte)0,
+        Unknown12 = sg.Unknown12 ?
+                        (byte)1 :
+                        (byte)0,
+        Unknown13 = sg.Unknown13 ?
+                        (byte)1 :
+                        (byte)0,
+        Unknown14 = sg.Unknown14 ?
+                        (byte)1 :
+                        (byte)0,
+        Unknown15 = sg.Unknown15 ?
+                        (byte)1 :
+                        (byte)0
     };
 }

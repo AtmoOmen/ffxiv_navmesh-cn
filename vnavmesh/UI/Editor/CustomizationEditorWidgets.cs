@@ -42,7 +42,9 @@ internal static class CustomizationEditorWidgets
                 names.Add(GetEnumDisplayName(candidate));
         }
 
-        return names.Count > 0 ? string.Join(" | ", names) : value.ToString();
+        return names.Count > 0 ?
+                   string.Join(" | ", names) :
+                   value.ToString();
     }
 
     private static string GetEnumDisplayName<T>(T value) where T : struct, Enum =>
@@ -124,9 +126,9 @@ internal static class CustomizationEditorWidgets
                 (
                     "0x",
                     StringComparison.OrdinalIgnoreCase
-                )
-                    ? text[2..]
-                    : text,
+                ) ?
+                    text[2..] :
+                    text,
                 NumberStyles.HexNumber,
                 CultureInfo.InvariantCulture,
                 out var parsed
@@ -219,7 +221,9 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
-            value = enabled ? fallback : null;
+            value = enabled ?
+                        fallback :
+                        null;
             return true;
         }
 
@@ -256,7 +260,9 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
-            value = enabled ? fallback : null;
+            value = enabled ?
+                        fallback :
+                        null;
             return true;
         }
 
@@ -293,7 +299,9 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
-            value = enabled ? fallback : null;
+            value = enabled ?
+                        fallback :
+                        null;
             return true;
         }
 
@@ -330,7 +338,9 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
-            value = enabled ? fallback.GetValueOrDefault() : null;
+            value = enabled ?
+                        fallback.GetValueOrDefault() :
+                        null;
             return true;
         }
 
@@ -367,7 +377,9 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
-            value = enabled ? (int[])fallback.Clone() : null;
+            value = enabled ?
+                        (int[])fallback.Clone() :
+                        null;
             return true;
         }
 
@@ -417,7 +429,9 @@ internal static class CustomizationEditorWidgets
 
         if (ImGui.Checkbox($"启用##{label}", ref enabled))
         {
-            value = enabled ? fallback.GetValueOrDefault() : null;
+            value = enabled ?
+                        fallback.GetValueOrDefault() :
+                        null;
             return true;
         }
 
@@ -515,7 +529,9 @@ internal static class CustomizationEditorWidgets
 
             if (ImGui.Checkbox(GetEnumDisplayName(candidate), ref enabled))
             {
-                current = enabled ? current | raw : current & ~raw;
+                current = enabled ?
+                              current | raw :
+                              current & ~raw;
                 changed = true;
             }
         }

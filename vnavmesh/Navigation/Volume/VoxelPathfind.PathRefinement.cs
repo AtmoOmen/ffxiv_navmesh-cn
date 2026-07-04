@@ -12,7 +12,7 @@ public partial class VoxelPathfind
         if (path.Count <= 2)
             return path;
 
-        List<(ulong voxel, Vector3 p)> simplified = [path[0]];
+        List<(ulong voxel, Vector3 p)> simplified  = [path[0]];
         var                            anchorIndex = 0;
 
         while (anchorIndex < path.Count - 1)
@@ -57,7 +57,7 @@ public partial class VoxelPathfind
             if (dirtyIndices != null)
                 dirtyIndices.UnionWith(projModified);
 
-            var changed = RelaxTowardOpenSpace(refined, cancel, dirtyIndices, out var relaxDirty);
+            var changed      = RelaxTowardOpenSpace(refined, cancel, dirtyIndices, out var relaxDirty);
             var straightened = SimplifyPath(refined, cancel);
 
             if (!changed && straightened.Count == refined.Count)
@@ -67,7 +67,9 @@ public partial class VoxelPathfind
             }
 
             // SimplifyPath 改变路径结构时重置脏集
-            dirtyIndices = straightened.Count != refined.Count ? null : relaxDirty;
+            dirtyIndices = straightened.Count != refined.Count ?
+                               null :
+                               relaxDirty;
             refined = straightened;
         }
 
@@ -120,9 +122,9 @@ public partial class VoxelPathfind
     private bool RelaxTowardOpenSpace
     (
         List<(ulong voxel, Vector3 p)> path,
-        CancellationToken               cancel,
-        HashSet<int>?                   dirtyIndices,
-        out HashSet<int>                newDirty
+        CancellationToken              cancel,
+        HashSet<int>?                  dirtyIndices,
+        out HashSet<int>               newDirty
     )
     {
         newDirty = new HashSet<int>();
@@ -131,6 +133,7 @@ public partial class VoxelPathfind
             return false;
 
         var changed = false;
+
         for (var i = 1; i < path.Count - 1; ++i)
         {
             if ((i & 0x1f) == 0)
@@ -172,17 +175,21 @@ public partial class VoxelPathfind
             return false;
 
         var horizontalForward = new Vector2(overallDirection.X, overallDirection.Z);
+
         if (!VoxelMathUtil.TryNormalize(horizontalForward, out var normalizedForward))
         {
             horizontalForward = new Vector2(next.p.X - current.p.X, next.p.Z - current.p.Z);
+
             if (!VoxelMathUtil.TryNormalize(horizontalForward, out normalizedForward))
             {
                 horizontalForward = new Vector2(current.p.X - previous.p.X, current.p.Z - previous.p.Z);
-                normalizedForward = VoxelMathUtil.TryNormalize(horizontalForward, out var fallback) ? fallback : Vector2.UnitX;
+                normalizedForward = VoxelMathUtil.TryNormalize(horizontalForward, out var fallback) ?
+                                        fallback :
+                                        Vector2.UnitX;
             }
         }
 
-        var forward3 = new Vector3(normalizedForward.X, 0, normalizedForward.Y);
+        var forward3 = new Vector3(normalizedForward.X,  0, normalizedForward.Y);
         var right3   = new Vector3(-normalizedForward.Y, 0, normalizedForward.X);
 
         var voxelSize          = GetVoxelSize(current.voxel);
@@ -211,12 +218,12 @@ public partial class VoxelPathfind
 
         var preferredHorizontal = MathF.Max
         (
-            voxelHorizontal * FLIGHT_PUSH_PREFERRED_CLEARANCE_VOXEL_SCALE,
+            voxelHorizontal    * FLIGHT_PUSH_PREFERRED_CLEARANCE_VOXEL_SCALE,
             leafHorizontalSize * FLIGHT_PUSH_PREFERRED_CLEARANCE_LEAF_SCALE
         );
         var preferredVertical = MathF.Max
         (
-            voxelVertical * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE,
+            voxelVertical    * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE,
             leafVerticalSize * FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE
         );
 
@@ -224,7 +231,7 @@ public partial class VoxelPathfind
         var maxHorizontalClearance = MathF.Max(MathF.Max(forwardClearance, backwardClearance), MathF.Max(rightClearance, leftClearance));
 
         var horizontalCramped = minHorizontalClearance < preferredHorizontal;
-        var floorCramped      = downClearance < preferredVertical && upClearance > FLIGHT_PUSH_MIN_DISTANCE;
+        var floorCramped      = downClearance < preferredVertical && upClearance   > FLIGHT_PUSH_MIN_DISTANCE;
         var ceilingCramped    = upClearance   < preferredVertical && downClearance > FLIGHT_PUSH_MIN_DISTANCE;
 
         Vector3 horizontalBias           = Vector3.Zero;
@@ -236,10 +243,11 @@ public partial class VoxelPathfind
         AccumulateDirectionalBias(ref horizontalBias, ref horizontalTotalClearance, -right3,   leftClearance,     1f);
 
         Vector3 horizontalOffset = Vector3.Zero;
+
         if (horizontalCramped && VoxelMathUtil.TryNormalize(new Vector2(horizontalBias.X, horizontalBias.Z), out var horizontalPushDirection))
         {
-            var deficit                = preferredHorizontal - minHorizontalClearance;
-            var maxHorizontalPush      = MathF.Min(horizontalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, maxHorizontalClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
+            var deficit = preferredHorizontal - minHorizontalClearance;
+            var maxHorizontalPush = MathF.Min(horizontalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, maxHorizontalClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
             var horizontalPushDistance = MathF.Min(maxHorizontalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
             if (horizontalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
                 horizontalOffset = new Vector3(horizontalPushDirection.X * horizontalPushDistance, 0, horizontalPushDirection.Y * horizontalPushDistance);
@@ -251,7 +259,7 @@ public partial class VoxelPathfind
         {
             var deficit              = preferredVertical - downClearance;
             var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, upClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
-            var verticalPushDistance = MathF.Min(maxVerticalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
+            var verticalPushDistance = MathF.Min(maxVerticalPush,                                       deficit     * FLIGHT_PUSH_RELIEF_SCALE);
             if (verticalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
                 verticalOffset = Vector3.UnitY * verticalPushDistance;
         }
@@ -259,7 +267,7 @@ public partial class VoxelPathfind
         {
             var deficit              = preferredVertical - upClearance;
             var maxVerticalPush      = MathF.Min(verticalScanDistance * FLIGHT_PUSH_SCAN_PUSH_FRACTION, downClearance * FLIGHT_PUSH_MAX_CLEARANCE_FRACTION);
-            var verticalPushDistance = MathF.Min(maxVerticalPush, deficit * FLIGHT_PUSH_RELIEF_SCALE);
+            var verticalPushDistance = MathF.Min(maxVerticalPush,                                       deficit       * FLIGHT_PUSH_RELIEF_SCALE);
             if (verticalPushDistance >= FLIGHT_PUSH_MIN_DISTANCE)
                 verticalOffset = -Vector3.UnitY * verticalPushDistance;
         }
@@ -478,6 +486,7 @@ public partial class VoxelPathfind
         while (furthestVisibleIndex < pathLastIndex)
         {
             var probeIndex = Math.Min(furthestVisibleIndex + step, pathLastIndex);
+
             if (!HasLineOfSight(path, anchorIndex, probeIndex, cancel))
             {
                 furthestVisibleIndex = FindVisibleBoundary(path, anchorIndex, furthestVisibleIndex, probeIndex - 1, cancel);
@@ -519,8 +528,8 @@ public partial class VoxelPathfind
         if ((probeIndex & 0x3f) == 0)
             cancel.ThrowIfCancellationRequested();
 
-        var anchor = path[anchorIndex];
-        var probe  = path[probeIndex];
+        var anchor   = path[anchorIndex];
+        var probe    = path[probeIndex];
         var cacheKey = (anchor.voxel, probe.voxel);
 
         if (pathLoSCache.TryGetValue(cacheKey, out var cached))

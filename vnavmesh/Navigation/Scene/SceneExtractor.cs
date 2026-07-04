@@ -100,21 +100,21 @@ public class SceneExtractor
 
     static SceneExtractor()
     {
-        MeshBox      = BuildBoxMesh();
-        MeshSphere   = BuildSphereMesh(16);
-        MeshCylinder = BuildCylinderMesh(16);
-        MeshPlane      = BuildPlaneMesh();
+        MeshBox         = BuildBoxMesh();
+        MeshSphere      = BuildSphereMesh(16);
+        MeshCylinder    = BuildCylinderMesh(16);
+        MeshPlane       = BuildPlaneMesh();
         MeshPlaneDouble = BuildPlaneMesh(true);
     }
 
     public unsafe SceneExtractor(SceneDefinition scene)
     {
-        Meshes[KEY_ANALYTIC_BOX]          = CreateBuiltinMesh(MeshBox,      MeshType.AnalyticShape);
-        Meshes[KEY_ANALYTIC_SPHERE]       = CreateBuiltinMesh(MeshSphere,   MeshType.AnalyticShape);
-        Meshes[KEY_ANALYTIC_CYLINDER]     = CreateBuiltinMesh(MeshCylinder, MeshType.AnalyticShape);
+        Meshes[KEY_ANALYTIC_BOX]          = CreateBuiltinMesh(MeshBox,         MeshType.AnalyticShape);
+        Meshes[KEY_ANALYTIC_SPHERE]       = CreateBuiltinMesh(MeshSphere,      MeshType.AnalyticShape);
+        Meshes[KEY_ANALYTIC_CYLINDER]     = CreateBuiltinMesh(MeshCylinder,    MeshType.AnalyticShape);
         Meshes[KEY_ANALYTIC_PLANE_SINGLE] = CreateBuiltinMesh(MeshPlane,       MeshType.AnalyticPlane);
         Meshes[KEY_ANALYTIC_PLANE_DOUBLE] = CreateBuiltinMesh(MeshPlaneDouble, MeshType.AnalyticPlane);
-        Meshes[KEY_MESH_CYLINDER]         = CreateBuiltinMesh(MeshCylinder, MeshType.CylinderMesh);
+        Meshes[KEY_MESH_CYLINDER]         = CreateBuiltinMesh(MeshCylinder,    MeshType.CylinderMesh);
         foreach (var path in scene.MeshPaths.Values)
             AddMesh(path, MeshType.FileMesh);
 
@@ -289,7 +289,16 @@ public class SceneExtractor
 
         for (var i = 0; i < 8; ++i)
         {
-            var p = ((i & 1) != 0 ? world.Row0 : -world.Row0) + ((i & 2) != 0 ? world.Row1 : -world.Row1) + ((i & 4) != 0 ? world.Row2 : -world.Row2) + world.Row3;
+            var p = ((i & 1) != 0 ?
+                         world.Row0 :
+                         -world.Row0) +
+                    ((i & 2) != 0 ?
+                         world.Row1 :
+                         -world.Row1) +
+                    ((i & 4) != 0 ?
+                         world.Row2 :
+                         -world.Row2) +
+                    world.Row3;
             res.Min = Vector3.Min(res.Min, p);
             res.Max = Vector3.Max(res.Max, p);
         }
@@ -317,9 +326,15 @@ public class SceneExtractor
         {
             var local = new Vector3
             (
-                (i & 1) != 0 ? bounds.Max.X : bounds.Min.X,
-                (i & 2) != 0 ? bounds.Max.Y : bounds.Min.Y,
-                (i & 4) != 0 ? bounds.Max.Z : bounds.Min.Z
+                (i & 1) != 0 ?
+                    bounds.Max.X :
+                    bounds.Min.X,
+                (i & 2) != 0 ?
+                    bounds.Max.Y :
+                    bounds.Min.Y,
+                (i & 4) != 0 ?
+                    bounds.Max.Z :
+                    bounds.Min.Z
             );
             var p = world.TransformCoordinate(local);
             res.Min = Vector3.Min(res.Min, p);
@@ -335,7 +350,13 @@ public class SceneExtractor
 
         for (var i = 0; i < 4; ++i)
         {
-            var p = ((i & 1) != 0 ? world.Row0 : -world.Row0) + ((i & 2) != 0 ? world.Row1 : -world.Row1) + world.Row3;
+            var p = ((i & 1) != 0 ?
+                         world.Row0 :
+                         -world.Row0) +
+                    ((i & 2) != 0 ?
+                         world.Row1 :
+                         -world.Row1) +
+                    world.Row3;
             res.Min = Vector3.Min(res.Min, p);
             res.Max = Vector3.Max(res.Max, p);
         }
@@ -544,11 +565,13 @@ public class SceneExtractor
         mesh.Vertices.Add(new(+1, +1, 0));
         mesh.Primitives.Add(new(0, 1, 2, PrimitiveFlags.None));
         mesh.Primitives.Add(new(0, 2, 3, PrimitiveFlags.None));
+
         if (doubleSided)
         {
             mesh.Primitives.Add(new(2, 1, 0, PrimitiveFlags.None));
             mesh.Primitives.Add(new(3, 2, 0, PrimitiveFlags.None));
         }
+
         return [FinalizePart(mesh)];
     }
 }

@@ -7,7 +7,7 @@ public sealed record NavmeshBuildManifest
     string               ScenePath,
     string               RawNavmeshPath,
     string               CacheKey,
-    NavmeshBuildSettings  Settings
+    NavmeshBuildSettings Settings
 );
 
 public sealed record NavmeshBuildResponse
@@ -25,7 +25,7 @@ public sealed record NavmeshBuildProgress
 
 public sealed record NavmeshBuildMessage
 (
-    string?                Type,
-    NavmeshBuildProgress?  Progress,
-    NavmeshBuildResponse?  Response
+    string?               Type,
+    NavmeshBuildProgress? Progress,
+    NavmeshBuildResponse? Response
 );

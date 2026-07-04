@@ -13,14 +13,14 @@ namespace vnavmesh;
 public sealed class Plugin : IDalamudPlugin
 {
     private readonly ServiceProvider serviceProvider;
-    
+
     public void Dispose() =>
         serviceProvider.Dispose();
 
     public Plugin(IDalamudPluginInterface dalamud)
     {
         MarkCurrentThreadAsMainThread();
-        
+
         if (!dalamud.ConfigDirectory.Exists)
             dalamud.ConfigDirectory.Create();
 
@@ -36,7 +36,7 @@ public sealed class Plugin : IDalamudPlugin
                               }
                           );
         serviceProvider.ActivatePluginServices();
-        
+
         return;
 
         void MarkCurrentThreadAsMainThread()

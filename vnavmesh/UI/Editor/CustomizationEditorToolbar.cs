@@ -46,11 +46,12 @@ internal static class CustomizationEditorToolbar
         );
 
         using var group = ImRaii.Group();
-        
+
         ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted("工具");
-        
+
         ImGui.SameLine();
+
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             DrawModeButton
@@ -66,7 +67,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
-            
+
             ImGui.SameLine();
             DrawModeButton
             (
@@ -111,7 +112,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
-            
+
             ImGui.SameLine();
             DrawModeButton
             (
@@ -126,7 +127,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
-            
+
             ImGui.SameLine();
             DrawModeButton
             (
@@ -141,7 +142,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
-            
+
             ImGui.SameLine();
             DrawModeButton
             (
@@ -171,7 +172,7 @@ internal static class CustomizationEditorToolbar
                 ref lastPickEscapeDown,
                 ref statusText
             );
-            
+
             ImGui.SameLine();
             DrawModeButton
             (
@@ -190,8 +191,9 @@ internal static class CustomizationEditorToolbar
 
         ImGui.AlignTextToFramePadding();
         ImGui.TextUnformatted("草稿");
-        
+
         ImGui.SameLine();
+
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || undoCount == 0))
         {
             if (ImGui.Button("撤销"))
@@ -199,6 +201,7 @@ internal static class CustomizationEditorToolbar
         }
 
         ImGui.SameLine();
+
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || redoCount == 0))
         {
             if (ImGui.Button("重做"))
@@ -206,6 +209,7 @@ internal static class CustomizationEditorToolbar
         }
 
         ImGui.SameLine();
+
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             if (ImGui.Button("重建预览"))
@@ -213,6 +217,7 @@ internal static class CustomizationEditorToolbar
         }
 
         ImGui.SameLine();
+
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             if (ImGui.Button("保存草稿"))
@@ -220,13 +225,15 @@ internal static class CustomizationEditorToolbar
         }
 
         ImGui.SameLine();
+
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             if (ImGui.Button("导出 C#"))
                 onExportDraft();
         }
-        
+
         ImGui.SameLine();
+
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
             if (ImGui.Button("打开导出文件夹"))
@@ -247,7 +254,7 @@ internal static class CustomizationEditorToolbar
                     ref lastWorldSelectMouseDown,
                     ref lastPickEscapeDown,
                     ref statusText,
-                "已退出当前工具"
+                    "已退出当前工具"
                 );
         }
     }
@@ -381,7 +388,7 @@ internal static class CustomizationEditorToolbar
         {
             PickKind.SelectCollider => "点击游戏画面中的碰撞体以选中",
             PickKind.SelectTriangle => "点击游戏画面中的三角形以选中",
-            PickKind.LinkShortcut => "点击游戏画面中的两个世界点以生成普通移动捷径",
+            PickKind.LinkShortcut   => "点击游戏画面中的两个世界点以生成普通移动捷径",
             _                       => $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)}: 在画面点击第 1 个世界点"
         };
     }

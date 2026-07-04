@@ -171,9 +171,9 @@ public partial class VoxelPathfind
     private const float  FLIGHT_DESCENT_SMOOTHING_MIN_DROP_MIN                           = 1.00f;
     private const float  FLIGHT_DESCENT_SMOOTHING_NEAR_VERTICAL_LEAF_SCALE               = 2.00f;
     private const float  FLIGHT_DESCENT_SMOOTHING_NEAR_VERTICAL_MIN                      = 1.20f;
-    private const int    REFINE_RELAX_EARLY_EXIT_MIN_CHANGED                                = 0;
-    private const int    PATH_LOS_CACHE_MAX_SIZE                                            = 200_000;
-    private const int    CLEARANCE_CACHE_MAX_SIZE                                           = 100_000;
+    private const int    REFINE_RELAX_EARLY_EXIT_MIN_CHANGED                             = 0;
+    private const int    PATH_LOS_CACHE_MAX_SIZE                                         = 200_000;
+    private const int    CLEARANCE_CACHE_MAX_SIZE                                        = 100_000;
 
     private struct VoxelNodeLookup
     {

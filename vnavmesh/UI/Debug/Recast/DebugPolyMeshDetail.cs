@@ -120,9 +120,33 @@ public class DebugPolyMeshDetail : DebugRecast
         var ext1  = (flags      & 3) != 0;
         var ext2  = (flags >> 2 & 3) != 0;
         var ext3  = (flags >> 4 & 3) != 0;
-        _dd.DrawWorldLine(v1, v2, 0x80000000, ext1 ? thicknessExternal : thicknessInternal);
-        _dd.DrawWorldLine(v2, v3, 0x80000000, ext2 ? thicknessExternal : thicknessInternal);
-        _dd.DrawWorldLine(v3, v1, 0x80000000, ext3 ? thicknessExternal : thicknessInternal);
+        _dd.DrawWorldLine
+        (
+            v1,
+            v2,
+            0x80000000,
+            ext1 ?
+                thicknessExternal :
+                thicknessInternal
+        );
+        _dd.DrawWorldLine
+        (
+            v2,
+            v3,
+            0x80000000,
+            ext2 ?
+                thicknessExternal :
+                thicknessInternal
+        );
+        _dd.DrawWorldLine
+        (
+            v3,
+            v1,
+            0x80000000,
+            ext3 ?
+                thicknessExternal :
+                thicknessInternal
+        );
     }
 
     private Vector3 GetVertex(int index) => new(_mesh.verts[3 * index], _mesh.verts[3 * index + 1], _mesh.verts[3 * index + 2]);

@@ -28,7 +28,9 @@ internal static class FlightWaypointNormalizer
                 break;
             }
 
-        var startIndex = firstAirborneIndex >= 0 ? firstAirborneIndex : firstDistinctIndex;
+        var startIndex = firstAirborneIndex >= 0 ?
+                             firstAirborneIndex :
+                             firstDistinctIndex;
         return [.. waypoints.Skip(startIndex)];
     }
 }

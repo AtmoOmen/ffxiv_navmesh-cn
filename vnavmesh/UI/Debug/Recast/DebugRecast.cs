@@ -27,9 +27,27 @@ public abstract class DebugRecast : IDisposable
     public static Vector4 IntColor(int v, float a)
     {
         var mask = new BitMask((ulong)v);
-        var r    = (mask[1] ? 0.25f : 0) + (mask[3] ? 0.5f : 0) + 0.25f;
-        var g    = (mask[2] ? 0.25f : 0) + (mask[4] ? 0.5f : 0) + 0.25f;
-        var b    = (mask[0] ? 0.25f : 0) + (mask[5] ? 0.5f : 0) + 0.25f;
+        var r = (mask[1] ?
+                     0.25f :
+                     0) +
+                (mask[3] ?
+                     0.5f :
+                     0) +
+                0.25f;
+        var g = (mask[2] ?
+                     0.25f :
+                     0) +
+                (mask[4] ?
+                     0.5f :
+                     0) +
+                0.25f;
+        var b = (mask[0] ?
+                     0.25f :
+                     0) +
+                (mask[5] ?
+                     0.5f :
+                     0) +
+                0.25f;
         return new(r, g, b, a);
     }
 }

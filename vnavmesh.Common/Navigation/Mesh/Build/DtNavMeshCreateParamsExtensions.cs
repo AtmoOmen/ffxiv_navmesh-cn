@@ -11,16 +11,16 @@ internal static class DtNavMeshCreateParamsExtensions
 {
     public static void AddOffMeshConnection
     (
-        this DtNavMeshCreateParams      config,
-        Vector3                        ptA,
-        Vector3                        ptB,
-        float                          radius,
-        bool                           bidirectional,
-        int                            userID,
-        NavmeshArea                    area,
-        NavmeshPolyFlags               flags,
-        NavmeshOffMeshKind             kind,
-        NavmeshLinkTraversalProfile?   _ = null
+        this DtNavMeshCreateParams   config,
+        Vector3                      ptA,
+        Vector3                      ptB,
+        float                        radius,
+        bool                         bidirectional,
+        int                          userID,
+        NavmeshArea                  area,
+        NavmeshPolyFlags             flags,
+        NavmeshOffMeshKind           kind,
+        NavmeshLinkTraversalProfile? _ = null
     )
     {
         if (!DtOffMeshConnectionTileClassifier.ShouldStoreConnection(config, ptA, ptB))
@@ -44,7 +44,9 @@ internal static class DtNavMeshCreateParamsExtensions
 
         Extend(ref config.offMeshConDir, 1);
         var dirs = config.offMeshConDir!;
-        dirs[^1] = bidirectional ? DT_OFFMESH_CON_BIDIR : 0;
+        dirs[^1] = bidirectional ?
+                       DT_OFFMESH_CON_BIDIR :
+                       0;
 
         Extend(ref config.offMeshConFlags, 1);
         var flagsArr = config.offMeshConFlags!;

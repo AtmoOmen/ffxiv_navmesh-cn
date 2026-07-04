@@ -69,12 +69,12 @@ public class DebugExtractedCollision : IDisposable
                                 (Math.Abs(shape.transform.Translation.X) > 0.1 ||
                                  Math.Abs(shape.transform.Translation.Y) > 0.1 ||
                                  Math.Abs(shape.transform.Translation.Z) > 0.1 ||
-                                 shape.transform.Rotation.W              < 0.99)
-                                    ? 0xff00ffff
-                                    : 0xffffffff;
-                    var type = p.analytic
-                                   ? $"{(haveShape ? ((FileLayerGroupAnalyticCollider.Type)shape.transform.Type).ToString() : "<missing>")}"
-                                   : $"Mesh {_scene.MeshPaths[p.crc]}";
+                                 shape.transform.Rotation.W              < 0.99) ?
+                                    0xff00ffff :
+                                    0xffffffff;
+                    var type = p.analytic ?
+                                   $"{(haveShape ? ((FileLayerGroupAnalyticCollider.Type)shape.transform.Type).ToString() : "<missing>")}" :
+                                   $"Mesh {_scene.MeshPaths[p.crc]}";
                     using var n = _tree.Node($"[{p.key:X}] {type} at {p.transform.Translation} ({p.crc:X}) (coll={(nint)coll:X})###{p.key:X}", false, color);
 
                     if (n.SelectedOrHovered)
@@ -339,9 +339,15 @@ public class DebugExtractedCollision : IDisposable
     private unsafe Collider* FindCollider(InstanceType type, ulong key)
     {
         var layout = LayoutWorld.Instance()->ActiveLayout;
-        var insts  = layout != null ? layout->InstancesByType.FindPtr(type) : null;
-        var inst   = insts  != null ? (*insts).FindPtr(key) : null;
-        var coll   = inst   != null ? inst->GetCollider() : null;
+        var insts = layout != null ?
+                        layout->InstancesByType.FindPtr(type) :
+                        null;
+        var inst = insts != null ?
+                       (*insts).FindPtr(key) :
+                       null;
+        var coll = inst != null ?
+                       inst->GetCollider() :
+                       null;
         return coll;
     }
 

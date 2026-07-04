@@ -41,17 +41,17 @@ public unsafe partial class DebugGameCollision : IDisposable
     private const float DefaultCollisionRenderHorizontalDistance = 50f;
     private const float DefaultCollisionRenderVerticalDistance   = 10f;
 
-    private readonly PluginConfig      _config;
-    private          UITree      _tree = new();
-    private          DebugDrawer _dd;
-    private          BitMask     _shownLayers = new(1);
-    private          BitMask     _materialMask;
-    private          BitMask     _materialId;
-    private          bool        _showZeroLayer = true;
-    private          bool        _showOnlyFlagRaycast;
-    private          bool        _showOnlyFlagVisit;
-    private          float       _renderHorizontalDistance = DefaultCollisionRenderHorizontalDistance;
-    private          float       _renderVerticalDistance   = DefaultCollisionRenderVerticalDistance;
+    private readonly PluginConfig _config;
+    private          UITree       _tree = new();
+    private          DebugDrawer  _dd;
+    private          BitMask      _shownLayers = new(1);
+    private          BitMask      _materialMask;
+    private          BitMask      _materialId;
+    private          bool         _showZeroLayer = true;
+    private          bool         _showOnlyFlagRaycast;
+    private          bool         _showOnlyFlagVisit;
+    private          float        _renderHorizontalDistance = DefaultCollisionRenderHorizontalDistance;
+    private          float        _renderVerticalDistance   = DefaultCollisionRenderVerticalDistance;
 
     private HashSet<nint> _streamedMeshes = new();
     private BitMask       _availableLayers;
@@ -283,11 +283,16 @@ public unsafe partial class DebugGameCollision : IDisposable
 
         var raycastFlag     = (coll->VisibilityFlags & 1) != 0;
         var globalVisitFlag = (coll->VisibilityFlags & 2) != 0;
-        var flagsText       = raycastFlag ? globalVisitFlag ? "射线检测, 全局访问" : "射线检测" : globalVisitFlag ? "全局访问" : "无";
+        var flagsText = raycastFlag ? globalVisitFlag ?
+                                          "射线检测, 全局访问" :
+                                          "射线检测" :
+                        globalVisitFlag ? "全局访问" : "无";
 
-        var type = coll->GetColliderType();
+        var type           = coll->GetColliderType();
         var layoutInstance = LayoutUtil.FindInstance(LayoutWorld.Instance()->ActiveLayout, coll->LayoutObjectId << 32 | coll->LayoutObjectId >> 32);
-        var color = layoutInstance == null || layoutInstance->Id.Type is not InstanceType.BgPart and not InstanceType.CollisionBox ? 0xff00ffff : 0xffffffff;
+        var color = layoutInstance == null || layoutInstance->Id.Type is not InstanceType.BgPart and not InstanceType.CollisionBox ?
+                        0xff00ffff :
+                        0xffffffff;
 
         if (type == ColliderType.Mesh)
         {
@@ -339,8 +344,8 @@ public unsafe partial class DebugGameCollision : IDisposable
 
                     for (var i = 0; i < cast->Header->NumMeshes; ++i)
                     {
-                        var entry    = cast->Entries  + i;
-                        var elem     = cast->Elements + i;
+                        var entry = cast->Entries  + i;
+                        var elem  = cast->Elements + i;
                         using var mn = _tree.Node
                             ($"Mesh {i}: file=tr{entry->MeshId:d4}.pcb, bounds={AABBStr(entry->Bounds)} == {(nint)elem->Mesh:X}###mesh_{i}", elem->Mesh == null);
                         if (mn.SelectedOrHovered && elem->Mesh != null)
@@ -406,7 +411,7 @@ public unsafe partial class DebugGameCollision : IDisposable
     private void DrawColliderMesh(ColliderMesh* coll)
     {
         DrawResource(coll->Resource);
-        
+
         if (ImGui.Button("复制 translation"))
         {
             var t = coll->Translation;
@@ -417,7 +422,7 @@ public unsafe partial class DebugGameCollision : IDisposable
 
             ImGui.SetClipboardText($"{LayoutUtil.Vec3ToSource(t)}, {LayoutUtil.Vec3ToSource(r)}");
         }
-        
+
         _tree.LeafNode($"Translation: {Vec3Str(coll->Translation)}");
         _tree.LeafNode($"Rotation: {Vec3Str(coll->Rotation)}");
         _tree.LeafNode($"Scale: {Vec3Str(coll->Scale)}");
@@ -447,7 +452,8 @@ public unsafe partial class DebugGameCollision : IDisposable
 
         using var n = _tree.Node(tag);
         if (n.SelectedOrHovered)
-            VisualizeColliderMeshPCBNode(node, ref world, new(1, 1, 0, 0.7f), objMatId, objMatId, _materialId, _materialMask, Service.ObjectTable.LocalPlayer?.Position);
+            VisualizeColliderMeshPCBNode
+                (node, ref world, new(1, 1, 0, 0.7f), objMatId, objMatId, _materialId, _materialMask, Service.ObjectTable.LocalPlayer?.Position);
         if (!n.Opened)
             return;
 

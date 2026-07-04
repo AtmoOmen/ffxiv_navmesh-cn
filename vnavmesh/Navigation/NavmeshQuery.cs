@@ -53,7 +53,11 @@ public class NavmeshQuery
     }
 
     internal VoxelPathfind? VolumeQuery =>
-        released ? null : volumeQuery ??= NavmeshData.Volume != null ? new(NavmeshData.Volume) : null;
+        released ?
+            null :
+            volumeQuery ??= NavmeshData.Volume != null ?
+                                new(NavmeshData.Volume) :
+                                null;
 
     internal List<long> LastPath { get; } = [];
 
@@ -111,14 +115,16 @@ public class NavmeshQuery
         var              max   = new Vector3(min.X        + param.tileWidth,           min.Y,        min.Z        + param.tileHeight);
         return (min, max);
     }
-    
+
     public bool IsPointOnMesh(Vector3 p, float halfExtentY = 5, bool allowUnreachable = true)
     {
         MeshQuery.FindNearestPoly
         (
             p.SystemToRecast(),
             new(0, halfExtentY, 0),
-            allowUnreachable ? AllTraversableFilter : GroundAreaFilter,
+            allowUnreachable ?
+                AllTraversableFilter :
+                GroundAreaFilter,
             out _,
             out _,
             out var isOverPoly
@@ -132,7 +138,9 @@ public class NavmeshQuery
         (
             p.SystemToRecast(),
             new(halfExtentXZ, halfExtentY, halfExtentXZ),
-            allowUnreachable ? AllTraversableFilter : GroundAreaFilter,
+            allowUnreachable ?
+                AllTraversableFilter :
+                GroundAreaFilter,
             out var nearestRef,
             out _,
             out _
@@ -148,7 +156,15 @@ public class NavmeshQuery
         {
             var refs  = new long[capacity];
             var query = new DtCollectPolysQuery(refs, refs.Length);
-            MeshQuery.QueryPolygons(p.SystemToRecast(), halfExtent.SystemToRecast(), allowUnreachable ? AllTraversableFilter : GroundAreaFilter, query);
+            MeshQuery.QueryPolygons
+            (
+                p.SystemToRecast(),
+                halfExtent.SystemToRecast(),
+                allowUnreachable ?
+                    AllTraversableFilter :
+                    GroundAreaFilter,
+                query
+            );
             if (!query.Overflowed())
                 return [.. refs.AsSpan(0, query.NumCollected()).ToArray()];
 
@@ -170,7 +186,9 @@ public class NavmeshQuery
     }
 
     internal Vector3? FindNearestPointOnMeshPoly(Vector3 p, long poly) =>
-        TryClosestPointOnPolyWithFlags(p, poly, out var closest, out _) ? closest : null;
+        TryClosestPointOnPolyWithFlags(p, poly, out var closest, out _) ?
+            closest :
+            null;
 
     internal Vector3? FindNearestPointOnMesh
     (
@@ -187,14 +205,18 @@ public class NavmeshQuery
         if (maxRadius <= 0)
             return null;
 
-        var filter   = allowUnreachable ? AllTraversableFilter : GroundAreaFilter;
+        var filter = allowUnreachable ?
+                         AllTraversableFilter :
+                         GroundAreaFilter;
         var startRef = FindNearestMeshPoly(center, 8, 8, allowUnreachable);
         if (startRef == 0)
             return null;
 
         var status = MeshQuery.FindRandomPointWithinCircle
             (startRef, center.SystemToRecast(), maxRadius, filter, new RcRand(Random.Shared.NextInt64()), out _, out var point);
-        return status.Succeeded() ? point.RecastToSystem() : null;
+        return status.Succeeded() ?
+                   point.RecastToSystem() :
+                   null;
     }
 
     internal Vector3? FindPointOnFloor(Vector3 p, float halfExtentXZ = 5, bool allowUnreachable = true)
@@ -269,8 +291,10 @@ public class NavmeshQuery
             }
         }
 
-        var voxel     = FindNearestVolumeVoxel(searchPoint, halfExtentXZ, halfExtentY, true, minCandidateY);
-        var safePoint = voxel != VoxelMap.INVALID_VOXEL ? VoxelSearch.FindClosestVoxelPoint(volume, voxel, searchPoint) : searchPoint;
+        var voxel = FindNearestVolumeVoxel(searchPoint, halfExtentXZ, halfExtentY, true, minCandidateY);
+        var safePoint = voxel != VoxelMap.INVALID_VOXEL ?
+                            VoxelSearch.FindClosestVoxelPoint(volume, voxel, searchPoint) :
+                            searchPoint;
         return new(voxel, searchPoint, safePoint, minCandidateY, usedSurfaceAnchor);
     }
 

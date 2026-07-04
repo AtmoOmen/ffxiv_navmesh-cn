@@ -371,9 +371,9 @@ internal static class CustomizationDraftExporter
 
         foreach (var link in links)
         {
-            var area  = FormatEnum(link.Area, "NavmeshArea");
-            var flags = FormatNavmeshPolyFlags(link.Flags);
-            var kind  = FormatEnum(link.Kind, "NavmeshOffMeshKind");
+            var area             = FormatEnum(link.Area, "NavmeshArea");
+            var flags            = FormatNavmeshPolyFlags(link.Flags);
+            var kind             = FormatEnum(link.Kind, "NavmeshOffMeshKind");
             var traversalProfile = FormatTraversalProfile(link.TraversalProfile);
 
             AppendNoteComment(sb, 2, link.Note);
@@ -471,6 +471,7 @@ internal static class CustomizationDraftExporter
     private static void AppendInstancePatch(StringBuilder sb, DraftSceneInstancePatch patch, string meshVariable, int patchIndex, int indent)
     {
         AppendNoteComment(sb, indent, patch.Note);
+
         switch (patch.Kind)
         {
             case DraftSceneInstancePatchKind.ClearInstances:
@@ -504,9 +505,11 @@ internal static class CustomizationDraftExporter
 
     private static void AppendColliderInsertion(StringBuilder sb, DraftSceneColliderInsertion insertion)
     {
-        var min             = Vector3.Min(insertion.Min, insertion.Max);
-        var max             = Vector3.Max(insertion.Min, insertion.Max);
-        var call            = insertion.Kind == DraftSceneColliderInsertionKind.Cylinder ? "InsertCylinderCollider" : "InsertAABoxCollider";
+        var min = Vector3.Min(insertion.Min, insertion.Max);
+        var max = Vector3.Max(insertion.Min, insertion.Max);
+        var call = insertion.Kind == DraftSceneColliderInsertionKind.Cylinder ?
+                       "InsertCylinderCollider" :
+                       "InsertAABoxCollider";
         var forceSetFlags   = FormatPrimitiveFlags(insertion.ForceSetPrimFlags);
         var forceClearFlags = FormatPrimitiveFlags(insertion.ForceClearPrimFlags);
 
@@ -523,7 +526,14 @@ internal static class CustomizationDraftExporter
         else
         {
             Line(sb, 3, "},");
-            Line(sb, 3, insertion.ForceClearPrimFlags == SceneExtractor.PrimitiveFlags.None ? forceSetFlags : $"{forceSetFlags},");
+            Line
+            (
+                sb,
+                3,
+                insertion.ForceClearPrimFlags == SceneExtractor.PrimitiveFlags.None ?
+                    forceSetFlags :
+                    $"{forceSetFlags},"
+            );
             if (insertion.ForceClearPrimFlags != SceneExtractor.PrimitiveFlags.None)
                 Line(sb, 3, forceClearFlags);
         }
@@ -658,7 +668,12 @@ internal static class CustomizationDraftExporter
             switch (ch)
             {
                 case >= 'a' and <= 'z':
-                    sb.Append(capitalizeNext ? char.ToUpperInvariant(ch) : ch);
+                    sb.Append
+                    (
+                        capitalizeNext ?
+                            char.ToUpperInvariant(ch) :
+                            ch
+                    );
                     capitalizeNext = false;
                     break;
                 case >= 'A' and <= 'Z' or >= '0' and <= '9':
@@ -690,7 +705,9 @@ internal static class CustomizationDraftExporter
 
     private static string FormatUlong(ulong value) => $"0x{value.ToString("X", CultureInfo.InvariantCulture)}ul";
 
-    private static string FormatBool(bool value) => value ? "true" : "false";
+    private static string FormatBool(bool value) => value ?
+                                                        "true" :
+                                                        "false";
 
     private static string FormatVector(Vector3 value) =>
         $"new({FormatFloat(value.X)}, {FormatFloat(value.Y)}, {FormatFloat(value.Z)})";
@@ -699,9 +716,9 @@ internal static class CustomizationDraftExporter
         $"new[] {{ {string.Join(", ", value.Select(static x => x.ToString(CultureInfo.InvariantCulture)))} }}";
 
     private static string FormatTraversalProfile(NavmeshLinkTraversalProfile? profile) =>
-        profile is { } value
-            ? $"new NavmeshLinkTraversalProfile({FormatFloat(value.DistanceScale)}, {FormatFloat(value.FixedPenalty)})"
-            : "null";
+        profile is { } value ?
+            $"new NavmeshLinkTraversalProfile({FormatFloat(value.DistanceScale)}, {FormatFloat(value.FixedPenalty)})" :
+            "null";
 
     private static string FormatRcPartition(RcPartition value) => FormatEnum(value, "RcPartition");
 
@@ -715,9 +732,9 @@ internal static class CustomizationDraftExporter
         FormatFlags(value, "NavmeshFilter");
 
     private static string FormatEnum<T>(T value, string prefix) where T : struct, Enum =>
-        Enum.IsDefined(typeof(T), value)
-            ? $"{prefix}.{value}"
-            : $"({prefix}){Convert.ToInt64(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)}";
+        Enum.IsDefined(typeof(T), value) ?
+            $"{prefix}.{value}" :
+            $"({prefix}){Convert.ToInt64(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)}";
 
     private static string FormatFlags<T>(T value, string prefix) where T : struct, Enum
     {
@@ -738,7 +755,9 @@ internal static class CustomizationDraftExporter
             parts.Add($"{prefix}.{flag}");
         }
 
-        return combined == raw && parts.Count > 0 ? string.Join(" | ", parts) : $"({prefix}){raw.ToString(CultureInfo.InvariantCulture)}";
+        return combined == raw && parts.Count > 0 ?
+                   string.Join(" | ", parts) :
+                   $"({prefix}){raw.ToString(CultureInfo.InvariantCulture)}";
     }
 
     private static string Escape(string value) =>

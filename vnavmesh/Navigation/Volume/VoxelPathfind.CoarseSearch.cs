@@ -6,7 +6,20 @@ namespace vnavmesh.Navigation.Volume;
 
 public partial class VoxelPathfind
 {
-    private readonly record struct L1Neighbour(ulong Voxel, int Dir, int Dx, int Dy, int Dz, int L0X, int L0Y, int L0Z, int L1X, int L1Y, int L1Z);
+    private readonly record struct L1Neighbour
+    (
+        ulong Voxel,
+        int   Dir,
+        int   Dx,
+        int   Dy,
+        int   Dz,
+        int   L0X,
+        int   L0Y,
+        int   L0Z,
+        int   L1X,
+        int   L1Y,
+        int   L1Z
+    );
 
     private int EnumerateL1Neighbours(ulong voxel, Span<L1Neighbour> output)
     {
@@ -30,20 +43,44 @@ public partial class VoxelPathfind
             var nl0Y = l0C.y;
             var nl0Z = l0C.z;
 
-            if (nl1X < 0) { nl0X--; nl1X = l1Desc.NumCellsX - 1; }
-            else if (nl1X >= l1Desc.NumCellsX) { nl0X++; nl1X = 0; }
+            if (nl1X < 0)
+            {
+                nl0X--;
+                nl1X = l1Desc.NumCellsX - 1;
+            }
+            else if (nl1X >= l1Desc.NumCellsX)
+            {
+                nl0X++;
+                nl1X = 0;
+            }
 
-            if (nl1Y < 0) { nl0Y--; nl1Y = l1Desc.NumCellsY - 1; }
-            else if (nl1Y >= l1Desc.NumCellsY) { nl0Y++; nl1Y = 0; }
+            if (nl1Y < 0)
+            {
+                nl0Y--;
+                nl1Y = l1Desc.NumCellsY - 1;
+            }
+            else if (nl1Y >= l1Desc.NumCellsY)
+            {
+                nl0Y++;
+                nl1Y = 0;
+            }
 
-            if (nl1Z < 0) { nl0Z--; nl1Z = l1Desc.NumCellsZ - 1; }
-            else if (nl1Z >= l1Desc.NumCellsZ) { nl0Z++; nl1Z = 0; }
+            if (nl1Z < 0)
+            {
+                nl0Z--;
+                nl1Z = l1Desc.NumCellsZ - 1;
+            }
+            else if (nl1Z >= l1Desc.NumCellsZ)
+            {
+                nl0Z++;
+                nl1Z = 0;
+            }
 
             if (!l0Desc.InBounds(nl0X, nl0Y, nl0Z))
                 continue;
 
             var neighbour = VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(nl1X, nl1Y, nl1Z));
-            neighbour = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0X, nl0Y, nl0Z), neighbour);
+            neighbour       = VoxelMap.EncodeIndex(l0Desc.VoxelToIndex(nl0X, nl0Y, nl0Z), neighbour);
             output[count++] = new(neighbour, dir, dx, dy, dz, nl0X, nl0Y, nl0Z, nl1X, nl1Y, nl1Z);
         }
 
@@ -53,7 +90,7 @@ public partial class VoxelPathfind
     private void VisitL1Neighbours(ulong voxel, Action<ulong> visitor)
     {
         Span<L1Neighbour> buffer = stackalloc L1Neighbour[6];
-        var count = EnumerateL1Neighbours(voxel, buffer);
+        var               count  = EnumerateL1Neighbours(voxel, buffer);
         for (var i = 0; i < count; i++)
             visitor(buffer[i].Voxel);
     }
@@ -64,8 +101,8 @@ public partial class VoxelPathfind
         l1DistanceField = new() { [goalL1] = 0 };
         var frontier = new Queue<ulong>();
         frontier.Enqueue(goalL1);
-        var expanded = 0;
-        Span<L1Neighbour> buffer = stackalloc L1Neighbour[6];
+        var               expanded = 0;
+        Span<L1Neighbour> buffer   = stackalloc L1Neighbour[6];
 
         while (frontier.TryDequeue(out var current) && expanded < budget)
         {
@@ -124,8 +161,8 @@ public partial class VoxelPathfind
         foreach (var (seedVoxel, seedDistance) in l1DistanceField)
             frontier.Enqueue(seedVoxel, seedDistance);
 
-        var expanded = 0;
-        Span<L1Neighbour> buffer = stackalloc L1Neighbour[6];
+        var               expanded = 0;
+        Span<L1Neighbour> buffer   = stackalloc L1Neighbour[6];
 
         while (frontier.TryDequeue(out var current, out var queuedDistance) && expanded < L1_DISTANCE_FIELD_BUDGET)
         {
@@ -213,7 +250,9 @@ public partial class VoxelPathfind
             return strictResult;
 
         var relaxedResult = TrySearchL1BestEffortPath(fromL1, toL1, fromVoxel, fromPoint, toVoxel, toPoint, true, true);
-        return IsBetterL1BestEffortResult(relaxedResult, strictResult) ? relaxedResult : strictResult;
+        return IsBetterL1BestEffortResult(relaxedResult, strictResult) ?
+                   relaxedResult :
+                   strictResult;
     }
 
     private void BuildL1Corridor(HashSet<ulong> pathSet, int corridorRadius)
@@ -287,11 +326,13 @@ public partial class VoxelPathfind
     {
         var horizontalDelta    = new Vector2(toPos.X - fromPos.X, toPos.Z - fromPos.Z);
         var horizontalDistance = horizontalDelta.Length();
-        var forward            = VoxelMathUtil.TryNormalize(horizontalDelta, out var normalizedForward) ? normalizedForward : Vector2.UnitX;
-        var right              = new Vector2(-forward.Y, forward.X);
-        var verticalDrop       = MathF.Max(fromPos.Y - toPos.Y, 0f);
-        var leafVertical       = MathF.Max(l2Desc.CellSize.Y,   SCORE_EPSILON);
-        var preferDescending   = verticalDrop >= leafVertical * LONG_RANGE_LATERAL_DESCENT_ENABLE_MIN_DROP_LEAF_CELLS;
+        var forward = VoxelMathUtil.TryNormalize(horizontalDelta, out var normalizedForward) ?
+                          normalizedForward :
+                          Vector2.UnitX;
+        var right            = new Vector2(-forward.Y, forward.X);
+        var verticalDrop     = MathF.Max(fromPos.Y - toPos.Y, 0f);
+        var leafVertical     = MathF.Max(l2Desc.CellSize.Y,   SCORE_EPSILON);
+        var preferDescending = verticalDrop >= leafVertical * LONG_RANGE_LATERAL_DESCENT_ENABLE_MIN_DROP_LEAF_CELLS;
         var heightPriority =
             1f + Math.Clamp(verticalDrop / (leafVertical * LONG_RANGE_LATERAL_DESCENT_PRIORITY_DROP_LEAF_CELLS), 0f, LONG_RANGE_LATERAL_DESCENT_PRIORITY_MAX_BONUS);
         var directionalPenalty = MathF.Max(LONG_RANGE_LATERAL_DIRECTIONAL_PENALTY_MIN, 1f - (attempt * LONG_RANGE_LATERAL_DIRECTIONAL_PENALTY_ATTEMPT_STEP));
@@ -383,20 +424,22 @@ public partial class VoxelPathfind
             var l1Idx = VoxelMap.DecodeIndex(ref temp);
             var l0c   = l0Desc.IndexToVoxel(l0Idx);
             var l1c   = l1Desc.IndexToVoxel(l1Idx);
-            var position = state.Voxel == fromL1
-                               ? fromPoint
-                               : state.Voxel == toL1
-                                   ? toPoint
-                                   : CoarseCellCenter(l0c, l1c);
-            var baseH = coarseBias.Enabled
-                            ? ComputeLongRangeLateralHeuristic(position, state.Voxel, coarseBias, toPoint)
-                            : H(l0c, l1c);
+            var position = state.Voxel   == fromL1 ? fromPoint
+                           : state.Voxel == toL1   ? toPoint
+                                                     : CoarseCellCenter(l0c, l1c);
+            var baseH = coarseBias.Enabled ?
+                            ComputeLongRangeLateralHeuristic(position, state.Voxel, coarseBias, toPoint) :
+                            H(l0c, l1c);
             if (state.Voxel != toL1)
                 return baseH;
             if (state.EntryFace == L1_FACE_INSIDE)
-                return directGoalConnected ? 0f : goalFacePenalty;
+                return directGoalConnected ?
+                           0f :
+                           goalFacePenalty;
 
-            return VoxelIndexUtil.HasL1Face(goalReachableFaces, state.EntryFace) ? 0f : goalFacePenalty;
+            return VoxelIndexUtil.HasL1Face(goalReachableFaces, state.EntryFace) ?
+                       0f :
+                       goalFacePenalty;
         }
 
         var startState = new L1TraversalState(fromL1, L1_FACE_INSIDE);
@@ -412,8 +455,8 @@ public partial class VoxelPathfind
 
         bool TryRunSearchPhase(int phaseBudget, out L1BestEffortSearchResult result)
         {
-            Span<L1Neighbour> nbBuffer = stackalloc L1Neighbour[6];
-            var phaseExpanded = 0;
+            Span<L1Neighbour> nbBuffer      = stackalloc L1Neighbour[6];
+            var               phaseExpanded = 0;
 
             while (openQ.TryDequeue(out var current, out _) && phaseExpanded < phaseBudget)
             {
@@ -429,11 +472,9 @@ public partial class VoxelPathfind
                 var l1c   = l1Desc.IndexToVoxel(l1Idx);
                 var cg    = gScore[current];
                 var h     = StateHeuristic(current);
-                var currentPosition = current.Voxel == fromL1
-                                          ? fromPoint
-                                          : current.Voxel == toL1
-                                              ? toPoint
-                                              : CoarseCellCenter(l0c, l1c);
+                var currentPosition = current.Voxel   == fromL1 ? fromPoint
+                                      : current.Voxel == toL1   ? toPoint
+                                                                  : CoarseCellCenter(l0c, l1c);
 
                 if (h + SCORE_EPSILON < bestDistance || (MathF.Abs(h - bestDistance) <= SCORE_EPSILON && cg < gScore.GetValueOrDefault(bestState, float.MaxValue)))
                 {
@@ -442,9 +483,9 @@ public partial class VoxelPathfind
                 }
 
                 var reachedGoal = current.Voxel == toL1 &&
-                                  (current.EntryFace == L1_FACE_INSIDE
-                                       ? directGoalConnected
-                                       : VoxelIndexUtil.HasL1Face(goalReachableFaces, current.EntryFace));
+                                  (current.EntryFace == L1_FACE_INSIDE ?
+                                       directGoalConnected :
+                                       VoxelIndexUtil.HasL1Face(goalReachableFaces, current.EntryFace));
 
                 if (reachedGoal)
                 {
@@ -453,9 +494,9 @@ public partial class VoxelPathfind
                     return true;
                 }
 
-                var exitFaceMask = current.EntryFace == L1_FACE_INSIDE
-                                       ? startReachableFaces
-                                       : GetReachableL1FacesFromEntry(current.Voxel, current.EntryFace);
+                var exitFaceMask = current.EntryFace == L1_FACE_INSIDE ?
+                                       startReachableFaces :
+                                       GetReachableL1FacesFromEntry(current.Voxel, current.EntryFace);
                 if (exitFaceMask == 0)
                     continue;
 
@@ -485,15 +526,17 @@ public partial class VoxelPathfind
                             continue;
                     }
 
-                    var neighbourPosition = n.Voxel == toL1
-                                                ? toPoint
-                                                : CoarseCellCenter((n.L0X, n.L0Y, n.L0Z), (n.L1X, n.L1Y, n.L1Z));
-                    var edgeCost     = n.Dx != 0 ? l1Desc.CellSize.X : n.Dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
-                    var mixedPenalty = isEmpty ? 0f : edgeCost * LONG_RANGE_L1_BEST_EFFORT_MIXED_CELL_PENALTY_SCALE;
-                    var traversalPenalty = coarseBias.Enabled
-                                               ? CalculateLongRangeLateralTraversalPenalty
-                                                   (current.Voxel, currentPosition, n.Voxel, neighbourPosition, coarseBias, toPoint)
-                                               : 0f;
+                    var neighbourPosition = n.Voxel == toL1 ?
+                                                toPoint :
+                                                CoarseCellCenter((n.L0X, n.L0Y, n.L0Z), (n.L1X, n.L1Y, n.L1Z));
+                    var edgeCost = n.Dx != 0 ? l1Desc.CellSize.X : n.Dy != 0 ? l1Desc.CellSize.Y : l1Desc.CellSize.Z;
+                    var mixedPenalty = isEmpty ?
+                                           0f :
+                                           edgeCost * LONG_RANGE_L1_BEST_EFFORT_MIXED_CELL_PENALTY_SCALE;
+                    var traversalPenalty = coarseBias.Enabled ?
+                                               CalculateLongRangeLateralTraversalPenalty
+                                                   (current.Voxel, currentPosition, n.Voxel, neighbourPosition, coarseBias, toPoint) :
+                                               0f;
                     var tentativeG = cg + edgeCost + mixedPenalty + traversalPenalty;
 
                     if (gScore.TryGetValue(nextState, out var existingG) && tentativeG >= existingG)
@@ -580,8 +623,8 @@ public partial class VoxelPathfind
         var closed   = new HashSet<ulong>();
         var openQ    = new PriorityQueue<ulong, float>();
         openQ.Enqueue(fromL1, 0);
-        var expanded = 0;
-        Span<L1Neighbour> buffer = stackalloc L1Neighbour[6];
+        var               expanded = 0;
+        Span<L1Neighbour> buffer   = stackalloc L1Neighbour[6];
 
         while (openQ.TryDequeue(out var current, out _) && expanded < L1_A_STAR_MAX_EXPANSIONS)
         {

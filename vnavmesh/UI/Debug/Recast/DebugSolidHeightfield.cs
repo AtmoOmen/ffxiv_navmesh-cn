@@ -21,7 +21,9 @@ public class DebugSolidHeightfield : DebugRecast
     private static Vector4 _colAreaNull     = new(0.25f, 0.25f, 0.25f, 0.7f);
     private static Vector4 _colAreaWalkable = new(0.25f, 0.5f, 0.63f, 0.7f);
 
-    private static Vector4 AreaColor(int area) => area == 0 ? _colAreaNull : _colAreaWalkable; // TODO: other colors for other areas
+    private static Vector4 AreaColor(int area) => area == 0 ?
+                                                      _colAreaNull :
+                                                      _colAreaWalkable; // TODO: other colors for other areas
 
     public DebugSolidHeightfield(RcHeightfield hf, UITree tree, DebugDrawer dd)
     {

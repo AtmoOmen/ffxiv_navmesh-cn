@@ -33,8 +33,10 @@ public partial class VoxelPathfind
         );
 
         var guidedCorridorRadius = ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance);
-        var proxyGoalVoxel       = coarsePath.ReachedGoal ? toVoxel : coarsePath.OrderedPath[^1];
-        var proxyGoalPos         = ResolveVoxelCenter(proxyGoalVoxel);
+        var proxyGoalVoxel = coarsePath.ReachedGoal ?
+                                 toVoxel :
+                                 coarsePath.OrderedPath[^1];
+        var proxyGoalPos = ResolveVoxelCenter(proxyGoalVoxel);
 
         // 粗搜索未达终点时，尝试把 L1-only 代理目标解析为真实 L2 体素
         if (!coarsePath.ReachedGoal)
@@ -98,18 +100,18 @@ public partial class VoxelPathfind
             {
                 Service.Log.Debug
                 (
-                    usedLongRangeReentry
-                        ? $"[算路] 飞行体素粗层代理搜索后二次粗搜接力完成：访问节点 = {visitedNodes}，路径点 = {tailPath.Count}"
-                        : $"[算路] 飞行体素粗层代理搜索后短程接力完成：访问节点 = {visitedNodes}，路径点 = {tailPath.Count}"
+                    usedLongRangeReentry ?
+                        $"[算路] 飞行体素粗层代理搜索后二次粗搜接力完成：访问节点 = {visitedNodes}，路径点 = {tailPath.Count}" :
+                        $"[算路] 飞行体素粗层代理搜索后短程接力完成：访问节点 = {visitedNodes}，路径点 = {tailPath.Count}"
                 );
                 return VoxelPathUtil.MergePathSegments(proxyPath, tailPath, SCORE_EPSILON);
             }
 
             Service.Log.Debug
             (
-                usedLongRangeReentry
-                    ? $"[算路] 飞行体素粗层代理搜索后二次粗搜接力未达终点（{lastTermination}），访问节点 = {visitedNodes}"
-                    : $"[算路] 飞行体素粗层代理搜索后短程接力未达终点（{lastTermination}），访问节点 = {visitedNodes}"
+                usedLongRangeReentry ?
+                    $"[算路] 飞行体素粗层代理搜索后二次粗搜接力未达终点（{lastTermination}），访问节点 = {visitedNodes}" :
+                    $"[算路] 飞行体素粗层代理搜索后短程接力未达终点（{lastTermination}），访问节点 = {visitedNodes}"
             );
             return VoxelPathUtil.MergePathSegments(proxyPath, tailPath, SCORE_EPSILON);
         }
@@ -139,7 +141,9 @@ public partial class VoxelPathfind
                 heuristicWeightOverride: LONG_RANGE_HEURISTIC_WEIGHT,
                 disableAncestorLookBack: true
             );
-            return fallbackPath.Count > 0 ? fallbackPath : proxyPath;
+            return fallbackPath.Count > 0 ?
+                       fallbackPath :
+                       proxyPath;
         }
 
         return proxyPath;
@@ -212,9 +216,9 @@ public partial class VoxelPathfind
 
             Service.Log.Debug
             (
-                guidedCorridorEarlyAbortTriggered
-                    ? $"[算路] 飞行体素粗层代理后定向走廊提前回退（进展停滞），访问节点 = {visitedNodes}，最佳距离 = {NodeSpan[bestNodeIndex].HScore:f3}，当前高差余量 = {MathF.Max(NodeSpan[bestNodeIndex].Position.Y - goalPos.Y, 0f):f3}"
-                    : $"[算路] 飞行体素粗层代理后定向走廊未达终点（{lastTermination}），回退{(allowLongRangeCoarseReentry ? "二次粗搜" : "真实终点距离场全搜索")}"
+                guidedCorridorEarlyAbortTriggered ?
+                    $"[算路] 飞行体素粗层代理后定向走廊提前回退（进展停滞），访问节点 = {visitedNodes}，最佳距离 = {NodeSpan[bestNodeIndex].HScore:f3}，当前高差余量 = {MathF.Max(NodeSpan[bestNodeIndex].Position.Y - goalPos.Y, 0f):f3}" :
+                    $"[算路] 飞行体素粗层代理后定向走廊未达终点（{lastTermination}），回退{(allowLongRangeCoarseReentry ? "二次粗搜" : "真实终点距离场全搜索")}"
             );
         }
 
@@ -267,7 +271,9 @@ public partial class VoxelPathfind
     {
         var attempts                = 2;
         var useExploratoryHeuristic = ShouldUseShortRangeExploratoryHeuristic(fromPos, toPos);
-        var fallbackHeuristicWeight = useExploratoryHeuristic ? LONG_RANGE_HEURISTIC_WEIGHT : SHORT_RANGE_HEURISTIC_WEIGHT;
+        var fallbackHeuristicWeight = useExploratoryHeuristic ?
+                                          LONG_RANGE_HEURISTIC_WEIGHT :
+                                          SHORT_RANGE_HEURISTIC_WEIGHT;
 
         Service.Log.Debug
         (

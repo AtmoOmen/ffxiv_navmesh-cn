@@ -13,7 +13,7 @@ public sealed class CustomizationDraftCustomization
 ) : NavmeshCustomization
 {
     public NavmeshCustomization BaseCustomization { get; } = baseCustomization;
-    public CustomizationDraft    Draft             { get; } = draft;
+    public CustomizationDraft   Draft             { get; } = draft;
 
     public override int Version
     {
@@ -40,7 +40,7 @@ public sealed class CustomizationDraftCustomization
     protected internal override void ApplyBuildSettings(SceneDefinition definition, NavmeshSettings settings)
     {
         BaseCustomization.ApplyBuildSettings(definition, settings);
-        var profile  = new NavmeshBuildProfile();
+        var profile = new NavmeshBuildProfile();
         CustomizationDraftApplier.ApplyBuildProfile(profile, Draft);
         profile.ApplyTo(settings);
         CustomizationDraftApplier.ApplyBuildSettings(settings, Draft);

@@ -10,7 +10,7 @@ public class Overworld : SceneNavmeshCustomization
     {
         if (Service.LuminaRow<TerritoryType>(definition.TerritoryID) is not { TerritoryIntendedUse.RowId: 1 })
             return false;
-        
+
         ApplyAgentRadiusOneSettings();
         return true;
     }

@@ -37,6 +37,6 @@ internal class Z0132格里达尼亚新街 : NavmeshCustomization
 
         //bridge to past aetheryte plaza and back
         LinkPoints(mesh, new(-21.689f, -4.302f, 16.821f), new(33.436f, -1.582f, 61.284f), true);
-        LinkPoints(mesh, new(53.482f, -0.772f, 71.466f),  new(3.601f, -2.647f, 34.097f), true);
+        LinkPoints(mesh, new(53.482f, -0.772f, 71.466f),  new(3.601f, -2.647f, 34.097f),  true);
     }
 }

@@ -8,7 +8,7 @@ public struct StopWatchTimer
 
     public TimeSpan Value()
     {
-        var now = DateTime.Now;
+        var now   = DateTime.Now;
         var delta = now - Start;
         Start = now;
         return delta;

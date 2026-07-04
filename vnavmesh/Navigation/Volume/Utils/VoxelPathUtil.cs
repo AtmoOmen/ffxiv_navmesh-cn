@@ -30,7 +30,9 @@ public static class VoxelPathUtil
         List<(ulong voxel, Vector3 p)> merged = new(head.Count + tail.Count);
         merged.AddRange(head);
 
-        var tailStartIndex = head[^1].voxel == tail[0].voxel && Vector3.DistanceSquared(head[^1].p, tail[0].p) <= epsilon * epsilon ? 1 : 0;
+        var tailStartIndex = head[^1].voxel == tail[0].voxel && Vector3.DistanceSquared(head[^1].p, tail[0].p) <= epsilon * epsilon ?
+                                 1 :
+                                 0;
         for (var i = tailStartIndex; i < tail.Count; ++i)
             merged.Add(tail[i]);
 

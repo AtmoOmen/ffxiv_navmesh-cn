@@ -34,26 +34,35 @@ internal class DebugNavmeshManager : IDisposable
     private const uint  PathActualStartColor             = 0xFF8E24AAu;
     private const uint  PathConsumedPrefixColor          = 0xFF757575u;
 
-    private sealed record RenderedPath(Vector3 RequestStart, PostprocessedPath Result, uint LineColor, uint PointColor, uint StartColor, uint EndColor, string Label);
+    private sealed record RenderedPath
+    (
+        Vector3           RequestStart,
+        PostprocessedPath Result,
+        uint              LineColor,
+        uint              PointColor,
+        uint              StartColor,
+        uint              EndColor,
+        string            Label
+    );
 
     private NavmeshManager       manager;
     private MovementPlanExecutor movementExecutor;
     private AsyncMoveRequest     asyncMove;
     private UITree               tree = new();
     private DebugDrawer          dd;
-    
+
     private DebugDetourNavmesh? drawNavmesh;
     private DebugVoxelMap?      debugVoxelMap;
     private DebugLinks?         debugLinks;
 
-    private Vector3 target;
-    private Task<PostprocessedPath>?      renderPathTask;
-    private CancellationTokenSource?      renderPathCancelSource;
-    private List<RenderedPath>            renderedPaths = [];
-    private bool                          renderPathFlyMode;
-    private Vector3                       renderPathRequestStart;
-    private bool                          renderStraightPathMode;
-    private bool                          showCornerPushDebug = true;
+    private Vector3                  target;
+    private Task<PostprocessedPath>? renderPathTask;
+    private CancellationTokenSource? renderPathCancelSource;
+    private List<RenderedPath>       renderedPaths = [];
+    private bool                     renderPathFlyMode;
+    private Vector3                  renderPathRequestStart;
+    private bool                     renderStraightPathMode;
+    private bool                     showCornerPushDebug = true;
 
     public DebugNavmeshManager
     (
@@ -83,14 +92,15 @@ internal class DebugNavmeshManager : IDisposable
         if (ImGui.CollapsingHeader("导航路网", ImGuiTreeNodeFlags.DefaultOpen))
         {
             ImGui.TextUnformatted($"场景键: {manager.CurrentKey}");
-            
+
             ImGui.Spacing();
-            
+
             var progress = manager.LoadTaskProgress;
+
             if (progress >= 0)
             {
                 ImGui.ProgressBar(progress, ImGuiHelpers.ScaledVector2(200, 0));
-                
+
                 ImGui.SameLine();
                 ImGui.TextUnformatted("构建进度");
             }
@@ -98,13 +108,13 @@ internal class DebugNavmeshManager : IDisposable
             {
                 if (ImGui.Button("重新加载"))
                     manager.Reload(true);
-                
+
                 ImGui.SameLine();
                 if (ImGui.Button("重新构建"))
                     manager.Reload(false);
             }
         }
-        
+
         if (manager.Navmesh == null || manager.Query == null)
             return;
 
@@ -119,20 +129,21 @@ internal class DebugNavmeshManager : IDisposable
             ImGui.Checkbox("显示角点扫描/推出调试", ref showCornerPushDebug);
 
             ImGui.Checkbox("允许移动", ref movementExecutor.MovementAllowed);
-            
+
             ImGui.NewLine();
-            
+
             ImGui.TextUnformatted($"目标位置: {target}");
-            
-            var player    = Service.ObjectTable.LocalPlayer;
-            
+
+            var player = Service.ObjectTable.LocalPlayer;
+
             using (ImRaii.Disabled(player == null))
             {
                 if (ImGui.Button("当前位置"))
                     target = player?.Position ?? default;
             }
-            
+
             ImGui.SameLine();
+
             using (ImRaii.Disabled(player?.TargetObject == null))
             {
                 if (ImGui.Button("目标位置"))
@@ -142,22 +153,23 @@ internal class DebugNavmeshManager : IDisposable
             unsafe
             {
                 ImGui.SameLine();
+
                 using (ImRaii.Disabled(AgentMap.Instance()->FlagMarkerCount == 0))
                 {
                     if (ImGui.Button("地图标记位置"))
                         target = MapUtil.FlagToPoint(manager.Query) ?? default;
                 }
             }
-            
+
             using (ImRaii.Disabled(target == Vector3.Zero))
             {
                 if (ImGui.Button("地面寻路"))
                     asyncMove.MoveTo(target, false);
-                
+
                 ImGui.SameLine();
                 if (ImGui.Button("空间寻路"))
                     asyncMove.MoveTo(target, true);
-                
+
                 ImGui.SameLine(0, ImGui.GetStyle().ItemSpacing.X * ImGuiHelpers.GlobalScale);
                 if (ImGui.Button("取消寻路"))
                     asyncMove.Stop();
@@ -178,6 +190,7 @@ internal class DebugNavmeshManager : IDisposable
             }
 
             ImGui.SameLine();
+
             using (ImRaii.Disabled(renderedPaths.Count == 0 && renderPathTask == null))
             {
                 if (ImGui.Button("清除渲染结果"))
@@ -186,12 +199,12 @@ internal class DebugNavmeshManager : IDisposable
                     renderedPaths.Clear();
                 }
             }
-            
+
             ImGui.NewLine();
-            
+
             if (ImGui.Button("导出位图 (玩家中心)"))
                 ExportBitmap(player?.Position ?? default);
-            
+
             if (player != null)
             {
                 DrawPosition("玩家", player.Position);
@@ -199,6 +212,7 @@ internal class DebugNavmeshManager : IDisposable
                 if (floor != null)
                     DrawPosition("地面", floor.Value);
             }
+
             if (target != Vector3.Zero)
                 DrawPosition("目标", target);
             var flag = MapUtil.FlagToPoint(manager.Query);
@@ -213,7 +227,9 @@ internal class DebugNavmeshManager : IDisposable
                 if (nd.Opened)
                 {
                     var diagnostics = manager.Query.GetGroundDiagnostics();
-                    var partialRate = diagnostics.GroundQueries > 0 ? diagnostics.PartialQueries / (double)diagnostics.GroundQueries : 0;
+                    var partialRate = diagnostics.GroundQueries > 0 ?
+                                          diagnostics.PartialQueries / (double)diagnostics.GroundQueries :
+                                          0;
                     tree.LeafNode($"总查询次数：{diagnostics.GroundQueries}");
                     tree.LeafNode($"失败次数：{diagnostics.FailedQueries}");
                     tree.LeafNode($"Partial 次数：{diagnostics.PartialQueries}，占比 {partialRate:P1}");
@@ -243,9 +259,9 @@ internal class DebugNavmeshManager : IDisposable
             return;
 
         manager.Navmesh!.Mesh.CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
-        var nearestAll       = manager.Query!.FindNearestMeshPoly(position);
-        var nearestReachable = manager.Query.FindNearestMeshPoly(position, allowUnreachable: false);
-        var nearestPointAll  = manager.Query.FindNearestPointOnMesh(position);
+        var nearestAll            = manager.Query!.FindNearestMeshPoly(position);
+        var nearestReachable      = manager.Query.FindNearestMeshPoly(position, allowUnreachable: false);
+        var nearestPointAll       = manager.Query.FindNearestPointOnMesh(position);
         var nearestPointReachable = manager.Query.FindNearestPointOnMesh(position, allowUnreachable: false);
         var floorAll              = manager.Query.FindPointOnFloor(position);
         var floorReachable        = manager.Query.FindPointOnFloor(position, allowUnreachable: false);
@@ -262,14 +278,21 @@ internal class DebugNavmeshManager : IDisposable
         if (tree.LeafNode($"{tag}体素：{voxel:X}###{tag}voxel").SelectedOrHovered && voxel != VoxelMap.INVALID_VOXEL)
             debugVoxelMap?.VisualizeVoxel(voxel);
         var voxelSurface = manager.Query.FindNearestVolumeVoxelSurfaceAware(position);
-        if (tree.LeafNode($"{tag}体素 Flight：{voxelSurface.Voxel:X}，地表锚定={(voxelSurface.UsedSurfaceAnchor ? "是" : "否")}，搜索点={voxelSurface.SearchPoint:f3}，安全点={voxelSurface.SafePoint:f3}###{tag}voxelFlight").SelectedOrHovered &&
+        if (tree.LeafNode
+            (
+                $"{tag}体素 Flight：{voxelSurface.Voxel:X}，地表锚定={(voxelSurface.UsedSurfaceAnchor ? "是" : "否")}，搜索点={voxelSurface.SearchPoint:f3}，安全点={voxelSurface.SafePoint:f3}###{tag}voxelFlight"
+            ).SelectedOrHovered &&
             voxelSurface.Voxel != VoxelMap.INVALID_VOXEL)
             debugVoxelMap?.VisualizeVoxel(voxelSurface.Voxel);
     }
 
-    private static string FormatPolyRef(long polyRef) => polyRef != 0 ? polyRef.ToString("X") : "<none>";
+    private static string FormatPolyRef(long polyRef) => polyRef != 0 ?
+                                                             polyRef.ToString("X") :
+                                                             "<none>";
 
-    private static string FormatVector(Vector3? value) => value is { } point ? point.ToString("f3") : "<none>";
+    private static string FormatVector(Vector3? value) => value is { } point ?
+                                                              point.ToString("f3") :
+                                                              "<none>";
 
     private void ExportBitmap(Vector3 startingPos) =>
         manager.BuildBitmap(startingPos, "D:\\navmesh.bmp", 0.5f);
@@ -279,10 +302,11 @@ internal class DebugNavmeshManager : IDisposable
         foreach (var renderedPath in renderedPaths)
         {
             DrawRenderedPath(renderedPath);
+
             if (showCornerPushDebug)
             {
                 DrawRenderedPathCornerDebug(renderedPath);
-                    }
+            }
         }
     }
 
@@ -303,9 +327,9 @@ internal class DebugNavmeshManager : IDisposable
         renderStraightPathMode = straightPath;
         renderPathRequestStart = from;
         renderPathCancelSource = new();
-        renderPathTask        = straightPath
-                                    ? manager.QueryStraightPathDetailed(from, to, fly, externalCancel: renderPathCancelSource.Token)
-                                    : manager.QueryPathDetailed(from, to, fly, externalCancel: renderPathCancelSource.Token);
+        renderPathTask = straightPath ?
+                             manager.QueryStraightPathDetailed(from, to, fly, externalCancel: renderPathCancelSource.Token) :
+                             manager.QueryPathDetailed(from, to, fly, externalCancel: renderPathCancelSource.Token);
     }
 
     private void TryCollectRenderedPathResult()
@@ -316,19 +340,26 @@ internal class DebugNavmeshManager : IDisposable
         try
         {
             var result = renderPathTask.Result;
+
             if (result.Succeeded)
             {
-                var renderedPath = renderStraightPathMode
-                                       ? new RenderedPath(renderPathRequestStart, result, 0xFF00BCD4u, 0xFF0097A7u, 0xFF1E88E5u, 0xFFE53935u, "StraightPath")
-                                       : new RenderedPath
+                var renderedPath = renderStraightPathMode ?
+                                       new RenderedPath(renderPathRequestStart, result, 0xFF00BCD4u, 0xFF0097A7u, 0xFF1E88E5u, 0xFFE53935u, "StraightPath") :
+                                       new RenderedPath
                                        (
                                            renderPathRequestStart,
                                            result,
-                                           renderPathFlyMode ? 0xFF2ECC71u : 0xFFF39C12u,
-                                           renderPathFlyMode ? 0xFF27AE60u : 0xFFD35400u,
+                                           renderPathFlyMode ?
+                                               0xFF2ECC71u :
+                                               0xFFF39C12u,
+                                           renderPathFlyMode ?
+                                               0xFF27AE60u :
+                                               0xFFD35400u,
                                            0xFF3498DBu,
                                            0xFFE74C3Cu,
-                                           renderPathFlyMode ? "Flight" : "Ground"
+                                           renderPathFlyMode ?
+                                               "Flight" :
+                                               "Ground"
                                        );
                 renderedPaths.Add(renderedPath);
             }
@@ -343,7 +374,7 @@ internal class DebugNavmeshManager : IDisposable
         finally
         {
             renderPathTask.Dispose();
-            renderPathTask         = null;
+            renderPathTask = null;
             renderPathCancelSource?.Dispose();
             renderPathCancelSource = null;
         }
@@ -365,21 +396,31 @@ internal class DebugNavmeshManager : IDisposable
 
     private void DrawRenderedPath(RenderedPath renderedPath)
     {
-        List<Vector3> points = [];
-        var firstSegment = renderedPath.Result.Segments.FirstOrDefault();
-        var actualStart = firstSegment?.StartPosition
-                       ?? (renderedPath.Result.Waypoints.Count > 0 ? renderedPath.Result.Waypoints[0] : renderedPath.Result.FinalDestination);
+        List<Vector3> points       = [];
+        var           firstSegment = renderedPath.Result.Segments.FirstOrDefault();
+        var actualStart = firstSegment?.StartPosition ??
+                          (renderedPath.Result.Waypoints.Count > 0 ?
+                               renderedPath.Result.Waypoints[0] :
+                               renderedPath.Result.FinalDestination);
         var initialWaypointIndex = firstSegment?.GroundCorridor?.InitialWaypointIndex ?? 0;
 
         DrawConsumedPrefix(firstSegment, actualStart, initialWaypointIndex);
 
-        points.Add(initialWaypointIndex > 0 ? renderedPath.RequestStart : actualStart);
+        points.Add
+        (
+            initialWaypointIndex > 0 ?
+                renderedPath.RequestStart :
+                actualStart
+        );
 
         {
             var firstWaypointSkipped = false;
+
             foreach (var segment in renderedPath.Result.Segments)
             {
-                var waypointStart = !firstWaypointSkipped ? Math.Clamp(initialWaypointIndex, 0, segment.Waypoints.Count) : 0;
+                var waypointStart = !firstWaypointSkipped ?
+                                        Math.Clamp(initialWaypointIndex, 0, segment.Waypoints.Count) :
+                                        0;
                 firstWaypointSkipped = true;
 
                 for (var i = waypointStart; i < segment.Waypoints.Count; ++i)
@@ -400,8 +441,8 @@ internal class DebugNavmeshManager : IDisposable
             }
         }
 
-        dd.DrawWorldPointFilled(renderedPath.RequestStart, 4, renderedPath.StartColor);
-        dd.DrawWorldPointFilled(actualStart, 4, PathActualStartColor);
+        dd.DrawWorldPointFilled(renderedPath.RequestStart,            4, renderedPath.StartColor);
+        dd.DrawWorldPointFilled(actualStart,                          4, PathActualStartColor);
         dd.DrawWorldPointFilled(renderedPath.Result.FinalDestination, 4, renderedPath.EndColor);
 
         if (Vector3.DistanceSquared(renderedPath.RequestStart, actualStart) > DuplicateRenderedPointDistanceSq)
@@ -424,10 +465,10 @@ internal class DebugNavmeshManager : IDisposable
                 foreach (var sample in debug.Samples)
                     dd.DrawWorldLine(sample.Start, sample.Endpoint, ColorForClearance(sample.Clearance, debug.MaxClearance), 1);
 
-                dd.DrawWorldLine(debug.OriginalPosition, debug.ScanOrigin, PathCornerScanColor, 1);
-                dd.DrawWorldLine(debug.ScanOrigin, debug.InteriorDirectionEndpoint, PathCornerInteriorColor, 2);
-                dd.DrawWorldLine(debug.ScanOrigin, debug.PreferredDirectionEndpoint, PathCornerPreferredColor, 2);
-                dd.DrawWorldLine(debug.ScanOrigin, debug.WallPressureEndpoint, PathCornerPressureColor, 2);
+                dd.DrawWorldLine(debug.OriginalPosition, debug.ScanOrigin,                 PathCornerScanColor,      1);
+                dd.DrawWorldLine(debug.ScanOrigin,       debug.InteriorDirectionEndpoint,  PathCornerInteriorColor,  2);
+                dd.DrawWorldLine(debug.ScanOrigin,       debug.PreferredDirectionEndpoint, PathCornerPreferredColor, 2);
+                dd.DrawWorldLine(debug.ScanOrigin,       debug.WallPressureEndpoint,       PathCornerPressureColor,  2);
 
                 if (debug.PushApplied)
                     dd.DrawWorldLine(debug.OriginalPosition, debug.AdjustedPosition, PathCornerMoveColor, 3);
@@ -436,8 +477,15 @@ internal class DebugNavmeshManager : IDisposable
                 if (cornerIndex == segment.GroundCorridor.InitialCornerIndex)
                     dd.DrawWorldPointFilled(debug.AdjustedPosition, 6, 0x33FFFFFFu);
 
-                dd.DrawWorldPointFilled(debug.OriginalPosition, 3, debug.InitiallyConsumed ? PathCornerSkippedColor : PathCornerOriginalColor);
-                dd.DrawWorldPointFilled(debug.ScanOrigin, 3, PathCornerScanOriginColor);
+                dd.DrawWorldPointFilled
+                (
+                    debug.OriginalPosition,
+                    3,
+                    debug.InitiallyConsumed ?
+                        PathCornerSkippedColor :
+                        PathCornerOriginalColor
+                );
+                dd.DrawWorldPointFilled(debug.ScanOrigin,       3, PathCornerScanOriginColor);
                 dd.DrawWorldPointFilled(debug.AdjustedPosition, 4, pointColor);
 
                 var labelAnchor = debug.AdjustedPosition + new Vector3(0, 0.12f, 0);
@@ -457,6 +505,7 @@ internal class DebugNavmeshManager : IDisposable
             return;
 
         List<Vector3> prefix = [actualStart];
+
         for (var i = 0; i < Math.Min(initialWaypointIndex, firstSegment.Waypoints.Count); ++i)
         {
             var waypoint = firstSegment.Waypoints[i];
@@ -473,10 +522,11 @@ internal class DebugNavmeshManager : IDisposable
 
     private static uint ColorForClearance(float clearance, float maxClearance)
     {
-        var normalized = maxClearance > 0.0001f ? Math.Clamp(clearance / maxClearance, 0f, 1f) : 0f;
-        var red        = (byte)(255 * (1f - normalized));
-        var green      = (byte)(255 * normalized);
+        var normalized = maxClearance > 0.0001f ?
+                             Math.Clamp(clearance / maxClearance, 0f, 1f) :
+                             0f;
+        var red   = (byte)(255 * (1f - normalized));
+        var green = (byte)(255 * normalized);
         return 0x66000000u | red | ((uint)green << 8);
     }
-
 }

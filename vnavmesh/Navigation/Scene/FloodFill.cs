@@ -135,8 +135,12 @@ public class FloodFill
 
     public bool TryLookup(uint territoryType, out IEnumerable<Vector3> points)
     {
-        var collA = seedsRemote.TryGetValue(territoryType, out var r) ? r : [];
-        var collB = seedsLocal.TryGetValue(territoryType, out var l) ? l : [];
+        var collA = seedsRemote.TryGetValue(territoryType, out var r) ?
+                        r :
+                        [];
+        var collB = seedsLocal.TryGetValue(territoryType, out var l) ?
+                        l :
+                        [];
 
         points = [.. collA, .. collB];
         return collA.Count > 0 || collB.Count > 0;

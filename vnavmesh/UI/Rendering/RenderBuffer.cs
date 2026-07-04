@@ -85,10 +85,14 @@ public class RenderBuffer<T> : IDisposable where T : unmanaged
             ctx.Device,
             new()
             {
-                SizeInBytes    = ElementSize * MaxElements,
-                Usage          = dynamic ? ResourceUsage.Dynamic : ResourceUsage.Default,
-                BindFlags      = bindFlags,
-                CpuAccessFlags = dynamic ? CpuAccessFlags.Write : CpuAccessFlags.None
+                SizeInBytes = ElementSize * MaxElements,
+                Usage = dynamic ?
+                            ResourceUsage.Dynamic :
+                            ResourceUsage.Default,
+                BindFlags = bindFlags,
+                CpuAccessFlags = dynamic ?
+                                     CpuAccessFlags.Write :
+                                     CpuAccessFlags.None
             }
         );
     }

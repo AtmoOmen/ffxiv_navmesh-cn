@@ -26,7 +26,9 @@ public sealed class CustomizationDraft
     public List<DraftOffMeshConnectionPatch> OffMeshConnections = [];
 
     public string DisplayName =>
-        string.IsNullOrWhiteSpace(TerritoryName) ? TerritoryID.ToString() : TerritoryName;
+        string.IsNullOrWhiteSpace(TerritoryName) ?
+            TerritoryID.ToString() :
+            TerritoryName;
 
     public CustomizationDraft Clone() =>
         CustomizationDraftJson.Clone(this);
@@ -40,27 +42,27 @@ public sealed class CustomizationDraft
 
 public sealed class CustomizationEditorWorkspace
 {
-    public string                WorkspaceId   = "";
-    public string                WorkspaceName = "";
-    public bool                  IsApplied     = true;
-    public CustomizationDraft          Draft    = new();
-    public CustomizationEditorSettings Settings = new();
+    public string                      WorkspaceId   = "";
+    public string                      WorkspaceName = "";
+    public bool                        IsApplied     = true;
+    public CustomizationDraft          Draft         = new();
+    public CustomizationEditorSettings Settings      = new();
 }
 
 public sealed class CustomizationEditorTerritoryStore
 {
-    public int    SchemaVersion = 1;
-    public uint   TerritoryID;
-    public string TerritoryKey = "";
-    public string TerritoryName = "";
-    public string CurrentWorkspaceId = "";
-    public List<CustomizationEditorWorkspace> Workspaces = [];
+    public int                                SchemaVersion = 1;
+    public uint                               TerritoryID;
+    public string                             TerritoryKey       = "";
+    public string                             TerritoryName      = "";
+    public string                             CurrentWorkspaceId = "";
+    public List<CustomizationEditorWorkspace> Workspaces         = [];
 }
 
 public sealed class CustomizationEditorSettings
 {
-    public string ExportDirectory     = "";
-    public bool   AutoSave            = true;
+    public string ExportDirectory = "";
+    public bool   AutoSave        = true;
 }
 
 public struct DraftMatrix4x3
@@ -163,6 +165,8 @@ internal static class CustomizationDraftJson
         var bytes = Encoding.UTF8.GetBytes(json);
         var hash  = SHA256.HashData(bytes);
         var value = BinaryPrimitives.ReadUInt32LittleEndian(hash.AsSpan(0, 4)) & 0x7FFF_FFFF;
-        return value == 0 ? 1 : (int)value;
+        return value == 0 ?
+                   1 :
+                   (int)value;
     }
 }

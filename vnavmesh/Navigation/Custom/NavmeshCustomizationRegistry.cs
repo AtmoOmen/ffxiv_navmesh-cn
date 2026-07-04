@@ -14,16 +14,20 @@ public static class NavmeshCustomizationRegistry
 
     static NavmeshCustomizationRegistry()
     {
-        var baseType = typeof(NavmeshCustomization);
-        var sceneTypes = new List<Type>();
+        var baseType       = typeof(NavmeshCustomization);
+        var sceneTypes     = new List<Type>();
         var sceneInstances = new Dictionary<Type, SceneNavmeshCustomization>();
 
         foreach (var t in Assembly
-                     .GetExecutingAssembly()
-                     .DefinedTypes
-                     .Where(t => t.IsSubclassOf(baseType) && !t.IsAbstract && !t.IsDefined(typeof(NavmeshCustomizationIgnoreAttribute), false))
-                     .OrderBy(t => t.Namespace?.Contains(".Generated", StringComparison.Ordinal) == true ? 1 : 0)
-                     .ThenBy(t => t.FullName ?? t.Name, StringComparer.Ordinal))
+                          .GetExecutingAssembly()
+                          .DefinedTypes
+                          .Where(t => t.IsSubclassOf(baseType) && !t.IsAbstract && !t.IsDefined(typeof(NavmeshCustomizationIgnoreAttribute), false))
+                          .OrderBy
+                          (t => t.Namespace?.Contains(".Generated", StringComparison.Ordinal) == true ?
+                                    1 :
+                                    0
+                          )
+                          .ThenBy(t => t.FullName ?? t.Name, StringComparer.Ordinal))
         {
             var instance = Activator.CreateInstance(t) as NavmeshCustomization;
 
@@ -64,13 +68,16 @@ public static class NavmeshCustomizationRegistry
         if (PerTerritory.TryGetValue(definition.TerritoryID, out var territoryCustomization))
             matches.Add(territoryCustomization);
 
-        return matches.Count == 1 ? matches[0] : new CompositeNavmeshCustomization(matches);
+        return matches.Count == 1 ?
+                   matches[0] :
+                   new CompositeNavmeshCustomization(matches);
     }
 
-    private static List<SceneNavmeshCustomization> OrderSceneCustomizations(List<Type> sceneTypes, IReadOnlyDictionary<Type, SceneNavmeshCustomization> sceneInstances)
+    private static List<SceneNavmeshCustomization> OrderSceneCustomizations
+        (List<Type> sceneTypes, IReadOnlyDictionary<Type, SceneNavmeshCustomization> sceneInstances)
     {
-        var sceneTypeSet = sceneTypes.ToHashSet();
-        var outgoing = sceneTypes.ToDictionary(static t => t, static _ => new HashSet<Type>());
+        var sceneTypeSet   = sceneTypes.ToHashSet();
+        var outgoing       = sceneTypes.ToDictionary(static t => t, static _ => new HashSet<Type>());
         var incomingCounts = sceneTypes.ToDictionary(static t => t, static _ => 0);
 
         foreach (var sceneType in sceneTypes)

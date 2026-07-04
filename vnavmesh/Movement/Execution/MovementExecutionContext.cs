@@ -19,9 +19,12 @@ internal sealed class MovementExecutionContext
     public required bool               MovementAllowed        { get; init; }
     public          Vector3?           PreviousPosition       { get; init; }
 
-    public int      WaypointCount         => Segment.Waypoints.Count;
-    public bool     HasRemainingWaypoints => ActiveWaypointIndex < WaypointCount;
-    public Vector3? ActiveWaypoint        => HasRemainingWaypoints ? Segment.Waypoints[ActiveWaypointIndex] : null;
+    public int  WaypointCount         => Segment.Waypoints.Count;
+    public bool HasRemainingWaypoints => ActiveWaypointIndex < WaypointCount;
+
+    public Vector3? ActiveWaypoint => HasRemainingWaypoints ?
+                                          Segment.Waypoints[ActiveWaypointIndex] :
+                                          null;
 
     public bool TryGetFirstRemainingWaypoint(out Vector3 waypoint) =>
         TryFindRemainingWaypoint(static (_, _) => true, out waypoint);
@@ -33,8 +36,10 @@ internal sealed class MovementExecutionContext
     {
         for (var segmentIndex = SegmentIndex; segmentIndex < Plan.Segments.Count; segmentIndex++)
         {
-            var segment            = Plan.Segments[segmentIndex];
-            var firstWaypointIndex = segmentIndex == SegmentIndex ? ActiveWaypointIndex : SegmentWaypointIndices[segmentIndex];
+            var segment = Plan.Segments[segmentIndex];
+            var firstWaypointIndex = segmentIndex == SegmentIndex ?
+                                         ActiveWaypointIndex :
+                                         SegmentWaypointIndices[segmentIndex];
 
             for (var waypointIndex = firstWaypointIndex; waypointIndex < segment.Waypoints.Count; waypointIndex++)
             {
@@ -61,8 +66,10 @@ internal sealed class MovementExecutionContext
             return false;
         }
 
-        start = traverseSegmentIndex == 0 ? Segment.StartPosition : Segment.Waypoints[traverseSegmentIndex - 1];
-        end   = Segment.Waypoints[traverseSegmentIndex];
+        start = traverseSegmentIndex == 0 ?
+                    Segment.StartPosition :
+                    Segment.Waypoints[traverseSegmentIndex - 1];
+        end = Segment.Waypoints[traverseSegmentIndex];
         return true;
     }
 }

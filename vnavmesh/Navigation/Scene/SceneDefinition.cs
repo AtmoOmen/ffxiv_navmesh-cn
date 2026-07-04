@@ -31,8 +31,12 @@ public class SceneDefinition
             return;
 
         var filter = LayoutUtil.FindFilter(layout);
-        TerritoryID               = filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId;
-        ContentsFinderConditionID = filter != null ? filter->CfcId : layout->CfcId;
+        TerritoryID = filter != null ?
+                          filter->TerritoryTypeId :
+                          layout->TerritoryTypeId;
+        ContentsFinderConditionID = filter != null ?
+                                        filter->CfcId :
+                                        layout->CfcId;
         ZoneSGs.AddRange(LayoutUtil.GetZoneSharedGroupsEnabled(TerritoryID));
 
         foreach (var (_, v) in layout->Layers)

@@ -264,7 +264,9 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
     private static SceneExtractor.MeshInstance? ResolveInstance(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)
     {
         var index = ResolveInstanceIndex(mesh, instanceId, instanceIndex);
-        return index >= 0 ? mesh.Instances[index] : null;
+        return index >= 0 ?
+                   mesh.Instances[index] :
+                   null;
     }
 
     private static int ResolveInstanceIndex(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)

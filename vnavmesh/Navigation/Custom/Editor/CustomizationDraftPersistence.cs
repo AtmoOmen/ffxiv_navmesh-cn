@@ -17,11 +17,12 @@ internal sealed class CustomizationDraftPersistence
     public CustomizationEditorTerritoryStore Load(uint territoryId)
     {
         var storePath = GetStorePath(territoryId);
+
         if (storePath.Exists)
         {
             try
             {
-                var json = File.ReadAllText(storePath.FullName, Encoding.UTF8);
+                var json  = File.ReadAllText(storePath.FullName, Encoding.UTF8);
                 var store = JsonSerializer.Deserialize<CustomizationEditorTerritoryStore>(json, JsonOptions);
                 return EnsureValid(store, territoryId);
             }
@@ -61,14 +62,18 @@ internal sealed class CustomizationDraftPersistence
 
         try
         {
-            var json = File.ReadAllText(legacyPath.FullName, Encoding.UTF8);
+            var json      = File.ReadAllText(legacyPath.FullName, Encoding.UTF8);
             var workspace = JsonSerializer.Deserialize<CustomizationEditorWorkspace>(json, JsonOptions);
             if (workspace == null)
                 return null;
 
-            workspace.WorkspaceId   = string.IsNullOrWhiteSpace(workspace.WorkspaceId) ? CreateWorkspaceId() : workspace.WorkspaceId;
-            workspace.WorkspaceName = string.IsNullOrWhiteSpace(workspace.WorkspaceName) ? "默认工作区" : workspace.WorkspaceName;
-            workspace.IsApplied     = true;
+            workspace.WorkspaceId = string.IsNullOrWhiteSpace(workspace.WorkspaceId) ?
+                                        CreateWorkspaceId() :
+                                        workspace.WorkspaceId;
+            workspace.WorkspaceName = string.IsNullOrWhiteSpace(workspace.WorkspaceName) ?
+                                          "默认工作区" :
+                                          workspace.WorkspaceName;
+            workspace.IsApplied         = true;
             workspace.Draft.TerritoryID = territoryId;
 
             var store = CreateEmptyStore(territoryId);
@@ -86,8 +91,8 @@ internal sealed class CustomizationDraftPersistence
 
     private static CustomizationEditorTerritoryStore EnsureValid(CustomizationEditorTerritoryStore? store, uint territoryId)
     {
-        store ??= new();
-        store.TerritoryID = territoryId;
+        store             ??= new();
+        store.TerritoryID =   territoryId;
         if (string.IsNullOrWhiteSpace(store.TerritoryKey))
             store.TerritoryKey = territoryId.ToString();
 
@@ -118,7 +123,9 @@ internal sealed class CustomizationDraftPersistence
             workspace.WorkspaceName = "默认工作区";
 
         workspace.Draft.TerritoryID = territoryId;
-        workspace.Draft.TerritoryName = string.IsNullOrWhiteSpace(workspace.Draft.TerritoryName) ? territoryId.ToString() : workspace.Draft.TerritoryName;
+        workspace.Draft.TerritoryName = string.IsNullOrWhiteSpace(workspace.Draft.TerritoryName) ?
+                                            territoryId.ToString() :
+                                            workspace.Draft.TerritoryName;
         workspace.Draft.MeshLinks.RemoveAll(static x => !Enum.IsDefined(x.Kind));
     }
 
@@ -126,8 +133,8 @@ internal sealed class CustomizationDraftPersistence
     {
         var store = new CustomizationEditorTerritoryStore
         {
-            TerritoryID = territoryId,
-            TerritoryKey = territoryId.ToString(),
+            TerritoryID   = territoryId,
+            TerritoryKey  = territoryId.ToString(),
             TerritoryName = territoryId.ToString()
         };
         return store;

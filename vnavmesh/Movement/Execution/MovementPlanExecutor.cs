@@ -17,8 +17,13 @@ namespace vnavmesh.Movement.Execution;
 
 public sealed class MovementPlanExecutor : IDisposable
 {
-    public bool          MovementAllowed = true;
-    public float         Tolerance => nextToleranceOverride ?? (IsRunning ? activeDestinationTolerance : config.PathTolerance);
+    public bool MovementAllowed = true;
+
+    public float Tolerance => nextToleranceOverride ??
+                              (IsRunning ?
+                                   activeDestinationTolerance :
+                                   config.PathTolerance);
+
     public bool          IsRunning => activePlan != null;
     public List<Vector3> Waypoints => CollectWaypoints();
 
@@ -174,13 +179,17 @@ public sealed class MovementPlanExecutor : IDisposable
             return;
         }
 
-        var requestedMode                = ignoreDeltaY ? MovementMode.Ground : MovementMode.Flight;
-        var resolvedGoal                 = goalPosition ?? waypoints[^1];
-        var resolvedDestinationTolerance = destTolerance > 0 ? destTolerance : tolerance ?? ConsumeNextTolerance();
-        var segments                     = new List<MovementSegment>();
-        var normalizedWaypoints = requestedMode == MovementMode.Flight && !IsAirborne
-                                      ? FlightWaypointNormalizer.NormalizeForTakeoff(waypoints, Service.ObjectTable.LocalPlayer?.Position ?? waypoints[0])
-                                      : waypoints.ToList();
+        var requestedMode = ignoreDeltaY ?
+                                MovementMode.Ground :
+                                MovementMode.Flight;
+        var resolvedGoal = goalPosition ?? waypoints[^1];
+        var resolvedDestinationTolerance = destTolerance > 0 ?
+                                               destTolerance :
+                                               tolerance ?? ConsumeNextTolerance();
+        var segments = new List<MovementSegment>();
+        var normalizedWaypoints = requestedMode == MovementMode.Flight && !IsAirborne ?
+                                      FlightWaypointNormalizer.NormalizeForTakeoff(waypoints, Service.ObjectTable.LocalPlayer?.Position ?? waypoints[0]) :
+                                      waypoints.ToList();
 
         if (requestedMode == MovementMode.Flight && !IsAirborne)
         {
@@ -197,16 +206,16 @@ public sealed class MovementPlanExecutor : IDisposable
 
         segments.Add
         (
-            requestedMode == MovementMode.Flight
-                ? new MovementSegment
+            requestedMode == MovementMode.Flight ?
+                new MovementSegment
                 {
                     Kind                = MovementSegmentKind.FlightTraverse,
                     MovementMode        = MovementMode.Flight,
                     CompletionTolerance = 0,
                     StartPosition       = Service.ObjectTable.LocalPlayer?.Position ?? normalizedWaypoints[0],
                     Waypoints           = normalizedWaypoints
-                }
-                : new MovementSegment
+                } :
+                new MovementSegment
                 {
                     Kind                = MovementSegmentKind.GroundTraverse,
                     MovementMode        = MovementMode.Ground,
@@ -373,7 +382,9 @@ public sealed class MovementPlanExecutor : IDisposable
         if (context.Segment.Kind == MovementSegmentKind.FlightTraverse && !IsAirborne && context.TryGetFirstElevatedRemainingWaypoint(TAKEOFF_RESUME_DELTA_Y, out _))
             return takeoffDriver;
 
-        return context.Segment.Kind == MovementSegmentKind.Takeoff ? takeoffDriver : traverseDriver;
+        return context.Segment.Kind == MovementSegmentKind.Takeoff ?
+                   takeoffDriver :
+                   traverseDriver;
     }
 
     private void ApplyFrameCommand(MovementFrameCommand command, Vector3 currentPosition)
@@ -422,7 +433,7 @@ public sealed class MovementPlanExecutor : IDisposable
             activePlan.DestinationTolerance,
             activeWaypoint
         );
-        
+
         Stop();
         OnMovementFailure?.Invoke(context);
     }
@@ -479,18 +490,18 @@ public sealed class MovementPlanExecutor : IDisposable
     private void OnConditionChange(ConditionFlag flag, bool value)
     {
         if (value || !RepathConditions.Contains(flag) || activePlan == null) return;
-        
+
         Service.Log.Debug("检测到 Condition 变化，重新算路");
         Fail(MovementFailureReason.RepathRequired);
     }
 
-    private void UpdateSharedState(bool isRunning) => 
+    private void UpdateSharedState(bool isRunning) =>
         sharedPathIsRunning[0] = isRunning;
 
     private bool SuspendsUnstuck() =>
         ReferenceEquals(activeDriver, takeoffDriver) || activePlan == null || activeSegmentIndex >= activePlan.Segments.Count;
 
-    private static bool IsAirborne => 
+    private static bool IsAirborne =>
         Service.Condition.Any(ConditionFlag.InFlight, ConditionFlag.Diving);
 
     private static readonly FrozenSet<ConditionFlag> RepathConditions =

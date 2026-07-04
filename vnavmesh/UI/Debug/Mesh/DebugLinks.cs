@@ -27,8 +27,8 @@ public class DebugLinks
         {
             for (var i = 0; i < mesh.Links.Count; i++)
             {
-                var link = mesh.Links[i];
-                using var nt = _tree.Node($"{DescribeLink(link)}###link{i}", true);
+                var       link = mesh.Links[i];
+                using var nt   = _tree.Node($"{DescribeLink(link)}###link{i}", true);
                 if (nt.SelectedOrHovered)
                     DrawLink(link.Start, link.End, LinkColor(link.Kind), link.Bidirectional);
             }
@@ -38,7 +38,7 @@ public class DebugLinks
     private void DrawLink(Vector3 from, Vector3 to, uint color, bool bidirectional)
     {
         dd.DrawWorldPointFilled(from, 5, color);
-        dd.DrawWorldPointFilled(to, 5, color);
+        dd.DrawWorldPointFilled(to,   5, color);
         dd.DrawWorldLine(from, to, color, 2);
         dd.DrawWorldArrowPoint(to, from, 40, color, 2);
         if (bidirectional)

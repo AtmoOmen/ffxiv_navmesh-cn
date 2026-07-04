@@ -48,8 +48,11 @@ public sealed class NavmeshManager : IDisposable
         internal set => Volatile.Write(ref field, value);
     } = -1f;
 
-    public bool PathfindInProgress        => numActivePathfinds > 0;
-    public int  NumQueuedPathfindRequests => numActivePathfinds > 0 ? numActivePathfinds - 1 : 0;
+    public bool PathfindInProgress => numActivePathfinds > 0;
+
+    public int NumQueuedPathfindRequests => numActivePathfinds > 0 ?
+                                                numActivePathfinds - 1 :
+                                                0;
 
     public event Action<Navmesh?, NavmeshQuery?>? OnNavmeshChanged;
 
@@ -61,7 +64,7 @@ public sealed class NavmeshManager : IDisposable
 
     private static readonly DtQueryDefaultFilter SPruneFilter = new();
 
-    private readonly PluginConfig        config;
+    private readonly PluginConfig  config;
     private readonly PluginPaths   paths;
     private readonly DirectoryInfo cacheDirectory;
 
@@ -131,20 +134,22 @@ public sealed class NavmeshManager : IDisposable
         if (currentCancelSource == null)
             throw new Exception("无法发起查询, 导航数据未就绪");
 
-        var combined    = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
-        var cleanedUp   = 0;
+        var combined  = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
+        var cleanedUp = 0;
         ++numActivePathfinds;
 
         var task = ExecuteWhenIdle
         (
             async _ =>
             {
-                using var autoDisposeCombined  = combined;
-                using var autoDecrementCounter = new OnDispose(() =>
-                {
-                    if (Interlocked.Exchange(ref cleanedUp, 1) == 0)
-                        --numActivePathfinds;
-                });
+                using var autoDisposeCombined = combined;
+                using var autoDecrementCounter = new OnDispose
+                (() =>
+                    {
+                        if (Interlocked.Exchange(ref cleanedUp, 1) == 0)
+                            --numActivePathfinds;
+                    }
+                );
 
                 Log($"发起算路。起点: {from} 终点: {to}");
                 var result = await Task.Run
@@ -157,9 +162,9 @@ public sealed class NavmeshManager : IDisposable
 
                                      Log($"执行算路。起点: {from:f3} 终点: {to:f3}");
 
-                                     var plannerResult = flying
-                                                             ? Query.PlanVolumePathDetailed(from, to, combined.Token)
-                                                             : Query.PlanMeshPathDetailed(from, to, range, combined.Token);
+                                     var plannerResult = flying ?
+                                                             Query.PlanVolumePathDetailed(from, to, combined.Token) :
+                                                             Query.PlanMeshPathDetailed(from, to, range, combined.Token);
                                      return Query.Postprocess(plannerResult, combined.Token);
                                  },
                                  combined.Token
@@ -203,20 +208,22 @@ public sealed class NavmeshManager : IDisposable
         if (currentCancelSource == null)
             throw new Exception("无法发起查询, 导航数据未就绪");
 
-        var combined    = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
-        var cleanedUp   = 0;
+        var combined  = CancellationTokenSource.CreateLinkedTokenSource(currentCancelSource.Token, externalCancel);
+        var cleanedUp = 0;
         ++numActivePathfinds;
 
         var task = ExecuteWhenIdle
         (
             async _ =>
             {
-                using var autoDisposeCombined  = combined;
-                using var autoDecrementCounter = new OnDispose(() =>
-                {
-                    if (Interlocked.Exchange(ref cleanedUp, 1) == 0)
-                        --numActivePathfinds;
-                });
+                using var autoDisposeCombined = combined;
+                using var autoDecrementCounter = new OnDispose
+                (() =>
+                    {
+                        if (Interlocked.Exchange(ref cleanedUp, 1) == 0)
+                            --numActivePathfinds;
+                    }
+                );
 
                 Log($"发起 straight path 查询。起点: {from} 终点: {to}");
                 var result = await Task.Run
@@ -229,9 +236,9 @@ public sealed class NavmeshManager : IDisposable
 
                                      Log($"执行 straight path 查询。起点: {from:f3} 终点: {to:f3}");
 
-                                     var plannerResult = flying
-                                                             ? Query.PlanVolumePathDetailed(from, to, combined.Token)
-                                                             : Query.PlanMeshPathDetailed(from, to, range, combined.Token);
+                                     var plannerResult = flying ?
+                                                             Query.PlanVolumePathDetailed(from, to, combined.Token) :
+                                                             Query.PlanMeshPathDetailed(from, to, range, combined.Token);
                                      return Query.PostprocessStraightPath(plannerResult, combined.Token, straightPathOptions);
                                  },
                                  combined.Token
@@ -454,7 +461,8 @@ public sealed class NavmeshManager : IDisposable
         var buildSnapshot = await CreateBuildSnapshot(scene, customization, cancel);
         var cache         = new FileInfo(Path.Combine(cacheDirectory.FullName, $"{cacheKey}.navmesh"));
 
-        if (allowLoadFromCache && TryLoadFromCache(cache, cacheKey, customization, buildSnapshot.Settings, buildSnapshot.BuildSignature, layers, totalTimer, out var cachedResult))
+        if (allowLoadFromCache &&
+            TryLoadFromCache(cache, cacheKey, customization, buildSnapshot.Settings, buildSnapshot.BuildSignature, layers, totalTimer, out var cachedResult))
             return cachedResult;
 
         cancel.ThrowIfCancellationRequested();
@@ -585,7 +593,14 @@ public sealed class NavmeshManager : IDisposable
     {
         paths.WorkerStateDirectory.Create();
 
-        var safeCacheKey = string.Concat(cacheKey.Select(static c => char.IsLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '_'));
+        var safeCacheKey = string.Concat
+        (
+            cacheKey.Select
+            (static c => char.IsLetterOrDigit(c) || c is '-' or '_' or '.' ?
+                             c :
+                             '_'
+            )
+        );
         var buildId      = $"{safeCacheKey}.{Environment.ProcessId}.{Interlocked.Increment(ref nextBuildSequence):X}";
         var sceneFile    = new FileInfo(Path.Combine(paths.WorkerStateDirectory.FullName, $"{buildId}.scene.bin"));
         var rawFile      = new FileInfo(Path.Combine(paths.WorkerStateDirectory.FullName, $"{buildId}.raw.navmesh"));
@@ -788,9 +803,16 @@ public sealed class NavmeshManager : IDisposable
         if (layout == null || layout->InitState != 7 || layout->FestivalStatus is > 0 and < 5)
             return "";
 
-        var filter    = LayoutUtil.FindFilter(layout);
-        var filterKey = filter != null ? filter->Key : 0;
-        var terrRow   = Service.LuminaRow<TerritoryType>(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
+        var filter = LayoutUtil.FindFilter(layout);
+        var filterKey = filter != null ?
+                            filter->Key :
+                            0;
+        var terrRow = Service.LuminaRow<TerritoryType>
+        (
+            filter != null ?
+                filter->TerritoryTypeId :
+                layout->TerritoryTypeId
+        );
 
         if (terrRow?.TerritoryIntendedUse.RowId == 60)
         {
@@ -799,17 +821,26 @@ public sealed class NavmeshManager : IDisposable
                 return "";
         }
 
-        var sgs = LayoutUtil.GetZoneSharedGroupsEnabled(filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId);
+        var sgs = LayoutUtil.GetZoneSharedGroupsEnabled
+        (
+            filter != null ?
+                filter->TerritoryTypeId :
+                layout->TerritoryTypeId
+        );
         return $"{terrRow?.Bg}//{filterKey:X}//{LayoutUtil.FestivalsString(layout->ActiveFestivals)}//{string.Join('.', sgs)}";
     }
 
     internal static unsafe string GetCacheKey(SceneDefinition scene)
     {
-        var layout    = LayoutWorld.Instance()->ActiveLayout;
-        var filter    = LayoutUtil.FindFilter(layout);
-        var filterKey = filter != null ? filter->Key : 0;
-        var terrId    = filter != null ? filter->TerritoryTypeId : layout->TerritoryTypeId;
-        var terrRow   = Service.LuminaRow<TerritoryType>(terrId);
+        var layout = LayoutWorld.Instance()->ActiveLayout;
+        var filter = LayoutUtil.FindFilter(layout);
+        var filterKey = filter != null ?
+                            filter->Key :
+                            0;
+        var terrId = filter != null ?
+                         filter->TerritoryTypeId :
+                         layout->TerritoryTypeId;
+        var terrRow = Service.LuminaRow<TerritoryType>(terrId);
         return $"{terrRow?.Bg.ToString().Replace('/', '_')}__{filterKey:X}__{FormatHexNumbers(scene.FestivalLayers)}__{FormatHexNumbers(scene.ZoneSGs)}";
     }
 
@@ -1043,6 +1074,7 @@ public sealed class NavmeshManager : IDisposable
         }
 
         var topology = BuildPruneTopology(mesh);
+
         if (topology.TotalTraversablePolyCount == 0)
         {
             Log("已跳过不可达裁剪：导航网格中没有可裁剪的可通行多边形");
@@ -1050,6 +1082,7 @@ public sealed class NavmeshManager : IDisposable
         }
 
         HashSet<int> keptComponents = [];
+
         foreach (var polyRef in startPolys)
         {
             if (topology.ComponentByPoly.TryGetValue(polyRef, out var componentIndex))
@@ -1096,6 +1129,7 @@ public sealed class NavmeshManager : IDisposable
         }
 
         HashSet<long> reachablePolys = [];
+
         foreach (var componentIndex in keptComponents)
         {
             foreach (var polyRef in topology.Components[componentIndex].PolyRefs)
@@ -1103,6 +1137,7 @@ public sealed class NavmeshManager : IDisposable
         }
 
         var pruneCount = 0;
+
         foreach (var pref in topology.TraversablePolyRefs)
         {
             if (mesh.GetPolyFlags(pref, out var fl).Failed())
@@ -1124,9 +1159,9 @@ public sealed class NavmeshManager : IDisposable
             }
         }
 
-        var extraComponentText = additionallyPreservedComponents.Count > 0
-            ? $"，额外保留大连通块 = {string.Join(", ", additionallyPreservedComponents.Select(i => $"{i}:{topology.Components[i].PolyRefs.Count}"))}"
-            : "";
+        var extraComponentText = additionallyPreservedComponents.Count > 0 ?
+                                     $"，额外保留大连通块 = {string.Join(", ", additionallyPreservedComponents.Select(i => $"{i}:{topology.Components[i].PolyRefs.Count}"))}" :
+                                     "";
         Log
         (
             $"已裁剪不可达多边形 {pruneCount} 个，保留 {keptPolyCount}/{topology.TotalTraversablePolyCount} 个可通行多边形，" +
@@ -1181,7 +1216,9 @@ public sealed class NavmeshManager : IDisposable
             out _,
             out _
         );
-        return nearestRef != 0 ? [nearestRef] : [];
+        return nearestRef != 0 ?
+                   [nearestRef] :
+                   [];
     }
 
     private static List<long> FindIntersectingMeshPolys(DtNavMeshQuery query, Vector3 point, Vector3 halfExtent)
@@ -1235,18 +1272,18 @@ public sealed class NavmeshManager : IDisposable
 
     private static PruneTopology BuildPruneTopology(DtNavMesh mesh)
     {
-        var traversablePolyRefs = CollectTraversableMeshPolyRefs(mesh);
-        var traversablePolySet  = traversablePolyRefs.ToHashSet();
-        Dictionary<long, int> componentByPoly = new(traversablePolyRefs.Count);
-        List<PruneComponent> components = [];
-        List<long> queue = [];
+        var                   traversablePolyRefs = CollectTraversableMeshPolyRefs(mesh);
+        var                   traversablePolySet  = traversablePolyRefs.ToHashSet();
+        Dictionary<long, int> componentByPoly     = new(traversablePolyRefs.Count);
+        List<PruneComponent>  components          = [];
+        List<long>            queue               = [];
 
         foreach (var rootPolyRef in traversablePolyRefs)
         {
             if (componentByPoly.ContainsKey(rootPolyRef))
                 continue;
 
-            var componentIndex = components.Count;
+            var        componentIndex    = components.Count;
             List<long> componentPolyRefs = [];
             queue.Add(rootPolyRef);
 
@@ -1261,6 +1298,7 @@ public sealed class NavmeshManager : IDisposable
                 componentPolyRefs.Add(currentPolyRef);
 
                 mesh.GetTileAndPolyByRefUnsafe(currentPolyRef, out var currentTile, out var currentPoly);
+
                 for (var linkIndex = currentPoly.firstLink; linkIndex != DtDetour.DT_NULL_LINK; linkIndex = currentTile.links[linkIndex].next)
                 {
                     var neighbourRef = currentTile.links[linkIndex].refs;
@@ -1286,9 +1324,11 @@ public sealed class NavmeshManager : IDisposable
                 continue;
 
             var polyRefBase = mesh.GetPolyRefBase(tile);
+
             for (var polyIndex = 0; polyIndex < tile.data.header.polyCount; ++polyIndex)
             {
                 var polyRef = polyRefBase | (uint)polyIndex;
+
                 if (mesh.GetPolyFlags(polyRef, out var flags).Failed())
                 {
                     Log($"读取多边形标记失败: {polyRef:X}");
@@ -1314,7 +1354,10 @@ public sealed class NavmeshManager : IDisposable
     private static string FormatHexNumbers<T>(IEnumerable<T> nums) where T : INumber<T> =>
         string.Join('.', nums.Select(n => n.ToString("X", CultureInfo.InvariantCulture)));
 
-    private sealed record PruneComponent(List<long> PolyRefs);
+    private sealed record PruneComponent
+    (
+        List<long> PolyRefs
+    );
 
     private sealed record PruneTopology
     (

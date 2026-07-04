@@ -137,7 +137,23 @@ public class DebugContourSet : DebugRecast
     private void VisualizeVertex(int[] verts, int index, int hOffset, uint color, float radius)
     {
         var isBorder = (verts[4 * index + 3] & RC_BORDER_VERTEX) != 0;
-        _dd.DrawWorldPoint(GetContourVertex(verts, index, hOffset + (isBorder ? 2 : 0)), radius, isBorder ? 0xffffffff : color, 2);
+        _dd.DrawWorldPoint
+        (
+            GetContourVertex
+            (
+                verts,
+                index,
+                hOffset +
+                (isBorder ?
+                     2 :
+                     0)
+            ),
+            radius,
+            isBorder ?
+                0xffffffff :
+                color,
+            2
+        );
     }
 
     private void VisualizeConnections()

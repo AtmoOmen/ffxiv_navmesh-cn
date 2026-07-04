@@ -8,7 +8,9 @@ public static class MapUtil
     public static Vector3? FlagToPoint(NavmeshQuery q)
     {
         var flag = GetFlagPosition();
-        return flag == null ? null : q.FindPointOnFloor(new(flag.Value.X, 1024, flag.Value.Y));
+        return flag == null ?
+                   null :
+                   q.FindPointOnFloor(new(flag.Value.X, 1024, flag.Value.Y));
     }
 
     private static unsafe Vector2? GetFlagPosition()

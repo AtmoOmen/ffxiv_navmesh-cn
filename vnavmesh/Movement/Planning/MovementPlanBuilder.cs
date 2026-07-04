@@ -28,9 +28,9 @@ internal sealed class MovementPlanBuilder
             path.Segments.Select
             (segment =>
                 {
-                    var resolvedSegment = shouldNormalizeTakeoffSegment && segment.SegmentKind == MovementSegmentKind.FlightTraverse
-                                              ? NormalizeTakeoffSegment(segment)
-                                              : segment;
+                    var resolvedSegment = shouldNormalizeTakeoffSegment && segment.SegmentKind == MovementSegmentKind.FlightTraverse ?
+                                              NormalizeTakeoffSegment(segment) :
+                                              segment;
                     if (segment.SegmentKind == MovementSegmentKind.FlightTraverse)
                         shouldNormalizeTakeoffSegment = false;
                     return BuildSegment(resolvedSegment);

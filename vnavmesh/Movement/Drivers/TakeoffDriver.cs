@@ -69,7 +69,9 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
         var currentFacing = context.Player.Rotation.Radians();
         var aligned       = (desiredFacing - currentFacing).Normalized().Abs().Rad <= FACING_TOLERANCE_RAD;
 
-        alignedFrameCount = aligned ? alignedFrameCount + 1 : 0;
+        alignedFrameCount = aligned ?
+                                alignedFrameCount + 1 :
+                                0;
 
         if (alignedFrameCount >= 2 || ElapsedSinceStateEntered() >= AlignTimeout)
         {
@@ -111,7 +113,9 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
     private static Angle ResolveDesiredFacing(Vector3 playerPosition, Angle currentFacing, Vector3 target)
     {
         var delta = new Vector3(target.X - playerPosition.X, 0, target.Z - playerPosition.Z);
-        return delta.LengthSquared() > 0.000001f ? Angle.FromDirectionXZ(delta) : currentFacing;
+        return delta.LengthSquared() > 0.000001f ?
+                   Angle.FromDirectionXZ(delta) :
+                   currentFacing;
     }
 
     private static MovementFrameCommand CreateFacingCommand(Vector3 desired, Angle desiredFacing, bool requestJump) =>

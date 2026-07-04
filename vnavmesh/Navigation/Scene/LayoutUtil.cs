@@ -39,12 +39,18 @@ public static unsafe class LayoutUtil
         return indices;
     }
 
-    public static string ReadString(byte* data) => data != null ? MemoryHelper.ReadStringNullTerminated((nint)data) : "";
+    public static string ReadString(byte* data) => data != null ?
+                                                       MemoryHelper.ReadStringNullTerminated((nint)data) :
+                                                       "";
 
-    public static string ReadString(RefCountedString* data) => data != null ? data->DataString : "";
+    public static string ReadString(RefCountedString* data) => data != null ?
+                                                                   data->DataString :
+                                                                   "";
 
     public static TV* FindPtr<TK, TV>(ref this StdMap<TK, Pointer<TV>> map, TK key) where TK : unmanaged, IComparable where TV : unmanaged =>
-        map.TryGetValuePointer(key, out var ptr) && ptr != null ? ptr->Value : null;
+        map.TryGetValuePointer(key, out var ptr) && ptr != null ?
+            ptr->Value :
+            null;
 
     public static ILayoutInstance* FindInstance(LayoutManager* layout, ulong key)
     {
@@ -78,7 +84,9 @@ public static unsafe class LayoutUtil
             }
         }
 
-        return layout->TerritoryTypeId == 0 ? layout->Filters.FindPtr(layout->LayerFilterKey) : null;
+        return layout->TerritoryTypeId == 0 ?
+                   layout->Filters.FindPtr(layout->LayerFilterKey) :
+                   null;
     }
 
     public static bool LayerActiveFestival(FileLayerGroupLayer* layer, Span<GameMain.Festival> festivals)
@@ -139,10 +147,14 @@ public static unsafe class LayoutUtil
         var abs = MathF.Abs(f);
 
         if (AlmostEqual(abs, MathF.PI))
-            return f < 0 ? "-pi" : "pi";
+            return f < 0 ?
+                       "-pi" :
+                       "pi";
 
         if (AlmostEqual(abs, MathF.PI * 0.5f))
-            return f < 0 ? "-hpi" : "hpi";
+            return f < 0 ?
+                       "-hpi" :
+                       "hpi";
 
         return f.ToString("0.###f");
 

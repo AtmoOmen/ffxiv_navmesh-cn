@@ -4,8 +4,8 @@ namespace vnavmesh.Navigation.Scene;
 
 public sealed class SceneTransitionPathCleaner : IDisposable
 {
-    private readonly NavmeshManager       _navmeshManager;
-    private readonly AsyncMoveRequest     _asyncMoveRequest;
+    private readonly NavmeshManager   _navmeshManager;
+    private readonly AsyncMoveRequest _asyncMoveRequest;
 
     public SceneTransitionPathCleaner(NavmeshManager navmeshManager, AsyncMoveRequest asyncMoveRequest)
     {

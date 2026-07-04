@@ -17,12 +17,13 @@ internal static class CustomizationEditorSpatial
         var axisZ       = transform.Row2;
         var center      = axisX      * localCenter.X + axisY      * localCenter.Y + axisZ      * localCenter.Z + transform.Row3;
         var extent      = Abs(axisX) * localExtent.X + Abs(axisY) * localExtent.Y + Abs(axisZ) * localExtent.Z;
-        return new() { Min = center - extent, Max = center + extent };
+        return new() { Min = center                  - extent, Max = center       + extent };
     }
 
     public static bool TryUnionBounds(IEnumerable<AABB> bounds, out AABB unionBounds)
     {
         using var enumerator = bounds.GetEnumerator();
+
         if (!enumerator.MoveNext())
         {
             unionBounds = default;
@@ -30,6 +31,7 @@ internal static class CustomizationEditorSpatial
         }
 
         unionBounds = enumerator.Current;
+
         while (enumerator.MoveNext())
         {
             var current = enumerator.Current;

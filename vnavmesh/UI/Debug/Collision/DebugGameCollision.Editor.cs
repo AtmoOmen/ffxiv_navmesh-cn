@@ -12,6 +12,7 @@ public unsafe partial class DebugGameCollision
     public bool TryGetMouseRaycastHit(out RaycastHit hit)
     {
         var module = Framework.Instance()->BGCollisionModule;
+
         if (!TryGetViewportCursorPosition(out var screenPos))
         {
             hit = default;
@@ -24,16 +25,17 @@ public unsafe partial class DebugGameCollision
             return false;
         }
 
-        var index = 0;
-        var found = false;
-        var best = new RaycastHit();
+        var index        = 0;
+        var found        = false;
+        var best         = new RaycastHit();
         var bestDistance = float.MaxValue;
+
         foreach (var scene in module->SceneManager->Scenes)
         {
             if (TryRaycastScene(scene, index, screenPos, out var candidate) && candidate.Distance < bestDistance)
             {
-                found = true;
-                best = candidate;
+                found        = true;
+                best         = candidate;
                 bestDistance = candidate.Distance;
             }
 
@@ -64,12 +66,12 @@ public unsafe partial class DebugGameCollision
         var cameraPosAtPlaneP = Vector4.Transform(clipPos, invViewProj);
         var cameraPosAtPlane = new Vector3
             (cameraPosAtPlaneP.X / cameraPosAtPlaneP.W, cameraPosAtPlaneP.Y / cameraPosAtPlaneP.W, cameraPosAtPlaneP.Z / cameraPosAtPlaneP.W);
-        var dir = Vector3.Normalize(cameraPosAtPlane - _dd.Origin);
+        var   dir     = Vector3.Normalize(cameraPosAtPlane - _dd.Origin);
         float maxDist = 100000;
-        var filter = new RaycastMaterialFilter { Mask = _materialMask.Raw, Value = _materialId.Raw };
-        var result = new RaycastHit();
-        var sphere = new Vector4(_dd.Origin, 1);
-        var arg = new RaycastParams { Origin = &sphere, Direction = &dir, MaxDistance = &maxDist, MaterialFilter = &filter };
+        var   filter  = new RaycastMaterialFilter { Mask = _materialMask.Raw, Value = _materialId.Raw };
+        var   result  = new RaycastHit();
+        var   sphere  = new Vector4(_dd.Origin, 1);
+        var   arg     = new RaycastParams { Origin = &sphere, Direction = &dir, MaxDistance = &maxDist, MaterialFilter = &filter };
 
         if (scene->Raycast(&result, _shownLayers.Raw, &arg))
         {

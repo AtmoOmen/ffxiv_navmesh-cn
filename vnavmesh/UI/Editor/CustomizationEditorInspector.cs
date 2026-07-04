@@ -12,8 +12,11 @@ namespace vnavmesh.UI.Editor;
 internal static class CustomizationEditorInspector
 {
     public delegate void CommitDelegate();
+
     public delegate void WorkspaceCreateDelegate();
+
     public delegate void WorkspaceDeleteDelegate();
+
     public delegate void WorkspaceSelectDelegate(string workspaceId);
 
     public delegate void AddMeshRemovalDelegate(string key);
@@ -30,27 +33,27 @@ internal static class CustomizationEditorInspector
 
     public static void Draw
     (
-        ref Selection                    selection,
+        ref Selection                     selection,
         CustomizationEditorTerritoryStore store,
-        bool                             hasWorkspace,
-        ref CustomizationEditorWorkspace workspace,
-        CustomizationPreviewBuilder      previewBuilder,
-        ref string                       statusText,
-        uint                             territoryID,
-        string                           territoryLabel,
-        ref string                       exportDirText,
-        NavmeshSettings                  settingsDefaults,
-        NavmeshBuildProfile              profileDefaults,
-        CommitDelegate                   onCommit,
-        WorkspaceCreateDelegate          onCreateWorkspace,
-        WorkspaceDeleteDelegate          onDeleteWorkspace,
-        WorkspaceSelectDelegate          onSelectWorkspace,
-        AddMeshRemovalDelegate           onAddMeshRemoval,
-        AddInstancePatchDelegate         onAddInstancePatch,
-        AddPartPatchDelegate             onAddPartPatch,
-        RemoveMatchingPartPatchDelegate  onRemoveMatchingPartPatch,
-        RebuildSceneExtractDelegate      onRebuildSceneExtract,
-        RebuildFullDelegate              onRebuildFull
+        bool                              hasWorkspace,
+        ref CustomizationEditorWorkspace  workspace,
+        CustomizationPreviewBuilder       previewBuilder,
+        ref string                        statusText,
+        uint                              territoryID,
+        string                            territoryLabel,
+        ref string                        exportDirText,
+        NavmeshSettings                   settingsDefaults,
+        NavmeshBuildProfile               profileDefaults,
+        CommitDelegate                    onCommit,
+        WorkspaceCreateDelegate           onCreateWorkspace,
+        WorkspaceDeleteDelegate           onDeleteWorkspace,
+        WorkspaceSelectDelegate           onSelectWorkspace,
+        AddMeshRemovalDelegate            onAddMeshRemoval,
+        AddInstancePatchDelegate          onAddInstancePatch,
+        AddPartPatchDelegate              onAddPartPatch,
+        RemoveMatchingPartPatchDelegate   onRemoveMatchingPartPatch,
+        RebuildSceneExtractDelegate       onRebuildSceneExtract,
+        RebuildFullDelegate               onRebuildFull
     )
     {
         DrawInspectorHeader(selection);
@@ -182,19 +185,20 @@ internal static class CustomizationEditorInspector
     private static void DrawWorkspaceInspector
     (
         CustomizationEditorTerritoryStore store,
-        bool                             hasWorkspace,
-        ref CustomizationEditorWorkspace workspace,
-        ref string                       exportDirText,
-        CommitDelegate                   onCommit,
-        WorkspaceCreateDelegate          onCreateWorkspace,
-        WorkspaceDeleteDelegate          onDeleteWorkspace,
-        WorkspaceSelectDelegate          onSelectWorkspace
+        bool                              hasWorkspace,
+        ref CustomizationEditorWorkspace  workspace,
+        ref string                        exportDirText,
+        CommitDelegate                    onCommit,
+        WorkspaceCreateDelegate           onCreateWorkspace,
+        WorkspaceDeleteDelegate           onDeleteWorkspace,
+        WorkspaceSelectDelegate           onSelectWorkspace
     )
     {
         if (ImGui.Button("新建工作区"))
             onCreateWorkspace();
 
         ImGui.SameLine();
+
         using (ImRaii.Disabled(!hasWorkspace))
         {
             if (ImGui.Button("删除当前工作区"))
@@ -210,7 +214,12 @@ internal static class CustomizationEditorInspector
         }
 
         ImGui.TextUnformatted($"当前工作区: {workspace.WorkspaceName}");
-        ImGui.TextDisabled(workspace.IsApplied ? "当前生效结果: 当前工作区" : "当前生效结果: 默认场景");
+        ImGui.TextDisabled
+        (
+            workspace.IsApplied ?
+                "当前生效结果: 当前工作区" :
+                "当前生效结果: 默认场景"
+        );
         ImGui.TextDisabled("当前编辑、保存和导出都只针对当前工作区");
         ImGui.Separator();
 
@@ -229,6 +238,7 @@ internal static class CustomizationEditorInspector
         }
 
         var renamed = workspace.WorkspaceName;
+
         if (ImGui.InputText("工作区名称", ref renamed) && !string.IsNullOrWhiteSpace(renamed))
         {
             workspace.WorkspaceName = renamed.Trim();
@@ -254,69 +264,120 @@ internal static class CustomizationEditorInspector
 
         if (ImGui.TreeNodeEx("像素", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("像素尺寸", ref workspace.Draft.BuildProfile.CellSizeOverride, settingsDefaults.CellSize,
-                "XZ 平面体素尺寸. 越小细节越高但构建越慢, 推荐角色半径 /2 或 /3");
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("像素高度", ref workspace.Draft.BuildProfile.CellHeightOverride, settingsDefaults.CellHeight,
-                "Y 轴体素高度. 推荐为像素尺寸一半");
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "像素尺寸",
+                ref workspace.Draft.BuildProfile.CellSizeOverride,
+                settingsDefaults.CellSize,
+                "XZ 平面体素尺寸. 越小细节越高但构建越慢, 推荐角色半径 /2 或 /3"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "像素高度",
+                ref workspace.Draft.BuildProfile.CellHeightOverride,
+                settingsDefaults.CellHeight,
+                "Y 轴体素高度. 推荐为像素尺寸一半"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("区域", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableEnum
-                ("分区算法", ref workspace.Draft.BuildProfile.PartitioningOverride, settingsDefaults.Partitioning,
-                    "Watershed = 质量最高最慢, Monotone = 最快, Layer = 折中");
+            (
+                "分区算法",
+                ref workspace.Draft.BuildProfile.PartitioningOverride,
+                settingsDefaults.Partitioning,
+                "Watershed = 质量最高最慢, Monotone = 最快, Layer = 折中"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("区域最小尺寸", ref workspace.Draft.BuildProfile.RegionMinSizeOverride, settingsDefaults.RegionMinSize,
-                    "小于此体素数的孤立区域会被移除");
+            (
+                "区域最小尺寸",
+                ref workspace.Draft.BuildProfile.RegionMinSizeOverride,
+                settingsDefaults.RegionMinSize,
+                "小于此体素数的孤立区域会被移除"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("区域合并尺寸", ref workspace.Draft.BuildProfile.RegionMergeSizeOverride, settingsDefaults.RegionMergeSize,
-                    "体素数小于此值的区域尽量合并到相邻大区域");
+            (
+                "区域合并尺寸",
+                ref workspace.Draft.BuildProfile.RegionMergeSizeOverride,
+                settingsDefaults.RegionMergeSize,
+                "体素数小于此值的区域尽量合并到相邻大区域"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("多边形化", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最大边长", ref workspace.Draft.BuildProfile.PolyMaxEdgeLenOverride, settingsDefaults.PolyMaxEdgeLen,
-                    "轮廓边最大长度, 防止生成长条三角. 推荐角色半径 *8, 0=不限制");
+            (
+                "最大边长",
+                ref workspace.Draft.BuildProfile.PolyMaxEdgeLenOverride,
+                settingsDefaults.PolyMaxEdgeLen,
+                "轮廓边最大长度, 防止生成长条三角. 推荐角色半径 *8, 0=不限制"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最大简化误差", ref workspace.Draft.BuildProfile.PolyMaxSimplificationErrorOverride, settingsDefaults.PolyMaxSimplificationError,
-                    "轮廓简化允许的最大偏离. 推荐 1.1 ~ 1.5");
+            (
+                "最大简化误差",
+                ref workspace.Draft.BuildProfile.PolyMaxSimplificationErrorOverride,
+                settingsDefaults.PolyMaxSimplificationError,
+                "轮廓简化允许的最大偏离. 推荐 1.1 ~ 1.5"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("代理", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("半径", ref workspace.Draft.BuildProfile.AgentRadiusOverride, settingsDefaults.AgentRadius,
-                "网格边缘离障碍物距离. >0 自动收缩, =0 需自行碰撞检测");
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "半径",
+                ref workspace.Draft.BuildProfile.AgentRadiusOverride,
+                settingsDefaults.AgentRadius,
+                "网格边缘离障碍物距离. >0 自动收缩, =0 需自行碰撞检测"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("细节网格", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("采样距离", ref workspace.Draft.BuildProfile.DetailSampleDistOverride, settingsDefaults.DetailSampleDist,
-                    "细节网格采样距离. 推荐约 6, 0=禁用");
+            (
+                "采样距离",
+                ref workspace.Draft.BuildProfile.DetailSampleDistOverride,
+                settingsDefaults.DetailSampleDist,
+                "细节网格采样距离. 推荐约 6, 0=禁用"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("边缘链接", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableBool
-                ("生成向下攀爬", ref workspace.Draft.BuildProfile.GenerateEdgeClimbLinksOverride, settingsDefaults.GenerateEdgeClimbLinks,
-                    "在边缘生成向下攀爬链接");
+            (
+                "生成向下攀爬",
+                ref workspace.Draft.BuildProfile.GenerateEdgeClimbLinksOverride,
+                settingsDefaults.GenerateEdgeClimbLinks,
+                "在边缘生成向下攀爬链接"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableBool
-                ("生成向下跳跃", ref workspace.Draft.BuildProfile.GenerateEdgeJumpLinksOverride, settingsDefaults.GenerateEdgeJumpLinks,
-                    "在边缘生成向下跳跃链接");
+            (
+                "生成向下跳跃",
+                ref workspace.Draft.BuildProfile.GenerateEdgeJumpLinksOverride,
+                settingsDefaults.GenerateEdgeJumpLinks,
+                "在边缘生成向下跳跃链接"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("体积", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableIntArray
-                ("体积瓦片", ref workspace.Draft.BuildProfile.VolumeTilesOverride, settingsDefaults.VolumeTiles,
-                    "体积细分每轴数量 [L2 瓦片数, L3 体素数]");
+            (
+                "体积瓦片",
+                ref workspace.Draft.BuildProfile.VolumeTilesOverride,
+                settingsDefaults.VolumeTiles,
+                "体积细分每轴数量 [L2 瓦片数, L3 体素数]"
+            );
             ImGui.TreePop();
         }
 
@@ -329,127 +390,254 @@ internal static class CustomizationEditorInspector
 
         if (ImGui.TreeNodeEx("通用", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= CustomizationEditorWidgets.DrawNullableBool("快速构建", ref workspace.Draft.BuildSettings.FastBuild, settingsDefaults.FastBuild,
-                "关闭细节网格以加速构建");
-            changed |= CustomizationEditorWidgets.DrawNullableFlags("过滤", ref workspace.Draft.BuildSettings.Filtering, settingsDefaults.Filtering,
-                "选择过滤通道以移除体素化伪影");
+            changed |= CustomizationEditorWidgets.DrawNullableBool
+            (
+                "快速构建",
+                ref workspace.Draft.BuildSettings.FastBuild,
+                settingsDefaults.FastBuild,
+                "关闭细节网格以加速构建"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFlags
+            (
+                "过滤",
+                ref workspace.Draft.BuildSettings.Filtering,
+                settingsDefaults.Filtering,
+                "选择过滤通道以移除体素化伪影"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("像素", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("像素尺寸", ref workspace.Draft.BuildSettings.CellSize, settingsDefaults.CellSize,
-                "XZ 平面体素尺寸. 越小细节越高但构建越慢, 推荐角色半径 /2 或 /3");
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("像素高度", ref workspace.Draft.BuildSettings.CellHeight, settingsDefaults.CellHeight,
-                "Y 轴体素高度. 推荐为像素尺寸一半");
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "像素尺寸",
+                ref workspace.Draft.BuildSettings.CellSize,
+                settingsDefaults.CellSize,
+                "XZ 平面体素尺寸. 越小细节越高但构建越慢, 推荐角色半径 /2 或 /3"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "像素高度",
+                ref workspace.Draft.BuildSettings.CellHeight,
+                settingsDefaults.CellHeight,
+                "Y 轴体素高度. 推荐为像素尺寸一半"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("代理", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("高度", ref workspace.Draft.BuildSettings.AgentHeight, settingsDefaults.AgentHeight,
-                "可行走区域最小净空, 低于此高度的区域不可行走");
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("半径", ref workspace.Draft.BuildSettings.AgentRadius, settingsDefaults.AgentRadius,
-                "网格边缘离障碍物距离. >0 自动收缩, =0 需自行碰撞检测");
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("最大攀爬", ref workspace.Draft.BuildSettings.AgentMaxClimb, settingsDefaults.AgentMaxClimb,
-                "台阶最大高度, 高于此值的台阶视为障碍物需绕行");
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最大坡度", ref workspace.Draft.BuildSettings.AgentMaxSlopeDeg, settingsDefaults.AgentMaxSlopeDeg,
-                    "可行走最大地面坡度 (度), 超出标记为不可行走");
+            (
+                "高度",
+                ref workspace.Draft.BuildSettings.AgentHeight,
+                settingsDefaults.AgentHeight,
+                "可行走区域最小净空, 低于此高度的区域不可行走"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "半径",
+                ref workspace.Draft.BuildSettings.AgentRadius,
+                settingsDefaults.AgentRadius,
+                "网格边缘离障碍物距离. >0 自动收缩, =0 需自行碰撞检测"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "最大攀爬",
+                ref workspace.Draft.BuildSettings.AgentMaxClimb,
+                settingsDefaults.AgentMaxClimb,
+                "台阶最大高度, 高于此值的台阶视为障碍物需绕行"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "最大坡度",
+                ref workspace.Draft.BuildSettings.AgentMaxSlopeDeg,
+                settingsDefaults.AgentMaxSlopeDeg,
+                "可行走最大地面坡度 (度), 超出标记为不可行走"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("区域", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= CustomizationEditorWidgets.DrawNullableFloat("最小尺寸", ref workspace.Draft.BuildSettings.RegionMinSize, settingsDefaults.RegionMinSize,
-                "小于此体素数的孤立区域会被移除");
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("合并尺寸", ref workspace.Draft.BuildSettings.RegionMergeSize, settingsDefaults.RegionMergeSize,
-                    "体素数小于此值的区域尽量合并到相邻大区域");
-            changed |= CustomizationEditorWidgets.DrawNullableEnum("分区算法", ref workspace.Draft.BuildSettings.Partitioning, settingsDefaults.Partitioning,
-                "Watershed = 质量最高最慢, Monotone = 最快, Layer = 折中");
+            (
+                "最小尺寸",
+                ref workspace.Draft.BuildSettings.RegionMinSize,
+                settingsDefaults.RegionMinSize,
+                "小于此体素数的孤立区域会被移除"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "合并尺寸",
+                ref workspace.Draft.BuildSettings.RegionMergeSize,
+                settingsDefaults.RegionMergeSize,
+                "体素数小于此值的区域尽量合并到相邻大区域"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableEnum
+            (
+                "分区算法",
+                ref workspace.Draft.BuildSettings.Partitioning,
+                settingsDefaults.Partitioning,
+                "Watershed = 质量最高最慢, Monotone = 最快, Layer = 折中"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("多边形化", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最大边长", ref workspace.Draft.BuildSettings.PolyMaxEdgeLen, settingsDefaults.PolyMaxEdgeLen,
-                    "轮廓边最大长度. 推荐角色半径 *8, 0=不限制");
+            (
+                "最大边长",
+                ref workspace.Draft.BuildSettings.PolyMaxEdgeLen,
+                settingsDefaults.PolyMaxEdgeLen,
+                "轮廓边最大长度. 推荐角色半径 *8, 0=不限制"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最大简化误差", ref workspace.Draft.BuildSettings.PolyMaxSimplificationError, settingsDefaults.PolyMaxSimplificationError,
-                    "轮廓简化允许最大偏离. 推荐 1.1 ~ 1.5");
-            changed |= CustomizationEditorWidgets.DrawNullableInt("每多边形最大顶点数", ref workspace.Draft.BuildSettings.PolyMaxVerts, settingsDefaults.PolyMaxVerts,
-                "单个多边形允许的最大顶点数, 至少 3");
+            (
+                "最大简化误差",
+                ref workspace.Draft.BuildSettings.PolyMaxSimplificationError,
+                settingsDefaults.PolyMaxSimplificationError,
+                "轮廓简化允许最大偏离. 推荐 1.1 ~ 1.5"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableInt
+            (
+                "每多边形最大顶点数",
+                ref workspace.Draft.BuildSettings.PolyMaxVerts,
+                settingsDefaults.PolyMaxVerts,
+                "单个多边形允许的最大顶点数, 至少 3"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("细节网格", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("采样距离", ref workspace.Draft.BuildSettings.DetailSampleDist, settingsDefaults.DetailSampleDist,
-                    "细节网格采样距离. 推荐约 6, 0=禁用");
+            (
+                "采样距离",
+                ref workspace.Draft.BuildSettings.DetailSampleDist,
+                settingsDefaults.DetailSampleDist,
+                "细节网格采样距离. 推荐约 6, 0=禁用"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最大采样误差", ref workspace.Draft.BuildSettings.DetailMaxSampleError, settingsDefaults.DetailMaxSampleError,
-                    "细节网格偏离高度场的最大距离");
+            (
+                "最大采样误差",
+                ref workspace.Draft.BuildSettings.DetailMaxSampleError,
+                settingsDefaults.DetailMaxSampleError,
+                "细节网格偏离高度场的最大距离"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("边缘链接", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableBool
-                ("生成向下攀爬", ref workspace.Draft.BuildSettings.GenerateEdgeClimbLinks, settingsDefaults.GenerateEdgeClimbLinks,
-                    "在边缘生成向下攀爬链接");
+            (
+                "生成向下攀爬",
+                ref workspace.Draft.BuildSettings.GenerateEdgeClimbLinks,
+                settingsDefaults.GenerateEdgeClimbLinks,
+                "在边缘生成向下攀爬链接"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableBool
-                ("生成向下跳跃", ref workspace.Draft.BuildSettings.GenerateEdgeJumpLinks, settingsDefaults.GenerateEdgeJumpLinks,
-                    "在边缘生成向下跳跃链接");
+            (
+                "生成向下跳跃",
+                ref workspace.Draft.BuildSettings.GenerateEdgeJumpLinks,
+                settingsDefaults.GenerateEdgeJumpLinks,
+                "在边缘生成向下跳跃链接"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("向下攀爬", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("地面容差", ref workspace.Draft.BuildSettings.GroundTolerance, settingsDefaults.GroundTolerance,
-                    "边缘链接检测的地面容差范围");
+            (
+                "地面容差",
+                ref workspace.Draft.BuildSettings.GroundTolerance,
+                settingsDefaults.GroundTolerance,
+                "边缘链接检测的地面容差范围"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("攀爬距离", ref workspace.Draft.BuildSettings.ClimbDownDistance, settingsDefaults.ClimbDownDistance,
-                    "边缘攀爬采样的水平搜索距离");
+            (
+                "攀爬距离",
+                ref workspace.Draft.BuildSettings.ClimbDownDistance,
+                settingsDefaults.ClimbDownDistance,
+                "边缘攀爬采样的水平搜索距离"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最大高度", ref workspace.Draft.BuildSettings.ClimbDownMaxHeight, settingsDefaults.ClimbDownMaxHeight,
-                    "向下攀爬链接允许的最大落差值");
+            (
+                "最大高度",
+                ref workspace.Draft.BuildSettings.ClimbDownMaxHeight,
+                settingsDefaults.ClimbDownMaxHeight,
+                "向下攀爬链接允许的最大落差值"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最小高度", ref workspace.Draft.BuildSettings.ClimbDownMinHeight, settingsDefaults.ClimbDownMinHeight,
-                    "向下攀爬链接所需的最小落差值");
+            (
+                "最小高度",
+                ref workspace.Draft.BuildSettings.ClimbDownMinHeight,
+                settingsDefaults.ClimbDownMinHeight,
+                "向下攀爬链接所需的最小落差值"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("边缘跳跃", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("结束距离", ref workspace.Draft.BuildSettings.EdgeJumpEndDistance, settingsDefaults.EdgeJumpEndDistance,
-                    "边缘跳跃终点水平搜索范围");
+            (
+                "结束距离",
+                ref workspace.Draft.BuildSettings.EdgeJumpEndDistance,
+                settingsDefaults.EdgeJumpEndDistance,
+                "边缘跳跃终点水平搜索范围"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("高度", ref workspace.Draft.BuildSettings.EdgeJumpHeight, settingsDefaults.EdgeJumpHeight,
-                    "边缘跳跃高度阈值");
+            (
+                "高度",
+                ref workspace.Draft.BuildSettings.EdgeJumpHeight,
+                settingsDefaults.EdgeJumpHeight,
+                "边缘跳跃高度阈值"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最大落差", ref workspace.Draft.BuildSettings.EdgeJumpMaxDrop, settingsDefaults.EdgeJumpMaxDrop,
-                    "边缘跳跃允许的最大垂直落差");
+            (
+                "最大落差",
+                ref workspace.Draft.BuildSettings.EdgeJumpMaxDrop,
+                settingsDefaults.EdgeJumpMaxDrop,
+                "边缘跳跃允许的最大垂直落差"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("最小落差", ref workspace.Draft.BuildSettings.EdgeJumpMinDrop, settingsDefaults.EdgeJumpMinDrop,
-                    "边缘跳跃所需的最小垂直落差");
+            (
+                "最小落差",
+                ref workspace.Draft.BuildSettings.EdgeJumpMinDrop,
+                settingsDefaults.EdgeJumpMinDrop,
+                "边缘跳跃所需的最小垂直落差"
+            );
             ImGui.TreePop();
         }
 
         if (ImGui.TreeNodeEx("瓦片", ImGuiTreeNodeFlags.DefaultOpen))
         {
             changed |= CustomizationEditorWidgets.DrawNullableFloat
-                ("地面区块目标尺寸", ref workspace.Draft.BuildSettings.GroundTileSize, settingsDefaults.GroundTileSize,
-                    "自动推导地面区块数量时使用的目标世界尺寸");
+            (
+                "地面区块目标尺寸",
+                ref workspace.Draft.BuildSettings.GroundTileSize,
+                settingsDefaults.GroundTileSize,
+                "自动推导地面区块数量时使用的目标世界尺寸"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableInt
-                ("地面区块数量上限", ref workspace.Draft.BuildSettings.GroundTileCountMax, settingsDefaults.GroundTileCountMax,
-                    "自动推导地面区块数量时的单轴上限");
-            changed |= CustomizationEditorWidgets.DrawNullableIntArray("体积细分", ref workspace.Draft.BuildSettings.VolumeTiles, settingsDefaults.VolumeTiles,
-                "体积细分每轴数量 [L2 瓦片数, L3 体素数]");
+            (
+                "地面区块数量上限",
+                ref workspace.Draft.BuildSettings.GroundTileCountMax,
+                settingsDefaults.GroundTileCountMax,
+                "自动推导地面区块数量时的单轴上限"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableIntArray
+            (
+                "体积细分",
+                ref workspace.Draft.BuildSettings.VolumeTiles,
+                settingsDefaults.VolumeTiles,
+                "体积细分每轴数量 [L2 瓦片数, L3 体素数]"
+            );
             ImGui.TreePop();
         }
 
@@ -483,8 +671,9 @@ internal static class CustomizationEditorInspector
         if (!TryGetItem(workspace.Draft.MeshRemovals, selection.Index, out var item))
             return;
 
-        var changed = false;
+        var changed       = false;
         var enabledBefore = item.Enabled;
+
         if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.MeshRemovals.RemoveAt(selection.Index);
@@ -492,12 +681,13 @@ internal static class CustomizationEditorInspector
             onCommit();
             return;
         }
+
         changed |= enabledBefore != item.Enabled;
 
         changed |= CustomizationEditorWidgets.DrawString("网格键", ref item.MeshKey);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        changed |= CustomizationEditorWidgets.DrawString("备注",  ref item.Note);
 
-        if (changed) 
+        if (changed)
             onCommit();
     }
 
@@ -506,8 +696,9 @@ internal static class CustomizationEditorInspector
         if (!TryGetItem(workspace.Draft.InstancePatches, selection.Index, out var item))
             return;
 
-        var changed = false;
+        var changed       = false;
         var enabledBefore = item.Enabled;
+
         if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.InstancePatches.RemoveAt(selection.Index);
@@ -515,10 +706,11 @@ internal static class CustomizationEditorInspector
             onCommit();
             return;
         }
+
         changed |= enabledBefore != item.Enabled;
 
         changed |= CustomizationEditorWidgets.DrawString("网格键", ref item.MeshKey);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        changed |= CustomizationEditorWidgets.DrawString("备注",  ref item.Note);
         changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
         changed |= CustomizationEditorWidgets.DrawInt("实例索引", ref item.InstanceIndex);
         changed |= CustomizationEditorWidgets.DrawUInt64("实例编号", ref item.InstanceId);
@@ -534,8 +726,9 @@ internal static class CustomizationEditorInspector
         if (!TryGetItem(workspace.Draft.PartPatches, selection.Index, out var item))
             return;
 
-        var changed = false;
+        var changed       = false;
         var enabledBefore = item.Enabled;
+
         if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.PartPatches.RemoveAt(selection.Index);
@@ -543,10 +736,11 @@ internal static class CustomizationEditorInspector
             onCommit();
             return;
         }
+
         changed |= enabledBefore != item.Enabled;
 
         changed |= CustomizationEditorWidgets.DrawString("网格键", ref item.MeshKey);
-        changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        changed |= CustomizationEditorWidgets.DrawString("备注",  ref item.Note);
         changed |= CustomizationEditorWidgets.DrawInt("部件索引", ref item.PartIndex);
         changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
 
@@ -566,32 +760,41 @@ internal static class CustomizationEditorInspector
                 if (ImGui.Button("不可行走"))
                 {
                     item.Flags = SceneExtractor.PrimitiveFlags.ForceUnwalkable;
-                    changed = true;
+                    changed    = true;
                 }
+
                 ImGui.SameLine();
+
                 if (ImGui.Button("可行走"))
                 {
                     item.Flags = SceneExtractor.PrimitiveFlags.ForceWalkable;
-                    changed = true;
+                    changed    = true;
                 }
+
                 ImGui.SameLine();
+
                 if (ImGui.Button("飞行穿透"))
                 {
                     item.Flags = SceneExtractor.PrimitiveFlags.FlyThrough;
-                    changed = true;
+                    changed    = true;
                 }
+
                 ImGui.SameLine();
+
                 if (ImGui.Button("不可降落"))
                 {
                     item.Flags = SceneExtractor.PrimitiveFlags.Unlandable;
-                    changed = true;
+                    changed    = true;
                 }
+
                 ImGui.SameLine();
+
                 if (ImGui.Button("清除"))
                 {
                     item.Flags = SceneExtractor.PrimitiveFlags.None;
-                    changed = true;
+                    changed    = true;
                 }
+
                 break;
 
             case DraftScenePartPatchKind.PrimitiveEdit:
@@ -607,6 +810,7 @@ internal static class CustomizationEditorInspector
                     item.V1 = item.V2 = item.V3 = 0;
                     changed = true;
                 }
+
                 if (ImGui.IsItemHovered())
                     ImGui.SetTooltip("将三个顶点索引设为相同值");
                 break;
@@ -621,8 +825,9 @@ internal static class CustomizationEditorInspector
         if (!TryGetItem(workspace.Draft.ColliderInsertions, selection.Index, out var item))
             return;
 
-        var changed = false;
+        var changed       = false;
         var enabledBefore = item.Enabled;
+
         if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.ColliderInsertions.RemoveAt(selection.Index);
@@ -630,6 +835,7 @@ internal static class CustomizationEditorInspector
             onCommit();
             return;
         }
+
         changed |= enabledBefore != item.Enabled;
 
         changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
@@ -646,8 +852,9 @@ internal static class CustomizationEditorInspector
         if (!TryGetItem(workspace.Draft.MeshLinks, selection.Index, out var item))
             return;
 
-        var changed = false;
+        var changed       = false;
         var enabledBefore = item.Enabled;
+
         if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.MeshLinks.RemoveAt(selection.Index);
@@ -655,6 +862,7 @@ internal static class CustomizationEditorInspector
             onCommit();
             return;
         }
+
         changed |= enabledBefore != item.Enabled;
 
         changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
@@ -671,8 +879,9 @@ internal static class CustomizationEditorInspector
         if (!TryGetItem(workspace.Draft.OffMeshConnections, selection.Index, out var item))
             return;
 
-        var changed = false;
+        var changed       = false;
         var enabledBefore = item.Enabled;
+
         if (DrawEnabledWithDelete(ref item.Enabled))
         {
             workspace.Draft.OffMeshConnections.RemoveAt(selection.Index);
@@ -680,6 +889,7 @@ internal static class CustomizationEditorInspector
             onCommit();
             return;
         }
+
         changed |= enabledBefore != item.Enabled;
 
         changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
@@ -725,6 +935,7 @@ internal static class CustomizationEditorInspector
             }
 
             ImGui.SameLine();
+
             if (ImGui.Button("重建完整导航网格"))
             {
                 onRebuildFull();
@@ -743,17 +954,23 @@ internal static class CustomizationEditorInspector
             if (ImGui.TreeNodeEx("构建阶段", ImGuiTreeNodeFlags.DefaultOpen))
             {
                 foreach (var phase in telemetry.Phases)
-                    ImGui.TextUnformatted($"{phase.Name}: {phase.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms, " +
-                                           $"占比 {phase.ShareOfPhaseTicks:P1}, 最慢 {phase.SlowestTileX}x{phase.SlowestTileZ}");
+                    ImGui.TextUnformatted
+                    (
+                        $"{phase.Name}: {phase.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms, " +
+                        $"占比 {phase.ShareOfPhaseTicks:P1}, 最慢 {phase.SlowestTileX}x{phase.SlowestTileZ}"
+                    );
                 ImGui.TreePop();
             }
 
             if (telemetry.SlowTiles.Count > 0 && ImGui.TreeNodeEx("慢瓦片"))
             {
                 foreach (var tile in telemetry.SlowTiles)
-                    ImGui.TextUnformatted($"{tile.TileX}x{tile.TileZ}: {tile.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms, " +
-                                           $"几何 {tile.GeometryJobCount}, 地形 {tile.TerrainJobCount}, " +
-                                           $"Poly {tile.PolyCount}, Vert {tile.VertCount}, Tri {tile.DetailTriCount}");
+                    ImGui.TextUnformatted
+                    (
+                        $"{tile.TileX}x{tile.TileZ}: {tile.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms, " +
+                        $"几何 {tile.GeometryJobCount}, 地形 {tile.TerrainJobCount}, "                                     +
+                        $"Poly {tile.PolyCount}, Vert {tile.VertCount}, Tri {tile.DetailTriCount}"
+                    );
                 ImGui.TreePop();
             }
         }
@@ -869,11 +1086,15 @@ internal static class CustomizationEditorInspector
             selection.Index >= mesh.Parts.Count)
             return;
 
-        var selKey                 = selection.Key;
-        var selIndex               = selection.Index;
-        var part                   = mesh.Parts[selIndex];
-        var selectedVertexIndex    = selection.Kind == SelectionKind.PreviewVertex ? selection.SubIndex : -1;
-        var selectedPrimitiveIndex = selection.Kind == SelectionKind.PreviewPrimitive ? selection.SubIndex : -1;
+        var selKey   = selection.Key;
+        var selIndex = selection.Index;
+        var part     = mesh.Parts[selIndex];
+        var selectedVertexIndex = selection.Kind == SelectionKind.PreviewVertex ?
+                                      selection.SubIndex :
+                                      -1;
+        var selectedPrimitiveIndex = selection.Kind == SelectionKind.PreviewPrimitive ?
+                                         selection.SubIndex :
+                                         -1;
 
         ImGui.TextUnformatted($"网格: {selection.Key}");
         ImGui.TextUnformatted($"部件: {selection.Index}");
@@ -923,10 +1144,12 @@ internal static class CustomizationEditorInspector
         else
         {
             ImGui.Separator();
+
             if (ImGui.Button("创建位置补丁"))
             {
                 onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.Vertex, vertexIndex);
             }
+
             ImGui.SameLine();
             ImGui.TextDisabled("将以当前位置创建补丁");
         }
@@ -967,6 +1190,7 @@ internal static class CustomizationEditorInspector
             {
                 onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.PrimitiveFlags, primitiveIndex);
             }
+
             ImGui.SameLine();
             ImGui.TextDisabled("将以当前标记创建补丁");
         }
@@ -986,6 +1210,7 @@ internal static class CustomizationEditorInspector
             {
                 onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.PrimitiveEdit, primitiveIndex);
             }
+
             ImGui.SameLine();
             ImGui.TextDisabled("将以当前值创建补丁");
         }
@@ -1002,7 +1227,9 @@ internal static class CustomizationEditorInspector
         if (patch.MeshKey != key || patch.PartIndex != partIndex || patch.Kind != kind)
             return false;
 
-        return kind == DraftScenePartPatchKind.Vertex ? patch.VertexIndex == subIndex : patch.PrimitiveIndex == subIndex;
+        return kind                     == DraftScenePartPatchKind.Vertex ?
+                   patch.VertexIndex    == subIndex :
+                   patch.PrimitiveIndex == subIndex;
     }
 
     private static bool TryGetItem<T>(List<T> items, int index, out T item)

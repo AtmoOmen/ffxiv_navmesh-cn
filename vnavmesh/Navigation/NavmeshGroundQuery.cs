@@ -73,11 +73,11 @@ internal sealed class NavmeshGroundQuery
             return LogMeshFailure(from, to, startRef, endRef, corridor[^1], range, "FindStraightPath 失败");
         }
 
-        var lastPoly          = corridor[^1];
-        var finalDestination  = straightPath[straightPathCount - 1].pos.RecastToSystem();
-        var resultStatus      = ResolveStatus(lastPoly, endRef, finalDestination, to, range);
-        var segment           = BuildGroundMeshCorridorSegment(from, projectedStart, finalDestination, corridor);
-        var plannerResult     = BuildGroundPlannerResult(to, range, resultStatus, finalDestination, [segment]);
+        var lastPoly         = corridor[^1];
+        var finalDestination = straightPath[straightPathCount - 1].pos.RecastToSystem();
+        var resultStatus     = ResolveStatus(lastPoly, endRef, finalDestination, to, range);
+        var segment          = BuildGroundMeshCorridorSegment(from, projectedStart, finalDestination, corridor);
+        var plannerResult    = BuildGroundPlannerResult(to, range, resultStatus, finalDestination, [segment]);
 
         query.LastPath.AddRange(corridor);
         cancel.ThrowIfCancellationRequested();
@@ -149,14 +149,19 @@ internal sealed class NavmeshGroundQuery
     private PlannerResult LogMeshFailure(Vector3 from, Vector3 to, long startRef, long endRef, long lastPoly, float range, string reason)
     {
         Interlocked.Increment(ref failedGroundQueryCount);
-        var lastPolyText = lastPoly != 0 ? lastPoly.ToString("X") : "<none>";
-        Service.Log.Error($"地面算路失败："                           +
-                          $"起点 = {from:f3}，"                   +
-                          $"请求终点 = {to:f3}，"                   +
-                          $"多边形 = {startRef:X} -> {endRef:X}，" +
-                          $"最后可达 = {lastPolyText}，"            +
-                          $"容差 = {range:f3}，"                  +
-                          $"原因 = {reason}");
+        var lastPolyText = lastPoly != 0 ?
+                               lastPoly.ToString("X") :
+                               "<none>";
+        Service.Log.Error
+        (
+            $"地面算路失败："                           +
+            $"起点 = {from:f3}，"                   +
+            $"请求终点 = {to:f3}，"                   +
+            $"多边形 = {startRef:X} -> {endRef:X}，" +
+            $"最后可达 = {lastPolyText}，"            +
+            $"容差 = {range:f3}，"                  +
+            $"原因 = {reason}"
+        );
         return new()
         {
             Status               = PathfindStatus.Failed,
@@ -212,11 +217,11 @@ internal sealed class NavmeshGroundQuery
     {
         var buffer = new long[MAX_PATH_POLYS];
         corridor = [];
-        var option = filter is GroundAreaCostFilter groundFilter && groundFilter.RequiresZeroHeuristic
-            ? DtFindPathOption.ZeroScale
-            : DtFindPathOption.NoOption;
+        var option = filter is GroundAreaCostFilter groundFilter && groundFilter.RequiresZeroHeuristic ?
+                         DtFindPathOption.ZeroScale :
+                         DtFindPathOption.NoOption;
         var status = query.FindPath(startRef, endRef, startPos, endPos, filter, buffer, out var count, buffer.Length, option);
-        corridor   = [.. buffer.AsSpan(0, count).ToArray()];
+        corridor = [.. buffer.AsSpan(0, count).ToArray()];
         return status;
     }
 
@@ -240,10 +245,10 @@ internal sealed class NavmeshGroundQuery
 
     private static PlannerPathSegment BuildGroundMeshCorridorSegment
     (
-        Vector3                  traversalStartPosition,
-        Vector3                  projectedStart,
-        Vector3                  finalDestination,
-        IReadOnlyList<long>      corridor
+        Vector3             traversalStartPosition,
+        Vector3             projectedStart,
+        Vector3             finalDestination,
+        IReadOnlyList<long> corridor
     ) =>
         new()
         {
@@ -270,10 +275,17 @@ internal sealed class NavmeshGroundQuery
     internal sealed class GroundAreaCostFilter
     (
         Navmesh navmeshData,
-        bool excludeUnreachable = true
+        bool    excludeUnreachable = true
     ) : IDtQueryFilter
     {
-        private readonly DtQueryDefaultFilter filter = new((int)NavmeshPolyFlags.AllTraversable, excludeUnreachable ? (int)NavmeshPolyFlags.Unreachable : 0, CreatePassCosts());
+        private readonly DtQueryDefaultFilter filter = new
+        (
+            (int)NavmeshPolyFlags.AllTraversable,
+            excludeUnreachable ?
+                (int)NavmeshPolyFlags.Unreachable :
+                0,
+            CreatePassCosts()
+        );
 
         public bool RequiresZeroHeuristic => navmeshData.HasHeuristicSensitiveOffMeshLinks;
 
@@ -303,9 +315,9 @@ internal sealed class NavmeshGroundQuery
             if (kind == null)
                 return Vector3.Distance(pa.RecastToSystem(), pb.RecastToSystem());
 
-            var traversalProfile = navmeshData.TryGetOffMeshLink(curRef, out var link)
-                ? link.TraversalProfile
-                : null;
+            var traversalProfile = navmeshData.TryGetOffMeshLink(curRef, out var link) ?
+                                       link.TraversalProfile :
+                                       null;
             return NavmeshLinkTraversalProfiles.EstimateCost(pa.RecastToSystem(), pb.RecastToSystem(), kind.Value, traversalProfile);
         }
 

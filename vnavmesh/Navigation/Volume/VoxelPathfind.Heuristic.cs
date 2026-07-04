@@ -11,6 +11,7 @@ public partial class VoxelPathfind
     private bool HasTraversableL1FaceTransition(ulong currentL1, ulong neighbourL1, int dx, int dy, int dz)
     {
         var cacheKey = (currentL1, neighbourL1);
+
         lock (cacheLock)
         {
             if (l1FaceTransitionCache.TryGetValue(cacheKey, out var cached))
@@ -18,36 +19,68 @@ public partial class VoxelPathfind
         }
 
         var result = ComputeL1FaceTransition(currentL1, neighbourL1, dx, dy, dz);
+
         lock (cacheLock)
         {
             l1FaceTransitionCache.TryAdd(cacheKey, result);
         }
+
         return result;
     }
 
     private bool ComputeL1FaceTransition(ulong currentL1, ulong neighbourL1, int dx, int dy, int dz)
     {
-        var currentX   = dx > 0 ? l2Desc.NumCellsX     - 1 : 0;
-        var currentY   = dy > 0 ? l2Desc.NumCellsY     - 1 : 0;
-        var currentZ   = dz > 0 ? l2Desc.NumCellsZ     - 1 : 0;
-        var neighbourX = dx > 0 ? 0 : l2Desc.NumCellsX - 1;
-        var neighbourY = dy > 0 ? 0 : l2Desc.NumCellsY - 1;
-        var neighbourZ = dz > 0 ? 0 : l2Desc.NumCellsZ - 1;
+        var currentX = dx > 0 ?
+                           l2Desc.NumCellsX - 1 :
+                           0;
+        var currentY = dy > 0 ?
+                           l2Desc.NumCellsY - 1 :
+                           0;
+        var currentZ = dz > 0 ?
+                           l2Desc.NumCellsZ - 1 :
+                           0;
+        var neighbourX = dx > 0 ?
+                             0 :
+                             l2Desc.NumCellsX - 1;
+        var neighbourY = dy > 0 ?
+                             0 :
+                             l2Desc.NumCellsY - 1;
+        var neighbourZ = dz > 0 ?
+                             0 :
+                             l2Desc.NumCellsZ - 1;
 
-        var xMin = dx == 0 ? 0 : currentX;
-        var xMax = dx == 0 ? l2Desc.NumCellsX - 1 : currentX;
-        var yMin = dy == 0 ? 0 : currentY;
-        var yMax = dy == 0 ? l2Desc.NumCellsY - 1 : currentY;
-        var zMin = dz == 0 ? 0 : currentZ;
-        var zMax = dz == 0 ? l2Desc.NumCellsZ - 1 : currentZ;
+        var xMin = dx == 0 ?
+                       0 :
+                       currentX;
+        var xMax = dx == 0 ?
+                       l2Desc.NumCellsX - 1 :
+                       currentX;
+        var yMin = dy == 0 ?
+                       0 :
+                       currentY;
+        var yMax = dy == 0 ?
+                       l2Desc.NumCellsY - 1 :
+                       currentY;
+        var zMin = dz == 0 ?
+                       0 :
+                       currentZ;
+        var zMax = dz == 0 ?
+                       l2Desc.NumCellsZ - 1 :
+                       currentZ;
 
         for (var z = zMin; z <= zMax; ++z)
         for (var x = xMin; x <= xMax; ++x)
         for (var y = yMin; y <= yMax; ++y)
         {
-            var otherX = dx == 0 ? x : neighbourX;
-            var otherY = dy == 0 ? y : neighbourY;
-            var otherZ = dz == 0 ? z : neighbourZ;
+            var otherX = dx == 0 ?
+                             x :
+                             neighbourX;
+            var otherY = dy == 0 ?
+                             y :
+                             neighbourY;
+            var otherZ = dz == 0 ?
+                             z :
+                             neighbourZ;
 
             var currentLeaf   = VoxelMap.EncodeSubIndex(currentL1,   l2Desc.VoxelToIndex(x,      y,      z),      2);
             var neighbourLeaf = VoxelMap.EncodeSubIndex(neighbourL1, l2Desc.VoxelToIndex(otherX, otherY, otherZ), 2);
@@ -67,7 +100,8 @@ public partial class VoxelPathfind
             return L1_ALL_FACES_MASK;
 
         ulong packedConnectivity;
-        bool hasCached;
+        bool  hasCached;
+
         lock (cacheLock)
         {
             hasCached = l1FaceConnectivityCache.TryGetValue(l1Voxel, out packedConnectivity);
@@ -76,6 +110,7 @@ public partial class VoxelPathfind
         if (!hasCached)
         {
             packedConnectivity = BuildPackedL1FaceConnectivity(l1Voxel);
+
             lock (cacheLock)
             {
                 l1FaceConnectivityCache.TryAdd(l1Voxel, packedConnectivity);
@@ -118,7 +153,7 @@ public partial class VoxelPathfind
             return packed;
         }
 
-        var   totalCellCount     = l2Desc.NumCellsTotal;
+        var totalCellCount = l2Desc.NumCellsTotal;
         l1FloodFillVisited ??= new bool[totalCellCount];
         if (l1FloodFillVisited.Length < totalCellCount)
             l1FloodFillVisited = new bool[totalCellCount];
@@ -167,7 +202,7 @@ public partial class VoxelPathfind
 
     private ushort FloodFillL1Component(ulong l1Voxel, ushort seedIndex, bool[]? visited, ushort? targetSeedIndex, out bool reachedTarget)
     {
-        reachedTarget =   false;
+        reachedTarget = false;
 
         if (visited is null)
         {
@@ -287,9 +322,15 @@ public partial class VoxelPathfind
         var span     = bounds.max - bounds.min;
         var clamped  = Vector3.Clamp(point, bounds.min, bounds.max - new Vector3(SCORE_EPSILON));
         var relative = clamped - bounds.min;
-        var x        = span.X > SCORE_EPSILON ? Math.Clamp((int)(relative.X / span.X * l2Desc.NumCellsX), 0, l2Desc.NumCellsX - 1) : 0;
-        var y        = span.Y > SCORE_EPSILON ? Math.Clamp((int)(relative.Y / span.Y * l2Desc.NumCellsY), 0, l2Desc.NumCellsY - 1) : 0;
-        var z        = span.Z > SCORE_EPSILON ? Math.Clamp((int)(relative.Z / span.Z * l2Desc.NumCellsZ), 0, l2Desc.NumCellsZ - 1) : 0;
+        var x = span.X > SCORE_EPSILON ?
+                    Math.Clamp((int)(relative.X / span.X * l2Desc.NumCellsX), 0, l2Desc.NumCellsX - 1) :
+                    0;
+        var y = span.Y > SCORE_EPSILON ?
+                    Math.Clamp((int)(relative.Y / span.Y * l2Desc.NumCellsY), 0, l2Desc.NumCellsY - 1) :
+                    0;
+        var z = span.Z > SCORE_EPSILON ?
+                    Math.Clamp((int)(relative.Z / span.Z * l2Desc.NumCellsZ), 0, l2Desc.NumCellsZ - 1) :
+                    0;
         return l2Desc.VoxelToIndex(x, y, z);
     }
 
@@ -317,6 +358,7 @@ public partial class VoxelPathfind
         while (frontier.TryDequeue(out var currentIndex))
         {
             var leafVoxel = VoxelMap.EncodeSubIndex(l1Voxel, currentIndex, 2);
+
             if (Volume.IsEmpty(leafVoxel))
             {
                 seedIndex = currentIndex;
@@ -325,12 +367,12 @@ public partial class VoxelPathfind
 
             var (x, y, z) = l2Desc.IndexToVoxel(currentIndex);
 
-            EnqueueNeighbour(x - 1, y, z);
-            EnqueueNeighbour(x + 1, y, z);
-            EnqueueNeighbour(x, y - 1, z);
-            EnqueueNeighbour(x, y + 1, z);
-            EnqueueNeighbour(x, y, z - 1);
-            EnqueueNeighbour(x, y, z + 1);
+            EnqueueNeighbour(x - 1, y,     z);
+            EnqueueNeighbour(x + 1, y,     z);
+            EnqueueNeighbour(x,     y - 1, z);
+            EnqueueNeighbour(x,     y + 1, z);
+            EnqueueNeighbour(x,     y,     z - 1);
+            EnqueueNeighbour(x,     y,     z + 1);
 
             void EnqueueNeighbour(int nx, int ny, int nz)
             {
@@ -358,9 +400,15 @@ public partial class VoxelPathfind
         var span     = bounds.max - bounds.min;
         var clamped  = Vector3.Clamp(referencePoint, bounds.min, bounds.max - new Vector3(SCORE_EPSILON));
         var relative = clamped - bounds.min;
-        var l1x      = span.X > SCORE_EPSILON ? Math.Clamp((int)(relative.X / span.X * l1Desc.NumCellsX), 0, l1Desc.NumCellsX - 1) : 0;
-        var l1y      = span.Y > SCORE_EPSILON ? Math.Clamp((int)(relative.Y / span.Y * l1Desc.NumCellsY), 0, l1Desc.NumCellsY - 1) : 0;
-        var l1z      = span.Z > SCORE_EPSILON ? Math.Clamp((int)(relative.Z / span.Z * l1Desc.NumCellsZ), 0, l1Desc.NumCellsZ - 1) : 0;
+        var l1x = span.X > SCORE_EPSILON ?
+                      Math.Clamp((int)(relative.X / span.X * l1Desc.NumCellsX), 0, l1Desc.NumCellsX - 1) :
+                      0;
+        var l1y = span.Y > SCORE_EPSILON ?
+                      Math.Clamp((int)(relative.Y / span.Y * l1Desc.NumCellsY), 0, l1Desc.NumCellsY - 1) :
+                      0;
+        var l1z = span.Z > SCORE_EPSILON ?
+                      Math.Clamp((int)(relative.Z / span.Z * l1Desc.NumCellsZ), 0, l1Desc.NumCellsZ - 1) :
+                      0;
         return VoxelMap.EncodeIndex(l0Index, VoxelMap.EncodeIndex(l1Desc.VoxelToIndex(l1x, l1y, l1z)));
     }
 
@@ -463,12 +511,14 @@ public partial class VoxelPathfind
         var lateralDist     = lateral.Length();
         var lateralOverflow = MathF.Max(lateralDist - guidedCorridor.HorizontalRadius, 0f);
 
-        var t              = guidedCorridor.HorizontalLength > SCORE_EPSILON ? Math.Clamp(advance / guidedCorridor.HorizontalLength, 0f, 1f) : 0f;
+        var t = guidedCorridor.HorizontalLength > SCORE_EPSILON ?
+                    Math.Clamp(advance / guidedCorridor.HorizontalLength, 0f, 1f) :
+                    0f;
         var baselineY      = guidedCorridor.Start.Y + (guidedCorridor.VerticalDelta * t);
         var verticalOffset = point.Y                - baselineY;
-        var verticalOverflow = verticalOffset >= 0f
-                                   ? MathF.Max(verticalOffset  - guidedCorridor.UpwardAllowance,   0f)
-                                   : MathF.Max(-verticalOffset - guidedCorridor.DownwardAllowance, 0f);
+        var verticalOverflow = verticalOffset >= 0f ?
+                                   MathF.Max(verticalOffset  - guidedCorridor.UpwardAllowance,   0f) :
+                                   MathF.Max(-verticalOffset - guidedCorridor.DownwardAllowance, 0f);
 
         var totalOverflow = advanceOverflow + lateralOverflow + verticalOverflow;
         if (totalOverflow <= SCORE_EPSILON)
@@ -523,8 +573,12 @@ public partial class VoxelPathfind
         var l1Index      = VoxelMap.DecodeIndex(ref encodedVoxel);
         var l2Index      = VoxelMap.DecodeIndex(ref encodedVoxel);
         var l0Coords     = l0Desc.IndexToVoxel(l0Index);
-        var l1Coords     = l1Index != VoxelMap.INDEX_LEVEL_MASK ? l1Desc.IndexToVoxel(l1Index) : default;
-        var l2Coords     = l2Index != VoxelMap.INDEX_LEVEL_MASK ? l2Desc.IndexToVoxel(l2Index) : default;
+        var l1Coords = l1Index != VoxelMap.INDEX_LEVEL_MASK ?
+                           l1Desc.IndexToVoxel(l1Index) :
+                           default;
+        var l2Coords = l2Index != VoxelMap.INDEX_LEVEL_MASK ?
+                           l2Desc.IndexToVoxel(l2Index) :
+                           default;
 
         if (l2Index != VoxelMap.INDEX_LEVEL_MASK)
         {
@@ -632,7 +686,9 @@ public partial class VoxelPathfind
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private float HeuristicDistance(Vector3 position, ulong voxel)
     {
-        var h = longRangeLateralBias.Enabled ? ComputeLongRangeLateralHeuristic(position, voxel) : Vector3.Distance(position, goalPos);
+        var h = longRangeLateralBias.Enabled ?
+                    ComputeLongRangeLateralHeuristic(position, voxel) :
+                    Vector3.Distance(position, goalPos);
         if (TryGetVoxelL1DistanceFloor(voxel, out var l1Dist))
             h = MathF.Max(h, l1Dist);
         return h;
@@ -761,10 +817,18 @@ public partial class VoxelPathfind
         }
 
         var open = HasVerifiedVerticalAccessThroughFace(voxel, true);
+
         lock (cacheLock)
         {
-            verifiedDownwardOpeningCache.TryAdd(voxel, open ? (byte)1 : (byte)2);
+            verifiedDownwardOpeningCache.TryAdd
+            (
+                voxel,
+                open ?
+                    (byte)1 :
+                    (byte)2
+            );
         }
+
         return open;
     }
 
@@ -777,10 +841,18 @@ public partial class VoxelPathfind
         }
 
         var open = HasVerifiedVerticalAccessThroughFace(voxel, false);
+
         lock (cacheLock)
         {
-            verifiedTopEntryCache.TryAdd(voxel, open ? (byte)1 : (byte)2);
+            verifiedTopEntryCache.TryAdd
+            (
+                voxel,
+                open ?
+                    (byte)1 :
+                    (byte)2
+            );
         }
+
         return open;
     }
 
@@ -809,12 +881,12 @@ public partial class VoxelPathfind
         var maxZ     = max.Z - epsZ;
         var probeDepth = MathF.Max
             (l2Desc.CellSize.Y * LONG_RANGE_LATERAL_VERTICAL_ACCESS_PROBE_LEAF_CELLS, size.Y * LONG_RANGE_LATERAL_VERTICAL_ACCESS_PROBE_HEIGHT_SCALE);
-        var insideY = throughLowerFace
-                          ? min.Y + Math.Clamp(size.Y * 0.60f, epsY, MathF.Max(epsY, size.Y - epsY))
-                          : max.Y - Math.Clamp(size.Y * 0.25f, epsY, MathF.Max(epsY, size.Y - epsY));
-        var outsideY = throughLowerFace
-                           ? MathF.Max(min.Y - probeDepth, rootMinY + epsY)
-                           : MathF.Min(max.Y + probeDepth, rootMaxY - epsY);
+        var insideY = throughLowerFace ?
+                          min.Y + Math.Clamp(size.Y * 0.60f, epsY, MathF.Max(epsY, size.Y - epsY)) :
+                          max.Y - Math.Clamp(size.Y * 0.25f, epsY, MathF.Max(epsY, size.Y - epsY));
+        var outsideY = throughLowerFace ?
+                           MathF.Max(min.Y - probeDepth, rootMinY + epsY) :
+                           MathF.Min(max.Y + probeDepth, rootMaxY - epsY);
 
         if (throughLowerFace)
         {
@@ -838,12 +910,16 @@ public partial class VoxelPathfind
 
         for (var i = 0; i < offsets.Length; ++i)
         {
-            var x         = Math.Clamp(centerX + offsets[i].X, minX, maxX);
-            var z         = Math.Clamp(centerZ + offsets[i].Y, minZ, maxZ);
-            var inside    = new Vector3(x, insideY,  z);
-            var outside   = new Vector3(x, outsideY, z);
-            var from      = throughLowerFace ? inside : outside;
-            var to        = throughLowerFace ? outside : inside;
+            var x       = Math.Clamp(centerX + offsets[i].X, minX, maxX);
+            var z       = Math.Clamp(centerZ + offsets[i].Y, minZ, maxZ);
+            var inside  = new Vector3(x, insideY,  z);
+            var outside = new Vector3(x, outsideY, z);
+            var from = throughLowerFace ?
+                           inside :
+                           outside;
+            var to = throughLowerFace ?
+                         outside :
+                         inside;
             var startLeaf = Volume.FindLeafVoxel(from);
             var endLeaf   = Volume.FindLeafVoxel(to);
             if (!startLeaf.empty || !endLeaf.empty)

@@ -66,7 +66,9 @@ public class VoxelMap
             running   += SubtreeCountByPackedState[packedStates[i]];
         }
 
-        return running == 0 ? null : counts;
+        return running == 0 ?
+                   null :
+                   counts;
     }
 
     private static byte[] BuildSubtreeCountByPackedState()
@@ -194,8 +196,8 @@ public class VoxelMap
             return false;
         }
 
-        var l0Index = (ushort)(voxel & INDEX_LEVEL_MASK);
-        var l1Index = (ushort)((voxel >> INDEX_LEVEL_SHIFT) & INDEX_LEVEL_MASK);
+        var l0Index = (ushort)(voxel                              & INDEX_LEVEL_MASK);
+        var l1Index = (ushort)((voxel >> INDEX_LEVEL_SHIFT)       & INDEX_LEVEL_MASK);
         var l2Index = (ushort)((voxel >> (INDEX_LEVEL_SHIFT * 2)) & INDEX_LEVEL_MASK);
 
         if (l1Index == INDEX_LEVEL_MASK || l2Index == INDEX_LEVEL_MASK)
@@ -212,13 +214,13 @@ public class VoxelMap
         var l1C = l1.IndexToVoxel(l1Index);
         var l2C = l2.IndexToVoxel(l2Index);
 
-        var min = RootTile.BoundsMin
-            + new Vector3
-               (
-                   l0C.x * l0.CellSize.X + l1C.x * l1.CellSize.X + l2C.x * l2.CellSize.X,
-                   l0C.y * l0.CellSize.Y + l1C.y * l1.CellSize.Y + l2C.y * l2.CellSize.Y,
-                   l0C.z * l0.CellSize.Z + l1C.z * l1.CellSize.Z + l2C.z * l2.CellSize.Z
-               );
+        var min = RootTile.BoundsMin +
+                  new Vector3
+                  (
+                      l0C.x * l0.CellSize.X + l1C.x * l1.CellSize.X + l2C.x * l2.CellSize.X,
+                      l0C.y * l0.CellSize.Y + l1C.y * l1.CellSize.Y + l2C.y * l2.CellSize.Y,
+                      l0C.z * l0.CellSize.Z + l1C.z * l1.CellSize.Z + l2C.z * l2.CellSize.Z
+                  );
 
         bounds = (min, min + l2.CellSize);
         return true;
@@ -278,6 +280,7 @@ public class VoxelMap
         }
 
         var id = data & VOXEL_ID_MASK;
+
         if (id == VOXEL_ID_MASK)
         {
             voxel = EncodeIndex(l0Index);
@@ -297,6 +300,7 @@ public class VoxelMap
         }
 
         id = data & VOXEL_ID_MASK;
+
         if (id == VOXEL_ID_MASK)
         {
             voxel = EncodeIndex(l1Index);
@@ -323,19 +327,25 @@ public class VoxelMap
             return false;
         }
 
-        ref var l0 = ref Levels[0];
-        ref var l1 = ref Levels[1];
-        ref var l2 = ref Levels[2];
-        var rootMin  = RootTile.BoundsMin;
-        var rootTile = RootTile;
+        ref var l0       = ref Levels[0];
+        ref var l1       = ref Levels[1];
+        ref var l2       = ref Levels[2];
+        var     rootMin  = RootTile.BoundsMin;
+        var     rootTile = RootTile;
 
-        var ab = toPos - fromPos;
+        var ab  = toPos   - fromPos;
         var rel = fromPos - rootMin;
 
         // 预计算 1/ab，用乘法替代除法
-        var invAbX = ab.X != 0 ? 1f / ab.X : 0;
-        var invAbY = ab.Y != 0 ? 1f / ab.Y : 0;
-        var invAbZ = ab.Z != 0 ? 1f / ab.Z : 0;
+        var invAbX = ab.X != 0 ?
+                         1f / ab.X :
+                         0;
+        var invAbY = ab.Y != 0 ?
+                         1f / ab.Y :
+                         0;
+        var invAbZ = ab.Z != 0 ?
+                         1f / ab.Z :
+                         0;
 
         var gx = (int)(rel.X * l2.InvCellSize.X);
         var gy = (int)(rel.Y * l2.InvCellSize.Y);
@@ -352,49 +362,89 @@ public class VoxelMap
         var totalGz = leafScaleZ[0] * Levels[0].NumCellsZ;
 
         // 1 cell 容差用于浮点精度，超出则回退到旧算法
-        if ((uint)(gx + 1) > (uint)totalGx || (uint)(gy + 1) > (uint)totalGy || (uint)(gz + 1) > (uint)totalGz ||
-            (uint)(goalGx + 1) > (uint)totalGx || (uint)(goalGy + 1) > (uint)totalGy || (uint)(goalGz + 1) > (uint)totalGz)
+        if ((uint)(gx     + 1) > (uint)totalGx ||
+            (uint)(gy     + 1) > (uint)totalGy ||
+            (uint)(gz     + 1) > (uint)totalGz ||
+            (uint)(goalGx + 1) > (uint)totalGx ||
+            (uint)(goalGy + 1) > (uint)totalGy ||
+            (uint)(goalGz + 1) > (uint)totalGz)
         {
             visible = false;
             return false;
         }
 
-        if (gx < 0)               gx = 0;
-        else if (gx >= totalGx)   gx = totalGx - 1;
-        if (gy < 0)               gy = 0;
-        else if (gy >= totalGy)   gy = totalGy - 1;
-        if (gz < 0)               gz = 0;
-        else if (gz >= totalGz)   gz = totalGz - 1;
+        if (gx      < 0) gx        = 0;
+        else if (gx >= totalGx) gx = totalGx - 1;
+        if (gy      < 0) gy        = 0;
+        else if (gy >= totalGy) gy = totalGy - 1;
+        if (gz      < 0) gz        = 0;
+        else if (gz >= totalGz) gz = totalGz - 1;
 
-        if (goalGx < 0)               goalGx = 0;
-        else if (goalGx >= totalGx)   goalGx = totalGx - 1;
-        if (goalGy < 0)               goalGy = 0;
-        else if (goalGy >= totalGy)   goalGy = totalGy - 1;
-        if (goalGz < 0)               goalGz = 0;
-        else if (goalGz >= totalGz)   goalGz = totalGz - 1;
+        if (goalGx      < 0) goalGx        = 0;
+        else if (goalGx >= totalGx) goalGx = totalGx - 1;
+        if (goalGy      < 0) goalGy        = 0;
+        else if (goalGy >= totalGy) goalGy = totalGy - 1;
+        if (goalGz      < 0) goalGz        = 0;
+        else if (goalGz >= totalGz) goalGz = totalGz - 1;
 
         var stepX = Math.Sign(ab.X);
         var stepY = Math.Sign(ab.Y);
         var stepZ = Math.Sign(ab.Z);
 
-        float tMaxX, tMaxY, tMaxZ;
+        float tMaxX,   tMaxY,   tMaxZ;
         float tDeltaX, tDeltaY, tDeltaZ;
 
         var cellSizeX = l2.CellSize.X;
         var cellSizeY = l2.CellSize.Y;
         var cellSizeZ = l2.CellSize.Z;
 
-        if (stepX > 0)     { tMaxX = ((gx + 1) * cellSizeX - rel.X) * invAbX; tDeltaX = cellSizeX * invAbX; }
-        else if (stepX < 0){ tMaxX = (gx * cellSizeX - rel.X) * invAbX;        tDeltaX = -cellSizeX * invAbX; }
-        else               { tMaxX = float.MaxValue; tDeltaX = 0; }
+        if (stepX > 0)
+        {
+            tMaxX   = ((gx + 1) * cellSizeX - rel.X) * invAbX;
+            tDeltaX = cellSizeX                      * invAbX;
+        }
+        else if (stepX < 0)
+        {
+            tMaxX   = (gx * cellSizeX - rel.X) * invAbX;
+            tDeltaX = -cellSizeX               * invAbX;
+        }
+        else
+        {
+            tMaxX   = float.MaxValue;
+            tDeltaX = 0;
+        }
 
-        if (stepY > 0)     { tMaxY = ((gy + 1) * cellSizeY - rel.Y) * invAbY; tDeltaY = cellSizeY * invAbY; }
-        else if (stepY < 0){ tMaxY = (gy * cellSizeY - rel.Y) * invAbY;        tDeltaY = -cellSizeY * invAbY; }
-        else               { tMaxY = float.MaxValue; tDeltaY = 0; }
+        if (stepY > 0)
+        {
+            tMaxY   = ((gy + 1) * cellSizeY - rel.Y) * invAbY;
+            tDeltaY = cellSizeY                      * invAbY;
+        }
+        else if (stepY < 0)
+        {
+            tMaxY   = (gy * cellSizeY - rel.Y) * invAbY;
+            tDeltaY = -cellSizeY               * invAbY;
+        }
+        else
+        {
+            tMaxY   = float.MaxValue;
+            tDeltaY = 0;
+        }
 
-        if (stepZ > 0)     { tMaxZ = ((gz + 1) * cellSizeZ - rel.Z) * invAbZ; tDeltaZ = cellSizeZ * invAbZ; }
-        else if (stepZ < 0){ tMaxZ = (gz * cellSizeZ - rel.Z) * invAbZ;        tDeltaZ = -cellSizeZ * invAbZ; }
-        else               { tMaxZ = float.MaxValue; tDeltaZ = 0; }
+        if (stepZ > 0)
+        {
+            tMaxZ   = ((gz + 1) * cellSizeZ - rel.Z) * invAbZ;
+            tDeltaZ = cellSizeZ                      * invAbZ;
+        }
+        else if (stepZ < 0)
+        {
+            tMaxZ   = (gz * cellSizeZ - rel.Z) * invAbZ;
+            tDeltaZ = -cellSizeZ               * invAbZ;
+        }
+        else
+        {
+            tMaxZ   = float.MaxValue;
+            tDeltaZ = 0;
+        }
 
         var l0ShiftX = l2.ShiftXZ + l1.ShiftXZ;
         var l0ShiftY = l2.ShiftYX + l1.ShiftYX;
@@ -408,24 +458,24 @@ public class VoxelMap
         var l2MaskZ = l2.NumCellsZ - 1;
 
         // L0 状态缓存
-        var curL0X  = gx >> l0ShiftX;
-        var curL0Y  = gy >> l0ShiftY;
-        var curL0Z  = gz >> l0ShiftZ;
-        var l0Data  = rootTile.GetCell(l0.VoxelToIndex(curL0X, curL0Y, curL0Z));
+        var curL0X = gx >> l0ShiftX;
+        var curL0Y = gy >> l0ShiftY;
+        var curL0Z = gz >> l0ShiftZ;
+        var l0Data = rootTile.GetCell(l0.VoxelToIndex(curL0X, curL0Y, curL0Z));
 
         // L1 状态缓存（curL1X < 0 表示需要重新初始化）
         VolumeTile? l1Tile = null;
-        var curL1X = -1;
-        var curL1Y = -1;
-        var curL1Z = -1;
-        ushort l1Data = 0;
+        var         curL1X = -1;
+        var         curL1Y = -1;
+        var         curL1Z = -1;
+        ushort      l1Data = 0;
 
         // L2 tile 缓存
-        VolumeTile? l2Tile  = null;
-        var l2TileId = -1;
+        VolumeTile? l2Tile   = null;
+        var         l2TileId = -1;
 
         const int MAX_DDA_ITERATIONS = 8192;
-        var iterations = 0;
+        var       iterations         = 0;
 
         while (gx != goalGx || gy != goalGy || gz != goalGz)
         {
@@ -459,11 +509,13 @@ public class VoxelMap
                 }
 
                 // 算术快进到 L0 cell 边界
-                FastForwardArithmetic(l0ShiftX, l0ShiftY, l0ShiftZ, ref gx, ref gy, ref gz, stepX, stepY, stepZ, ref tMaxX, ref tMaxY, ref tMaxZ, tDeltaX, tDeltaY, tDeltaZ);
+                FastForwardArithmetic
+                    (l0ShiftX, l0ShiftY, l0ShiftZ, ref gx, ref gy, ref gz, stepX, stepY, stepZ, ref tMaxX, ref tMaxY, ref tMaxZ, tDeltaX, tDeltaY, tDeltaZ);
                 continue;
             }
 
             var l0Id = l0Data & VOXEL_ID_MASK;
+
             if (l0Id == VOXEL_ID_MASK)
             {
                 visible = false;
@@ -483,10 +535,10 @@ public class VoxelMap
                     l2TileId = -1;
                 }
 
-                curL1X = newL1X;
-                curL1Y = newL1Y;
-                curL1Z = newL1Z;
-                l1Data = l1Tile!.GetCell(l1.VoxelToIndex(curL1X, curL1Y, curL1Z));
+                curL1X   = newL1X;
+                curL1Y   = newL1Y;
+                curL1Z   = newL1Z;
+                l1Data   = l1Tile!.GetCell(l1.VoxelToIndex(curL1X, curL1Y, curL1Z));
                 l2TileId = -1;
             }
 
@@ -502,11 +554,13 @@ public class VoxelMap
                 }
 
                 // 算术快进到 L1 cell 边界
-                FastForwardArithmetic(l2.ShiftXZ, l2.ShiftYX, l2ShiftZ, ref gx, ref gy, ref gz, stepX, stepY, stepZ, ref tMaxX, ref tMaxY, ref tMaxZ, tDeltaX, tDeltaY, tDeltaZ);
+                FastForwardArithmetic
+                    (l2.ShiftXZ, l2.ShiftYX, l2ShiftZ, ref gx, ref gy, ref gz, stepX, stepY, stepZ, ref tMaxX, ref tMaxY, ref tMaxZ, tDeltaX, tDeltaY, tDeltaZ);
                 continue;
             }
 
             l0Id = l1Data & VOXEL_ID_MASK;
+
             if (l0Id == VOXEL_ID_MASK)
             {
                 visible = false;
@@ -519,6 +573,7 @@ public class VoxelMap
                 l2Tile   = l1Tile!.GetSubdivision(l0Id);
                 l2TileId = l0Id;
             }
+
             var l2Index = l2.VoxelToIndex(gx & l2MaskX, gy & l2MaskY, gz & l2MaskZ);
             var l2Data  = l2Tile!.GetCell(l2Index);
 
@@ -531,13 +586,29 @@ public class VoxelMap
             // L2 cell 为空，正常 DDA 步进
             if (tMaxX < tMaxY)
             {
-                if (tMaxX < tMaxZ) { gx += stepX; tMaxX += tDeltaX; }
-                else               { gz += stepZ; tMaxZ += tDeltaZ; }
+                if (tMaxX < tMaxZ)
+                {
+                    gx    += stepX;
+                    tMaxX += tDeltaX;
+                }
+                else
+                {
+                    gz    += stepZ;
+                    tMaxZ += tDeltaZ;
+                }
             }
             else
             {
-                if (tMaxY < tMaxZ) { gy += stepY; tMaxY += tDeltaY; }
-                else               { gz += stepZ; tMaxZ += tDeltaZ; }
+                if (tMaxY < tMaxZ)
+                {
+                    gy    += stepY;
+                    tMaxY += tDeltaY;
+                }
+                else
+                {
+                    gz    += stepZ;
+                    tMaxZ += tDeltaZ;
+                }
             }
         }
 
@@ -548,21 +619,21 @@ public class VoxelMap
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void FastForwardArithmetic
     (
-        int     shiftX,
-        int     shiftY,
-        int     shiftZ,
-        ref int gx,
-        ref int gy,
-        ref int gz,
-        int     stepX,
-        int     stepY,
-        int     stepZ,
+        int       shiftX,
+        int       shiftY,
+        int       shiftZ,
+        ref int   gx,
+        ref int   gy,
+        ref int   gz,
+        int       stepX,
+        int       stepY,
+        int       stepZ,
         ref float tMaxX,
         ref float tMaxY,
         ref float tMaxZ,
-        float   tDeltaX,
-        float   tDeltaY,
-        float   tDeltaZ
+        float     tDeltaX,
+        float     tDeltaY,
+        float     tDeltaZ
     )
     {
         // 计算各轴退出当前 cell 的 t 值
@@ -572,42 +643,42 @@ public class VoxelMap
         {
             var cellEnd = ((gx >> shiftX) + 1) << shiftX;
             var nCross  = cellEnd - gx;
-            tExit       = tMaxX + (nCross - 1) * tDeltaX;
+            tExit = tMaxX + (nCross - 1) * tDeltaX;
         }
         else if (stepX < 0)
         {
             var cellStart = (gx >> shiftX) << shiftX;
-            var nCross    = gx - cellStart + 1;
-            tExit         = tMaxX + (nCross - 1) * tDeltaX;
+            var nCross    = gx      - cellStart + 1;
+            tExit = tMaxX + (nCross - 1) * tDeltaX;
         }
 
         if (stepY > 0)
         {
-            var cellEnd = ((gy >> shiftY) + 1) << shiftY;
-            var nCross  = cellEnd - gy;
-            var tExitY  = tMaxY + (nCross - 1) * tDeltaY;
+            var cellEnd               = ((gy >> shiftY) + 1) << shiftY;
+            var nCross                = cellEnd - gy;
+            var tExitY                = tMaxY   + (nCross - 1) * tDeltaY;
             if (tExitY < tExit) tExit = tExitY;
         }
         else if (stepY < 0)
         {
-            var cellStart = (gy >> shiftY) << shiftY;
-            var nCross    = gy - cellStart + 1;
-            var tExitY    = tMaxY + (nCross - 1) * tDeltaY;
+            var cellStart             = (gy >> shiftY) << shiftY;
+            var nCross                = gy - cellStart + 1;
+            var tExitY                = tMaxY          + (nCross - 1) * tDeltaY;
             if (tExitY < tExit) tExit = tExitY;
         }
 
         if (stepZ > 0)
         {
-            var cellEnd = ((gz >> shiftZ) + 1) << shiftZ;
-            var nCross  = cellEnd - gz;
-            var tExitZ  = tMaxZ + (nCross - 1) * tDeltaZ;
+            var cellEnd               = ((gz >> shiftZ) + 1) << shiftZ;
+            var nCross                = cellEnd - gz;
+            var tExitZ                = tMaxZ   + (nCross - 1) * tDeltaZ;
             if (tExitZ < tExit) tExit = tExitZ;
         }
         else if (stepZ < 0)
         {
-            var cellStart = (gz >> shiftZ) << shiftZ;
-            var nCross    = gz - cellStart + 1;
-            var tExitZ    = tMaxZ + (nCross - 1) * tDeltaZ;
+            var cellStart             = (gz >> shiftZ) << shiftZ;
+            var nCross                = gz - cellStart + 1;
+            var tExitZ                = tMaxZ          + (nCross - 1) * tDeltaZ;
             if (tExitZ < tExit) tExit = tExitZ;
         }
 
@@ -615,22 +686,22 @@ public class VoxelMap
         if (stepX != 0 && tExit >= tMaxX)
         {
             var n = (int)((tExit - tMaxX) / tDeltaX + 1e-6f) + 1;
-            gx     += stepX * n;
-            tMaxX  += n * tDeltaX;
+            gx    += stepX * n;
+            tMaxX += n     * tDeltaX;
         }
 
         if (stepY != 0 && tExit >= tMaxY)
         {
             var n = (int)((tExit - tMaxY) / tDeltaY + 1e-6f) + 1;
-            gy     += stepY * n;
-            tMaxY  += n * tDeltaY;
+            gy    += stepY * n;
+            tMaxY += n     * tDeltaY;
         }
 
         if (stepZ != 0 && tExit >= tMaxZ)
         {
             var n = (int)((tExit - tMaxZ) / tDeltaZ + 1e-6f) + 1;
-            gz     += stepZ * n;
-            tMaxZ  += n * tDeltaZ;
+            gz    += stepZ * n;
+            tMaxZ += n     * tDeltaZ;
         }
     }
 
@@ -755,7 +826,18 @@ public class VoxelMap
     }
 
     private ushort BuildTileContent
-        (Voxelizer vox, VolumeTile parent, List<VolumeTile>? rootSubdivision, VolumeTile? tileSubdivision, int rootX, int rootY, int rootZ, int leafX, int leafY, int leafZ)
+    (
+        Voxelizer         vox,
+        VolumeTile        parent,
+        List<VolumeTile>? rootSubdivision,
+        VolumeTile?       tileSubdivision,
+        int               rootX,
+        int               rootY,
+        int               rootZ,
+        int               leafX,
+        int               leafY,
+        int               leafZ
+    )
     {
         var level = parent.Level;
         var (solid, empty) = vox.ClassifyBox(leafX, leafY, leafZ, leafScaleX[level], leafScaleY[level], leafScaleZ[level]);
@@ -797,21 +879,23 @@ public class VoxelMap
 
     private ushort BuildTileContent
     (
-        Voxelizer           vox,
-        Voxelizer[]         mipScratch,
-        VolumeTile          parent,
+        Voxelizer         vox,
+        Voxelizer[]       mipScratch,
+        VolumeTile        parent,
         List<VolumeTile>? rootSubdivision,
         VolumeTile?       tileSubdivision,
-        int         rootX,
-        int         rootY,
-        int         rootZ,
-        int         cellX,
-        int         cellY,
-        int         cellZ
+        int               rootX,
+        int               rootY,
+        int               rootZ,
+        int               cellX,
+        int               cellY,
+        int               cellZ
     )
     {
-        var level  = parent.Level;
-        var source = level == Levels.Length - 1 ? vox : mipScratch[level];
+        var level = parent.Level;
+        var source = level == Levels.Length - 1 ?
+                         vox :
+                         mipScratch[level];
         var (solid, empty) = source.GetCellState(cellX, cellY, cellZ);
         if (!solid) return 0;
 

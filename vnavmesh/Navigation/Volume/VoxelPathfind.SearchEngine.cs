@@ -52,7 +52,9 @@ public partial class VoxelPathfind
             if (nodes.Count >= MAX_NODE_COUNT)
                 return VolumeSearchTermination.StepBudgetReached;
             if (!ExecuteStep())
-                return goalReached ? VolumeSearchTermination.ReachedGoal : VolumeSearchTermination.SearchExhausted;
+                return goalReached ?
+                           VolumeSearchTermination.ReachedGoal :
+                           VolumeSearchTermination.SearchExhausted;
             if (ShouldAbortGuidedCorridorEarly())
                 return VolumeSearchTermination.SearchExhausted;
             if ((i & 0xff) == 0)
@@ -86,7 +88,7 @@ public partial class VoxelPathfind
             GUIDED_CORRIDOR_EARLY_ABORT_VERTICAL_PROGRESS_MIN_DISTANCE
         );
 
-        var horizontalProgress = guidedCorridorLastProgressDistance - bestDistance;
+        var horizontalProgress = guidedCorridorLastProgressDistance  - bestDistance;
         var verticalProgress   = guidedCorridorLastProgressAboveGoal - bestAboveGoal;
 
         if (horizontalProgress >= horizontalProgressThreshold || verticalProgress >= verticalProgressThreshold)
@@ -120,10 +122,10 @@ public partial class VoxelPathfind
         int                   maxSteps,
         int                   attempts,
         CancellationToken     cancel,
-        GuidedSearchCorridor? corridor                  = null,
-        float?                heuristicWeightOverride   = null,
-        LongRangeLateralBias  lateralBias               = default,
-        bool                  disableAncestorLookBack   = false
+        GuidedSearchCorridor? corridor                = null,
+        float?                heuristicWeightOverride = null,
+        LongRangeLateralBias  lateralBias             = default,
+        bool                  disableAncestorLookBack = false
     )
     {
         Start(fromVoxel, toVoxel, fromPos, toPos, lateralBias);
@@ -245,26 +247,26 @@ public partial class VoxelPathfind
         openList.Clear();
         ClearVisibilityCaches();
         TrimCachesIfNeeded();
-        bestNodeIndex                        = 0;
-        goalReached                          = false;
-        visitedNodes                         = 0;
-        generatedNodes                       = 0;
-        lineOfSightChecks                    = 0;
-        lineOfSightHits                      = 0;
-        peakOpenListSize                     = 0;
-        heuristicWeight                      = 1;
-        allowAncestorLookBack                = true;
-        useGuidedCorridor                    = false;
-        guidedCorridor                       = default;
-        longRangeLateralBias                 = default;
-        guidedCorridorEarlyAbortTriggered    = false;
-        lastTermination                      = VolumeSearchTermination.SearchExhausted;
-        lastSearchAttempts                   = 0;
-        guidedCorridorInitialAboveGoal       = 0;
-        guidedCorridorInitialGoalDistance    = 0;
-        guidedCorridorLastProgressAboveGoal  = 0;
-        guidedCorridorLastProgressDistance   = 0;
-        guidedCorridorLastProgressVisited    = 0;
+        bestNodeIndex                       = 0;
+        goalReached                         = false;
+        visitedNodes                        = 0;
+        generatedNodes                      = 0;
+        lineOfSightChecks                   = 0;
+        lineOfSightHits                     = 0;
+        peakOpenListSize                    = 0;
+        heuristicWeight                     = 1;
+        allowAncestorLookBack               = true;
+        useGuidedCorridor                   = false;
+        guidedCorridor                      = default;
+        longRangeLateralBias                = default;
+        guidedCorridorEarlyAbortTriggered   = false;
+        lastTermination                     = VolumeSearchTermination.SearchExhausted;
+        lastSearchAttempts                  = 0;
+        guidedCorridorInitialAboveGoal      = 0;
+        guidedCorridorInitialGoalDistance   = 0;
+        guidedCorridorLastProgressAboveGoal = 0;
+        guidedCorridorLastProgressDistance  = 0;
+        guidedCorridorLastProgressVisited   = 0;
     }
 
     private void TrimCachesIfNeeded()
@@ -284,11 +286,13 @@ public partial class VoxelPathfind
         }
 
         var totalVisibility = 0;
+
         for (var i = 0; i < VISIBILITY_CACHE_STRIPES; ++i)
         {
             lock (visibilityLocks[i])
                 totalVisibility += visibilityCaches[i].Count;
         }
+
         if (totalVisibility > VISIBILITY_CACHE_MAX_SIZE)
             ClearVisibilityCaches();
     }
@@ -327,16 +331,17 @@ public partial class VoxelPathfind
         nodes.TrimExcess();
         nodeLookup.TrimExcess();
         openList.TrimExcess();
-        l1PathSet               = null;
-        l0PathSet               = null;
-        l1CorridorDistance      = null;
-        l0CorridorDistance      = null;
-        l1DistanceField         = null;
-        l0DistanceField         = null;
-        l1FloodFillVisited      = null;
-        l1BfsQueue              = null;
+        l1PathSet                = null;
+        l0PathSet                = null;
+        l1CorridorDistance       = null;
+        l0CorridorDistance       = null;
+        l1DistanceField          = null;
+        l0DistanceField          = null;
+        l1FloodFillVisited       = null;
+        l1BfsQueue               = null;
         parallelEvaluationBuffer = Array.Empty<VolumeNeighbourEvaluation?>();
         ClearVisibilityCaches();
+
         lock (cacheLock)
         {
             voxelWallMaskCache.Clear();

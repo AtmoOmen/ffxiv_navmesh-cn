@@ -44,16 +44,16 @@ internal sealed class NavmeshFlightQuery
             return CreateFlightFailure(to);
         }
 
-        var requestedStartLeaf = volume.FindLeafVoxel(from);
+        var requestedStartLeaf  = volume.FindLeafVoxel(from);
         var requestedTargetLeaf = volume.FindLeafVoxel(to);
-        var safeStart = !startLocate.UsedSurfaceAnchor && requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel
-                            ? from
-                            : startLocate.SafePoint;
-        var safeDestination = !endLocate.UsedSurfaceAnchor && requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel
-                                  ? to
-                                  : endLocate.SafePoint;
+        var safeStart = !startLocate.UsedSurfaceAnchor && requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ?
+                            from :
+                            startLocate.SafePoint;
+        var safeDestination = !endLocate.UsedSurfaceAnchor && requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ?
+                                  to :
+                                  endLocate.SafePoint;
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
-        var searchTimer = StopWatchTimer.Create();
+        var searchTimer             = StopWatchTimer.Create();
         var voxelPath = volumeQuery.FindPath
             (startVoxel, endVoxel, safeStart, safeDestination, false, cancel);
         var telemetry = volumeQuery.LastTelemetry;
@@ -65,7 +65,10 @@ internal sealed class NavmeshFlightQuery
 
         if (voxelPath.Count == 0)
         {
-            Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空，终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，访问节点 = {telemetry.VisitedNodes}");
+            Service.Log.Error
+            (
+                $"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 体素路径为空，终止 = {GetLogVolumeSearchTermination(telemetry.Termination)}，访问节点 = {telemetry.VisitedNodes}"
+            );
             return CreateFlightFailure(to);
         }
 
@@ -107,14 +110,14 @@ internal sealed class NavmeshFlightQuery
                     [
                         new()
                         {
-                            MovementMode         = MovementMode.Flight,
-                            SegmentKind          = MovementSegmentKind.FlightTraverse,
-                            AllowVerticalControl = true,
-                            GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                            MovementMode           = MovementMode.Flight,
+                            SegmentKind            = MovementSegmentKind.FlightTraverse,
+                            AllowVerticalControl   = true,
+                            GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
                             TraversalStartPosition = from,
-                            StartPosition        = from,
-                            EndPosition          = partialDestination,
-                            Points               = [.. rawWaypoints]
+                            StartPosition          = from,
+                            EndPosition            = partialDestination,
+                            Points                 = [.. rawWaypoints]
                         }
                     ]
                 };
@@ -145,11 +148,15 @@ internal sealed class NavmeshFlightQuery
             $"[算路] 飞行终点解析：请求终点 = {to:f3}，空体素终点 = {safeDestination:f3}，落地点 = {(landingPoint is { } lp ? lp.ToString("f3") : "无")}，最终终点 = {finalDestination:f3}，落地吸附 = {(landingPoint != null ? "是" : "否")}"
         );
 
-        var finalDestinationTolerance = landingPoint != null ? completionTolerance : 0;
+        var finalDestinationTolerance = landingPoint != null ?
+                                            completionTolerance :
+                                            0;
 
         return new()
         {
-            Status               = destinationAdjusted ? PathfindStatus.Partial : PathfindStatus.Complete,
+            Status = destinationAdjusted ?
+                         PathfindStatus.Partial :
+                         PathfindStatus.Complete,
             RequestedMode        = MovementMode.Flight,
             RequestedDestination = to,
             FinalDestination     = finalDestination,
@@ -158,14 +165,14 @@ internal sealed class NavmeshFlightQuery
             [
                 new()
                 {
-                    MovementMode         = MovementMode.Flight,
-                    SegmentKind          = MovementSegmentKind.FlightTraverse,
-                    AllowVerticalControl = true,
-                    GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                    MovementMode           = MovementMode.Flight,
+                    SegmentKind            = MovementSegmentKind.FlightTraverse,
+                    AllowVerticalControl   = true,
+                    GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
                     TraversalStartPosition = from,
-                    StartPosition        = from,
-                    EndPosition          = finalDestination,
-                    Points               = [.. rawWaypoints]
+                    StartPosition          = from,
+                    EndPosition            = finalDestination,
+                    Points                 = [.. rawWaypoints]
                 }
             ]
         };
@@ -239,7 +246,7 @@ internal sealed class NavmeshFlightQuery
         );
 
         var approachLocate = query.FindNearestVolumeVoxelSurfaceAware(candidate, transitionTolerance, MathF.Max(toleranceFloor, verticalDrop));
-        var approachVoxel = approachLocate.Voxel;
+        var approachVoxel  = approachLocate.Voxel;
         if (approachVoxel == VoxelMap.INVALID_VOXEL)
             return candidate;
 
@@ -307,14 +314,14 @@ internal sealed class NavmeshFlightQuery
         [
             new()
             {
-                MovementMode         = MovementMode.Flight,
-                SegmentKind          = MovementSegmentKind.FlightTraverse,
-                AllowVerticalControl = true,
-                GeometryKind         = PlannerSegmentGeometryKind.DiscretePoints,
+                MovementMode           = MovementMode.Flight,
+                SegmentKind            = MovementSegmentKind.FlightTraverse,
+                AllowVerticalControl   = true,
+                GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
                 TraversalStartPosition = requestedStart,
-                StartPosition        = requestedStart,
-                EndPosition          = transitionPoint,
-                Points               = flightWaypoints
+                StartPosition          = requestedStart,
+                EndPosition            = transitionPoint,
+                Points                 = flightWaypoints
             }
         ];
         foreach (var segment in groundResult.Segments)
@@ -363,7 +370,7 @@ internal sealed class NavmeshFlightQuery
 
     private static float ComputeNearGoalThreshold(VoxelMap volume)
     {
-        var l1CellSize = volume.Levels[1].CellSize;
+        var l1CellSize  = volume.Levels[1].CellSize;
         var maxL1Extent = MathF.Max(l1CellSize.X, MathF.Max(l1CellSize.Y, l1CellSize.Z));
         return maxL1Extent * 2f;
     }
@@ -374,5 +381,4 @@ internal sealed class NavmeshFlightQuery
         var dz = left.Z           - right.Z;
         return MathF.Sqrt(dx * dx + dz * dz);
     }
-
 }

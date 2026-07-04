@@ -59,12 +59,14 @@ public partial class VoxelPathfind
         bestScore       = float.MaxValue;
 
         // 预计算邻居位置，避免祖先链中重复调用 ResolveVoxelCenter
-        var neighbourPosition = neighbourVoxel == goalVoxel ? goalPos : ResolveVoxelCenter(neighbourVoxel);
+        var neighbourPosition = neighbourVoxel == goalVoxel ?
+                                    goalPos :
+                                    ResolveVoxelCenter(neighbourVoxel);
 
-        var nodeSpan      = NodeSpan;
-        ref var current   = ref nodeSpan[currentIndex];
-        var currentGScore = current.GScore;
-        var edgeCost      = Vector3.Distance(current.Position, neighbourPosition);
+        var     nodeSpan      = NodeSpan;
+        ref var current       = ref nodeSpan[currentIndex];
+        var     currentGScore = current.GScore;
+        var     edgeCost      = Vector3.Distance(current.Position, neighbourPosition);
 
         // 预检：邻居已关闭则直接跳过（ApplyNeighbourEvaluation 也会跳过，提前省掉 LoS）
         if (nodeLookup.TryGetValue(neighbourVoxel, out var existingIndex))
@@ -75,7 +77,8 @@ public partial class VoxelPathfind
         }
 
         var requireDirectVisibility = VoxelIndexUtil.IsCoarseNeighbour(neighbourVoxel);
-        if (!TryEvaluateCandidate(currentIndex, neighbourVoxel, neighbourPosition, edgeCost, requireDirectVisibility, ref bestParentIndex, ref bestPosition, ref bestScore))
+        if (!TryEvaluateCandidate
+                (currentIndex, neighbourVoxel, neighbourPosition, edgeCost, requireDirectVisibility, ref bestParentIndex, ref bestPosition, ref bestScore))
             return false;
 
         var earlyStopThreshold = currentGScore + edgeCost * 0.8f;
@@ -105,10 +108,11 @@ public partial class VoxelPathfind
 
         for (var i = 0; i < ancestorCount && lookBackCount < effectiveLookBack; ++i)
         {
-            var ancestorIndex = ancestorChain[i];
+            var ancestorIndex    = ancestorChain[i];
             var ancestorEdgeCost = Vector3.Distance(nodeSpan[ancestorIndex].Position, neighbourPosition);
 
-            if (!TryEvaluateCandidate(ancestorIndex, neighbourVoxel, neighbourPosition, ancestorEdgeCost, true, ref bestParentIndex, ref bestPosition, ref bestScore))
+            if (!TryEvaluateCandidate
+                    (ancestorIndex, neighbourVoxel, neighbourPosition, ancestorEdgeCost, true, ref bestParentIndex, ref bestPosition, ref bestScore))
             {
                 ++lookBackCount;
                 continue;
@@ -134,6 +138,7 @@ public partial class VoxelPathfind
             var rootIndex = ancestorChain[ancestorCount - 1];
 
             ref var rootNode = ref nodeSpan[rootIndex];
+
             if (rootNode.ParentIndex != rootIndex)
             {
                 while (true)

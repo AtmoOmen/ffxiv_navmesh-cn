@@ -51,6 +51,7 @@ public record class Navmesh
 
     public int GeneratedClimbDownLinkCount { get; set; }
     public int GeneratedEdgeJumpLinkCount  { get; set; }
+
     public bool HasHeuristicSensitiveOffMeshLinks
     {
         get
@@ -135,9 +136,9 @@ public record class Navmesh
         var requiresRewrite = volumeSegment.Codec != CacheCodec.FastLz;
         var source          = reader.BaseStream;
         var (meshPayload, meshTelemetry) = DecodeDeferredMeshSegment(meshSegment, source);
-        var (volume, volumeTelemetry) = volumeSegment.Codec == CacheCodec.FastLz
-                                            ? DecodeDeferredVolumeSegment(volumeSegment, source)
-                                            : DecodeSegment(volumeSegment, source, DeserializeVolume);
+        var (volume, volumeTelemetry) = volumeSegment.Codec == CacheCodec.FastLz ?
+                                            DecodeDeferredVolumeSegment(volumeSegment, source) :
+                                            DecodeSegment(volumeSegment, source, DeserializeVolume);
         var navmesh = new Navmesh(customizationVersion, buildSignature, customizationApplied, null!, volume);
         navmesh.SetDeferredMeshPayload(meshPayload, meshSegment.Codec, meshSegment.UncompressedBytes);
         return new(navmesh, new(meshTelemetry, volumeTelemetry), requiresRewrite);
@@ -897,13 +898,13 @@ public record class Navmesh
             for (var connectionIndex = 0; connectionIndex < tile.data.header.offMeshConCount; ++connectionIndex)
             {
                 var offMeshConnection = tile.data.offMeshCons[connectionIndex];
-                var poly             = tile.data.polys[offMeshConnection.poly];
+                var poly              = tile.data.polys[offMeshConnection.poly];
                 if (poly == null)
                     continue;
 
-                if ((NavmeshArea)poly.GetArea() != (NavmeshArea)connection.Area ||
-                    poly.flags                   != connection.Flags             ||
-                    offMeshConnection.userId     != connection.UserId            ||
+                if ((NavmeshArea)poly.GetArea()    != (NavmeshArea)connection.Area ||
+                    poly.flags                     != connection.Flags             ||
+                    offMeshConnection.userId       != connection.UserId            ||
                     (offMeshConnection.flags != 0) != connection.Bidirectional)
                     continue;
 

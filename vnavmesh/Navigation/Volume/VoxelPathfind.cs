@@ -17,23 +17,23 @@ public partial class VoxelPathfind
     private readonly float       bestNodeRelativeHTolerance;
     private readonly List<ulong> neighbourScratch = new(64);
 
-    private readonly List<VolumePathfindNode>                        nodes                        = new(1024);
-    private          VoxelNodeLookup                                 nodeLookup                   = new(2048);
-    private readonly Dictionary<ulong, byte>                         voxelWallMaskCache           = new(4096);
-    private readonly Dictionary<ulong, byte>                         verifiedDownwardOpeningCache = new(2048);
-    private readonly Dictionary<ulong, byte>                         verifiedTopEntryCache        = new(2048);
-    private readonly Dictionary<ulong, ulong>                        l1FaceConnectivityCache      = new(2048);
-    private readonly Dictionary<(ulong, ulong), bool>                l1FaceTransitionCache        = new(2048);
-    private readonly List<int>                                       openList                     = new(256);
-    private readonly Dictionary<VolumeVisibilityKey, bool>[]         visibilityCaches;
-    private readonly object[]                                        visibilityLocks;
-    private readonly Dictionary<(ulong, ulong), bool>               pathLoSCache                 = new(1024);
-    private readonly Dictionary<(ulong, int), float>                clearanceCache               = new(1024);
-    private readonly object                                          cacheLock                    = new();
-    private          VolumeNeighbourEvaluation?[]                    parallelEvaluationBuffer     = Array.Empty<VolumeNeighbourEvaluation?>();
-    private readonly ParallelOptions                                 parallelOptions              = new() { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) };
-    private          bool[]?                                         l1FloodFillVisited;
-    private          Queue<ushort>?                                  l1BfsQueue;
+    private readonly List<VolumePathfindNode>                nodes                        = new(1024);
+    private          VoxelNodeLookup                         nodeLookup                   = new(2048);
+    private readonly Dictionary<ulong, byte>                 voxelWallMaskCache           = new(4096);
+    private readonly Dictionary<ulong, byte>                 verifiedDownwardOpeningCache = new(2048);
+    private readonly Dictionary<ulong, byte>                 verifiedTopEntryCache        = new(2048);
+    private readonly Dictionary<ulong, ulong>                l1FaceConnectivityCache      = new(2048);
+    private readonly Dictionary<(ulong, ulong), bool>        l1FaceTransitionCache        = new(2048);
+    private readonly List<int>                               openList                     = new(256);
+    private readonly Dictionary<VolumeVisibilityKey, bool>[] visibilityCaches;
+    private readonly object[]                                visibilityLocks;
+    private readonly Dictionary<(ulong, ulong), bool>        pathLoSCache             = new(1024);
+    private readonly Dictionary<(ulong, int), float>         clearanceCache           = new(1024);
+    private readonly object                                  cacheLock                = new();
+    private          VolumeNeighbourEvaluation?[]            parallelEvaluationBuffer = Array.Empty<VolumeNeighbourEvaluation?>();
+    private readonly ParallelOptions                         parallelOptions          = new() { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) };
+    private          bool[]?                                 l1FloodFillVisited;
+    private          Queue<ushort>?                          l1BfsQueue;
 
     private int                        bestNodeIndex;
     private ulong                      goalVoxel;
@@ -95,6 +95,7 @@ public partial class VoxelPathfind
 
         visibilityCaches = new Dictionary<VolumeVisibilityKey, bool>[VISIBILITY_CACHE_STRIPES];
         visibilityLocks  = new object[VISIBILITY_CACHE_STRIPES];
+
         for (var i = 0; i < VISIBILITY_CACHE_STRIPES; ++i)
         {
             visibilityCaches[i] = new(256);
@@ -124,13 +125,13 @@ public partial class VoxelPathfind
         bool              allowRelay
     )
     {
-        l1PathSet                  = null;
-        l0PathSet                  = null;
-        l1CorridorDistance         = null;
-        l0CorridorDistance         = null;
-        l1DistanceField            = null;
-        l0DistanceField            = null;
-        previouslyVisitedVoxels    = null;
+        l1PathSet               = null;
+        l0PathSet               = null;
+        l1CorridorDistance      = null;
+        l0CorridorDistance      = null;
+        l1DistanceField         = null;
+        l0DistanceField         = null;
+        previouslyVisitedVoxels = null;
 
         if (fromVoxel == toVoxel)
         {
@@ -173,13 +174,13 @@ public partial class VoxelPathfind
         {
             var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, 1, cancel);
 
-        if (lastTermination != VolumeSearchTermination.ReachedGoal)
-        {
-            RetainClosedSetKnowledge();
-            path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
-        }
+            if (lastTermination != VolumeSearchTermination.ReachedGoal)
+            {
+                RetainClosedSetKnowledge();
+                path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
+            }
 
-        return RefineSimplifiedPath(path, cancel);
+            return RefineSimplifiedPath(path, cancel);
         }
 
         if (TryCreateGuidedCorridor(fromPos, toPos, out var corridor))
@@ -209,9 +210,9 @@ public partial class VoxelPathfind
 
             Service.Log.Debug
             (
-                guidedCorridorEarlyAbortTriggered
-                    ? $"[算路] 飞行体素定向走廊搜索提前回退（进展停滞），访问节点 = {visitedNodes}，最佳距离 = {NodeSpan[bestNodeIndex].HScore:f3}，当前高差余量 = {MathF.Max(NodeSpan[bestNodeIndex].Position.Y - goalPos.Y, 0f):f3}"
-                    : $"[算路] 飞行体素定向走廊搜索未达终点（{lastTermination}），回退侧向探测/全搜索"
+                guidedCorridorEarlyAbortTriggered ?
+                    $"[算路] 飞行体素定向走廊搜索提前回退（进展停滞），访问节点 = {visitedNodes}，最佳距离 = {NodeSpan[bestNodeIndex].HScore:f3}，当前高差余量 = {MathF.Max(NodeSpan[bestNodeIndex].Position.Y - goalPos.Y, 0f):f3}" :
+                    $"[算路] 飞行体素定向走廊搜索未达终点（{lastTermination}），回退侧向探测/全搜索"
             );
         }
 
@@ -224,14 +225,16 @@ public partial class VoxelPathfind
         // Partial 接力：用当前路径终点作为新起点重新搜索
         if (allowRelay && longRangePath.Count > 0)
         {
-            var relayPoint    = longRangePath[^1];
+            var relayPoint = longRangePath[^1];
             var (relayVoxel, relayEmpty) = Volume.FindLeafVoxel(relayPoint.p);
+
             if (relayEmpty && relayVoxel != VoxelMap.INVALID_VOXEL && relayVoxel != fromVoxel)
             {
                 var remainingDistance = Vector3.Distance(relayPoint.p, toPos);
                 Service.Log.Debug($"[算路] 飞行体素 Partial 接力搜索：接力点 = {relayPoint.p:f3}，剩余距离 = {remainingDistance:f3}");
 
                 var relayPath = FindPathInternal(relayVoxel, toVoxel, relayPoint.p, toPos, returnIntermediatePoints, cancel, allowRelay: false);
+
                 if (relayPath.Count > 0)
                 {
                     var mergedPath = VoxelPathUtil.MergePathSegments(longRangePath, relayPath, SCORE_EPSILON);
@@ -240,6 +243,8 @@ public partial class VoxelPathfind
             }
         }
 
-        return longRangePath.Count > 0 ? RefineSimplifiedPath(longRangePath, cancel) : [];
+        return longRangePath.Count > 0 ?
+                   RefineSimplifiedPath(longRangePath, cancel) :
+                   [];
     }
 }

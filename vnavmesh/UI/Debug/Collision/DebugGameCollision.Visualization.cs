@@ -17,7 +17,8 @@ public unsafe partial class DebugGameCollision
     public bool IsBoundsWithinEditorRenderDistance(AABB bounds)
     {
         var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
-        return playerPosition == null || IsBoundsWithinRenderDistance(bounds.Min, bounds.Max, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance);
+        return playerPosition == null ||
+               IsBoundsWithinRenderDistance(bounds.Min, bounds.Max, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance);
     }
 
     public bool IsSegmentWithinEditorRenderDistance(Vector3 start, Vector3 end)
@@ -40,7 +41,7 @@ public unsafe partial class DebugGameCollision
         var closestZ = Math.Clamp(playerPosition.Value.Z, bounds.Min.Z, bounds.Max.Z);
         var dx       = playerPosition.Value.X - closestX;
         var dz       = playerPosition.Value.Z - closestZ;
-        return MathF.Sqrt(dx * dx + dz * dz);
+        return MathF.Sqrt(dx * dx             + dz * dz);
     }
 
     public void VisualizeCollider(Collider* coll, BitMask filterId, BitMask filterMask, bool drawLine = true)
@@ -69,7 +70,22 @@ public unsafe partial class DebugGameCollision
             }
                 break;
             case ColliderType.Mesh:
-                VisualizeColliderMesh((ColliderMesh*)coll, new(_streamedMeshes.Contains((nint)coll) ? 0 : 1, 1, 0, 0.7f), filterId, filterMask, playerPosition);
+                VisualizeColliderMesh
+                (
+                    (ColliderMesh*)coll,
+                    new
+                    (
+                        _streamedMeshes.Contains((nint)coll) ?
+                            0 :
+                            1,
+                        1,
+                        0,
+                        0.7f
+                    ),
+                    filterId,
+                    filterMask,
+                    playerPosition
+                );
                 break;
             case ColliderType.Box:
             {
@@ -77,8 +93,8 @@ public unsafe partial class DebugGameCollision
                 var render = GetDynamicMeshes();
                 if (!CanAddDynamicMesh(render, 8, 12, 1))
                     break;
-                var box    = new AnalyticMeshBox(render);
-                var icnt   = render.NumInstances;
+                var box  = new AnalyticMeshBox(render);
+                var icnt = render.NumInstances;
                 render.AddInstance(new(cast->World, new(1, 0, 0, 0.7f)));
                 render.AddMesh(box.FirstVertex, box.FirstPrimitive, box.NumPrimitives, icnt, 1);
             }
@@ -152,7 +168,7 @@ public unsafe partial class DebugGameCollision
 
         if (node->NumPrims > 0)
         {
-            var renderer = GetDynamicMeshes();
+            var renderer    = GetDynamicMeshes();
             var numVertices = node->NumVertsRaw + node->NumVertsCompressed;
             if (!CanAddDynamicMesh(renderer, numVertices, node->NumPrims, 1))
                 return;
@@ -273,17 +289,35 @@ public unsafe partial class DebugGameCollision
 
     private bool ShouldVisualizeCollider(Collider* coll, Vector3? playerPosition)
     {
-        if (coll == null || playerPosition == null)
+        if (coll        == null || playerPosition == null)
             return coll != null;
 
         return coll->GetColliderType() switch
         {
-            ColliderType.Mesh => IsBoundsWithinRenderDistance(((ColliderMesh*)coll)->WorldBoundingBox.Min, ((ColliderMesh*)coll)->WorldBoundingBox.Max, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
-            ColliderType.Box => IsLocalBoundsWithinRenderDistance(ref ((ColliderBox*)coll)->World, new(-1, -1, -1), new(1, 1, 1), playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
-            ColliderType.Cylinder => IsLocalBoundsWithinRenderDistance(ref ((ColliderCylinder*)coll)->World, new(-1, -1, -1), new(1, 1, 1), playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
-            ColliderType.Sphere => IsSphereWithinRenderDistance(((ColliderSphere*)coll)->Translation, MathF.Max(((ColliderSphere*)coll)->Scale.X, MathF.Max(((ColliderSphere*)coll)->Scale.Y, ((ColliderSphere*)coll)->Scale.Z)), playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
-            ColliderType.Plane => IsPointWithinRenderDistance(((ColliderPlane*)coll)->Translation, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
-            ColliderType.PlaneTwoSided => IsPointWithinRenderDistance(((ColliderPlane*)coll)->Translation, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
+            ColliderType.Mesh => IsBoundsWithinRenderDistance
+            (
+                ((ColliderMesh*)coll)->WorldBoundingBox.Min,
+                ((ColliderMesh*)coll)->WorldBoundingBox.Max,
+                playerPosition.Value,
+                _renderHorizontalDistance,
+                _renderVerticalDistance
+            ),
+            ColliderType.Box => IsLocalBoundsWithinRenderDistance
+                (ref ((ColliderBox*)coll)->World, new(-1, -1, -1), new(1, 1, 1), playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
+            ColliderType.Cylinder => IsLocalBoundsWithinRenderDistance
+                (ref ((ColliderCylinder*)coll)->World, new(-1, -1, -1), new(1, 1, 1), playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
+            ColliderType.Sphere => IsSphereWithinRenderDistance
+            (
+                ((ColliderSphere*)coll)->Translation,
+                MathF.Max(((ColliderSphere*)coll)->Scale.X, MathF.Max(((ColliderSphere*)coll)->Scale.Y, ((ColliderSphere*)coll)->Scale.Z)),
+                playerPosition.Value,
+                _renderHorizontalDistance,
+                _renderVerticalDistance
+            ),
+            ColliderType.Plane => IsPointWithinRenderDistance
+                (((ColliderPlane*)coll)->Translation, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
+            ColliderType.PlaneTwoSided => IsPointWithinRenderDistance
+                (((ColliderPlane*)coll)->Translation, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance),
             _ => true
         };
     }
@@ -291,7 +325,8 @@ public unsafe partial class DebugGameCollision
     private bool IsNodeWithinRenderDistance(MeshPCB.FileNode* node, Matrix4x3 world, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
         => IsLocalBoundsWithinRenderDistance(ref world, node->LocalBounds.Min, node->LocalBounds.Max, playerPosition, maxHorizontalDistance, maxVerticalDistance);
 
-    private bool IsLocalBoundsWithinRenderDistance(ref Matrix4x3 world, Vector3 localMin, Vector3 localMax, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    private bool IsLocalBoundsWithinRenderDistance
+        (ref Matrix4x3 world, Vector3 localMin, Vector3 localMax, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
     {
         var min = world.TransformCoordinate(localMin);
         var max = min;
@@ -334,8 +369,8 @@ public unsafe partial class DebugGameCollision
 
         var closestX = Math.Clamp(playerPosition.X, min.X, max.X);
         var closestZ = Math.Clamp(playerPosition.Z, min.Z, max.Z);
-        var dx = playerPosition.X - closestX;
-        var dz = playerPosition.Z - closestZ;
+        var dx       = playerPosition.X - closestX;
+        var dz       = playerPosition.Z - closestZ;
         return dx * dx + dz * dz <= maxHorizontalDistance * maxHorizontalDistance;
     }
 }

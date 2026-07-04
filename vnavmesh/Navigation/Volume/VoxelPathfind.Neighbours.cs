@@ -15,8 +15,12 @@ public partial class VoxelPathfind
         var l1Index      = VoxelMap.DecodeIndex(ref encodedVoxel);
         var l2Index      = VoxelMap.DecodeIndex(ref encodedVoxel);
         var l0Coords     = l0Desc.IndexToVoxel(l0Index);
-        var l1Coords     = l1Index != VoxelMap.INDEX_LEVEL_MASK ? l1Desc.IndexToVoxel(l1Index) : default;
-        var l2Coords     = l2Index != VoxelMap.INDEX_LEVEL_MASK ? l2Desc.IndexToVoxel(l2Index) : default;
+        var l1Coords = l1Index != VoxelMap.INDEX_LEVEL_MASK ?
+                           l1Desc.IndexToVoxel(l1Index) :
+                           default;
+        var l2Coords = l2Index != VoxelMap.INDEX_LEVEL_MASK ?
+                           l2Desc.IndexToVoxel(l2Index) :
+                           default;
 
         CollectDirection(l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, 0,  -1, 0);
         CollectDirection(l0Index, l1Index, l2Index, l0Coords, l1Coords, l2Coords, 0,  +1, 0);
@@ -238,7 +242,9 @@ public partial class VoxelPathfind
         if (!Volume.IsEmpty(voxel))
             return false;
 
-        return dy < 0 ? HasVerifiedTopEntry(voxel) : HasDownwardOpening(voxel);
+        return dy < 0 ?
+                   HasVerifiedTopEntry(voxel) :
+                   HasDownwardOpening(voxel);
     }
 
     private void CollectBorder(ulong voxel, VolumeLevel levelDesc, int level, int dx, int dy, int dz)

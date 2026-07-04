@@ -323,9 +323,14 @@ public class NavmeshRasterizer
 
             public Entry(int next, int voxelY, float preciseY, bool normalUp)
             {
-                Next    = next;
-                SortKey = (uint)((preciseY + 1024) * ValueScale) << 1 | (normalUp ? 1u : 0);
-                VoxelY  = normalUp ? voxelY : -voxelY;
+                Next = next;
+                SortKey = (uint)((preciseY + 1024) * ValueScale) << 1 |
+                          (normalUp ?
+                               1u :
+                               0);
+                VoxelY = normalUp ?
+                             voxelY :
+                             -voxelY;
             }
         }
 
@@ -427,13 +432,13 @@ public class NavmeshRasterizer
     private readonly int _tileX;
     private readonly int _tileZ;
     private readonly ScratchBuffers _scratch;
-    private const float VolumeWallThickenNormalYThreshold = 0.15f;
-    private const int   VolumeWallThickenHorizontalRadius = 1;
-    private const float VolumePreparedProjectionNormalYThreshold = 0.35f;
-    private const float VolumeThinWallStripNormalYThreshold = 0.30f;
-    private const float VolumeThinWallStripMaxProjectedThickness = 0.55f;
-    private const float VolumeThinWallStripBaseRadius            = 0.75f;
-    private const float VolumeThinWallStripExtraPadding          = 0.20f;
+    private const    float VolumeWallThickenNormalYThreshold = 0.15f;
+    private const    int VolumeWallThickenHorizontalRadius = 1;
+    private const    float VolumePreparedProjectionNormalYThreshold = 0.35f;
+    private const    float VolumeThinWallStripNormalYThreshold = 0.30f;
+    private const    float VolumeThinWallStripMaxProjectedThickness = 0.55f;
+    private const    float VolumeThinWallStripBaseRadius = 0.75f;
+    private const    float VolumeThinWallStripExtraPadding = 0.20f;
 
     public NavmeshRasterizer
     (
@@ -449,12 +454,14 @@ public class NavmeshRasterizer
         int             tileZ   = -1
     )
     {
-        _heightfield             = heightfield;
-        _telemetry               = telemetry;
-        _voxelizer               = voxelizer;
-        _scratch                 = scratch ?? new();
-        _iset                    = _scratch.AcquireIntersectionSet(fillInteriors, heightfield.width, heightfield.height);
-        _terrainSpans            = tileX >= 0 && tileZ >= 0 ? _scratch.AcquireTerrainSpanBuffer(heightfield.width * heightfield.height) : null;
+        _heightfield = heightfield;
+        _telemetry   = telemetry;
+        _voxelizer   = voxelizer;
+        _scratch     = scratch ?? new();
+        _iset        = _scratch.AcquireIntersectionSet(fillInteriors, heightfield.width, heightfield.height);
+        _terrainSpans = tileX >= 0 && tileZ >= 0 ?
+                            _scratch.AcquireTerrainSpanBuffer(heightfield.width * heightfield.height) :
+                            null;
         _invCellXZ               = 1.0f / _heightfield.cs;
         _invCellY                = 1.0f / _heightfield.ch;
         _maxY                    = (int)((_heightfield.bmax.Y - _heightfield.bmin.Y) * _invCellY);
@@ -501,12 +508,31 @@ public class NavmeshRasterizer
                     var z1 = Math.Clamp((int)((instance.WorldBounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
                     var x0 = Math.Clamp((int)((instance.WorldBounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
                     var x1 = Math.Clamp((int)((instance.WorldBounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
-                    FillInterior(z0, z1, x0, x1, solidBelowNonManifold ? minY : _maxY);
+                    FillInterior
+                    (
+                        z0,
+                        z1,
+                        x0,
+                        x1,
+                        solidBelowNonManifold ?
+                            minY :
+                            _maxY
+                    );
                 }
             }
         }
 
-        if (!perMeshInteriors) FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
+        if (!perMeshInteriors)
+            FillInterior
+            (
+                0,
+                _heightfield.height - 1,
+                0,
+                _heightfield.width - 1,
+                solidBelowNonManifold ?
+                    0 :
+                    _maxY
+            );
     }
 
     public void Rasterize
@@ -528,11 +554,30 @@ public class NavmeshRasterizer
                 var z1 = Math.Clamp((int)((instance.WorldBounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
                 var x0 = Math.Clamp((int)((instance.WorldBounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
                 var x1 = Math.Clamp((int)((instance.WorldBounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
-                FillInterior(z0, z1, x0, x1, solidBelowNonManifold ? minY : _maxY);
+                FillInterior
+                (
+                    z0,
+                    z1,
+                    x0,
+                    x1,
+                    solidBelowNonManifold ?
+                        minY :
+                        _maxY
+                );
             }
         }
 
-        if (!perMeshInteriors) FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
+        if (!perMeshInteriors)
+            FillInterior
+            (
+                0,
+                _heightfield.height - 1,
+                0,
+                _heightfield.width - 1,
+                solidBelowNonManifold ?
+                    0 :
+                    _maxY
+            );
     }
 
     public void Rasterize
@@ -554,11 +599,30 @@ public class NavmeshRasterizer
                 var z1 = Math.Clamp((int)((instance.WorldBounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
                 var x0 = Math.Clamp((int)((instance.WorldBounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
                 var x1 = Math.Clamp((int)((instance.WorldBounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
-                FillInterior(z0, z1, x0, x1, solidBelowNonManifold ? minY : _maxY);
+                FillInterior
+                (
+                    z0,
+                    z1,
+                    x0,
+                    x1,
+                    solidBelowNonManifold ?
+                        minY :
+                        _maxY
+                );
             }
         }
 
-        if (!perMeshInteriors) FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
+        if (!perMeshInteriors)
+            FillInterior
+            (
+                0,
+                _heightfield.height - 1,
+                0,
+                _heightfield.width - 1,
+                solidBelowNonManifold ?
+                    0 :
+                    _maxY
+            );
     }
 
     public void Rasterize
@@ -580,11 +644,30 @@ public class NavmeshRasterizer
                 var z1 = Math.Clamp((int)((partInstance.Instance.WorldBounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
                 var x0 = Math.Clamp((int)((partInstance.Instance.WorldBounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
                 var x1 = Math.Clamp((int)((partInstance.Instance.WorldBounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
-                FillInterior(z0, z1, x0, x1, solidBelowNonManifold ? minY : _maxY);
+                FillInterior
+                (
+                    z0,
+                    z1,
+                    x0,
+                    x1,
+                    solidBelowNonManifold ?
+                        minY :
+                        _maxY
+                );
             }
         }
 
-        if (!perMeshInteriors) FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
+        if (!perMeshInteriors)
+            FillInterior
+            (
+                0,
+                _heightfield.height - 1,
+                0,
+                _heightfield.width - 1,
+                solidBelowNonManifold ?
+                    0 :
+                    _maxY
+            );
     }
 
     internal void Rasterize(ReadOnlySpan<RasterJob> jobs, bool perMeshInteriors, bool solidBelowNonManifold, Action<RasterJob>? onJobFinished = null)
@@ -597,7 +680,16 @@ public class NavmeshRasterizer
                 var z1 = Math.Clamp((int)((job.WorldBounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
                 var x0 = Math.Clamp((int)((job.WorldBounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
                 var x1 = Math.Clamp((int)((job.WorldBounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
-                FillInterior(z0, z1, x0, x1, solidBelowNonManifold ? minY : _maxY);
+                FillInterior
+                (
+                    z0,
+                    z1,
+                    x0,
+                    x1,
+                    solidBelowNonManifold ?
+                        minY :
+                        _maxY
+                );
             }
 
             onJobFinished?.Invoke(job);
@@ -606,7 +698,16 @@ public class NavmeshRasterizer
         FlushTerrainSpans();
 
         if (!perMeshInteriors)
-            FillInterior(0, _heightfield.height - 1, 0, _heightfield.width - 1, solidBelowNonManifold ? 0 : _maxY);
+            FillInterior
+            (
+                0,
+                _heightfield.height - 1,
+                0,
+                _heightfield.width - 1,
+                solidBelowNonManifold ?
+                    0 :
+                    _maxY
+            );
     }
 
     internal bool RasterizeJob(RasterJob job, out int minimalY)
@@ -653,7 +754,9 @@ public class NavmeshRasterizer
 
         var            vertexCount   = job.VertexCount;
         Span<OutFlags> stackOutFlags = stackalloc OutFlags[256];
-        var            outFlags      = vertexCount <= 256 ? stackOutFlags[..vertexCount] : _scratch.OutFlags(vertexCount);
+        var outFlags = vertexCount <= 256 ?
+                           stackOutFlags[..vertexCount] :
+                           _scratch.OutFlags(vertexCount);
         ComputeOutFlags(prepared.WorldVertexTriples, outFlags);
         RasterizeTerrainLikePart(job.Part.PrimitiveSpan, default, job.Instance, prepared.WorldVertexTriples, outFlags, ref minimalY);
         return true;
@@ -669,18 +772,24 @@ public class NavmeshRasterizer
         Span<float>    stackWorldTriples  = stackalloc float[256 * 3];
         Span<OutFlags> stackOutFlags      = stackalloc OutFlags[256];
         var            vertexCount        = part.Vertices.Count;
-        var            outFlags           = vertexCount <= 256 ? stackOutFlags[..vertexCount] : _scratch.OutFlags(vertexCount);
-        var            terrainLike        = (meshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
+        var outFlags = vertexCount <= 256 ?
+                           stackOutFlags[..vertexCount] :
+                           _scratch.OutFlags(vertexCount);
+        var terrainLike = (meshType & (SceneExtractor.MeshType.Terrain | SceneExtractor.MeshType.AnalyticPlane)) != 0;
 
         if (terrainLike)
         {
-            var worldTriples = vertexCount <= 256 ? stackWorldTriples[..(vertexCount * 3)] : _scratch.WorldVertexTriples(vertexCount);
+            var worldTriples = vertexCount <= 256 ?
+                                   stackWorldTriples[..(vertexCount * 3)] :
+                                   _scratch.WorldVertexTriples(vertexCount);
             TransformVerticesPacked(instance, part.VertexSpan, worldTriples, outFlags);
             RasterizeTerrainLikePart(part.PrimitiveSpan, default, instance, worldTriples, outFlags, ref minimalY);
         }
         else
         {
-            var worldVertices = vertexCount <= 256 ? stackWorldVertices[..vertexCount] : _scratch.WorldVertices(vertexCount);
+            var worldVertices = vertexCount <= 256 ?
+                                    stackWorldVertices[..vertexCount] :
+                                    _scratch.WorldVertices(vertexCount);
             TransformVertices(instance, part.VertexSpan, worldVertices, outFlags);
             RasterizeGeneralPart(part.PrimitiveSpan, instance, worldVertices, outFlags, ref minimalY);
         }
@@ -698,21 +807,25 @@ public class NavmeshRasterizer
         ref int                                minimalY
     )
     {
-        Span<float> clipBuffer     = stackalloc float[7 * 3 * 4];
-        var         cellZSize      = _heightfield.cs;
-        var         cellXSize      = _heightfield.cs;
-        var         inverseCellY   = _invCellY;
-        var         heightfieldY   = _heightfield.bmin.Y;
-        var         heightfieldX   = _heightfield.bmin.X;
-        var         heightfieldZ   = _heightfield.bmin.Z;
-        ref var     primitiveRef   = ref MemoryMarshal.GetReference(primitives);
-        var         useBuckets     = !primitiveIndices.IsEmpty;
-        var         primitiveCount = useBuckets ? primitiveIndices.Length : primitives.Length;
+        Span<float> clipBuffer   = stackalloc float[7 * 3 * 4];
+        var         cellZSize    = _heightfield.cs;
+        var         cellXSize    = _heightfield.cs;
+        var         inverseCellY = _invCellY;
+        var         heightfieldY = _heightfield.bmin.Y;
+        var         heightfieldX = _heightfield.bmin.X;
+        var         heightfieldZ = _heightfield.bmin.Z;
+        ref var     primitiveRef = ref MemoryMarshal.GetReference(primitives);
+        var         useBuckets   = !primitiveIndices.IsEmpty;
+        var primitiveCount = useBuckets ?
+                                 primitiveIndices.Length :
+                                 primitives.Length;
 
         for (var primitiveIndex = 0; primitiveIndex < primitiveCount; ++primitiveIndex)
         {
-            var              primitiveSourceIndex = useBuckets ? primitiveIndices[primitiveIndex] : primitiveIndex;
-            ref readonly var p                    = ref Unsafe.Add(ref primitiveRef, primitiveSourceIndex);
+            var primitiveSourceIndex = useBuckets ?
+                                           primitiveIndices[primitiveIndex] :
+                                           primitiveIndex;
+            ref readonly var p = ref Unsafe.Add(ref primitiveRef, primitiveSourceIndex);
             if (!useBuckets && (outFlags[p.V1] & outFlags[p.V2] & outFlags[p.V3]) != OutFlags.None)
                 continue;
 
@@ -747,9 +860,13 @@ public class NavmeshRasterizer
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
             var unwalkable = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
                              !forceWalkable && unwalkableSlope;
-            var areaId        = unwalkable ? 0 : RC_WALKABLE_AREA;
-            var inverseCrossY = _iset != null && crossY != 0 ? -1.0f / crossY : 0;
-            var normalUp      = crossY > 0;
+            var areaId = unwalkable ?
+                             0 :
+                             RC_WALKABLE_AREA;
+            var inverseCrossY = _iset != null && crossY != 0 ?
+                                    -1.0f / crossY :
+                                    0;
+            var normalUp = crossY > 0;
             if (_voxelizer != null && realSolid)
                 RasterizeVolumeThinWallStrip
                 (
@@ -760,15 +877,15 @@ public class NavmeshRasterizer
                     crossY,
                     crossZ
                 );
-            var minZ          = Math.Min(v1z, Math.Min(v2z, v3z));
-            var maxZ          = Math.Max(v1z, Math.Max(v2z, v3z));
-            var z0            = Math.Clamp((int)((minZ - heightfieldZ) * _invCellXZ), -1, _heightfield.height - 1);
-            var z1            = Math.Clamp((int)((maxZ - heightfieldZ) * _invCellXZ), 0,  _heightfield.height - 1);
-            var sourceOffset  = 0;
-            var rowOffset     = 7 * 3;
-            var tmpOffset     = rowOffset + 7 * 3;
-            var remainOffset  = tmpOffset + 7 * 3;
-            var numInput      = 3;
+            var minZ         = Math.Min(v1z, Math.Min(v2z, v3z));
+            var maxZ         = Math.Max(v1z, Math.Max(v2z, v3z));
+            var z0           = Math.Clamp((int)((minZ - heightfieldZ) * _invCellXZ), -1, _heightfield.height - 1);
+            var z1           = Math.Clamp((int)((maxZ - heightfieldZ) * _invCellXZ), 0,  _heightfield.height - 1);
+            var sourceOffset = 0;
+            var rowOffset    = 7 * 3;
+            var tmpOffset    = rowOffset + 7 * 3;
+            var remainOffset = tmpOffset + 7 * 3;
+            var numInput     = 3;
 
             CopyVertexTriplet(clipBuffer, sourceOffset,     worldVertices, offset1);
             CopyVertexTriplet(clipBuffer, sourceOffset + 3, worldVertices, offset2);
@@ -859,6 +976,7 @@ public class NavmeshRasterizer
                 continue;
 
             ref readonly var primitive = ref Unsafe.Add(ref primitiveRef, primitiveIndex);
+
             if (_voxelizer != null && info.RealSolid)
             {
                 var offset1 = primitive.V1 * 3;
@@ -873,17 +991,18 @@ public class NavmeshRasterizer
                 var v3x     = worldVertices[offset3];
                 var v3y     = worldVertices[offset3 + 1];
                 var v3z     = worldVertices[offset3 + 2];
-                var v12x    = v2x - v1x;
-                var v12y    = v2y - v1y;
-                var v12z    = v2z - v1z;
-                var v13x    = v3x - v1x;
-                var v13y    = v3y - v1y;
-                var v13z    = v3z - v1z;
+                var v12x    = v2x         - v1x;
+                var v12y    = v2y         - v1y;
+                var v12z    = v2z         - v1z;
+                var v13x    = v3x         - v1x;
+                var v13y    = v3y         - v1y;
+                var v13z    = v3z         - v1z;
                 var crossX  = v12y * v13z - v12z * v13y;
                 var crossY  = v12z * v13x - v12x * v13z;
                 var crossZ  = v12x * v13y - v12y * v13x;
                 RasterizeVolumeThinWallStrip(new(v1x, v1y, v1z), new(v2x, v2y, v2z), new(v3x, v3y, v3z), crossX, crossY, crossZ);
             }
+
             if (info.Projected)
                 RasterizePreparedTerrainPrimitiveProjected(info, ref minimalY);
             else
@@ -1117,8 +1236,10 @@ public class NavmeshRasterizer
             var lenSq      = v12cross13.LengthSquared();
             if (lenSq == 0)
                 continue;
-            var crossY   = v12cross13.Y;
-            var invDiv   = _iset != null && crossY != 0 ? -1.0f / crossY : 0; // see below
+            var crossY = v12cross13.Y;
+            var invDiv = _iset != null && crossY != 0 ?
+                             -1.0f / crossY :
+                             0; // see below
             var normalUp = crossY > 0;
 
             var flags           = p.Flags & ~instance.ForceClearPrimFlags | instance.ForceSetPrimFlags;
@@ -1127,7 +1248,9 @@ public class NavmeshRasterizer
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
             var unwalkable = flags.HasFlag(SceneExtractor.PrimitiveFlags.ForceUnwalkable) ||
                              !forceWalkable && unwalkableSlope;
-            var areaId = unwalkable ? 0 : RC_WALKABLE_AREA;
+            var areaId = unwalkable ?
+                             0 :
+                             RC_WALKABLE_AREA;
             if (_voxelizer != null && realSolid)
                 RasterizeVolumeThinWallStrip(v1, v2, v3, v12cross13.X, crossY, v12cross13.Z);
 
@@ -1223,14 +1346,15 @@ public class NavmeshRasterizer
         ref var cellHead = ref _heightfield.spans[z * _heightfield.width + x];
 
         // find insert position for new span: skip any existing spans that end before new span start
-        var     prevMaxY = y0;
-        var     nextMinY = y1;
+        var  prevMaxY      = y0;
+        var  nextMinY      = y1;
         uint prevSpanIndex = 0;
         var  currSpanIndex = cellHead;
 
         while (currSpanIndex != 0)
         {
             ref var currSpan = ref _heightfield.Span(currSpanIndex);
+
             if (currSpan.smin > nextMinY)
             {
                 // new span should be inserted before current one
@@ -1251,7 +1375,9 @@ public class NavmeshRasterizer
             var heightDiff = currSpan.smax - y1;
             if (heightDiff > _walkableClimbThreshold || heightDiff >= -_walkableClimbThreshold && currSpan.area > areaId)
                 areaId = currSpan.area;
-            y0 = mergeFromLowerBound ? Math.Min(y0, currSpan.smin) : Math.Max(y0, currSpan.smax);
+            y0 = mergeFromLowerBound ?
+                     Math.Min(y0, currSpan.smin) :
+                     Math.Max(y0, currSpan.smax);
             y1 = Math.Max(y1, currSpan.smax);
 
             var nextSpanIndex = currSpan.next;
@@ -1264,8 +1390,8 @@ public class NavmeshRasterizer
         }
 
         // insert new span
-        var newSpanIndex = AllocSpan();
-        ref var newSpan = ref _heightfield.Span(newSpanIndex);
+        var     newSpanIndex = AllocSpan();
+        ref var newSpan      = ref _heightfield.Span(newSpanIndex);
         newSpan.smin = y0;
         newSpan.smax = y1;
         newSpan.area = areaId;
@@ -1323,14 +1449,20 @@ public class NavmeshRasterizer
             return -1;
 
         var ratio = sourceCells / targetCells;
-        return BitOperations.IsPow2((uint)ratio) ? BitOperations.Log2((uint)ratio) : -1;
+        return BitOperations.IsPow2((uint)ratio) ?
+                   BitOperations.Log2((uint)ratio) :
+                   -1;
     }
 
     private static int MapVoxelIndex(int sourceIndex, int sourceCells, int targetCells, int exactShift)
-        => exactShift >= 0 ? sourceIndex >> exactShift : (int)((long)sourceIndex * targetCells / sourceCells);
+        => exactShift >= 0 ?
+               sourceIndex >> exactShift :
+               (int)((long)sourceIndex * targetCells / sourceCells);
 
     private static int MapVoxelSpanMaxInclusive(int sourceIndex, int sourceCells, int targetCells, int exactShift)
-        => exactShift >= 0 ? sourceIndex >> exactShift : (int)(((long)(sourceIndex + 1) * targetCells - 1) / sourceCells);
+        => exactShift >= 0 ?
+               sourceIndex >> exactShift :
+               (int)(((long)(sourceIndex + 1) * targetCells - 1) / sourceCells);
 
     private void WriteVolumeSpan(int x, int z, int y0, int y1, bool includeInVolume)
     {
@@ -1342,8 +1474,8 @@ public class NavmeshRasterizer
 
     private bool TryMapVolumeSpan(int x, int z, int y0, int y1, out int volumeX, out int volumeZ, out int volumeY0, out int volumeY1)
     {
-        volumeX = 0;
-        volumeZ = 0;
+        volumeX  = 0;
+        volumeZ  = 0;
         volumeY0 = 0;
         volumeY1 = 0;
 
@@ -1401,8 +1533,8 @@ public class NavmeshRasterizer
         if (y1 < 0 || y0 >= _voxelizer.SizeY)
             return;
 
-        y0 = Math.Clamp(y0, 0,             _voxelizer.SizeY - 1);
-        y1 = Math.Clamp(y1, y0,            _voxelizer.SizeY - 1);
+        y0 = Math.Clamp(y0, 0,  _voxelizer.SizeY - 1);
+        y1 = Math.Clamp(y1, y0, _voxelizer.SizeY - 1);
         _voxelizer.AddSpan(x, z, y0, y1);
     }
 
@@ -1424,10 +1556,14 @@ public class NavmeshRasterizer
             return;
 
         var horizontalLength = MathF.Sqrt(horizontalLengthSq);
-        var dirX = normalX / horizontalLength;
-        var dirZ = normalZ / horizontalLength;
-        var stepX = Math.Abs(dirX) >= 0.35f ? Math.Sign(dirX) : 0;
-        var stepZ = Math.Abs(dirZ) >= 0.35f ? Math.Sign(dirZ) : 0;
+        var dirX             = normalX / horizontalLength;
+        var dirZ             = normalZ / horizontalLength;
+        var stepX = Math.Abs(dirX) >= 0.35f ?
+                        Math.Sign(dirX) :
+                        0;
+        var stepZ = Math.Abs(dirZ) >= 0.35f ?
+                        Math.Sign(dirZ) :
+                        0;
 
         if (stepX == 0 && stepZ == 0)
             return;
@@ -1466,7 +1602,7 @@ public class NavmeshRasterizer
 
         var minY = Math.Min(v1.Y, Math.Min(v2.Y, v3.Y));
         var maxY = Math.Max(v1.Y, Math.Max(v2.Y, v3.Y));
-        var y0   = (int)MathF.Floor((minY - _heightfield.bmin.Y) * _invCellY);
+        var y0   = (int)MathF.Floor((minY   - _heightfield.bmin.Y) * _invCellY);
         var y1   = (int)MathF.Ceiling((maxY - _heightfield.bmin.Y) * _invCellY);
         if (!TryMapVolumeYSpan(y0, y1, out var volumeY0, out var volumeY1))
             return;
@@ -1475,8 +1611,8 @@ public class NavmeshRasterizer
         var p2 = WorldToVolumePlane(v2);
         var p3 = WorldToVolumePlane(v3);
 
-        var segA = p1;
-        var segB = p2;
+        var segA  = p1;
+        var segB  = p2;
         var other = p3;
         var len12 = Vector2.DistanceSquared(p1, p2);
         var len23 = Vector2.DistanceSquared(p2, p3);
@@ -1503,11 +1639,11 @@ public class NavmeshRasterizer
             return;
 
         var radius   = MathF.Max(VolumeThinWallStripBaseRadius, projectedThickness + VolumeThinWallStripExtraPadding);
-        var minX               = Math.Max(0, (int)MathF.Floor(Math.Min(segA.X, segB.X) - radius));
-        var maxX               = Math.Min(_voxelizer.SizeX - 1, (int)MathF.Ceiling(Math.Max(segA.X, segB.X) + radius));
-        var minZ               = Math.Max(0, (int)MathF.Floor(Math.Min(segA.Y, segB.Y) - radius));
-        var maxZ               = Math.Min(_voxelizer.SizeZ - 1, (int)MathF.Ceiling(Math.Max(segA.Y, segB.Y) + radius));
-        var radiusSq           = radius * radius;
+        var minX     = Math.Max(0, (int)MathF.Floor(Math.Min(segA.X, segB.X)                      - radius));
+        var maxX     = Math.Min(_voxelizer.SizeX - 1, (int)MathF.Ceiling(Math.Max(segA.X, segB.X) + radius));
+        var minZ     = Math.Max(0, (int)MathF.Floor(Math.Min(segA.Y, segB.Y)                      - radius));
+        var maxZ     = Math.Min(_voxelizer.SizeZ - 1, (int)MathF.Ceiling(Math.Max(segA.Y, segB.Y) + radius));
+        var radiusSq = radius * radius;
 
         for (var z = minZ; z <= maxZ; ++z)
         {
@@ -1524,14 +1660,14 @@ public class NavmeshRasterizer
     {
         var sourceX = (world.X - _heightfield.bmin.X) * _invCellXZ - _heightfield.borderSize;
         var sourceZ = (world.Z - _heightfield.bmin.Z) * _invCellXZ - _heightfield.borderSize;
-        var volumeX = sourceX * _voxelizer!.SizeX / _voxSourceX;
-        var volumeZ = sourceZ * _voxelizer.SizeZ / _voxSourceZ;
+        var volumeX = sourceX                         * _voxelizer!.SizeX / _voxSourceX;
+        var volumeZ = sourceZ                         * _voxelizer.SizeZ  / _voxSourceZ;
         return new(volumeX, volumeZ);
     }
 
     private static float DistanceToSegmentSquared(Vector2 point, Vector2 a, Vector2 b)
     {
-        var ab     = b - a;
+        var ab      = b - a;
         var abLenSq = ab.LengthSquared();
         if (abLenSq <= 0.000001f)
             return Vector2.DistanceSquared(point, a);
@@ -1552,21 +1688,21 @@ public class NavmeshRasterizer
 
     private void WriteVolumeWallThicknessFromTriangle(int x, int z, int y0, int y1, ReadOnlySpan<float> worldVertices, int offset1, int offset2, int offset3)
     {
-        var v1x = worldVertices[offset1];
-        var v1y = worldVertices[offset1 + 1];
-        var v1z = worldVertices[offset1 + 2];
-        var v2x = worldVertices[offset2];
-        var v2y = worldVertices[offset2 + 1];
-        var v2z = worldVertices[offset2 + 2];
-        var v3x = worldVertices[offset3];
-        var v3y = worldVertices[offset3 + 1];
-        var v3z = worldVertices[offset3 + 2];
-        var v12x = v2x - v1x;
-        var v12y = v2y - v1y;
-        var v12z = v2z - v1z;
-        var v13x = v3x - v1x;
-        var v13y = v3y - v1y;
-        var v13z = v3z - v1z;
+        var v1x    = worldVertices[offset1];
+        var v1y    = worldVertices[offset1 + 1];
+        var v1z    = worldVertices[offset1 + 2];
+        var v2x    = worldVertices[offset2];
+        var v2y    = worldVertices[offset2 + 1];
+        var v2z    = worldVertices[offset2 + 2];
+        var v3x    = worldVertices[offset3];
+        var v3y    = worldVertices[offset3 + 1];
+        var v3z    = worldVertices[offset3 + 2];
+        var v12x   = v2x         - v1x;
+        var v12y   = v2y         - v1y;
+        var v12z   = v2z         - v1z;
+        var v13x   = v3x         - v1x;
+        var v13y   = v3y         - v1y;
+        var v13z   = v3z         - v1z;
         var crossX = v12y * v13z - v12z * v13y;
         var crossY = v12z * v13x - v12x * v13z;
         var crossZ = v12x * v13y - v12y * v13x;
@@ -1688,7 +1824,9 @@ public class NavmeshRasterizer
                             unwalkable = normal.Y < _walkableNormalThreshold;
                         }
 
-                        var areaId = unwalkable ? 0 : RC_WALKABLE_AREA;
+                        var areaId = unwalkable ?
+                                         0 :
+                                         RC_WALKABLE_AREA;
                         RcRasterizations.RasterizeTriangle(_telemetry, vertices, p.V1, p.V2, p.V3, areaId, _heightfield, _walkableClimbThreshold);
                     }
                 }

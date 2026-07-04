@@ -81,7 +81,9 @@ public unsafe partial class DebugLayout
         foreach (var instOffset in layer->InstanceOffsets)
         {
             var inst = layer->Instance(instOffset);
-            var key  = prefabKey == 0 ? (ulong)inst->Key << 32 : prefabKey | inst->Key << subShift;
+            var key = prefabKey == 0 ?
+                          (ulong)inst->Key << 32 :
+                          prefabKey | inst->Key << subShift;
 
             if (_insts.ContainsKey(key))
             {

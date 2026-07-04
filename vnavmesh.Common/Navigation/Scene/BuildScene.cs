@@ -42,7 +42,7 @@ public sealed class BuildScene
 
     public sealed class MeshPart
     {
-        public List<Vector3>   Vertices  = [];
+        public List<Vector3>   Vertices   = [];
         public List<Primitive> Primitives = [];
         public Aabb            LocalBounds;
 
@@ -79,8 +79,9 @@ public sealed class BuildScene
 
     public static BuildScene Read(BinaryReader reader)
     {
-        var scene = new BuildScene();
+        var scene     = new BuildScene();
         var meshCount = reader.ReadInt32();
+
         for (var i = 0; i < meshCount; ++i)
         {
             var key = reader.ReadString();
@@ -93,6 +94,7 @@ public sealed class BuildScene
     public void Write(BinaryWriter writer)
     {
         writer.Write(Meshes.Count);
+
         foreach (var (key, mesh) in Meshes)
         {
             writer.Write(key);
@@ -153,6 +155,7 @@ public sealed class BuildScene
     {
         part.LocalBounds.Write(writer);
         writer.Write(part.Vertices.Count);
+
         foreach (var v in part.Vertices)
         {
             writer.Write(v.X);
@@ -161,6 +164,7 @@ public sealed class BuildScene
         }
 
         writer.Write(part.Primitives.Count);
+
         foreach (var p in part.Primitives)
         {
             writer.Write(p.V1);

@@ -97,7 +97,13 @@ internal static class CustomizationEditorLeftPanel
             if (focusedPreviewInstance)
                 ImGui.SetNextItemOpen(true);
 
-            var meshOpen     = ImGui.TreeNodeEx(meshLabel, meshSelected ? ImGuiTreeNodeFlags.Selected : ImGuiTreeNodeFlags.None);
+            var meshOpen = ImGui.TreeNodeEx
+            (
+                meshLabel,
+                meshSelected ?
+                    ImGuiTreeNodeFlags.Selected :
+                    ImGuiTreeNodeFlags.None
+            );
 
             if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
                 selection = new(SelectionKind.PreviewMesh, Key: key);
@@ -126,7 +132,13 @@ internal static class CustomizationEditorLeftPanel
                                        selection.Index == partIndex &&
                                        selection.Kind is SelectionKind.PreviewPart or SelectionKind.PreviewVertex or SelectionKind.PreviewPrimitive;
 
-                    var partOpen = ImGui.TreeNodeEx(partLabel, partSelected ? ImGuiTreeNodeFlags.Selected : ImGuiTreeNodeFlags.None);
+                    var partOpen = ImGui.TreeNodeEx
+                    (
+                        partLabel,
+                        partSelected ?
+                            ImGuiTreeNodeFlags.Selected :
+                            ImGuiTreeNodeFlags.None
+                    );
                     if (ImGui.IsItemClicked(ImGuiMouseButton.Left))
                         selection = new(SelectionKind.PreviewPart, partIndex, Key: key);
 
@@ -230,8 +242,8 @@ internal static class CustomizationEditorLeftPanel
             {
                 foreach (var instanceIndex in visibleInstanceIndices)
                 {
-                    var instance = mesh.Instances[instanceIndex];
-                    var patchTag = BuildInstancePatchTag(workspace, key, instanceIndex, instance.Id);
+                    var instance      = mesh.Instances[instanceIndex];
+                    var patchTag      = BuildInstancePatchTag(workspace, key, instanceIndex, instance.Id);
                     var instanceLabel = $"[{instanceIndex}] {instance.Id:X} {instance.WorldBounds.Min:f1}-{instance.WorldBounds.Max:f1}{patchTag}";
                     var instanceSelected = selection is { Kind: SelectionKind.PreviewInstance, Key: var instanceKey, Index: var selectedIndex } &&
                                            instanceKey   == key                                                                                 &&
@@ -312,12 +324,12 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawDraftTree
     (
-        ref Selection               selection,
-        Selection?                  focusSelection,
-        ref bool                    focusConsumed,
+        ref Selection                selection,
+        Selection?                   focusSelection,
+        ref bool                     focusConsumed,
         CustomizationEditorWorkspace workspace,
-        CustomizationPreviewBuilder previewBuilder,
-        DebugGameCollision          collision
+        CustomizationPreviewBuilder  previewBuilder,
+        DebugGameCollision           collision
     )
     {
         if (ImGui.Selectable("工作区", selection.Kind == SelectionKind.Workspace))
@@ -404,12 +416,12 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawDraftItems
     (
-        string                   title,
-        List<DraftListEntry>     items,
-        SelectionKind            kind,
-        ref Selection            selection,
-        Selection?               focusSelection,
-        ref bool                 focusConsumed
+        string               title,
+        List<DraftListEntry> items,
+        SelectionKind        kind,
+        ref Selection        selection,
+        Selection?           focusSelection,
+        ref bool             focusConsumed
     )
     {
         if (!ImGui.TreeNodeEx($"{title} ({items.Count})", ImGuiTreeNodeFlags.DefaultOpen))
@@ -418,6 +430,7 @@ internal static class CustomizationEditorLeftPanel
         foreach (var item in items)
         {
             var pushedTextStyle = false;
+
             if (!item.IsEnabled)
             {
                 ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.82f, 0.58f, 0.34f, 1f));
@@ -450,6 +463,7 @@ internal static class CustomizationEditorLeftPanel
         (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
     {
         List<DraftListEntry> entries = [];
+
         for (var i = 0; i < workspace.Draft.MeshRemovals.Count; ++i)
         {
             var item = workspace.Draft.MeshRemovals[i];
@@ -465,6 +479,7 @@ internal static class CustomizationEditorLeftPanel
         (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
     {
         List<DraftListEntry> entries = [];
+
         for (var i = 0; i < workspace.Draft.InstancePatches.Count; ++i)
         {
             var item = workspace.Draft.InstancePatches[i];
@@ -480,11 +495,16 @@ internal static class CustomizationEditorLeftPanel
         (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
     {
         List<DraftListEntry> entries = [];
+
         for (var i = 0; i < workspace.Draft.PartPatches.Count; ++i)
         {
             var item = workspace.Draft.PartPatches[i];
             var info = DescribePartPatch(previewBuilder, collision, item);
-            entries.Add(CreateDraftEntry(i, $"{item.MeshKey} 部件 {item.PartIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}", item.Note, item.Enabled, info));
+            entries.Add
+            (
+                CreateDraftEntry
+                    (i, $"{item.MeshKey} 部件 {item.PartIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}", item.Note, item.Enabled, info)
+            );
         }
 
         SortDraftEntries(entries);
@@ -494,11 +514,15 @@ internal static class CustomizationEditorLeftPanel
     private static List<DraftListEntry> BuildColliderInsertionEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
     {
         List<DraftListEntry> entries = [];
+
         for (var i = 0; i < workspace.Draft.ColliderInsertions.Count; ++i)
         {
-            var item  = workspace.Draft.ColliderInsertions[i];
-            var info  = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Min, item.Max));
-            entries.Add(CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Min:f1} -> {item.Max:f1}", item.Note, item.Enabled, info));
+            var item = workspace.Draft.ColliderInsertions[i];
+            var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Min, item.Max));
+            entries.Add
+            (
+                CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Min:f1} -> {item.Max:f1}", item.Note, item.Enabled, info)
+            );
         }
 
         SortDraftEntries(entries);
@@ -508,11 +532,15 @@ internal static class CustomizationEditorLeftPanel
     private static List<DraftListEntry> BuildMeshLinkEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
     {
         List<DraftListEntry> entries = [];
+
         for (var i = 0; i < workspace.Draft.MeshLinks.Count; ++i)
         {
             var item = workspace.Draft.MeshLinks[i];
             var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Start, item.End));
-            entries.Add(CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Start:f1} -> {item.End:f1}", item.Note, item.Enabled, info));
+            entries.Add
+            (
+                CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Start:f1} -> {item.End:f1}", item.Note, item.Enabled, info)
+            );
         }
 
         SortDraftEntries(entries);
@@ -522,11 +550,15 @@ internal static class CustomizationEditorLeftPanel
     private static List<DraftListEntry> BuildOffMeshConnectionEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
     {
         List<DraftListEntry> entries = [];
+
         for (var i = 0; i < workspace.Draft.OffMeshConnections.Count; ++i)
         {
             var item = workspace.Draft.OffMeshConnections[i];
             var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Start, item.End));
-            entries.Add(CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Start:f1} -> {item.End:f1}", item.Note, item.Enabled, info));
+            entries.Add
+            (
+                CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Start:f1} -> {item.End:f1}", item.Note, item.Enabled, info)
+            );
         }
 
         SortDraftEntries(entries);
@@ -536,7 +568,7 @@ internal static class CustomizationEditorLeftPanel
     private static DraftDistanceInfo DescribeMeshRemoval
         (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftSceneMeshRemoval item)
     {
-        if (previewBuilder.Extractor == null ||
+        if (previewBuilder.Extractor == null                                         ||
             !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
             !TryGetNearestInstanceBounds(mesh, collision, out var bounds))
         {
@@ -549,7 +581,7 @@ internal static class CustomizationEditorLeftPanel
     private static DraftDistanceInfo DescribeInstancePatch
         (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftSceneInstancePatch item)
     {
-        if (previewBuilder.Extractor == null ||
+        if (previewBuilder.Extractor == null                                         ||
             !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
             !TryGetInstancePatchBounds(mesh, item, out var bounds))
         {
@@ -562,7 +594,7 @@ internal static class CustomizationEditorLeftPanel
     private static DraftDistanceInfo DescribePartPatch
         (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftScenePartPatch item)
     {
-        if (previewBuilder.Extractor == null ||
+        if (previewBuilder.Extractor == null                                         ||
             !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
             !TryGetNearestInstanceBounds(mesh, collision, out var bounds))
         {
@@ -573,17 +605,16 @@ internal static class CustomizationEditorLeftPanel
     }
 
     private static DraftDistanceInfo DescribeBounds(DebugGameCollision collision, AABB bounds) =>
-        collision.HasRenderDistanceReferencePosition
-            ? new(collision.GetHorizontalDistanceToBounds(bounds), collision.IsBoundsWithinEditorRenderDistance(bounds))
-            : DraftDistanceInfo.Unknown;
+        collision.HasRenderDistanceReferencePosition ?
+            new(collision.GetHorizontalDistanceToBounds(bounds), collision.IsBoundsWithinEditorRenderDistance(bounds)) :
+            DraftDistanceInfo.Unknown;
 
     private static DraftListEntry CreateDraftEntry(int index, string label, string note, bool enabled, DraftDistanceInfo info) =>
         new(index, FormatDraftLabel(label, note, enabled, info.IsInRange), info.Distance, enabled, info.IsInRange);
 
     private static void SortDraftEntries(List<DraftListEntry> entries) =>
         entries.Sort
-        (
-            static (a, b) =>
+        (static (a, b) =>
             {
                 if (a.Distance == null && b.Distance == null)
                     return a.Index.CompareTo(b.Index);
@@ -593,22 +624,26 @@ internal static class CustomizationEditorLeftPanel
                     return -1;
 
                 var cmp = a.Distance.Value.CompareTo(b.Distance.Value);
-                return cmp != 0 ? cmp : a.Index.CompareTo(b.Index);
+                return cmp != 0 ?
+                           cmp :
+                           a.Index.CompareTo(b.Index);
             }
         );
 
     private static string FormatDraftLabel(string fallbackLabel, string note, bool enabled, bool isInRange)
     {
-        return string.IsNullOrWhiteSpace(note) ? fallbackLabel : note.Trim();
+        return string.IsNullOrWhiteSpace(note) ?
+                   fallbackLabel :
+                   note.Trim();
     }
 
     private static string FormatMeshRemovalLabel(DraftSceneMeshRemoval item) =>
         item.MeshKey;
 
     private static string FormatInstancePatchLabel(DraftSceneInstancePatch item) =>
-        item.Kind == DraftSceneInstancePatchKind.ClearInstances
-            ? $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}"
-            : $"{item.MeshKey} #{item.InstanceIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}";
+        item.Kind == DraftSceneInstancePatchKind.ClearInstances ?
+            $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}" :
+            $"{item.MeshKey} #{item.InstanceIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}";
 
     private static bool TryGetNearestInstanceBounds(SceneExtractor.Mesh mesh, DebugGameCollision collision, out AABB bounds)
     {
@@ -623,6 +658,7 @@ internal static class CustomizationEditorLeftPanel
             return true;
 
         var bestDistance = collision.GetHorizontalDistanceToBounds(bounds);
+
         for (var i = 1; i < mesh.Instances.Count; ++i)
         {
             var candidate = mesh.Instances[i].WorldBounds;
@@ -703,6 +739,7 @@ internal static class CustomizationEditorLeftPanel
         }
 
         bounds = mesh.Instances[visibleInstanceIndices[0]].WorldBounds;
+
         for (var i = 1; i < visibleInstanceIndices.Count; ++i)
         {
             var candidate = mesh.Instances[visibleInstanceIndices[i]].WorldBounds;
@@ -738,7 +775,8 @@ internal static class CustomizationEditorLeftPanel
         focusSelection is { Kind: SelectionKind.MeshLink or SelectionKind.OffMeshConnection };
 
     private static bool IsDraftSelectionKind(SelectionKind kind) =>
-        kind is SelectionKind.MeshRemoval or SelectionKind.InstancePatch or SelectionKind.PartPatch or SelectionKind.ColliderInsertion or SelectionKind.MeshLink or SelectionKind.OffMeshConnection;
+        kind is SelectionKind.MeshRemoval or SelectionKind.InstancePatch or SelectionKind.PartPatch or SelectionKind.ColliderInsertion or SelectionKind.MeshLink
+            or SelectionKind.OffMeshConnection;
 
     private static string BuildInstancePatchTag(CustomizationEditorWorkspace workspace, string meshKey, int instanceIndex, ulong instanceId)
     {
@@ -746,10 +784,10 @@ internal static class CustomizationEditorLeftPanel
 
         foreach (var patch in workspace.Draft.InstancePatches.Where(x => x.Enabled && x.MeshKey == meshKey))
         {
-            var matches = patch.Kind == DraftSceneInstancePatchKind.ClearInstances ||
-                          patch.InstanceId != 0
-                              ? patch.InstanceId == instanceId
-                              : patch.InstanceIndex == instanceIndex;
+            var matches = patch.Kind       == DraftSceneInstancePatchKind.ClearInstances ||
+                          patch.InstanceId != 0 ?
+                              patch.InstanceId    == instanceId :
+                              patch.InstanceIndex == instanceIndex;
             if (!matches && patch.Kind != DraftSceneInstancePatchKind.ClearInstances)
                 continue;
 
@@ -774,12 +812,25 @@ internal static class CustomizationEditorLeftPanel
             }
         }
 
-        return tags.Count == 0 ? string.Empty : $" [{string.Join(", ", tags)}]";
+        return tags.Count == 0 ?
+                   string.Empty :
+                   $" [{string.Join(", ", tags)}]";
     }
 
-    private readonly record struct DraftListEntry(int Index, string Label, float? Distance, bool IsEnabled, bool IsInRange);
+    private readonly record struct DraftListEntry
+    (
+        int    Index,
+        string Label,
+        float? Distance,
+        bool   IsEnabled,
+        bool   IsInRange
+    );
 
-    private readonly record struct DraftDistanceInfo(float? Distance, bool IsInRange)
+    private readonly record struct DraftDistanceInfo
+    (
+        float? Distance,
+        bool   IsInRange
+    )
     {
         public static DraftDistanceInfo Unknown => new(null, true);
     }

@@ -32,7 +32,7 @@ public unsafe class DebugDrawer : IDisposable
 
     private List<(Vector2 from, Vector2 to, uint col, int thickness)> _viewportLines   = new();
     private List<(Vector2 center, float radius, uint color)>          _viewportCircles = new();
-    private List<(Vector2 pos, uint color, string text)>             _viewportTexts   = new();
+    private List<(Vector2 pos, uint color, string text)>              _viewportTexts   = new();
 
     public DebugDrawer()
     {
@@ -56,7 +56,9 @@ public unsafe class DebugDrawer : IDisposable
     public void StartFrame()
     {
         var controlCamera = CameraManager.Instance()->GetActiveCamera();
-        var renderCamera  = controlCamera != null ? controlCamera->SceneCamera.RenderCamera : null;
+        var renderCamera = controlCamera != null ?
+                               controlCamera->SceneCamera.RenderCamera :
+                               null;
 
         if (renderCamera != null)
         {
@@ -94,7 +96,7 @@ public unsafe class DebugDrawer : IDisposable
     {
         RenderContext.Execute();
 
-        var dl = ImGui.GetForegroundDrawList();
+        var dl          = ImGui.GetForegroundDrawList();
         var viewportPos = ImGuiHelpers.MainViewport.Pos;
 
         if (RenderTarget != null)
@@ -154,22 +156,22 @@ public unsafe class DebugDrawer : IDisposable
 
     public void DrawWorldCylinder(Vector3 origin, Vector3 halfSize, uint color, int thickness = 1)
     {
-        var radius = MathF.Max(MathF.Max(MathF.Abs(halfSize.X), MathF.Abs(halfSize.Z)), 0.01f);
+        var radius      = MathF.Max(MathF.Max(MathF.Abs(halfSize.X), MathF.Abs(halfSize.Z)), 0.01f);
         var numSegments = Math.Max(24, CurveApproxUtil.CalculateCircleSegments(radius, 360.Degrees(), 0.08f));
-        var prevBottom = origin + new Vector3(halfSize.X, -halfSize.Y, 0);
-        var prevMid    = origin + new Vector3(halfSize.X, 0, 0);
-        var prevTop    = origin + new Vector3(halfSize.X, halfSize.Y, 0);
+        var prevBottom  = origin + new Vector3(halfSize.X, -halfSize.Y, 0);
+        var prevMid     = origin + new Vector3(halfSize.X, 0,           0);
+        var prevTop     = origin + new Vector3(halfSize.X, halfSize.Y,  0);
 
         for (var i = 1; i <= numSegments; ++i)
         {
-            var dir = (i * 360.0f / numSegments).Degrees().ToDirection();
+            var dir    = (i * 360.0f / numSegments).Degrees().ToDirection();
             var bottom = origin + new Vector3(dir.X * halfSize.X, -halfSize.Y, dir.Y * halfSize.Z);
-            var mid = origin + new Vector3(dir.X * halfSize.X, 0, dir.Y * halfSize.Z);
-            var top = origin + new Vector3(dir.X * halfSize.X, halfSize.Y, dir.Y * halfSize.Z);
+            var mid    = origin + new Vector3(dir.X * halfSize.X, 0,           dir.Y * halfSize.Z);
+            var top    = origin + new Vector3(dir.X * halfSize.X, halfSize.Y,  dir.Y * halfSize.Z);
             DrawWorldLine(prevBottom, bottom, color, thickness);
-            DrawWorldLine(prevMid, mid, color, thickness);
-            DrawWorldLine(prevTop, top, color, thickness);
-            DrawWorldLine(bottom, top, color, thickness);
+            DrawWorldLine(prevMid,    mid,    color, thickness);
+            DrawWorldLine(prevTop,    top,    color, thickness);
+            DrawWorldLine(bottom,     top,    color, thickness);
             prevBottom = bottom;
             prevMid    = mid;
             prevTop    = top;

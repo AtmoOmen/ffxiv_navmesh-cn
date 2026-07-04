@@ -21,7 +21,7 @@ public class PluginConfig : IPluginConfiguration
     public bool  StopOnStuck;
     public float UnstuckDetectionSeconds = 2f;
     public float UnstuckCooldownSeconds  = 3f;
-    public float PathTolerance        = 0.05f;
+    public float PathTolerance           = 0.05f;
 
     private const float              CONFIG_VALUE_WIDTH    = 260f;
     private const ImGuiTreeNodeFlags DEFAULT_SECTION_FLAGS = ImGuiTreeNodeFlags.DefaultOpen;
@@ -41,7 +41,7 @@ public class PluginConfig : IPluginConfiguration
         DrawCheckbox("切换区域时自动加载导航数据", ref AutoLoadNavmesh,        "进入新区域后自动尝试载入对应的导航数据。");
         DrawCheckbox("显示路径点",         ref ShowWaypoints,          "在世界中绘制当前路径的关键点。");
         DrawCheckbox("始终显示游戏碰撞体积",    ref ForceShowGameCollision, "用于排查地形碰撞与导航结果之间的差异。");
-        DrawCheckbox("游戏隐藏界面时仍然渲染", ref RenderWhenGameUiHidden, "即使使用游戏内隐藏界面功能，插件的调试渲染与窗口仍继续绘制。");
+        DrawCheckbox("游戏隐藏界面时仍然渲染",   ref RenderWhenGameUiHidden, "即使使用游戏内隐藏界面功能，插件的调试渲染与窗口仍继续绘制。");
         DrawCheckbox("启用 DTR 信息栏",    ref EnableDTR,              "在界面上方的信息栏显示插件状态。");
 
         using var disabled = ImRaii.Disabled(!EnableDTR);
@@ -51,7 +51,7 @@ public class PluginConfig : IPluginConfiguration
     private void DrawMovementAndCameraSection()
     {
         DrawCheckbox("玩家产生移动输入时取消当前路径", ref CancelMoveOnUserInput, "手动接管角色时立即停止自动移动。");
-        DrawSliderFloat("终点容差",   ref PathTolerance,        0.01f, 1f, "%.2f", "角色进入目标点附近该范围后，视为已经到达最终目的地。");
+        DrawSliderFloat("终点容差", ref PathTolerance, 0.01f, 1f, "%.2f", "角色进入目标点附近该范围后，视为已经到达最终目的地。");
 
         ImGui.Spacing();
         ImGui.TextDisabled("镜头联动");
@@ -75,7 +75,7 @@ public class PluginConfig : IPluginConfiguration
         using var indent = ImRaii.PushIndent();
 
         DrawSliderFloat("卡住判定时长 (秒)", ref UnstuckDetectionSeconds, 0.5f, 10f, "%.1f", "持续几乎没有实际位移达到该时长后，开始尝试脱困。");
-        DrawSliderFloat("脱困冷却期 (秒)", ref UnstuckCooldownSeconds, 0.5f, 10f, "%.1f", "每次随机位移脱困结束后，暂停重新判定卡住的时间。");
+        DrawSliderFloat("脱困冷却期 (秒)",  ref UnstuckCooldownSeconds,  0.5f, 10f, "%.1f", "每次随机位移脱困结束后，暂停重新判定卡住的时间。");
     }
 
     private static void DrawSection(string title, string description, Action drawContent)

@@ -60,9 +60,9 @@ internal sealed class PathPostprocessor
     {
         cancel.ThrowIfCancellationRequested();
 
-        var groundCorridor = segment is { MovementMode: MovementMode.Ground, GeometryKind: PlannerSegmentGeometryKind.MeshCorridor }
-                                 ? BuildGroundCorridor(segment)
-                                 : segment.GroundCorridor;
+        var groundCorridor = segment is { MovementMode: MovementMode.Ground, GeometryKind: PlannerSegmentGeometryKind.MeshCorridor } ?
+                                 BuildGroundCorridor(segment) :
+                                 segment.GroundCorridor;
         var waypoints = segment.GeometryKind switch
         {
             PlannerSegmentGeometryKind.MeshCorridor   => BuildMeshWaypoints(segment, groundCorridor),
@@ -86,14 +86,14 @@ internal sealed class PathPostprocessor
     {
         cancel.ThrowIfCancellationRequested();
 
-        var groundCorridor = segment is { MovementMode: MovementMode.Ground, GeometryKind: PlannerSegmentGeometryKind.MeshCorridor }
-                                 ? BuildGroundCorridor(segment, straightPathOptions)
-                                 : segment.GroundCorridor;
+        var groundCorridor = segment is { MovementMode: MovementMode.Ground, GeometryKind: PlannerSegmentGeometryKind.MeshCorridor } ?
+                                 BuildGroundCorridor(segment, straightPathOptions) :
+                                 segment.GroundCorridor;
         var waypoints = segment.GeometryKind switch
         {
-            PlannerSegmentGeometryKind.MeshCorridor => BuildRawStraightPathWaypoints(segment, [.. segment.Corridor], straightPathOptions),
+            PlannerSegmentGeometryKind.MeshCorridor   => BuildRawStraightPathWaypoints(segment, [.. segment.Corridor], straightPathOptions),
             PlannerSegmentGeometryKind.DiscretePoints => BuildRawDiscreteWaypoints(segment),
-            _ => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
+            _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
         };
 
         return new()
@@ -113,7 +113,9 @@ internal sealed class PathPostprocessor
         if (segment.Corridor.Count == 0)
             return [];
 
-        return groundCorridor != null ? [.. groundCorridor.Corners.Select(c => c.Position)] : BuildStraightPathWaypoints(segment, [.. segment.Corridor]);
+        return groundCorridor != null ?
+                   [.. groundCorridor.Corners.Select(c => c.Position)] :
+                   BuildStraightPathWaypoints(segment, [.. segment.Corridor]);
     }
 
     private List<Vector3> BuildStraightPathWaypoints(PlannerPathSegment segment, long[] corridor)
@@ -163,16 +165,16 @@ internal sealed class PathPostprocessor
 
         for (var i = 0; i < straightPathCount; i++)
         {
-            var rawCorner = straightPath[i];
-            var position  = adjustedPositions[i];
-            var area      = ResolveArea(corridor, rawCorner.refs);
-            var linkKind  = ResolveLinkKind(area, rawCorner.flags);
+            var rawCorner        = straightPath[i];
+            var position         = adjustedPositions[i];
+            var area             = ResolveArea(corridor, rawCorner.refs);
+            var linkKind         = ResolveLinkKind(area, rawCorner.flags);
             var traversalProfile = ResolveTraversalProfile(rawCorner.refs, linkKind);
             if (linkKind is { } resolvedKind && debugInfos[i] is { } debugInfo)
                 debugInfos[i] = debugInfo with
                 {
                     TraversalProfile = traversalProfile,
-                    TraversalCost    = NavmeshLinkTraversalProfiles.EstimateCost(position, ResolveLinkEndPosition(adjustedPositions, i), resolvedKind, traversalProfile)
+                    TraversalCost = NavmeshLinkTraversalProfiles.EstimateCost(position, ResolveLinkEndPosition(adjustedPositions, i), resolvedKind, traversalProfile)
                 };
             var corner = new GroundPathCorner
             (
@@ -270,13 +272,11 @@ internal sealed class PathPostprocessor
 
         var localPolyRefs = CollectLocalPolyRefs(straightPath, straightPathCount, corridor, index);
         var next          = straightPath[index + 1].pos.RecastToSystem();
-        var previous = isExecutionStart
-                           ? initialWaypointIndex == 0
-                                 ? point - (next - point)
-                                 : traversalStartPosition
-                           : isStartPoint
-                               ? point - (next - point)
-                               : straightPath[index - 1].pos.RecastToSystem();
+        var previous = isExecutionStart ? initialWaypointIndex == 0 ?
+                                              point - (next - point) :
+                                              traversalStartPosition
+                       : isStartPoint ? point - (next - point)
+                                        : straightPath[index - 1].pos.RecastToSystem();
         var incoming = new Vector2(point.X - previous.X, point.Z - previous.Z);
         var outgoing = new Vector2(next.X  - point.X,    next.Z  - point.Z);
         if (incoming.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ || outgoing.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
@@ -294,18 +294,13 @@ internal sealed class PathPostprocessor
         if (!isStartAdjacent && !isEndAdjacent && bisector.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
             return point;
 
-        var travelDirection = isStartAdjacent
-                                  ? outgoing
-                                  : isEndAdjacent
-                                      ? incoming
-                                      : Vector2.Normalize(bisector);
-        var preferredDirectionBias = isStartAdjacent
-                                         ? outgoing
-                                         : isEndAdjacent
-                                             ? -incoming
-                                             : cornerStrength <= WALL_STRAIGHT_PUSH_MAX_CORNER_STRENGTH
-                                                 ? travelDirection
-                                                 : -travelDirection;
+        var travelDirection = isStartAdjacent ? outgoing
+                              : isEndAdjacent ? incoming
+                                                : Vector2.Normalize(bisector);
+        var preferredDirectionBias = isStartAdjacent                                            ? outgoing
+                                     : isEndAdjacent                                            ? -incoming
+                                     : cornerStrength <= WALL_STRAIGHT_PUSH_MAX_CORNER_STRENGTH ? travelDirection
+                                                                                                  : -travelDirection;
         var scanOrigin = BuildScanOrigin(point, previous, next, polyRef, isStartAdjacent, isEndAdjacent);
         polyRef = ResolveScanPolyRef(localPolyRefs, polyRef, scanOrigin, WALL_SCAN_ORIGIN_REPROJECT_MAX_DISTANCE, out scanOrigin);
 
@@ -849,23 +844,23 @@ internal sealed class PathPostprocessor
 
     private Vector3 BuildScanOrigin(Vector3 point, Vector3 previous, Vector3 next, long polyRef, bool isStartAdjacent, bool isEndAdjacent)
     {
-        var delta = isStartAdjacent
-                        ? new Vector2(next.X - point.X, next.Z - point.Z)
-                        : isEndAdjacent
-                            ? new Vector2(previous.X                   - point.X, previous.Z                   - point.Z)
-                            : new Vector2((previous.X + next.X) * 0.5f - point.X, (previous.Z + next.Z) * 0.5f - point.Z);
+        var delta = isStartAdjacent ? new Vector2(next.X                         - point.X, next.Z                       - point.Z)
+                    : isEndAdjacent ? new Vector2(previous.X                     - point.X, previous.Z                   - point.Z)
+                                      : new Vector2((previous.X + next.X) * 0.5f - point.X, (previous.Z + next.Z) * 0.5f - point.Z);
         var lengthSq = delta.LengthSquared();
         if (lengthSq <= WALL_SCAN_MIN_VECTOR_SQ)
             return point;
 
-        var length = MathF.Sqrt(lengthSq);
+        var length           = MathF.Sqrt(lengthSq);
         var endpointAdjacent = isStartAdjacent || isEndAdjacent;
-        var insetScale = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_SCALE : endpointAdjacent ? WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_SCALE : 0.35f;
-        var insetMin = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_MIN : WALL_SCAN_ORIGIN_INSET_MIN;
-        var insetMax = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_MAX : endpointAdjacent ? WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_MAX : WALL_SCAN_ORIGIN_INSET_MAX;
-        var inset = Math.Clamp(length * insetScale, insetMin, insetMax);
+        var insetScale       = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_SCALE : endpointAdjacent ? WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_SCALE : 0.35f;
+        var insetMin = isStartAdjacent ?
+                           WALL_STARTPOINT_SCAN_ORIGIN_MIN :
+                           WALL_SCAN_ORIGIN_INSET_MIN;
+        var insetMax    = isStartAdjacent ? WALL_STARTPOINT_SCAN_ORIGIN_MAX : endpointAdjacent ? WALL_ENDPOINT_ADJACENT_SCAN_ORIGIN_MAX : WALL_SCAN_ORIGIN_INSET_MAX;
+        var inset       = Math.Clamp(length   * insetScale, insetMin, insetMax);
         var insetFactor = MathF.Min(1f, inset / length);
-        var origin = point + new Vector3(delta.X * insetFactor, 0, delta.Y * insetFactor);
+        var origin      = point + new Vector3(delta.X * insetFactor, 0, delta.Y * insetFactor);
 
         if (MeshQuery.GetPolyHeight(polyRef, origin.SystemToRecast(), out var height).Succeeded())
             origin.Y = height;
@@ -1119,7 +1114,9 @@ internal sealed class PathPostprocessor
 
         var lateralEscape = Vector2.Normalize(wallPressure);
         lateralEscape -= outgoing * Vector2.Dot(lateralEscape, outgoing);
-        lateralEscape =  lateralEscape.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ ? Vector2.Normalize(lateralEscape) : Vector2.Zero;
+        lateralEscape = lateralEscape.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ ?
+                            Vector2.Normalize(lateralEscape) :
+                            Vector2.Zero;
 
         var lateralInset = Math.Clamp
         (
@@ -1322,7 +1319,9 @@ internal sealed class PathPostprocessor
             if (status.Failed())
                 return;
 
-            var clearance = t == float.MaxValue ? maxDistance : Math.Clamp(t, 0f, 1f) * maxDistance;
+            var clearance = t == float.MaxValue ?
+                                maxDistance :
+                                Math.Clamp(t, 0f, 1f) * maxDistance;
 
             if (!hasCandidate || clearance > bestClearance)
             {
@@ -1335,7 +1334,9 @@ internal sealed class PathPostprocessor
 
         bestPolyRef        = bestPolyRefLocal;
         bestProjectedStart = bestProjectedStartLocal;
-        return hasCandidate ? bestClearance : 0f;
+        return hasCandidate ?
+                   bestClearance :
+                   0f;
     }
 
     private (DtStraightPath[] StraightPath, int Count) QueryStraightPath(PlannerPathSegment segment, long[] corridor, int straightPathOptions)
@@ -1581,26 +1582,26 @@ internal sealed class PathPostprocessor
         if (cornerStrength > WALL_STRAIGHT_PUSH_MAX_CORNER_STRENGTH || travelDirection.LengthSquared() <= WALL_SCAN_MIN_VECTOR_SQ)
             return false;
 
-        var pathDirection        = Vector2.Normalize(travelDirection);
-        var leftNormal           = new Vector2(-pathDirection.Y, pathDirection.X);
-        var rightNormal          = -leftNormal;
-        var debugSamples         = samples;
-        var preferredPolyRef     = polyRef;
-        var rescanned            = false;
-        var straightScanOrigin   = scanOrigin;
-        var leftClearance        = MeasureRaycastClearance(localPolyRefs, polyRef, straightScanOrigin, leftNormal,  WALL_SCAN_RADIUS, out var leftPolyRef);
-        var rightClearance       = MeasureRaycastClearance(localPolyRefs, polyRef, straightScanOrigin, rightNormal, WALL_SCAN_RADIUS, out var rightPolyRef);
-        var lateralPreference    = rightClearance >= leftClearance ? rightNormal : leftNormal;
+        var pathDirection      = Vector2.Normalize(travelDirection);
+        var leftNormal         = new Vector2(-pathDirection.Y, pathDirection.X);
+        var rightNormal        = -leftNormal;
+        var debugSamples       = samples;
+        var preferredPolyRef   = polyRef;
+        var rescanned          = false;
+        var straightScanOrigin = scanOrigin;
+        var leftClearance      = MeasureRaycastClearance(localPolyRefs, polyRef, straightScanOrigin, leftNormal,  WALL_SCAN_RADIUS, out var leftPolyRef);
+        var rightClearance     = MeasureRaycastClearance(localPolyRefs, polyRef, straightScanOrigin, rightNormal, WALL_SCAN_RADIUS, out var rightPolyRef);
+        var lateralPreference = rightClearance >= leftClearance ?
+                                    rightNormal :
+                                    leftNormal;
         var hasInteriorDirection = TryBuildInteriorDirection(localPolyRefs, point, straightScanOrigin, pathDirection, lateralPreference, out var interiorDirection);
 
         if (ShouldRescanNearStraight(leftClearance, rightClearance, averageClearance))
         {
             var pressureBias = BuildPathLateralDirection(wallPressure, pathDirection, lateralPreference);
-            var rescanBias = hasInteriorDirection
-                                 ? interiorDirection
-                                 : pressureBias.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ
-                                     ? pressureBias
-                                     : lateralPreference;
+            var rescanBias = hasInteriorDirection                                     ? interiorDirection
+                             : pressureBias.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ ? pressureBias
+                                                                                        : lateralPreference;
             var rescannedOrigin  = RecenterNearStraightScanOrigin(straightScanOrigin, pathDirection, rescanBias, averageClearance);
             var rescannedPolyRef = ResolveScanPolyRef(localPolyRefs, polyRef, rescannedOrigin, WALL_SCAN_ORIGIN_REPROJECT_MAX_DISTANCE, out rescannedOrigin);
             var rescannedLeftClearance = MeasureRaycastClearance
@@ -1613,18 +1614,28 @@ internal sealed class PathPostprocessor
                     (rescannedLeftClearance, rescannedRightClearance) >
                 MathF.Min(leftClearance, rightClearance) + WALL_STRAIGHT_RESCAN_MIN_CLEARANCE_IMPROVEMENT_THRESHOLD)
             {
-                straightScanOrigin   = rescannedOrigin;
-                scanOrigin           = rescannedOrigin;
-                polyRef              = rescannedPolyRef;
-                leftClearance        = rescannedLeftClearance;
-                rightClearance       = rescannedRightClearance;
-                leftPolyRef          = rescannedLeftPolyRef;
-                rightPolyRef         = rescannedRightPolyRef;
-                lateralPreference    = rightClearance >= leftClearance ? rightNormal : leftNormal;
+                straightScanOrigin = rescannedOrigin;
+                scanOrigin         = rescannedOrigin;
+                polyRef            = rescannedPolyRef;
+                leftClearance      = rescannedLeftClearance;
+                rightClearance     = rescannedRightClearance;
+                leftPolyRef        = rescannedLeftPolyRef;
+                rightPolyRef       = rescannedRightPolyRef;
+                lateralPreference = rightClearance >= leftClearance ?
+                                        rightNormal :
+                                        leftNormal;
                 hasInteriorDirection = TryBuildInteriorDirection(localPolyRefs, point, straightScanOrigin, pathDirection, lateralPreference, out interiorDirection);
                 rescanned            = true;
 
-                var rescannedSample = SampleScanClearances(localPolyRefs, polyRef, straightScanOrigin, hasInteriorDirection ? interiorDirection : lateralPreference);
+                var rescannedSample = SampleScanClearances
+                (
+                    localPolyRefs,
+                    polyRef,
+                    straightScanOrigin,
+                    hasInteriorDirection ?
+                        interiorDirection :
+                        lateralPreference
+                );
                 minClearance       = rescannedSample.MinClearance;
                 maxClearance       = rescannedSample.MaxClearance;
                 averageClearance   = rescannedSample.AverageClearance;
@@ -1673,15 +1684,17 @@ internal sealed class PathPostprocessor
         var sideBalance         = rightClearance - leftClearance;
         var sideBalanceDistance = MathF.Abs(sideBalance);
         var sideBalanceRatio    = sideBalanceDistance / sideTotal;
-        var minBalanceDistance = endpointAdjacent
-                                     ? WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE * WALL_ENDPOINT_ADJACENT_BALANCE_DISTANCE_SCALE
-                                     : WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE;
-        var minBalanceRatio = endpointAdjacent
-                                  ? WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO * WALL_ENDPOINT_ADJACENT_BALANCE_RATIO_SCALE
-                                  : WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO;
-        var nearClearance    = MathF.Min(leftClearance, rightClearance);
-        var farClearance     = MathF.Max(leftClearance, rightClearance);
-        var lateralDirection = sideBalance         > 0 ? rightNormal : leftNormal;
+        var minBalanceDistance = endpointAdjacent ?
+                                     WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE * WALL_ENDPOINT_ADJACENT_BALANCE_DISTANCE_SCALE :
+                                     WALL_STRAIGHT_PUSH_MIN_BALANCE_DISTANCE;
+        var minBalanceRatio = endpointAdjacent ?
+                                  WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO * WALL_ENDPOINT_ADJACENT_BALANCE_RATIO_SCALE :
+                                  WALL_STRAIGHT_PUSH_MIN_BALANCE_RATIO;
+        var nearClearance = MathF.Min(leftClearance, rightClearance);
+        var farClearance  = MathF.Max(leftClearance, rightClearance);
+        var lateralDirection = sideBalance > 0 ?
+                                   rightNormal :
+                                   leftNormal;
         var balancedEnough   = sideBalanceDistance >= minBalanceDistance && sideBalanceRatio >= minBalanceRatio;
         var lowClearanceCase = false;
 
@@ -1822,7 +1835,9 @@ internal sealed class PathPostprocessor
             isExecutionStart,
             polyRef,
             localPolyRefs.Length,
-            preferredDirection.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ ? polyRef : 0,
+            preferredDirection.LengthSquared() > WALL_SCAN_MIN_VECTOR_SQ ?
+                polyRef :
+                0,
             0,
             0,
             false,
@@ -1915,7 +1930,9 @@ internal sealed class PathPostprocessor
 
     private NavmeshArea ResolveArea(long[] corridor, long polyRef)
     {
-        var resolvedRef = polyRef != 0 ? polyRef : corridor[^1];
+        var resolvedRef = polyRef != 0 ?
+                              polyRef :
+                              corridor[^1];
         MeshQuery.GetAttachedNavMesh().GetTileAndPolyByRefUnsafe(resolvedRef, out _, out var poly);
         return (NavmeshArea)poly.GetArea();
     }
@@ -1942,18 +1959,22 @@ internal sealed class PathPostprocessor
         if (kind == null)
             return null;
 
-        return MeshQuery.GetAttachedNavMesh() != null &&
+        return MeshQuery.GetAttachedNavMesh() != null                                   &&
                GroundFilter is NavmeshGroundQuery.GroundAreaCostFilter { } groundFilter &&
-               groundFilter.TryGetRegisteredTraversalProfile(polyRef, out var traversalProfile)
-            ? traversalProfile
-            : null;
+               groundFilter.TryGetRegisteredTraversalProfile(polyRef, out var traversalProfile) ?
+                   traversalProfile :
+                   null;
     }
 
     private static Vector3 ResolveLinkEndPosition(IReadOnlyList<GroundPathCorner> corners, int index) =>
-        index + 1 < corners.Count ? corners[index + 1].Position : corners[index].Position;
+        index + 1 < corners.Count ?
+            corners[index + 1].Position :
+            corners[index].Position;
 
     private static Vector3 ResolveLinkEndPosition(IReadOnlyList<Vector3> positions, int index) =>
-        index + 1 < positions.Count ? positions[index + 1] : positions[index];
+        index + 1 < positions.Count ?
+            positions[index + 1] :
+            positions[index];
 
     private static List<Vector3> BuildRawDiscreteWaypoints(PlannerPathSegment segment)
         => [.. segment.Points];
@@ -2060,7 +2081,7 @@ internal sealed class PathPostprocessor
 
     #region 常量
 
-        private const float DUPLICATE_WAYPOINT_DISTANCE_SQ                           = 0.000001f;
+    private const float DUPLICATE_WAYPOINT_DISTANCE_SQ                           = 0.000001f;
     private const float COLLINEAR_WAYPOINT_TOLERANCE                             = 0.01f;
     private const int   MAX_SMOOTH_PATH_POINTS                                   = 102400;
     private const int   WALL_SCAN_DIRECTION_COUNT                                = 24;

@@ -54,7 +54,9 @@ public unsafe partial class DebugGameCollision
 
     private bool FilterCollider(Collider* coll)
     {
-        if (coll->LayerMask == 0 ? !_showZeroLayer : (_shownLayers.Raw & coll->LayerMask) == 0)
+        if (coll->LayerMask == 0 ?
+                !_showZeroLayer :
+                (_shownLayers.Raw & coll->LayerMask) == 0)
             return false;
         if (_showOnlyFlagRaycast && (coll->VisibilityFlags & 1) == 0)
             return false;
@@ -89,8 +91,14 @@ public unsafe partial class DebugGameCollision
         }
 
         {
-            var       matMask   = _materialMask & _availableMaterials;
-            using var materials = ImRaii.Combo("材质掩码 (Material Mask)", matMask.None() ? "无" : matMask.Raw.ToString("X"));
+            var matMask = _materialMask & _availableMaterials;
+            using var materials = ImRaii.Combo
+            (
+                "材质掩码 (Material Mask)",
+                matMask.None() ?
+                    "无" :
+                    matMask.Raw.ToString("X")
+            );
 
             if (materials)
             {
@@ -104,8 +112,14 @@ public unsafe partial class DebugGameCollision
         }
 
         {
-            var       matId     = _materialId & _availableMaterials;
-            using var materials = ImRaii.Combo("材质 ID", matId.None() ? "无" : matId.Raw.ToString("X"));
+            var matId = _materialId & _availableMaterials;
+            using var materials = ImRaii.Combo
+            (
+                "材质 ID",
+                matId.None() ?
+                    "无" :
+                    matId.Raw.ToString("X")
+            );
 
             if (materials)
             {
@@ -120,7 +134,13 @@ public unsafe partial class DebugGameCollision
 
         {
             using var flags = ImRaii.Combo
-                ("标志筛选", _showOnlyFlagRaycast ? _showOnlyFlagVisit ? "仅当两个标志均设置时" : "仅当射线检测标志设置时" : _showOnlyFlagVisit ? "仅当全局访问标志设置时" : "显示全部");
+            (
+                "标志筛选",
+                _showOnlyFlagRaycast ? _showOnlyFlagVisit ?
+                                           "仅当两个标志均设置时" :
+                                           "仅当射线检测标志设置时" :
+                _showOnlyFlagVisit ? "仅当全局访问标志设置时" : "显示全部"
+            );
 
             if (flags)
             {

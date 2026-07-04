@@ -63,7 +63,9 @@ public struct BitMask
         }
     }
 
-    private ulong MaskForBit(int index) => (uint)index < 64 ? 1ul << index : 0;
+    private ulong MaskForBit(int index) => (uint)index < 64 ?
+                                               1ul << index :
+                                               0;
 
     public override bool Equals(object? obj) => obj is BitMask other && this == other;
 

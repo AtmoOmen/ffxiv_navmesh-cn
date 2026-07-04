@@ -26,7 +26,7 @@ internal class Z1193神圣禁地深空天坑 : NavmeshCustomization
             null
         );
     }
-    
+
     public override void CustomizeMesh(Navmesh mesh, List<uint> festivalLayers)
     {
         LinkClientPath(mesh, new(100.06602f, -189.8996f, -231.05582f), new(139.63399f, -184.84326f, -294.38354f));

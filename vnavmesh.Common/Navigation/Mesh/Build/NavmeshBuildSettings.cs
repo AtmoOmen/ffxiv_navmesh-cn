@@ -18,17 +18,17 @@ public sealed class NavmeshBuildSettings
         Interiors              = 1 << 3
     }
 
-    public float                               CellSize         = 0.25f;
-    public float                               CellHeight       = 0.25f;
-    public float                               AgentHeight      = 2.0f;
-    public float                               AgentRadius      = 0.5f;
-    public float                               AgentMaxClimb    = 0.5f;
-    public float                               AgentMaxSlopeDeg = 55f;
-    public Filter                              Filtering        = Filter.LowHangingObstacles | Filter.WalkableLowHeightSpans;
-    public float                               RegionMinSize    = 8;
-    public float                               RegionMergeSize  = 20;
-    public RcPartition                         Partitioning     = RcPartition.WATERSHED;
-    public float                               PolyMaxEdgeLen   = 12f;
+    public float                               CellSize                   = 0.25f;
+    public float                               CellHeight                 = 0.25f;
+    public float                               AgentHeight                = 2.0f;
+    public float                               AgentRadius                = 0.5f;
+    public float                               AgentMaxClimb              = 0.5f;
+    public float                               AgentMaxSlopeDeg           = 55f;
+    public Filter                              Filtering                  = Filter.LowHangingObstacles | Filter.WalkableLowHeightSpans;
+    public float                               RegionMinSize              = 8;
+    public float                               RegionMergeSize            = 20;
+    public RcPartition                         Partitioning               = RcPartition.WATERSHED;
+    public float                               PolyMaxEdgeLen             = 12f;
     public float                               PolyMaxSimplificationError = 1.1f;
     public int                                 PolyMaxVerts               = 6;
     public float                               DetailSampleDist           = 6f;
@@ -99,7 +99,12 @@ public sealed class NavmeshBuildSettings
 
         void appendBool(string key, bool value)
         {
-            sb.Append(key).Append('=').Append(value ? '1' : '0').Append(';');
+            sb.Append(key).Append('=').Append
+            (
+                value ?
+                    '1' :
+                    '0'
+            ).Append(';');
         }
 
         void appendText(string key, string value)

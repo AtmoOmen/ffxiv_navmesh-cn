@@ -25,40 +25,41 @@ public static class VoxelSearch
     )
     {
         var centerLeaf = volume.FindLeafVoxel(center);
+
         if (centerLeaf.empty && minCandidateY == null)
         {
             return centerLeaf.voxel;
         }
 
-        var minDist            = float.MaxValue;
-        var nearestVoxel       = VoxelMap.INVALID_VOXEL;
-        var preferredMinDist   = float.MaxValue;
-        var preferredVoxel     = VoxelMap.INVALID_VOXEL;
-        var belowFloorSlack    = MathF.Max(volume.Levels[^1].CellSize.Y * 0.5f, 0.25f);
+        var minDist          = float.MaxValue;
+        var nearestVoxel     = VoxelMap.INVALID_VOXEL;
+        var preferredMinDist = float.MaxValue;
+        var preferredVoxel   = VoxelMap.INVALID_VOXEL;
+        var belowFloorSlack  = MathF.Max(volume.Levels[^1].CellSize.Y * 0.5f, 0.25f);
 
         foreach (var v in volume.RootTile.EnumerateLeafVoxels(center - halfExtent, center + halfExtent))
         {
             if (!v.empty)
                 continue;
 
-            var p          = FindClosestVoxelPoint(volume, v.index, center, 0);
+            var p = FindClosestVoxelPoint(volume, v.index, center, 0);
             if (minCandidateY is { } minY && p.Y + float.Epsilon < minY)
                 continue;
 
-            var d          = p - center;
-            var dist       = d.LengthSquared();
-            var upward     = MathF.Max(d.Y, 0f);
-            var downward   = MathF.Max(-d.Y, 0f);
-            dist          += upward * upward * UpwardVoxelPreferencePenaltyScale;
-            dist          += upward * UpwardVoxelPreferencePenaltyLinear;
-            dist          += downward * DownwardVoxelPreferencePenalty;
+            var d        = p - center;
+            var dist     = d.LengthSquared();
+            var upward   = MathF.Max(d.Y,  0f);
+            var downward = MathF.Max(-d.Y, 0f);
+            dist += upward   * upward * UpwardVoxelPreferencePenaltyScale;
+            dist += upward   * UpwardVoxelPreferencePenaltyLinear;
+            dist += downward * DownwardVoxelPreferencePenalty;
 
             if (minCandidateY is { } floorMinY)
             {
                 var bounds            = volume.VoxelBounds(v.index, 0);
                 var bottomPenetration = MathF.Max(floorMinY - (bounds.min.Y + belowFloorSlack), 0f);
-                dist                 += bottomPenetration * bottomPenetration * BelowFloorVoxelBottomPenaltyScale;
-                dist                 += bottomPenetration * BelowFloorVoxelBottomPenaltyLinear;
+                dist += bottomPenetration * bottomPenetration * BelowFloorVoxelBottomPenaltyScale;
+                dist += bottomPenetration * BelowFloorVoxelBottomPenaltyLinear;
             }
 
             if (p.Y + float.Epsilon >= center.Y && dist < preferredMinDist)
@@ -74,7 +75,9 @@ public static class VoxelSearch
             }
         }
 
-        return preferNonBelow && preferredVoxel != VoxelMap.INVALID_VOXEL ? preferredVoxel : nearestVoxel;
+        return preferNonBelow && preferredVoxel != VoxelMap.INVALID_VOXEL ?
+                   preferredVoxel :
+                   nearestVoxel;
     }
 
     public static IEnumerable<(ulong voxel, float t, bool empty)> EnumerateVoxelsInLine
@@ -167,13 +170,31 @@ public static class VoxelSearch
         out bool  nextEmpty
     )
     {
-        var (vMin, vMax) = volume.TryGetLeafVoxelBounds(fromVoxel, out var leafBounds)
-                               ? leafBounds
-                               : volume.VoxelBounds(fromVoxel, 0);
+        var (vMin, vMax) = volume.TryGetLeafVoxelBounds(fromVoxel, out var leafBounds) ?
+                               leafBounds :
+                               volume.VoxelBounds(fromVoxel, 0);
 
-        var tx = ab.X == 0 ? float.MaxValue : ((ab.X > 0 ? vMax.X : vMin.X) - fromPos.X) / ab.X;
-        var ty = ab.Y == 0 ? float.MaxValue : ((ab.Y > 0 ? vMax.Y : vMin.Y) - fromPos.Y) / ab.Y;
-        var tz = ab.Z == 0 ? float.MaxValue : ((ab.Z > 0 ? vMax.Z : vMin.Z) - fromPos.Z) / ab.Z;
+        var tx = ab.X == 0 ?
+                     float.MaxValue :
+                     ((ab.X > 0 ?
+                           vMax.X :
+                           vMin.X) -
+                      fromPos.X) /
+                     ab.X;
+        var ty = ab.Y == 0 ?
+                     float.MaxValue :
+                     ((ab.Y > 0 ?
+                           vMax.Y :
+                           vMin.Y) -
+                      fromPos.Y) /
+                     ab.Y;
+        var tz = ab.Z == 0 ?
+                     float.MaxValue :
+                     ((ab.Z > 0 ?
+                           vMax.Z :
+                           vMin.Z) -
+                      fromPos.Z) /
+                     ab.Z;
 
         t = MathF.Min(MathF.Min(tx, ty), MathF.Min(tz, 1));
 

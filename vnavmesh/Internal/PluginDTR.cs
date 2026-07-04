@@ -7,7 +7,7 @@ namespace vnavmesh.Internal;
 
 public class PluginDTR
 (
-    PluginConfig               config,
+    PluginConfig         config,
     NavmeshManager       manager,
     AsyncMoveRequest     asyncMove,
     MovementPlanExecutor movementExecutor
@@ -25,8 +25,9 @@ public class PluginDTR
 
         if (dtrBarEntry.Shown)
         {
-            var loadProgress = manager.LoadTaskProgress;
+            var   loadProgress = manager.LoadTaskProgress;
             float buildProgress;
+
             if (loadProgress >= 0)
             {
                 buildProgress = loadProgress;
@@ -36,7 +37,7 @@ public class PluginDTR
                 buildProgress = manager.ExternalBuildProgress;
             }
 
-            var meshStatus   = buildProgress >= 0 ? $"{buildProgress * 100:f0}%" : manager.Navmesh != null ? "就绪" : "未就绪";
+            var meshStatus = buildProgress >= 0 ? $"{buildProgress * 100:f0}%" : manager.Navmesh != null ? "就绪" : "未就绪";
 
             var statusText = "导航: " + meshStatus;
 
@@ -49,7 +50,9 @@ public class PluginDTR
 
                 if (pathfindInProgress || numQueued > 0)
                 {
-                    var activeCount = pathfindInProgress ? 1 : 0;
+                    var activeCount = pathfindInProgress ?
+                                          1 :
+                                          0;
                     statusText += $" | 算路: {activeCount}";
                     if (numQueued > 0)
                         statusText += $" (等待中: {numQueued})";

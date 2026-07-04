@@ -190,7 +190,9 @@ public unsafe partial class DebugLayout : IDisposable
                     break;
                 case InstanceType.CollisionBox:
                     var instCollGeneric = (CollisionBoxLayoutInstance*)inst;
-                    var pcbPath         = instCollGeneric->PcbPathCrc != 0 ? layout->CrcToPath.FindPtr(instCollGeneric->PcbPathCrc) : null;
+                    var pcbPath = instCollGeneric->PcbPathCrc != 0 ?
+                                      layout->CrcToPath.FindPtr(instCollGeneric->PcbPathCrc) :
+                                      null;
                     tree.LeafNode
                     (
                         $"Type: {instCollGeneric->TriggerBoxLayoutInstance.Type} (pcb={instCollGeneric->PcbPathCrc:X} '{(pcbPath != null ? pcbPath->DataString : "")}')"
@@ -555,9 +557,9 @@ public unsafe partial class DebugLayout : IDisposable
             var layer = header->Layer(layerOffset);
 
             var filter = layer->Filter;
-            var filterString = filter != null
-                                   ? $"{filter->Operation} [{string.Join(',', Enumerable.Range(0, filter->NumListEntries).Select(j => $"{filter->Entries[j]:X}"))}]"
-                                   : "<none>";
+            var filterString = filter != null ?
+                                   $"{filter->Operation} [{string.Join(',', Enumerable.Range(0, filter->NumListEntries).Select(j => $"{filter->Entries[j]:X}"))}]" :
+                                   "<none>";
 
             var layerUnks = ""; // $", u20={layer->u20}, u1C={layer->u1C}, u10={layer->u10}, u11={layer->u11}";
             using var nl = _tree.Node
@@ -636,8 +638,12 @@ public unsafe partial class DebugLayout : IDisposable
     private void DrawComparison(LayoutManager* layout)
     {
         var activeFilter = LayoutUtil.FindFilter(layout);
-        var terrId       = activeFilter != null ? activeFilter->TerritoryTypeId : layout->TerritoryTypeId;
-        var cfcId        = activeFilter != null ? activeFilter->CfcId : layout->CfcId;
+        var terrId = activeFilter != null ?
+                         activeFilter->TerritoryTypeId :
+                         layout->TerritoryTypeId;
+        var cfcId = activeFilter != null ?
+                        activeFilter->CfcId :
+                        layout->CfcId;
 
         var terr = Service.LuminaRow<TerritoryType>(terrId);
         if (terr == null || layout == null)
@@ -654,7 +660,13 @@ public unsafe partial class DebugLayout : IDisposable
             fixed (byte* lvbData = &lvb.Data[0])
             {
                 FillInstancesFromFileScene
-                    (FindSection<FileSceneHeader>((FileHeader*)lvbData, 0x314E4353), activeFilter != null ? activeFilter->Key : 0, layout->ActiveFestivals);
+                (
+                    FindSection<FileSceneHeader>((FileHeader*)lvbData, 0x314E4353),
+                    activeFilter != null ?
+                        activeFilter->Key :
+                        0,
+                    layout->ActiveFestivals
+                );
             }
         }
 

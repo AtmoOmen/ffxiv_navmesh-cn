@@ -32,7 +32,9 @@ public class Voxelizer
     public (bool solid, bool empty) GetCellState(int index)
     {
         var solid = GetBit(solidWords, index);
-        var empty = emptyWords != null ? GetBit(emptyWords, index) : !solid;
+        var empty = emptyWords != null ?
+                        GetBit(emptyWords, index) :
+                        !solid;
         return (solid, empty);
     }
 
@@ -57,7 +59,9 @@ public class Voxelizer
                     return (true, true);
             }
 
-            return anySolid ? (true, !allSolid) : (false, true);
+            return anySolid ?
+                       (true, !allSolid) :
+                       (false, true);
         }
 
         var anyEmpty = false;
@@ -116,9 +120,9 @@ public class Voxelizer
             var wordIndex = index >> 6;
             var bitOffset = index & 63;
             var bitCount  = Math.Min(64 - bitOffset, remaining);
-            var mask = bitCount == 64
-                           ? ulong.MaxValue
-                           : (1UL << bitCount) - 1 << bitOffset;
+            var mask = bitCount == 64 ?
+                           ulong.MaxValue :
+                           (1UL << bitCount) - 1 << bitOffset;
             words[wordIndex] |= mask;
             index            += bitCount;
             remaining        -= bitCount;
@@ -137,9 +141,9 @@ public class Voxelizer
             var wordIndex = index >> 6;
             var bitOffset = index & 63;
             var bitCount  = Math.Min(64 - bitOffset, remaining);
-            var mask = bitCount == 64
-                           ? ulong.MaxValue
-                           : (1UL << bitCount) - 1 << bitOffset;
+            var mask = bitCount == 64 ?
+                           ulong.MaxValue :
+                           (1UL << bitCount) - 1 << bitOffset;
             var value = words[wordIndex] & mask;
             if (value != 0)
                 anySet = true;
@@ -166,9 +170,9 @@ public class Voxelizer
             var wordIndex = index >> 6;
             var bitOffset = index & 63;
             var bitCount  = Math.Min(64 - bitOffset, remaining);
-            var mask = bitCount == 64
-                           ? ulong.MaxValue
-                           : (1UL << bitCount) - 1 << bitOffset;
+            var mask = bitCount == 64 ?
+                           ulong.MaxValue :
+                           (1UL << bitCount) - 1 << bitOffset;
             anySet1 |= (words1[wordIndex] & mask) != 0;
             anySet2 |= (words2[wordIndex] & mask) != 0;
             if (anySet1 && anySet2)

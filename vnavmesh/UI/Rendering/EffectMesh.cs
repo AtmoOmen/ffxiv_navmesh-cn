@@ -291,7 +291,12 @@ public class EffectMesh : IDisposable
         ctx.Context.VertexShader.SetConstantBuffer(0, _constantBuffer);
         if (wireframe)
             ctx.Context.Rasterizer.State = _rsWireframe;
-        ctx.Context.PixelShader.Set(unlit ? _psUnlit : _ps);
+        ctx.Context.PixelShader.Set
+        (
+            unlit ?
+                _psUnlit :
+                _ps
+        );
         ctx.Context.PixelShader.SetConstantBuffer(0, _constantBuffer);
     }
 

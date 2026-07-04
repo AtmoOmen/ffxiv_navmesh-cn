@@ -44,28 +44,28 @@ public class DebugVoxelMap : IDisposable
         int     ClosedCount
     );
 
-    private VoxelMap                                                _vm;
-    private VoxelPathfind?                                          _query;
-    private NavmeshQuery?                                           _navQuery;
-    private UITree                                                  _tree;
-    private DebugDrawer                                             _dd;
-    private int[]                                                   _numSubdivPerLevel;
-    private int[]                                                   _numLeavesPerLevel;
-    private float                                                   _renderHorizontalDistance = DefaultVoxelRenderHorizontalDistance;
-    private float                                                   _renderVerticalDistance   = DefaultVoxelRenderVerticalDistance;
-    private float                                                   _queryRenderHorizontalDistance = DefaultQueryRenderHorizontalDistance;
-    private float                                                   _queryRenderVerticalDistance   = DefaultQueryRenderVerticalDistance;
-    private bool                                                    _statsInitialized;
-    private QueryVisualizationMode                                  _queryVisualizationMode   = QueryVisualizationMode.Auto;
-    private int                                                     _queryAggregationLevel;
-    private int                                                     _queryRenderBudget       = DefaultQueryRenderBudget;
-    private int                                                     _queryListBudget         = DefaultQueryListBudget;
-    private List<QueryBucketRenderEntry>                            _queryBuckets            = [];
-    private int                                                     _queryBucketsMaxCount;
-    private int                                                     _cachedQueryNodeCount    = -1;
-    private int                                                     _cachedVisitedNodes      = -1;
-    private int                                                     _cachedAggregationLevel  = -1;
-    private long                                                    _nextQueryCacheRefreshAt;
+    private VoxelMap                     _vm;
+    private VoxelPathfind?               _query;
+    private NavmeshQuery?                _navQuery;
+    private UITree                       _tree;
+    private DebugDrawer                  _dd;
+    private int[]                        _numSubdivPerLevel;
+    private int[]                        _numLeavesPerLevel;
+    private float                        _renderHorizontalDistance      = DefaultVoxelRenderHorizontalDistance;
+    private float                        _renderVerticalDistance        = DefaultVoxelRenderVerticalDistance;
+    private float                        _queryRenderHorizontalDistance = DefaultQueryRenderHorizontalDistance;
+    private float                        _queryRenderVerticalDistance   = DefaultQueryRenderVerticalDistance;
+    private bool                         _statsInitialized;
+    private QueryVisualizationMode       _queryVisualizationMode = QueryVisualizationMode.Auto;
+    private int                          _queryAggregationLevel;
+    private int                          _queryRenderBudget = DefaultQueryRenderBudget;
+    private int                          _queryListBudget   = DefaultQueryListBudget;
+    private List<QueryBucketRenderEntry> _queryBuckets      = [];
+    private int                          _queryBucketsMaxCount;
+    private int                          _cachedQueryNodeCount   = -1;
+    private int                          _cachedVisitedNodes     = -1;
+    private int                          _cachedAggregationLevel = -1;
+    private long                         _nextQueryCacheRefreshAt;
 
     public DebugVoxelMap(VoxelMap vm, VoxelPathfind? query, NavmeshQuery? navQuery, UITree tree, DebugDrawer dd)
     {
@@ -89,20 +89,25 @@ public class DebugVoxelMap : IDisposable
 
         EnsureTileStatsInitialized();
         var player = Service.ObjectTable.LocalPlayer;
+
         if (player != null)
         {
             var playerPosition = player.Position;
-            var playerVoxel = _vm.FindLeafVoxel(playerPosition);
+            var playerVoxel    = _vm.FindLeafVoxel(playerPosition);
             if (_tree.LeafNode($"玩家原始叶体素：{playerVoxel.voxel:X} (是否为空={playerVoxel.empty})").SelectedOrHovered && playerVoxel.voxel != VoxelMap.INVALID_VOXEL)
                 VisualizeVoxel(playerVoxel.voxel);
+
             if (_navQuery != null)
             {
                 var resolved = _navQuery.FindNearestVolumeVoxelSurfaceAware(playerPosition);
-                if (_tree.LeafNode($"玩家飞行定位体素：{resolved.Voxel:X} (地表锚定={resolved.UsedSurfaceAnchor}，搜索点={resolved.SearchPoint:f3}，安全点={resolved.SafePoint:f3})").SelectedOrHovered &&
+                if (_tree.LeafNode
+                             ($"玩家飞行定位体素：{resolved.Voxel:X} (地表锚定={resolved.UsedSurfaceAnchor}，搜索点={resolved.SearchPoint:f3}，安全点={resolved.SafePoint:f3})")
+                         .SelectedOrHovered &&
                     resolved.Voxel != VoxelMap.INVALID_VOXEL)
                     VisualizeVoxel(resolved.Voxel);
             }
         }
+
         ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
         ImGui.SliderFloat("Voxel 水平渲染距离###voxelRenderHorizontalDistance", ref _renderHorizontalDistance, 2f, 500f, "%.0f");
         ImGui.SetNextItemWidth(220 * ImGui.GetIO().FontGlobalScale);
@@ -126,7 +131,7 @@ public class DebugVoxelMap : IDisposable
 
             if (nv.Opened && _query != null)
             {
-                var ns = _query.NodeSpan;
+                var ns        = _query.NodeSpan;
                 var listLimit = Math.Clamp(_queryListBudget, 100, 20000);
                 if (ns.Length > listLimit)
                     _tree.LeafNode($"节点列表已限流：显示前 {listLimit} / {ns.Length} 个，避免界面卡顿");
@@ -209,6 +214,7 @@ public class DebugVoxelMap : IDisposable
     private void VisualizeTile(VolumeTile tile)
     {
         var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
+
         if (playerPosition == null)
         {
             VisualizeAllTileCells(tile);
@@ -227,25 +233,35 @@ public class DebugVoxelMap : IDisposable
         if (ns.Length == 0)
             return;
 
-        var effectiveMode  = ResolveEffectiveQueryVisualizationMode(ns.Length);
-        var renderBudget   = Math.Clamp(_queryRenderBudget, 100, 50000);
-        var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
+        var effectiveMode         = ResolveEffectiveQueryVisualizationMode(ns.Length);
+        var renderBudget          = Math.Clamp(_queryRenderBudget, 100, 50000);
+        var playerPosition        = Service.ObjectTable.LocalPlayer?.Position;
         var maxHorizontalDistance = _queryRenderHorizontalDistance;
         var maxVerticalDistance   = _queryRenderVerticalDistance;
 
         if (effectiveMode == QueryVisualizationMode.RawWireframe)
         {
-            var stride    = Math.Max(1, ns.Length / renderBudget);
-            var rendered  = 0;
+            var stride   = Math.Max(1, ns.Length / renderBudget);
+            var rendered = 0;
 
             for (var i = 0; i < ns.Length && rendered < renderBudget; i += stride)
             {
-                ref var node = ref ns[i];
-                var bounds = _vm.VoxelBounds(node.Voxel, 0);
-                if (playerPosition != null && !IsBoundsWithinRenderDistance(bounds.min, bounds.max, playerPosition.Value, maxHorizontalDistance, maxVerticalDistance))
+                ref var node   = ref ns[i];
+                var     bounds = _vm.VoxelBounds(node.Voxel, 0);
+                if (playerPosition != null &&
+                    !IsBoundsWithinRenderDistance(bounds.min, bounds.max, playerPosition.Value, maxHorizontalDistance, maxVerticalDistance))
                     continue;
 
-                VisualizeCell(bounds, node.Closed ? 0x88FFB300u : 0x8800BCD4u, node.Closed ? 1 : 2);
+                VisualizeCell
+                (
+                    bounds,
+                    node.Closed ?
+                        0x88FFB300u :
+                        0x8800BCD4u,
+                    node.Closed ?
+                        1 :
+                        2
+                );
                 rendered++;
             }
 
@@ -258,6 +274,7 @@ public class DebugVoxelMap : IDisposable
             return;
 
         var renderedBuckets = 0;
+
         foreach (var bucket in _queryBuckets)
         {
             if (renderedBuckets >= renderBudget)
@@ -266,16 +283,24 @@ public class DebugVoxelMap : IDisposable
                 continue;
 
             var color = QueryBucketColor(bucket.Count, _queryBucketsMaxCount, bucket.ClosedCount);
+
             if (effectiveMode == QueryVisualizationMode.AggregatedBoxes)
             {
                 var density = QueryBucketDensity(bucket.Count, _queryBucketsMaxCount);
-                VisualizeCell((bucket.Min, bucket.Max), color, density >= 0.65f ? 2 : 1);
+                VisualizeCell
+                (
+                    (bucket.Min, bucket.Max),
+                    color,
+                    density >= 0.65f ?
+                        2 :
+                        1
+                );
             }
             else
             {
-                var density = QueryBucketDensity(bucket.Count, _queryBucketsMaxCount);
+                var density   = QueryBucketDensity(bucket.Count, _queryBucketsMaxCount);
                 var levelBias = Math.Max(0, _vm.Levels.Length - aggregationLevel - 1) * 0.75f;
-                var radius = 3f + density * 5f + levelBias;
+                var radius    = 3f + density * 5f + levelBias;
                 _dd.DrawWorldPointFilled((bucket.Min + bucket.Max) * 0.5f, radius, color);
             }
 
@@ -292,6 +317,7 @@ public class DebugVoxelMap : IDisposable
                 continue;
 
             var id = cell & VoxelMap.VOXEL_ID_MASK;
+
             if (id == VoxelMap.VOXEL_ID_MASK)
             {
                 var bounds = tile.CalculateSubdivisionBounds(IndexToVoxel(tile, i));
@@ -316,6 +342,7 @@ public class DebugVoxelMap : IDisposable
                 continue;
 
             var id = cell & VoxelMap.VOXEL_ID_MASK;
+
             if (id == VoxelMap.VOXEL_ID_MASK)
             {
                 var bounds = tile.CalculateSubdivisionBounds(IndexToVoxel(tile, i));
@@ -413,8 +440,8 @@ public class DebugVoxelMap : IDisposable
         _queryVisualizationMode switch
         {
             QueryVisualizationMode.Auto when nodeCount > AutoAggregateQueryNodeThreshold => QueryVisualizationMode.AggregatedPoints,
-            QueryVisualizationMode.Auto                                                => QueryVisualizationMode.RawWireframe,
-            _                                                                          => _queryVisualizationMode
+            QueryVisualizationMode.Auto                                                  => QueryVisualizationMode.RawWireframe,
+            _                                                                            => _queryVisualizationMode
         };
 
     private int ResolveQueryAggregationLevel() => Math.Clamp(_queryAggregationLevel, 0, _vm.Levels.Length - 1);
@@ -427,9 +454,9 @@ public class DebugVoxelMap : IDisposable
         var now          = Environment.TickCount64;
         var nodeCount    = _query.NodeSpan.Length;
         var visitedNodes = _query.LastTelemetry.VisitedNodes;
-        var stale        = aggregationLevel != _cachedAggregationLevel ||
-                           nodeCount         != _cachedQueryNodeCount   ||
-                           visitedNodes      != _cachedVisitedNodes;
+        var stale = aggregationLevel != _cachedAggregationLevel ||
+                    nodeCount        != _cachedQueryNodeCount   ||
+                    visitedNodes     != _cachedVisitedNodes;
 
         if (!stale || now < _nextQueryCacheRefreshAt)
             return;
@@ -441,14 +468,14 @@ public class DebugVoxelMap : IDisposable
         _queryBucketsMaxCount    = 0;
         _queryBuckets.Clear();
 
-        var ns = _query.NodeSpan;
-        var capacity = Math.Clamp(nodeCount / 16, 256, 262144);
-        Dictionary<ulong, QueryBucketAccumulator> buckets = new(capacity);
+        var                                       ns       = _query.NodeSpan;
+        var                                       capacity = Math.Clamp(nodeCount / 16, 256, 262144);
+        Dictionary<ulong, QueryBucketAccumulator> buckets  = new(capacity);
 
         for (var i = 0; i < ns.Length; ++i)
         {
-            var bucketVoxel = ReduceVoxelToLevel(ns[i].Voxel, aggregationLevel);
-            ref var bucket  = ref CollectionsMarshal.GetValueRefOrAddDefault(buckets, bucketVoxel, out _);
+            var     bucketVoxel = ReduceVoxelToLevel(ns[i].Voxel, aggregationLevel);
+            ref var bucket      = ref CollectionsMarshal.GetValueRefOrAddDefault(buckets, bucketVoxel, out _);
             bucket.Count++;
             if (ns[i].Closed)
                 bucket.ClosedCount++;
@@ -463,20 +490,21 @@ public class DebugVoxelMap : IDisposable
         }
 
         _queryBuckets.Sort
-        (
-            static (left, right) =>
+        (static (left, right) =>
             {
                 var byCount = right.Count.CompareTo(left.Count);
-                return byCount != 0 ? byCount : right.ClosedCount.CompareTo(left.ClosedCount);
+                return byCount != 0 ?
+                           byCount :
+                           right.ClosedCount.CompareTo(left.ClosedCount);
             }
         );
     }
 
     private void InvalidateQueryBucketCache()
     {
-        _cachedAggregationLevel = -1;
-        _cachedQueryNodeCount   = -1;
-        _cachedVisitedNodes     = -1;
+        _cachedAggregationLevel  = -1;
+        _cachedQueryNodeCount    = -1;
+        _cachedVisitedNodes      = -1;
         _nextQueryCacheRefreshAt = 0;
         _queryBuckets.Clear();
         _queryBucketsMaxCount = 0;
@@ -488,8 +516,8 @@ public class DebugVoxelMap : IDisposable
             return voxel;
 
         Span<ushort> indices = stackalloc ushort[8];
-        var temp  = voxel;
-        var count = 0;
+        var          temp    = voxel;
+        var          count   = 0;
 
         for (var i = 0; i <= level && i < indices.Length; ++i)
         {
@@ -521,14 +549,16 @@ public class DebugVoxelMap : IDisposable
 
     private static uint QueryBucketColor(int count, int maxCount, int closedCount)
     {
-        var density     = QueryBucketDensity(count, maxCount);
-        var closedRatio = count > 0 ? Math.Clamp((float)closedCount / count, 0f, 1f) : 0f;
-        var frontier    = new Vector3(0x33, 0xD1, 0xFF);
-        var explored    = new Vector3(0xFF, 0xB3, 0x00);
-        var saturated   = new Vector3(0xF4, 0x43, 0x36);
-        var rgb         = Vector3.Lerp(frontier, explored, closedRatio);
-        rgb             = Vector3.Lerp(rgb, saturated, density);
-        var alpha       = 72f + 156f * MathF.Max(density, closedRatio * 0.65f);
+        var density = QueryBucketDensity(count, maxCount);
+        var closedRatio = count > 0 ?
+                              Math.Clamp((float)closedCount / count, 0f, 1f) :
+                              0f;
+        var frontier  = new Vector3(0x33, 0xD1, 0xFF);
+        var explored  = new Vector3(0xFF, 0xB3, 0x00);
+        var saturated = new Vector3(0xF4, 0x43, 0x36);
+        var rgb       = Vector3.Lerp(frontier, explored, closedRatio);
+        rgb = Vector3.Lerp(rgb, saturated, density);
+        var alpha = 72f + 156f * MathF.Max(density, closedRatio * 0.65f);
         return PackColor(rgb, alpha);
     }
 

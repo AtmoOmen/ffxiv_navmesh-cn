@@ -102,8 +102,10 @@ public class RenderTarget : IDisposable
         );
 
         var dssDesc = DepthStencilStateDescription.Default();
-        dssDesc.DepthComparison = _inverseZ ? Comparison.GreaterEqual : Comparison.Less;
-        _dss                    = new(ctx.Device, dssDesc);
+        dssDesc.DepthComparison = _inverseZ ?
+                                      Comparison.GreaterEqual :
+                                      Comparison.Less;
+        _dss = new(ctx.Device, dssDesc);
     }
 
     public void Dispose()
@@ -119,7 +121,15 @@ public class RenderTarget : IDisposable
     public void Bind(RenderContext ctx)
     {
         ctx.Context.ClearRenderTargetView(_rtRTV, new());
-        ctx.Context.ClearDepthStencilView(_depthDSV, DepthStencilClearFlags.Depth, _inverseZ ? 0 : 1, 0);
+        ctx.Context.ClearDepthStencilView
+        (
+            _depthDSV,
+            DepthStencilClearFlags.Depth,
+            _inverseZ ?
+                0 :
+                1,
+            0
+        );
         ctx.Context.Rasterizer.SetViewport(0, 0, Size.X, Size.Y);
         ctx.Context.OutputMerger.SetDepthStencilState(_dss);
         ctx.Context.OutputMerger.SetTargets(_depthDSV, _rtRTV);

@@ -119,7 +119,16 @@ public class DebugPolyMesh : DebugRecast
                     numTriangles = _mesh.nvp;
                 numTriangles = Math.Max(numTriangles - 2, 0);
 
-                builder.AddMesh(0, startingPrimitive, numTriangles, _mesh.areas[i] == 0 ? 0 : 1, 1);
+                builder.AddMesh
+                (
+                    0,
+                    startingPrimitive,
+                    numTriangles,
+                    _mesh.areas[i] == 0 ?
+                        0 :
+                        1,
+                    1
+                );
                 startingPrimitive += primsPerPoly;
             }
 
@@ -167,7 +176,16 @@ public class DebugPolyMesh : DebugRecast
     }
 
     private void VisualizeEdge(Vector3 from, Vector3 to, int adj) => _dd.DrawWorldLine
-        (from, to, adj == RC_MESH_NULL_IDX ? 0xd8403000 : 0x80403000, adj == RC_MESH_NULL_IDX ? 2 : 1);
+    (
+        from,
+        to,
+        adj == RC_MESH_NULL_IDX ?
+            0xd8403000 :
+            0x80403000,
+        adj == RC_MESH_NULL_IDX ?
+            2 :
+            1
+    );
 
     private void VisualizeVertex(int index) => _dd.DrawWorldPoint(GetVertex(index), 5, 0xff0000ff);
 

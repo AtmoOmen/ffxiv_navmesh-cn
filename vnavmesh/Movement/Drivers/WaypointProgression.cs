@@ -107,8 +107,10 @@ internal static class WaypointProgression
             return false;
         }
 
-        start = traverseSegmentIndex == 0 ? startPosition : waypoints[traverseSegmentIndex - 1];
-        end   = waypoints[traverseSegmentIndex];
+        start = traverseSegmentIndex == 0 ?
+                    startPosition :
+                    waypoints[traverseSegmentIndex - 1];
+        end = waypoints[traverseSegmentIndex];
         return true;
     }
 
@@ -131,14 +133,14 @@ internal static class WaypointProgression
     {
         var segment      = end - start;
         var segmentLenSq = segment.LengthSquared();
-        return segmentLenSq > MinSegmentLengthSq
-                   ? Vector3.Dot(position - start, segment) / segmentLenSq
-                   : 1f;
+        return segmentLenSq > MinSegmentLengthSq ?
+                   Vector3.Dot(position - start, segment) / segmentLenSq :
+                   1f;
     }
 
-    private static Vector3 Project(Vector3 value, bool flatten) => flatten
-                                                                       ? new(value.X, 0, value.Z)
-                                                                       : value;
+    private static Vector3 Project(Vector3 value, bool flatten) => flatten ?
+                                                                       new(value.X, 0, value.Z) :
+                                                                       value;
 
     private static bool ShouldHoldForClientPath(MovementExecutionContext context, int waypointIndex, out bool proceed)
     {

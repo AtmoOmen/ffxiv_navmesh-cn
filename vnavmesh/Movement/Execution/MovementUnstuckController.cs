@@ -162,7 +162,9 @@ internal sealed class MovementUnstuckController
 
         for (var attempt = 0; attempt < RANDOM_TARGET_RESOLVE_ATTEMPTS; attempt++)
         {
-            var candidate = fly ? ResolveRandomFlightTarget(query, origin) : ResolveRandomGroundTarget(query, origin);
+            var candidate = fly ?
+                                ResolveRandomFlightTarget(query, origin) :
+                                ResolveRandomGroundTarget(query, origin);
             if (candidate is not { } resolved)
                 continue;
 
@@ -177,7 +179,9 @@ internal sealed class MovementUnstuckController
     {
         var radius = RandomDistance();
         var target = query.FindRandomPointOnMeshAroundCircle(origin, radius, false);
-        return target is { } resolved && IsValidRecoveryTarget(origin, resolved, true) ? resolved : null;
+        return target is { } resolved && IsValidRecoveryTarget(origin, resolved, true) ?
+                   resolved :
+                   null;
     }
 
     private static Vector3? ResolveRandomFlightTarget(NavmeshQuery query, Vector3 origin)
@@ -195,7 +199,9 @@ internal sealed class MovementUnstuckController
             return null;
 
         var target = VoxelSearch.FindClosestVoxelPoint(volume, voxel, sample);
-        return IsValidRecoveryTarget(origin, target, false) ? target : null;
+        return IsValidRecoveryTarget(origin, target, false) ?
+                   target :
+                   null;
     }
 
     private static float RandomDistance() =>
@@ -204,9 +210,9 @@ internal sealed class MovementUnstuckController
     private static bool IsValidRecoveryTarget(Vector3 origin, Vector3 target, bool flatten)
     {
         var delta = target - origin;
-        return flatten
-                   ? new Vector2(delta.X, delta.Z).Length() >= MIN_RECOVERY_TARGET_DISTANCE
-                   : delta.Length()                         >= MIN_RECOVERY_TARGET_DISTANCE;
+        return flatten ?
+                   new Vector2(delta.X, delta.Z).Length() >= MIN_RECOVERY_TARGET_DISTANCE :
+                   delta.Length()                         >= MIN_RECOVERY_TARGET_DISTANCE;
     }
 
     private static Vector3 ResolvePathGoal(MovementExecutionContext context) =>
@@ -219,7 +225,9 @@ internal sealed class MovementUnstuckController
     private static float MeasureDistance(Vector3 from, Vector3 to, bool flatten)
     {
         var delta = to - from;
-        return flatten ? new Vector2(delta.X, delta.Z).Length() : delta.Length();
+        return flatten ?
+                   new Vector2(delta.X, delta.Z).Length() :
+                   delta.Length();
     }
 
     private static bool CanAttemptJump(MovementExecutionContext context)

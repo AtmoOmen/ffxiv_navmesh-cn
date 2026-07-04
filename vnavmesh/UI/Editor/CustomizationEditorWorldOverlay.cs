@@ -146,15 +146,29 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             var selected = selection is { Kind: SelectionKind.ColliderInsertion, Index: var selectedIndex and >= 0 } &&
                            selectedIndex == i;
-            var color = selected
-                            ? 0xFFFFD94A
-                            : insertion.Kind == DraftSceneColliderInsertionKind.Cylinder
-                                ? 0xFF00FF00
-                                : 0xFF00FFFF;
+            var color = selected                                                     ? 0xFFFFD94A
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Cylinder ? 0xFF00FF00
+                                                                                       : 0xFF00FFFF;
             if (insertion.Kind == DraftSceneColliderInsertionKind.Cylinder)
-                dd.DrawWorldCylinder((insertion.Min + insertion.Max) * 0.5f, (insertion.Max - insertion.Min) * 0.5f, color, selected ? 3 : 2);
+                dd.DrawWorldCylinder
+                (
+                    (insertion.Min + insertion.Max) * 0.5f,
+                    (insertion.Max - insertion.Min) * 0.5f,
+                    color,
+                    selected ?
+                        3 :
+                        2
+                );
             else
-                dd.DrawWorldAABB((insertion.Min + insertion.Max) * 0.5f, (insertion.Max - insertion.Min) * 0.5f, color, selected ? 3 : 2);
+                dd.DrawWorldAABB
+                (
+                    (insertion.Min + insertion.Max) * 0.5f,
+                    (insertion.Max - insertion.Min) * 0.5f,
+                    color,
+                    selected ?
+                        3 :
+                        2
+                );
         }
 
         for (var i = 0; i < workspace.Draft.MeshLinks.Count; ++i)
@@ -168,16 +182,22 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             var selected = selection is { Kind: SelectionKind.MeshLink, Index: var selectedIndex and >= 0 } &&
                            selectedIndex == i;
-            var color     = selected ? 0xFFFFD94A : 0xFFAAFF00;
-            var thickness = selected ? 6 : 4;
+            var color = selected ?
+                            0xFFFFD94A :
+                            0xFFAAFF00;
+            var thickness = selected ?
+                                6 :
+                                4;
 
             dd.DrawWorldLine(link.Start, link.End, color, thickness);
 
             if (!link.Bidirectional)
             {
-                var dir       = Vector3.Normalize(link.End - link.Start);
-                var len       = Vector3.Distance(link.Start, link.End);
-                var arrowSize = selected ? 20f : 15f;
+                var dir = Vector3.Normalize(link.End - link.Start);
+                var len = Vector3.Distance(link.Start, link.End);
+                var arrowSize = selected ?
+                                    20f :
+                                    15f;
 
                 // 每隔 4 米绘制一个单向流向箭头，距终点留出 0.5 米
                 for (var d = 4.0f; d < len - 0.5f; d += 4.0f)
@@ -202,12 +222,18 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             var selected = selection is { Kind: SelectionKind.OffMeshConnection, Index: var selectedIndex and >= 0 } &&
                            selectedIndex == i;
-            var color     = selected ? 0xFFFFD94A : 0xFFFF8800;
-            var thickness = selected ? 6 : 4;
+            var color = selected ?
+                            0xFFFFD94A :
+                            0xFFFF8800;
+            var thickness = selected ?
+                                6 :
+                                4;
 
             if (link.Bidirectional)
             {
-                var arrowSize = selected ? 10f : 6f;
+                var arrowSize = selected ?
+                                    10f :
+                                    6f;
                 dd.DrawWorldArc(link.Start, link.End, 0.15f, arrowSize, arrowSize, color, thickness);
             }
             else
@@ -216,10 +242,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 dd.DrawWorldArc(link.Start, link.End, 0.15f, 0f, 0f, color, thickness);
 
                 // 采样切线，在抛物线上绘制多个流动的大箭头
-                var delta     = link.End - link.Start;
-                var len       = delta.Length();
-                var h         = 0.15f * len;
-                var arrowSize = selected ? 20f : 15f;
+                var delta = link.End - link.Start;
+                var len   = delta.Length();
+                var h     = 0.15f * len;
+                var arrowSize = selected ?
+                                    20f :
+                                    15f;
 
                 Vector3 EvalArc(float u)
                 {
@@ -658,7 +686,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (D < 0.00001f)
         {
             sc = 0.0f;
-            tc = c > 0.0f ? e / c : 0.0f;
+            tc = c > 0.0f ?
+                     e / c :
+                     0.0f;
         }
         else
         {
@@ -1372,14 +1402,13 @@ internal static unsafe class CustomizationEditorWorldOverlay
             if (!collision.IsBoundsWithinEditorRenderDistance(overlay.Bounds))
                 continue;
 
-            var color = overlay.IsSelected
-                            ? 0xFFFFD94A
-                            : overlay.HasRemove
-                                ? 0xFFFF4D4D
-                                : overlay.HasTransform
-                                    ? 0xFF00E0FF
-                                    : 0xFF33FF66;
-            var thickness = overlay.IsSelected ? 3 : 2;
+            var color = overlay.IsSelected     ? 0xFFFFD94A
+                        : overlay.HasRemove    ? 0xFFFF4D4D
+                        : overlay.HasTransform ? 0xFF00E0FF
+                                                 : 0xFF33FF66;
+            var thickness = overlay.IsSelected ?
+                                3 :
+                                2;
 
             if (overlay.HasRemove) overlay.Bounds = CustomizationEditorSpatial.CalculateTransformedBounds(overlay.Mesh.LocalBounds, overlay.Transform);
 
@@ -1404,6 +1433,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         {
             OverlayPool[i].Mesh = null!;
         }
+
         OverlaysCache.Clear();
     }
 
@@ -1445,8 +1475,17 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         if (patch.VertexIndex >= 0 && patch.VertexIndex < part.Vertices.Count)
                         {
                             var worldPos = instance.WorldTransform.TransformCoordinate(patch.Position);
-                            var color    = isSelected ? 0xFFFFD94A : 0xFF00FF00;
-                            dd.DrawWorldPointFilled(worldPos, isSelected ? 6 : 4, color);
+                            var color = isSelected ?
+                                            0xFFFFD94A :
+                                            0xFF00FF00;
+                            dd.DrawWorldPointFilled
+                            (
+                                worldPos,
+                                isSelected ?
+                                    6 :
+                                    4,
+                                color
+                            );
                         }
 
                         break;
@@ -1460,9 +1499,15 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
                             if (patch.Kind == DraftScenePartPatchKind.PrimitiveEdit)
                             {
-                                v0 = patch.V1 >= 0 && patch.V1 < part.Vertices.Count ? part.Vertices[patch.V1] : part.Vertices[prim.V1];
-                                v1 = patch.V2 >= 0 && patch.V2 < part.Vertices.Count ? part.Vertices[patch.V2] : part.Vertices[prim.V2];
-                                v2 = patch.V3 >= 0 && patch.V3 < part.Vertices.Count ? part.Vertices[patch.V3] : part.Vertices[prim.V3];
+                                v0 = patch.V1 >= 0 && patch.V1 < part.Vertices.Count ?
+                                         part.Vertices[patch.V1] :
+                                         part.Vertices[prim.V1];
+                                v1 = patch.V2 >= 0 && patch.V2 < part.Vertices.Count ?
+                                         part.Vertices[patch.V2] :
+                                         part.Vertices[prim.V2];
+                                v2 = patch.V3 >= 0 && patch.V3 < part.Vertices.Count ?
+                                         part.Vertices[patch.V3] :
+                                         part.Vertices[prim.V3];
                             }
                             else
                             {
@@ -1475,8 +1520,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
                             var worldV1 = instance.WorldTransform.TransformCoordinate(v1);
                             var worldV2 = instance.WorldTransform.TransformCoordinate(v2);
 
-                            var color     = isSelected ? 0xFFFFD94A : patch.Kind == DraftScenePartPatchKind.PrimitiveEdit ? 0xFFFF00FF : 0xFF00FFFF;
-                            var thickness = isSelected ? 3 : 2;
+                            var color = isSelected ? 0xFFFFD94A : patch.Kind == DraftScenePartPatchKind.PrimitiveEdit ? 0xFFFF00FF : 0xFF00FFFF;
+                            var thickness = isSelected ?
+                                                3 :
+                                                2;
                             dd.DrawWorldTriangle(worldV0, worldV1, worldV2, color, thickness);
                         }
 
@@ -1516,7 +1563,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         var anchor = new Vector3(bounds.Min.X, bounds.Max.Y, bounds.Min.Z);
-        var color  = isSelected ? 0xFFFFD94A : 0xFFFFFFFF;
+        var color = isSelected ?
+                        0xFFFFD94A :
+                        0xFFFFFFFF;
         dd.DrawWorldText(anchor, string.Join("\n", lines), color);
     }
 
@@ -1531,7 +1580,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
         AppendFlagName(flags, SceneExtractor.PrimitiveFlags.Unlandable,      "Unlandable",      names);
         AppendFlagName(flags, SceneExtractor.PrimitiveFlags.ForceWalkable,   "ForceWalkable",   names);
         AppendFlagName(flags, SceneExtractor.PrimitiveFlags.Fishable,        "Fishable",        names);
-        return names.Count == 0 ? string.Empty : $"{prefix}: {string.Join(", ", names)}";
+        return names.Count == 0 ?
+                   string.Empty :
+                   $"{prefix}: {string.Join(", ", names)}";
     }
 
     private static void AppendFlagName
@@ -1590,8 +1641,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
     }
 
     private static readonly Dictionary<(string MeshKey, ulong InstanceId, int InstanceIndex), InstanceOverlayInfo> OverlaysCache = [];
-    private static readonly List<InstanceOverlayInfo> OverlayPool = [];
-    private static int OverlayPoolUsed;
+    private static readonly List<InstanceOverlayInfo>                                                              OverlayPool   = [];
+    private static          int                                                                                    OverlayPoolUsed;
 
     private static InstanceOverlayInfo GetOrCreateOverlay(SceneExtractor.Mesh mesh, Matrix4x3 transform, AABB bounds)
     {
@@ -1647,7 +1698,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 var min = Vector3.Min(first, current);
                 var max = Vector3.Max(first, current);
                 NormalizeBounds(ref min, ref max);
-                var color = pickKind == PickKind.Cylinder ? 0xFF33FF66 : 0xFF33DDFF;
+                var color = pickKind == PickKind.Cylinder ?
+                                0xFF33FF66 :
+                                0xFF33DDFF;
                 if (pickKind == PickKind.Cylinder)
                     dd.DrawWorldCylinder((min + max) * 0.5f, (max - min) * 0.5f, color, 2);
                 else

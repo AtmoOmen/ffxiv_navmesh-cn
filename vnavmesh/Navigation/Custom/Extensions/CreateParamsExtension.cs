@@ -14,10 +14,10 @@ public static class CreateParamsExtension
         (
             Vector3                      ptA,
             Vector3                      ptB,
-            float                        radius            = 0.5f,
-            bool                         bidirectional     = false,
-            int                          userID            = 0,
-            NavmeshLinkTraversalProfile? traversalProfile  = null
+            float                        radius           = 0.5f,
+            bool                         bidirectional    = false,
+            int                          userID           = 0,
+            NavmeshLinkTraversalProfile? traversalProfile = null
         ) =>
             config.AddOffMeshConnection
             (
@@ -36,10 +36,10 @@ public static class CreateParamsExtension
         (
             Vector3                      ptA,
             Vector3                      ptB,
-            float                        radius            = 0.5f,
-            bool                         bidirectional     = false,
-            int                          userID            = 0,
-            NavmeshLinkTraversalProfile? traversalProfile  = null
+            float                        radius           = 0.5f,
+            bool                         bidirectional    = false,
+            int                          userID           = 0,
+            NavmeshLinkTraversalProfile? traversalProfile = null
         ) =>
             config.AddOffMeshConnection
             (
@@ -88,7 +88,9 @@ public static class CreateParamsExtension
             config.offMeshConVerts[^1] = ptB.Z;
 
             Extend(ref config.offMeshConDir, 1);
-            config.offMeshConDir[^1] = bidirectional ? DtDetour.DT_OFFMESH_CON_BIDIR : 0;
+            config.offMeshConDir[^1] = bidirectional ?
+                                           DtDetour.DT_OFFMESH_CON_BIDIR :
+                                           0;
 
             Extend(ref config.offMeshConFlags, 1);
             config.offMeshConFlags[^1] = (int)flags;

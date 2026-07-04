@@ -42,11 +42,9 @@ internal static class CustomizationDraftSeedBuilder
             if (link.Kind is not (NavmeshOffMeshKind.Shortcut or NavmeshOffMeshKind.Teleport or NavmeshOffMeshKind.ClientPath))
                 continue;
 
-            var kind = link.Kind == NavmeshOffMeshKind.ClientPath
-                           ? DraftMeshLinkKind.ClientPath
-                           : link.Kind == NavmeshOffMeshKind.Shortcut
-                               ? DraftMeshLinkKind.Shortcut
-                           : DraftMeshLinkKind.Points;
+            var kind = link.Kind   == NavmeshOffMeshKind.ClientPath ? DraftMeshLinkKind.ClientPath
+                       : link.Kind == NavmeshOffMeshKind.Shortcut   ? DraftMeshLinkKind.Shortcut
+                                                                      : DraftMeshLinkKind.Points;
 
             draft.MeshLinks.Add
             (
@@ -95,23 +93,23 @@ internal static class CustomizationDraftSeedBuilder
 
     private static void CopySettings(DraftBuildSettingsOverrides target, NavmeshSettings defaults, NavmeshSettings current)
     {
-        CopyIfChanged(current.CellSize, defaults.CellSize, v => target.CellSize = v);
-        CopyIfChanged(current.CellHeight, defaults.CellHeight, v => target.CellHeight = v);
-        CopyIfChanged(current.AgentHeight, defaults.AgentHeight, v => target.AgentHeight = v);
-        CopyIfChanged(current.AgentRadius, defaults.AgentRadius, v => target.AgentRadius = v);
-        CopyIfChanged(current.AgentMaxClimb, defaults.AgentMaxClimb, v => target.AgentMaxClimb = v);
+        CopyIfChanged(current.CellSize,         defaults.CellSize,         v => target.CellSize         = v);
+        CopyIfChanged(current.CellHeight,       defaults.CellHeight,       v => target.CellHeight       = v);
+        CopyIfChanged(current.AgentHeight,      defaults.AgentHeight,      v => target.AgentHeight      = v);
+        CopyIfChanged(current.AgentRadius,      defaults.AgentRadius,      v => target.AgentRadius      = v);
+        CopyIfChanged(current.AgentMaxClimb,    defaults.AgentMaxClimb,    v => target.AgentMaxClimb    = v);
         CopyIfChanged(current.AgentMaxSlopeDeg, defaults.AgentMaxSlopeDeg, v => target.AgentMaxSlopeDeg = v);
         if (current.Filtering != defaults.Filtering)
             target.Filtering = current.Filtering;
-        CopyIfChanged(current.RegionMinSize, defaults.RegionMinSize, v => target.RegionMinSize = v);
+        CopyIfChanged(current.RegionMinSize,   defaults.RegionMinSize,   v => target.RegionMinSize   = v);
         CopyIfChanged(current.RegionMergeSize, defaults.RegionMergeSize, v => target.RegionMergeSize = v);
         if (current.Partitioning != defaults.Partitioning)
             target.Partitioning = current.Partitioning;
-        CopyIfChanged(current.PolyMaxEdgeLen, defaults.PolyMaxEdgeLen, v => target.PolyMaxEdgeLen = v);
+        CopyIfChanged(current.PolyMaxEdgeLen,             defaults.PolyMaxEdgeLen,             v => target.PolyMaxEdgeLen             = v);
         CopyIfChanged(current.PolyMaxSimplificationError, defaults.PolyMaxSimplificationError, v => target.PolyMaxSimplificationError = v);
         if (current.PolyMaxVerts != defaults.PolyMaxVerts)
             target.PolyMaxVerts = current.PolyMaxVerts;
-        CopyIfChanged(current.DetailSampleDist, defaults.DetailSampleDist, v => target.DetailSampleDist = v);
+        CopyIfChanged(current.DetailSampleDist,     defaults.DetailSampleDist,     v => target.DetailSampleDist     = v);
         CopyIfChanged(current.DetailMaxSampleError, defaults.DetailMaxSampleError, v => target.DetailMaxSampleError = v);
         if (current.FastBuild != defaults.FastBuild)
             target.FastBuild = current.FastBuild;
@@ -119,15 +117,15 @@ internal static class CustomizationDraftSeedBuilder
             target.GenerateEdgeClimbLinks = current.GenerateEdgeClimbLinks;
         if (current.GenerateEdgeJumpLinks != defaults.GenerateEdgeJumpLinks)
             target.GenerateEdgeJumpLinks = current.GenerateEdgeJumpLinks;
-        CopyIfChanged(current.GroundTolerance, defaults.GroundTolerance, v => target.GroundTolerance = v);
-        CopyIfChanged(current.ClimbDownDistance, defaults.ClimbDownDistance, v => target.ClimbDownDistance = v);
-        CopyIfChanged(current.ClimbDownMaxHeight, defaults.ClimbDownMaxHeight, v => target.ClimbDownMaxHeight = v);
-        CopyIfChanged(current.ClimbDownMinHeight, defaults.ClimbDownMinHeight, v => target.ClimbDownMinHeight = v);
+        CopyIfChanged(current.GroundTolerance,     defaults.GroundTolerance,     v => target.GroundTolerance     = v);
+        CopyIfChanged(current.ClimbDownDistance,   defaults.ClimbDownDistance,   v => target.ClimbDownDistance   = v);
+        CopyIfChanged(current.ClimbDownMaxHeight,  defaults.ClimbDownMaxHeight,  v => target.ClimbDownMaxHeight  = v);
+        CopyIfChanged(current.ClimbDownMinHeight,  defaults.ClimbDownMinHeight,  v => target.ClimbDownMinHeight  = v);
         CopyIfChanged(current.EdgeJumpEndDistance, defaults.EdgeJumpEndDistance, v => target.EdgeJumpEndDistance = v);
-        CopyIfChanged(current.EdgeJumpHeight, defaults.EdgeJumpHeight, v => target.EdgeJumpHeight = v);
-        CopyIfChanged(current.EdgeJumpMaxDrop, defaults.EdgeJumpMaxDrop, v => target.EdgeJumpMaxDrop = v);
-        CopyIfChanged(current.EdgeJumpMinDrop, defaults.EdgeJumpMinDrop, v => target.EdgeJumpMinDrop = v);
-        CopyIfChanged(current.GroundTileSize, defaults.GroundTileSize, v => target.GroundTileSize = v);
+        CopyIfChanged(current.EdgeJumpHeight,      defaults.EdgeJumpHeight,      v => target.EdgeJumpHeight      = v);
+        CopyIfChanged(current.EdgeJumpMaxDrop,     defaults.EdgeJumpMaxDrop,     v => target.EdgeJumpMaxDrop     = v);
+        CopyIfChanged(current.EdgeJumpMinDrop,     defaults.EdgeJumpMinDrop,     v => target.EdgeJumpMinDrop     = v);
+        CopyIfChanged(current.GroundTileSize,      defaults.GroundTileSize,      v => target.GroundTileSize      = v);
         if (current.GroundTileCountMax != defaults.GroundTileCountMax)
             target.GroundTileCountMax = current.GroundTileCountMax;
         if (!current.VolumeTiles.SequenceEqual(defaults.VolumeTiles))
@@ -137,7 +135,7 @@ internal static class CustomizationDraftSeedBuilder
     private static void CopySceneDiffs(CustomizationDraft draft, SceneDefinition scene, NavmeshCustomization customization)
     {
         var defaultScene = new SceneExtractor(scene);
-        var customScene   = new SceneExtractor(scene);
+        var customScene  = new SceneExtractor(scene);
         customization.CustomizeScene(customScene);
 
         foreach (var key in defaultScene.Meshes.Keys.Where(key => !customScene.Meshes.ContainsKey(key)))
@@ -160,16 +158,19 @@ internal static class CustomizationDraftSeedBuilder
             return;
 
         var baseIds = defaultMesh.Instances.Select(static instance => instance.Id).ToHashSet();
+
         foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.Id)))
         {
             draft.ColliderInsertions.Add
             (
                 new()
                 {
-                    Kind              = meshKey == "<cylinder>" ? DraftSceneColliderInsertionKind.Cylinder : DraftSceneColliderInsertionKind.Aabb,
-                    Min               = instance.WorldBounds.Min,
-                    Max               = instance.WorldBounds.Max,
-                    ForceSetPrimFlags = instance.ForceSetPrimFlags,
+                    Kind = meshKey == "<cylinder>" ?
+                               DraftSceneColliderInsertionKind.Cylinder :
+                               DraftSceneColliderInsertionKind.Aabb,
+                    Min                 = instance.WorldBounds.Min,
+                    Max                 = instance.WorldBounds.Max,
+                    ForceSetPrimFlags   = instance.ForceSetPrimFlags,
                     ForceClearPrimFlags = instance.ForceClearPrimFlags
                 }
             );
@@ -189,6 +190,7 @@ internal static class CustomizationDraftSeedBuilder
         for (var i = 0; i < defaultMesh.Instances.Count; ++i)
         {
             var instance = defaultMesh.Instances[i];
+
             if (!customById.TryGetValue(instance.Id, out var customInstance))
             {
                 draft.InstancePatches.Add
@@ -210,11 +212,11 @@ internal static class CustomizationDraftSeedBuilder
                 (
                     new()
                     {
-                        MeshKey         = meshKey,
-                        Kind            = DraftSceneInstancePatchKind.Transform,
-                        InstanceId      = instance.Id,
-                        InstanceIndex   = i,
-                        WorldTransform  = DraftMatrix4x3.FromRuntime(customInstance.WorldTransform)
+                        MeshKey        = meshKey,
+                        Kind           = DraftSceneInstancePatchKind.Transform,
+                        InstanceId     = instance.Id,
+                        InstanceIndex  = i,
+                        WorldTransform = DraftMatrix4x3.FromRuntime(customInstance.WorldTransform)
                     }
                 );
             }
@@ -244,9 +246,10 @@ internal static class CustomizationDraftSeedBuilder
         for (var partIndex = 0; partIndex < partCount; ++partIndex)
         {
             var defaultPart = defaultMesh.Parts[partIndex];
-            var customPart   = customMesh.Parts[partIndex];
+            var customPart  = customMesh.Parts[partIndex];
 
             var vertexCount = Math.Min(defaultPart.Vertices.Count, customPart.Vertices.Count);
+
             for (var vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex)
             {
                 if (defaultPart.Vertices[vertexIndex] == customPart.Vertices[vertexIndex])
@@ -266,6 +269,7 @@ internal static class CustomizationDraftSeedBuilder
             }
 
             var primitiveCount = Math.Min(defaultPart.Primitives.Count, customPart.Primitives.Count);
+
             for (var primitiveIndex = 0; primitiveIndex < primitiveCount; ++primitiveIndex)
             {
                 var defaultPrimitive = defaultPart.Primitives[primitiveIndex];
@@ -274,9 +278,9 @@ internal static class CustomizationDraftSeedBuilder
                 if (defaultPrimitive == customPrimitive)
                     continue;
 
-                if (defaultPrimitive.V1 == customPrimitive.V1 &&
-                    defaultPrimitive.V2 == customPrimitive.V2 &&
-                    defaultPrimitive.V3 == customPrimitive.V3 &&
+                if (defaultPrimitive.V1       == customPrimitive.V1 &&
+                    defaultPrimitive.V2       == customPrimitive.V2 &&
+                    defaultPrimitive.V3       == customPrimitive.V3 &&
                     defaultPrimitive.Material == customPrimitive.Material)
                 {
                     draft.PartPatches.Add
@@ -316,6 +320,7 @@ internal static class CustomizationDraftSeedBuilder
     private static void CopyOffMeshConnections(CustomizationDraft draft, NavmeshCustomization customization)
     {
         var connections = OffMeshConnectionMetadataRegistry.Collect(customization);
+
         foreach (var connection in connections)
         {
             draft.OffMeshConnections.Add

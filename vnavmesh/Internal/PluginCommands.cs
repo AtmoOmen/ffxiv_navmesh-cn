@@ -144,8 +144,10 @@ internal sealed class PluginCommands : IDisposable
         if (args.Length < 4)
             return;
 
-        var originActor = relativeToPlayer ? Service.ObjectTable.LocalPlayer : null;
-        var origin      = originActor?.Position ?? new();
+        var originActor = relativeToPlayer ?
+                              Service.ObjectTable.LocalPlayer :
+                              null;
+        var origin = originActor?.Position ?? new();
         var offset = new Vector3
         (
             float.Parse(args[1], CultureInfo.InvariantCulture),

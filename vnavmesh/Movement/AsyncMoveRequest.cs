@@ -56,6 +56,7 @@ public class AsyncMoveRequest : IDisposable
     public void Dispose()
     {
         pendingTaskCancelSource?.Cancel();
+
         if (pendingTask != null)
         {
             if (!pendingTask.IsCompleted)
@@ -97,9 +98,10 @@ public class AsyncMoveRequest : IDisposable
                 {
                     executor.Execute(BuildPlan(result));
                     activeMoveRequest = request;
-                    activeExternalMoveRequest = request is { Origin: PathRequestOrigin.Normal } || request is { Origin: PathRequestOrigin.RepathAfterConditionChange }
-                                                    ? new(request.Value.Destination, request.Value.Fly, request.Value.Range)
-                                                    : null;
+                    activeExternalMoveRequest =
+                        request is { Origin: PathRequestOrigin.Normal } || request is { Origin: PathRequestOrigin.RepathAfterConditionChange } ?
+                            new(request.Value.Destination, request.Value.Fly, request.Value.Range) :
+                            null;
                     recoveryRetry = null;
                 }
                 else if (request is { Origin: PathRequestOrigin.RepathAfterUnstuck })
@@ -177,12 +179,17 @@ public class AsyncMoveRequest : IDisposable
         }
 
         recoveryRetry = null;
-        var resolvedDestinationTolerance = range                        > 0 ? range : executor.ConsumeNextTolerance();
-        var toleranceStr                 = resolvedDestinationTolerance > 0 ? $"，终点容差 = {resolvedDestinationTolerance:f3}" : "";
+        var resolvedDestinationTolerance = range > 0 ?
+                                               range :
+                                               executor.ConsumeNextTolerance();
+        var toleranceStr = resolvedDestinationTolerance > 0 ?
+                               $"，终点容差 = {resolvedDestinationTolerance:f3}" :
+                               "";
         Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
         pendingTaskCancelSource = new();
-        pendingTask             = manager.QueryPathDetailed(Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance, pendingTaskCancelSource.Token);
-        pendingMoveRequest      = new(dest, fly, resolvedDestinationTolerance, origin);
+        pendingTask = manager.QueryPathDetailed
+            (Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance, pendingTaskCancelSource.Token);
+        pendingMoveRequest = new(dest, fly, resolvedDestinationTolerance, origin);
         return true;
     }
 

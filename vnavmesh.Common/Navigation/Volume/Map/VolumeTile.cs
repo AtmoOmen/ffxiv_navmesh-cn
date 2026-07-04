@@ -13,17 +13,17 @@ public sealed class VolumeTile
 {
     private VolumeTile[]? subdivision;
 
-    private ushort[]? contentCleared = clearContents
-                                           ? new ushort[owner.Levels[level].NumCellsTotal]
-                                           : GC.AllocateUninitializedArray<ushort>(owner.Levels[level].NumCellsTotal);
+    private ushort[]? contentCleared = clearContents ?
+                                           new ushort[owner.Levels[level].NumCellsTotal] :
+                                           GC.AllocateUninitializedArray<ushort>(owner.Levels[level].NumCellsTotal);
 
     private byte[]?   packedStates;
     private ushort[]? subtreePrefixCounts;
 
-    public VoxelMap   Owner     { get; init; } = owner;
-    public Vector3    BoundsMin { get; init; } = boundsMin;
-    public Vector3    BoundsMax { get; init; } = boundsMax;
-    public int        Level     { get; init; } = level;
+    public VoxelMap Owner     { get; init; } = owner;
+    public Vector3  BoundsMin { get; init; } = boundsMin;
+    public Vector3  BoundsMax { get; init; } = boundsMax;
+    public int      Level     { get; init; } = level;
 
     public ushort[] Contents
     {
@@ -41,13 +41,17 @@ public sealed class VolumeTile
 
     public int CellCount => LevelDesc.NumCellsTotal;
 
-    public ReadOnlySpan<VolumeTile> Subdivisions => subdivision == null ? [] : subdivision.AsSpan(0, SubdivisionCount);
+    public ReadOnlySpan<VolumeTile> Subdivisions => subdivision == null ?
+                                                        [] :
+                                                        subdivision.AsSpan(0, SubdivisionCount);
 
     public VolumeLevel LevelDesc => Owner.Levels[Level];
 
     internal VolumeTileStorageKind StorageKind { get; private set; } = VolumeTileStorageKind.Dense;
 
-    internal ReadOnlySpan<byte> PackedStates => packedStates == null ? [] : packedStates.AsSpan();
+    internal ReadOnlySpan<byte> PackedStates => packedStates == null ?
+                                                    [] :
+                                                    packedStates.AsSpan();
 
     public (int x, int y, int z) WorldToVoxel(Vector3 v)
     {
@@ -185,6 +189,7 @@ public sealed class VolumeTile
             }
 
             var childIndex = data & VoxelMap.VOXEL_ID_MASK;
+
             if (childIndex == VoxelMap.VOXEL_ID_MASK)
             {
                 yield return (VoxelMap.EncodeIndex(idx), false);
@@ -203,8 +208,10 @@ public sealed class VolumeTile
         if (capacity <= 0 || capacity <= (subdivision?.Length ?? 0))
             return;
 
-        var newCapacity = subdivision == null ? Math.Max(capacity, 4) : Math.Max(capacity, subdivision.Length * 2);
-        var resized     = GC.AllocateUninitializedArray<VolumeTile>(newCapacity);
+        var newCapacity = subdivision == null ?
+                              Math.Max(capacity, 4) :
+                              Math.Max(capacity, subdivision.Length * 2);
+        var resized = GC.AllocateUninitializedArray<VolumeTile>(newCapacity);
         if (SubdivisionCount > 0)
             Array.Copy(subdivision!, resized, SubdivisionCount);
         subdivision = resized;

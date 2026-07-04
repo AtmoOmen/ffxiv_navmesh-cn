@@ -127,7 +127,9 @@ public unsafe class MovementInputController : IDisposable
             var dir = relDir.h.ToDirection();
             result->Forward = dir.Y;
             result->Left    = dir.X;
-            result->Up      = AllowVerticalControl ? relDir.v.Rad : 0;
+            result->Up = AllowVerticalControl ?
+                             relDir.v.Rad :
+                             0;
         }
 
         if ((IgnoreUserInput || result->Turn == 0) && ResolveFacingTurnInput() is { } turnInput)
@@ -145,10 +147,12 @@ public unsafe class MovementInputController : IDisposable
             return null;
 
         var dirH = Angle.FromDirectionXZ(dist);
-        var dirV = allowVertical ? Angle.FromDirection(new(dist.Y, new Vector2(dist.X, dist.Z).Length())) : default;
-        var refDir = legacyMode
-                         ? ((CameraEx*)CameraManager.Instance()->GetActiveCamera())->DirH.Radians() + 180.Degrees()
-                         : player.Rotation.Radians();
+        var dirV = allowVertical ?
+                       Angle.FromDirection(new(dist.Y, new Vector2(dist.X, dist.Z).Length())) :
+                       default;
+        var refDir = legacyMode ?
+                         ((CameraEx*)CameraManager.Instance()->GetActiveCamera())->DirH.Radians() + 180.Degrees() :
+                         player.Rotation.Radians();
         return (dirH - refDir, dirV);
     }
 

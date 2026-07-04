@@ -31,15 +31,17 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
                 departVerts[85].Y += 1;
 
                 var box = SceneExtractor.BuildBoxMesh()[0];
+
                 foreach (ref var vert in CollectionsMarshal.AsSpan(box.Vertices))
                 {
                     vert *= new Vector3(1.5f, 3.75f, 1.5f);
                     vert += new Vector3(4.5f, 6.25f, -1);
                 }
+
                 mesh.Parts.Add(box);
             }
         }
-        
+
         if (scene.Meshes.TryGetValue("bg/ffxiv/cos_c1/hou/c1w4/collision/c1w4_t0_rck03f.pcb", out var mesh0))
         {
             if (ResolveInstance(mesh0, 0xBF844300000000ul, 297) is { } instance0)
@@ -54,6 +56,7 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
                 instance0.WorldBounds = TransformBounds(instance0.WorldTransform, mesh0.LocalBounds);
             }
         }
+
         scene.InsertAABoxCollider
         (
             new AABB
@@ -149,7 +152,9 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
     private static SceneExtractor.MeshInstance? ResolveInstance(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)
     {
         var index = ResolveInstanceIndex(mesh, instanceId, instanceIndex);
-        return index >= 0 ? mesh.Instances[index] : null;
+        return index >= 0 ?
+                   mesh.Instances[index] :
+                   null;
     }
 
     private static int ResolveInstanceIndex(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)

@@ -127,7 +127,8 @@ public static class NavmeshLinkTraversalProfiles
     public static readonly NavmeshLinkTraversalProfile ClientPath         = new(0f, 3f);
 
     public static NavmeshLinkTraversalProfile Resolve(NavmeshOffMeshKind kind, NavmeshLinkTraversalProfile? overrideProfile = null) =>
-        overrideProfile ?? kind switch
+        overrideProfile ??
+        kind switch
         {
             NavmeshOffMeshKind.GeneratedClimbDown => GeneratedClimbDown,
             NavmeshOffMeshKind.GeneratedEdgeJump  => GeneratedEdgeJump,
@@ -168,11 +169,11 @@ public static class NavmeshLinkTraversalProfiles
 /// <param name="UserId">用户自定义 ID，用于与外部数据关联。</param>
 public readonly record struct NavmeshLink
 (
-    Vector3            Start,
-    Vector3            End,
-    NavmeshOffMeshKind Kind,
-    bool               Bidirectional,
-    int                UserId,
+    Vector3                      Start,
+    Vector3                      End,
+    NavmeshOffMeshKind           Kind,
+    bool                         Bidirectional,
+    int                          UserId,
     NavmeshLinkTraversalProfile? TraversalProfile = null
 );
 

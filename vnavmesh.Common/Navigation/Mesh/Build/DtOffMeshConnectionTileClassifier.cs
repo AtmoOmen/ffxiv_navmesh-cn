@@ -12,7 +12,7 @@ public static class DtOffMeshConnectionTileClassifier
             return IsWithinTileBounds(config, start);
 
         var (boundsMin, boundsMax) = ResolveTightBounds(config);
-        var startClass             = DtNavMeshBuilder.ClassifyOffMeshPoint(new RcVec3f(start.X, start.Y, start.Z), boundsMin, boundsMax);
+        var startClass = DtNavMeshBuilder.ClassifyOffMeshPoint(new RcVec3f(start.X, start.Y, start.Z), boundsMin, boundsMax);
         if (startClass == 0xff && (start.Y < boundsMin.Y || start.Y > boundsMax.Y))
             startClass = 0;
 
@@ -62,6 +62,8 @@ public static class DtOffMeshConnectionTileClassifier
     }
 
     private static bool IsWithinTileBounds(DtNavMeshCreateParams config, Vector3 point) =>
-        point.X >= config.bmin.X && point.X <= config.bmax.X &&
-        point.Z >= config.bmin.Z && point.Z <= config.bmax.Z;
+        point.X >= config.bmin.X &&
+        point.X <= config.bmax.X &&
+        point.Z >= config.bmin.Z &&
+        point.Z <= config.bmax.Z;
 }
