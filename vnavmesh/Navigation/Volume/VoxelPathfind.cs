@@ -63,6 +63,7 @@ public partial class VoxelPathfind
     private float                      guidedCorridorLastProgressAboveGoal;
     private int                        guidedCorridorLastProgressVisited;
     private bool                       allowCoarseL1Stepping;
+    private bool                       allowAncestorLookBack = true;
     private HashSet<ulong>?            previouslyVisitedVoxels;
 
     public VoxelMap Volume { get; }

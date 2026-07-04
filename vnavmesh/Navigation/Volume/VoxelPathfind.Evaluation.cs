@@ -82,6 +82,9 @@ public partial class VoxelPathfind
         if (bestScore <= earlyStopThreshold)
             return true;
 
+        if (!allowAncestorLookBack)
+            return bestParentIndex >= 0;
+
         // 预取祖先索引链，避免评估循环中反复 nodeSpan[...].ParentIndex 指针追逐
         Span<int> ancestorChain = stackalloc int[MAX_ANCESTOR_LOOK_BACK];
         var       ancestorCount = 0;

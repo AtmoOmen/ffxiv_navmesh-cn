@@ -120,13 +120,15 @@ public partial class VoxelPathfind
         int                   maxSteps,
         int                   attempts,
         CancellationToken     cancel,
-        GuidedSearchCorridor? corridor                = null,
-        float?                heuristicWeightOverride = null,
-        LongRangeLateralBias  lateralBias             = default
+        GuidedSearchCorridor? corridor                  = null,
+        float?                heuristicWeightOverride   = null,
+        LongRangeLateralBias  lateralBias               = default,
+        bool                  disableAncestorLookBack   = false
     )
     {
         Start(fromVoxel, toVoxel, fromPos, toPos, lateralBias);
         allowCoarseL1Stepping = maxSteps > RAYCAST_SEARCH_STEP_BUDGET;
+        allowAncestorLookBack = !disableAncestorLookBack;
         useGuidedCorridor     = corridor.HasValue;
         guidedCorridor        = corridor.GetValueOrDefault();
         heuristicWeight       = heuristicWeightOverride ?? SHORT_RANGE_HEURISTIC_WEIGHT;
@@ -251,6 +253,7 @@ public partial class VoxelPathfind
         lineOfSightHits                      = 0;
         peakOpenListSize                     = 0;
         heuristicWeight                      = 1;
+        allowAncestorLookBack                = true;
         useGuidedCorridor                    = false;
         guidedCorridor                       = default;
         longRangeLateralBias                 = default;

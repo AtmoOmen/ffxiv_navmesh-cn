@@ -33,8 +33,6 @@ public partial class VoxelPathfind
         );
 
         var guidedCorridorRadius = ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance);
-        if (coarsePath.ReachedGoal)
-            guidedCorridorRadius = Math.Min(guidedCorridorRadius * 2, LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS);
         var proxyGoalVoxel       = coarsePath.ReachedGoal ? toVoxel : coarsePath.OrderedPath[^1];
         var proxyGoalPos         = ResolveVoxelCenter(proxyGoalVoxel);
 
@@ -60,7 +58,8 @@ public partial class VoxelPathfind
             proxySearchBudget,
             1,
             cancel,
-            heuristicWeightOverride: coarsePath.ReachedGoal ? SHORT_RANGE_HEURISTIC_WEIGHT : LONG_RANGE_HEURISTIC_WEIGHT
+            heuristicWeightOverride: coarsePath.ReachedGoal ? SHORT_RANGE_HEURISTIC_WEIGHT : LONG_RANGE_HEURISTIC_WEIGHT,
+            disableAncestorLookBack: true
         );
 
         if (lastTermination == VolumeSearchTermination.ReachedGoal)
