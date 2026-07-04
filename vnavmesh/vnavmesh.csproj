@@ -1,6 +1,6 @@
 <Project Sdk="Dalamud.CN.NET.Sdk/15.0.0">
     <PropertyGroup>
-        <Version>0.7.1.0</Version>
+        <Version>0.7.2.0</Version>
         <PackageProjectUrl>https://github.com/AtmoOmen/ffxiv_navmesh</PackageProjectUrl>
         <ImplicitUsings>enable</ImplicitUsings>
         <DebugType>none</DebugType>
@@ -27,7 +27,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Navigation\Custom\Customizations\" />
+        <Folder Include="Navigation\Custom\Customizations\"/>
     </ItemGroup>
 
     <Target Name="CopyNavmeshWorker" AfterTargets="Build">
