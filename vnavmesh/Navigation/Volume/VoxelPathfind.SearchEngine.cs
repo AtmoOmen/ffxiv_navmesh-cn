@@ -225,12 +225,17 @@ public partial class VoxelPathfind
 
         if (neighbours.Count >= RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD && Environment.ProcessorCount > 1)
         {
-            var evaluations = new VolumeNeighbourEvaluation?[neighbours.Count];
+            if (parallelEvaluationBuffer.Length < neighbours.Count)
+                parallelEvaluationBuffer = new VolumeNeighbourEvaluation?[neighbours.Count];
+            else
+                Array.Clear(parallelEvaluationBuffer, 0, neighbours.Count);
+
+            var evaluations = parallelEvaluationBuffer;
             Parallel.For
             (
                 0,
                 neighbours.Count,
-                new ParallelOptions { MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, neighbours.Count) },
+                parallelOptions,
                 i =>
                 {
                     if (TryGetBestCandidate(currentIndex, neighbours[i], out var bestParentIndex, out var bestPosition, out var bestScore))
@@ -238,9 +243,9 @@ public partial class VoxelPathfind
                 }
             );
 
-            foreach (var evaluation in evaluations)
+            for (var i = 0; i < neighbours.Count; ++i)
             {
-                if (evaluation is { } resolved)
+                if (evaluations[i] is { } resolved)
                     ApplyNeighbourEvaluation(resolved);
             }
         }
@@ -263,7 +268,10 @@ public partial class VoxelPathfind
         nodes.Clear();
         nodeLookup.Clear();
         openList.Clear();
-        visibilityCache.Clear();
+        lock (cacheLock)
+        {
+            visibilityCache.Clear();
+        }
         TrimCachesIfNeeded();
         bestNodeIndex                        = 0;
         goalReached                          = false;
@@ -288,16 +296,19 @@ public partial class VoxelPathfind
 
     private void TrimCachesIfNeeded()
     {
-        if (voxelWallMaskCache.Count > WALL_MASK_CACHE_MAX_SIZE)
-            voxelWallMaskCache.Clear();
-        if (verifiedDownwardOpeningCache.Count > VERTICAL_ACCESS_CACHE_MAX_SIZE)
-            verifiedDownwardOpeningCache.Clear();
-        if (verifiedTopEntryCache.Count > VERTICAL_ACCESS_CACHE_MAX_SIZE)
-            verifiedTopEntryCache.Clear();
-        if (l1FaceConnectivityCache.Count > L1_FACE_CACHE_MAX_SIZE)
-            l1FaceConnectivityCache.Clear();
-        if (visibilityCache.Count > VISIBILITY_CACHE_MAX_SIZE)
-            visibilityCache.Clear();
+        lock (cacheLock)
+        {
+            if (voxelWallMaskCache.Count > WALL_MASK_CACHE_MAX_SIZE)
+                voxelWallMaskCache.Clear();
+            if (verifiedDownwardOpeningCache.Count > VERTICAL_ACCESS_CACHE_MAX_SIZE)
+                verifiedDownwardOpeningCache.Clear();
+            if (verifiedTopEntryCache.Count > VERTICAL_ACCESS_CACHE_MAX_SIZE)
+                verifiedTopEntryCache.Clear();
+            if (l1FaceConnectivityCache.Count > L1_FACE_CACHE_MAX_SIZE)
+                l1FaceConnectivityCache.Clear();
+            if (visibilityCache.Count > VISIBILITY_CACHE_MAX_SIZE)
+                visibilityCache.Clear();
+        }
     }
 
     private void RetainClosedSetKnowledge()
@@ -325,17 +336,23 @@ public partial class VoxelPathfind
         nodes.TrimExcess();
         nodeLookup.TrimExcess();
         openList.TrimExcess();
-        l1PathSet          = null;
-        l0PathSet          = null;
-        l1CorridorDistance = null;
-        l0CorridorDistance = null;
-        l1DistanceField    = null;
-        l0DistanceField    = null;
-        visibilityCache.Clear();
-        voxelWallMaskCache.Clear();
-        verifiedDownwardOpeningCache.Clear();
-        verifiedTopEntryCache.Clear();
-        l1FaceConnectivityCache.Clear();
+        l1PathSet               = null;
+        l0PathSet               = null;
+        l1CorridorDistance      = null;
+        l0CorridorDistance      = null;
+        l1DistanceField         = null;
+        l0DistanceField         = null;
+        l1FloodFillVisited      = null;
+        l1BfsQueue              = null;
+        parallelEvaluationBuffer = Array.Empty<VolumeNeighbourEvaluation?>();
+        lock (cacheLock)
+        {
+            visibilityCache.Clear();
+            voxelWallMaskCache.Clear();
+            verifiedDownwardOpeningCache.Clear();
+            verifiedTopEntryCache.Clear();
+            l1FaceConnectivityCache.Clear();
+        }
     }
 
     private bool TryBuildDirectPath(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos, out List<(ulong voxel, Vector3 p)> path)

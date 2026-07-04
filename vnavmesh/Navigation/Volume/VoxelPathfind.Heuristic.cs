@@ -49,7 +49,22 @@ public partial class VoxelPathfind
         if (Volume.IsEmpty(l1Voxel))
             return L1_ALL_FACES_MASK;
 
-        var packedConnectivity = l1FaceConnectivityCache.GetOrAdd(l1Voxel, BuildPackedL1FaceConnectivity);
+        ulong packedConnectivity;
+        bool hasCached;
+        lock (cacheLock)
+        {
+            hasCached = l1FaceConnectivityCache.TryGetValue(l1Voxel, out packedConnectivity);
+        }
+
+        if (!hasCached)
+        {
+            packedConnectivity = BuildPackedL1FaceConnectivity(l1Voxel);
+            lock (cacheLock)
+            {
+                l1FaceConnectivityCache.TryAdd(l1Voxel, packedConnectivity);
+            }
+        }
+
         return VoxelIndexUtil.GetPackedReachableL1Faces(packedConnectivity, entryFace);
     }
 
@@ -87,7 +102,12 @@ public partial class VoxelPathfind
         }
 
         var   totalCellCount     = l2Desc.NumCellsTotal;
-        var   visited            = new bool[totalCellCount];
+        l1FloodFillVisited ??= new bool[totalCellCount];
+        if (l1FloodFillVisited.Length < totalCellCount)
+            l1FloodFillVisited = new bool[totalCellCount];
+        else
+            Array.Clear(l1FloodFillVisited);
+        var   visited            = l1FloodFillVisited;
         ulong packedConnectivity = 0;
 
         for (ushort seedIndex = 0; seedIndex < totalCellCount; ++seedIndex)
@@ -131,7 +151,17 @@ public partial class VoxelPathfind
     private ushort FloodFillL1Component(ulong l1Voxel, ushort seedIndex, bool[]? visited, ushort? targetSeedIndex, out bool reachedTarget)
     {
         reachedTarget =   false;
-        visited       ??= new bool[l2Desc.NumCellsTotal];
+
+        if (visited is null)
+        {
+            var totalCells = l2Desc.NumCellsTotal;
+            l1FloodFillVisited ??= new bool[totalCells];
+            if (l1FloodFillVisited.Length < totalCells)
+                l1FloodFillVisited = new bool[totalCells];
+            else
+                Array.Clear(l1FloodFillVisited);
+            visited = l1FloodFillVisited;
+        }
 
         if (visited[seedIndex])
         {
@@ -147,7 +177,9 @@ public partial class VoxelPathfind
             return 0;
         }
 
-        Queue<ushort> frontier = new();
+        l1BfsQueue ??= new Queue<ushort>(l2Desc.NumCellsTotal);
+        l1BfsQueue.Clear();
+        var frontier = l1BfsQueue;
         frontier.Enqueue(seedIndex);
         visited[seedIndex] = true;
 
@@ -246,27 +278,57 @@ public partial class VoxelPathfind
 
     private bool TryFindNearestEmptyL1SeedIndex(ulong l1Voxel, Vector3 point, out ushort seedIndex)
     {
-        seedIndex = 0;
-        var bestDistance = float.MaxValue;
-        var found        = false;
+        seedIndex = ResolvePointL2IndexWithinL1(l1Voxel, point);
+        if (Volume.IsEmpty(VoxelMap.EncodeSubIndex(l1Voxel, seedIndex, 2)))
+            return true;
 
-        for (ushort currentIndex = 0; currentIndex < l2Desc.NumCellsTotal; ++currentIndex)
+        var totalCells = l2Desc.NumCellsTotal;
+        l1FloodFillVisited ??= new bool[totalCells];
+        if (l1FloodFillVisited.Length < totalCells)
+            l1FloodFillVisited = new bool[totalCells];
+        else
+            Array.Clear(l1FloodFillVisited);
+        var visited = l1FloodFillVisited;
+
+        l1BfsQueue ??= new Queue<ushort>(totalCells);
+        l1BfsQueue.Clear();
+        var frontier = l1BfsQueue;
+
+        visited[seedIndex] = true;
+        frontier.Enqueue(seedIndex);
+
+        while (frontier.TryDequeue(out var currentIndex))
         {
             var leafVoxel = VoxelMap.EncodeSubIndex(l1Voxel, currentIndex, 2);
-            if (!Volume.IsEmpty(leafVoxel))
-                continue;
+            if (Volume.IsEmpty(leafVoxel))
+            {
+                seedIndex = currentIndex;
+                return true;
+            }
 
-            var center          = ResolveVoxelCenter(leafVoxel);
-            var distanceSquared = Vector3.DistanceSquared(center, point);
-            if (distanceSquared + SCORE_EPSILON >= bestDistance)
-                continue;
+            var (x, y, z) = l2Desc.IndexToVoxel(currentIndex);
 
-            bestDistance = distanceSquared;
-            seedIndex    = currentIndex;
-            found        = true;
+            EnqueueNeighbour(x - 1, y, z);
+            EnqueueNeighbour(x + 1, y, z);
+            EnqueueNeighbour(x, y - 1, z);
+            EnqueueNeighbour(x, y + 1, z);
+            EnqueueNeighbour(x, y, z - 1);
+            EnqueueNeighbour(x, y, z + 1);
+
+            void EnqueueNeighbour(int nx, int ny, int nz)
+            {
+                if (!l2Desc.InBounds(nx, ny, nz))
+                    return;
+                var nIndex = l2Desc.VoxelToIndex(nx, ny, nz);
+                if (visited[nIndex])
+                    return;
+                visited[nIndex] = true;
+                frontier.Enqueue(nIndex);
+            }
         }
 
-        return found;
+        seedIndex = 0;
+        return false;
     }
 
     private ulong ResolveRepresentativeL1Voxel(ulong voxel, Vector3 referencePoint)
@@ -411,8 +473,11 @@ public partial class VoxelPathfind
 
     private byte GetVoxelWallMask(ulong voxel)
     {
-        if (voxelWallMaskCache.TryGetValue(voxel, out var cached))
-            return cached;
+        lock (cacheLock)
+        {
+            if (voxelWallMaskCache.TryGetValue(voxel, out var cached))
+                return cached;
+        }
 
         byte wallMask = 0;
         if (!HasEmptyNeighbourInDirection(voxel, -1, 0, 0))
@@ -428,8 +493,10 @@ public partial class VoxelPathfind
         if (!HasEmptyNeighbourInDirection(voxel, 0, 0, +1))
             wallMask |= SEARCH_WALL_POS_Z;
 
-        if (!voxelWallMaskCache.TryAdd(voxel, wallMask))
-            return voxelWallMaskCache[voxel];
+        lock (cacheLock)
+        {
+            voxelWallMaskCache.TryAdd(voxel, wallMask);
+        }
 
         return wallMask;
     }
@@ -672,21 +739,33 @@ public partial class VoxelPathfind
 
     private bool HasDownwardOpening(ulong voxel)
     {
-        if (verifiedDownwardOpeningCache.TryGetValue(voxel, out var cached))
-            return cached == 1;
+        lock (cacheLock)
+        {
+            if (verifiedDownwardOpeningCache.TryGetValue(voxel, out var cached))
+                return cached == 1;
+        }
 
         var open = HasVerifiedVerticalAccessThroughFace(voxel, true);
-        verifiedDownwardOpeningCache.TryAdd(voxel, open ? (byte)1 : (byte)2);
+        lock (cacheLock)
+        {
+            verifiedDownwardOpeningCache.TryAdd(voxel, open ? (byte)1 : (byte)2);
+        }
         return open;
     }
 
     private bool HasVerifiedTopEntry(ulong voxel)
     {
-        if (verifiedTopEntryCache.TryGetValue(voxel, out var cached))
-            return cached == 1;
+        lock (cacheLock)
+        {
+            if (verifiedTopEntryCache.TryGetValue(voxel, out var cached))
+                return cached == 1;
+        }
 
         var open = HasVerifiedVerticalAccessThroughFace(voxel, false);
-        verifiedTopEntryCache.TryAdd(voxel, open ? (byte)1 : (byte)2);
+        lock (cacheLock)
+        {
+            verifiedTopEntryCache.TryAdd(voxel, open ? (byte)1 : (byte)2);
+        }
         return open;
     }
 

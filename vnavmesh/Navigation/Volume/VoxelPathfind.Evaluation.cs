@@ -183,14 +183,21 @@ public partial class VoxelPathfind
     {
         var     nodeSpan = NodeSpan;
         ref var fromNode = ref nodeSpan[fromNodeIndex];
-        var     cacheKey = new VolumeVisibilityKey(fromNodeIndex, fromNode.Revision, toVoxel);
-        if (visibilityCache.TryGetValue(cacheKey, out var cached))
-            return cached;
+        var     cacheKey = new VolumeVisibilityKey(fromNode.Voxel, toVoxel);
+
+        lock (cacheLock)
+        {
+            if (visibilityCache.TryGetValue(cacheKey, out var cached))
+                return cached;
+        }
 
         Interlocked.Increment(ref lineOfSightChecks);
         var visible = VoxelSearch.LineOfSight(Volume, fromNode.Voxel, toVoxel, fromNode.Position, toPosition);
-        if (!visibilityCache.TryAdd(cacheKey, visible))
-            return visibilityCache[cacheKey];
+
+        lock (cacheLock)
+        {
+            visibilityCache.TryAdd(cacheKey, visible);
+        }
 
         if (visible)
             Interlocked.Increment(ref lineOfSightHits);

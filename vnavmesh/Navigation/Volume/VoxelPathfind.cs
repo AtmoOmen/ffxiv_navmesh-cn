@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Common.Navigation.Volume.Map;
@@ -19,12 +18,17 @@ public partial class VoxelPathfind
 
     private readonly List<VolumePathfindNode>                        nodes                        = new(1024);
     private          VoxelNodeLookup                                 nodeLookup                   = new(2048);
-    private readonly ConcurrentDictionary<ulong, byte>               voxelWallMaskCache           = new(Environment.ProcessorCount, 4096);
-    private readonly ConcurrentDictionary<ulong, byte>               verifiedDownwardOpeningCache = new(Environment.ProcessorCount, 2048);
-    private readonly ConcurrentDictionary<ulong, byte>               verifiedTopEntryCache        = new(Environment.ProcessorCount, 2048);
-    private readonly ConcurrentDictionary<ulong, ulong>              l1FaceConnectivityCache      = new(Environment.ProcessorCount, 2048);
+    private readonly Dictionary<ulong, byte>                         voxelWallMaskCache           = new(4096);
+    private readonly Dictionary<ulong, byte>                         verifiedDownwardOpeningCache = new(2048);
+    private readonly Dictionary<ulong, byte>                         verifiedTopEntryCache        = new(2048);
+    private readonly Dictionary<ulong, ulong>                        l1FaceConnectivityCache      = new(2048);
     private readonly List<int>                                       openList                     = new(256);
-    private readonly ConcurrentDictionary<VolumeVisibilityKey, bool> visibilityCache              = new(Environment.ProcessorCount, 4096);
+    private readonly Dictionary<VolumeVisibilityKey, bool>           visibilityCache              = new(4096);
+    private readonly object                                          cacheLock                    = new();
+    private          VolumeNeighbourEvaluation?[]                    parallelEvaluationBuffer     = Array.Empty<VolumeNeighbourEvaluation?>();
+    private readonly ParallelOptions                                 parallelOptions              = new() { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) };
+    private          bool[]?                                         l1FloodFillVisited;
+    private          Queue<ushort>?                                  l1BfsQueue;
 
     private int                        bestNodeIndex;
     private ulong                      goalVoxel;
