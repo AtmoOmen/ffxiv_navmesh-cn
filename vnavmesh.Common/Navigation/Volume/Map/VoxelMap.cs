@@ -332,6 +332,11 @@ public class VoxelMap
         var ab = toPos - fromPos;
         var rel = fromPos - rootMin;
 
+        // 预计算 1/ab，用乘法替代除法
+        var invAbX = ab.X != 0 ? 1f / ab.X : 0;
+        var invAbY = ab.Y != 0 ? 1f / ab.Y : 0;
+        var invAbZ = ab.Z != 0 ? 1f / ab.Z : 0;
+
         var gx = (int)(rel.X * l2.InvCellSize.X);
         var gy = (int)(rel.Y * l2.InvCellSize.Y);
         var gz = (int)(rel.Z * l2.InvCellSize.Z);
@@ -375,16 +380,20 @@ public class VoxelMap
         float tMaxX, tMaxY, tMaxZ;
         float tDeltaX, tDeltaY, tDeltaZ;
 
-        if (stepX > 0)     { tMaxX = ((gx + 1) * l2.CellSize.X - rel.X) / ab.X; tDeltaX = l2.CellSize.X / ab.X; }
-        else if (stepX < 0){ tMaxX = (gx * l2.CellSize.X - rel.X) / ab.X;        tDeltaX = -l2.CellSize.X / ab.X; }
+        var cellSizeX = l2.CellSize.X;
+        var cellSizeY = l2.CellSize.Y;
+        var cellSizeZ = l2.CellSize.Z;
+
+        if (stepX > 0)     { tMaxX = ((gx + 1) * cellSizeX - rel.X) * invAbX; tDeltaX = cellSizeX * invAbX; }
+        else if (stepX < 0){ tMaxX = (gx * cellSizeX - rel.X) * invAbX;        tDeltaX = -cellSizeX * invAbX; }
         else               { tMaxX = float.MaxValue; tDeltaX = 0; }
 
-        if (stepY > 0)     { tMaxY = ((gy + 1) * l2.CellSize.Y - rel.Y) / ab.Y; tDeltaY = l2.CellSize.Y / ab.Y; }
-        else if (stepY < 0){ tMaxY = (gy * l2.CellSize.Y - rel.Y) / ab.Y;        tDeltaY = -l2.CellSize.Y / ab.Y; }
+        if (stepY > 0)     { tMaxY = ((gy + 1) * cellSizeY - rel.Y) * invAbY; tDeltaY = cellSizeY * invAbY; }
+        else if (stepY < 0){ tMaxY = (gy * cellSizeY - rel.Y) * invAbY;        tDeltaY = -cellSizeY * invAbY; }
         else               { tMaxY = float.MaxValue; tDeltaY = 0; }
 
-        if (stepZ > 0)     { tMaxZ = ((gz + 1) * l2.CellSize.Z - rel.Z) / ab.Z; tDeltaZ = l2.CellSize.Z / ab.Z; }
-        else if (stepZ < 0){ tMaxZ = (gz * l2.CellSize.Z - rel.Z) / ab.Z;        tDeltaZ = -l2.CellSize.Z / ab.Z; }
+        if (stepZ > 0)     { tMaxZ = ((gz + 1) * cellSizeZ - rel.Z) * invAbZ; tDeltaZ = cellSizeZ * invAbZ; }
+        else if (stepZ < 0){ tMaxZ = (gz * cellSizeZ - rel.Z) * invAbZ;        tDeltaZ = -cellSizeZ * invAbZ; }
         else               { tMaxZ = float.MaxValue; tDeltaZ = 0; }
 
         var l0ShiftX = l2.ShiftXZ + l1.ShiftXZ;
@@ -410,6 +419,10 @@ public class VoxelMap
         var curL1Y = -1;
         var curL1Z = -1;
         ushort l1Data = 0;
+
+        // L2 tile 缓存
+        VolumeTile? l2Tile  = null;
+        var l2TileId = -1;
 
         const int MAX_DDA_ITERATIONS = 8192;
         var iterations = 0;
@@ -465,12 +478,16 @@ public class VoxelMap
             if (newL1X != curL1X || newL1Y != curL1Y || newL1Z != curL1Z)
             {
                 if (curL1X < 0)
-                    l1Tile = rootTile.GetSubdivision(l0Id);
+                {
+                    l1Tile   = rootTile.GetSubdivision(l0Id);
+                    l2TileId = -1;
+                }
 
                 curL1X = newL1X;
                 curL1Y = newL1Y;
                 curL1Z = newL1Z;
                 l1Data = l1Tile!.GetCell(l1.VoxelToIndex(curL1X, curL1Y, curL1Z));
+                l2TileId = -1;
             }
 
             if ((l1Data & VOXEL_OCCUPIED_BIT) == 0)
@@ -497,9 +514,13 @@ public class VoxelMap
             }
 
             // --- L2 层检查 ---
-            var l2Tile  = l1Tile!.GetSubdivision(l0Id);
+            if (l0Id != l2TileId)
+            {
+                l2Tile   = l1Tile!.GetSubdivision(l0Id);
+                l2TileId = l0Id;
+            }
             var l2Index = l2.VoxelToIndex(gx & l2MaskX, gy & l2MaskY, gz & l2MaskZ);
-            var l2Data  = l2Tile.GetCell(l2Index);
+            var l2Data  = l2Tile!.GetCell(l2Index);
 
             if ((l2Data & VOXEL_OCCUPIED_BIT) != 0)
             {
@@ -590,24 +611,24 @@ public class VoxelMap
             if (tExitZ < tExit) tExit = tExitZ;
         }
 
-        // 推进 DDA 状态到 tExit
+        // 推进 DDA 状态到 tExit（tExit >= tMax 时值非负，(int) 截断等同 Floor）
         if (stepX != 0 && tExit >= tMaxX)
         {
-            var n = (int)MathF.Floor((tExit - tMaxX) / tDeltaX + 1e-6f) + 1;
+            var n = (int)((tExit - tMaxX) / tDeltaX + 1e-6f) + 1;
             gx     += stepX * n;
             tMaxX  += n * tDeltaX;
         }
 
         if (stepY != 0 && tExit >= tMaxY)
         {
-            var n = (int)MathF.Floor((tExit - tMaxY) / tDeltaY + 1e-6f) + 1;
+            var n = (int)((tExit - tMaxY) / tDeltaY + 1e-6f) + 1;
             gy     += stepY * n;
             tMaxY  += n * tDeltaY;
         }
 
         if (stepZ != 0 && tExit >= tMaxZ)
         {
-            var n = (int)MathF.Floor((tExit - tMaxZ) / tDeltaZ + 1e-6f) + 1;
+            var n = (int)((tExit - tMaxZ) / tDeltaZ + 1e-6f) + 1;
             gz     += stepZ * n;
             tMaxZ  += n * tDeltaZ;
         }
