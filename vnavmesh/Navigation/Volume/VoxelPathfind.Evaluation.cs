@@ -75,7 +75,7 @@ public partial class VoxelPathfind
         }
 
         var requireDirectVisibility = VoxelIndexUtil.IsCoarseNeighbour(neighbourVoxel);
-        if (!TryEvaluateCandidate(currentIndex, neighbourVoxel, neighbourPosition, requireDirectVisibility, ref bestParentIndex, ref bestPosition, ref bestScore))
+        if (!TryEvaluateCandidate(currentIndex, neighbourVoxel, neighbourPosition, edgeCost, requireDirectVisibility, ref bestParentIndex, ref bestPosition, ref bestScore))
             return false;
 
         var earlyStopThreshold = currentGScore + edgeCost * 0.8f;
@@ -103,8 +103,9 @@ public partial class VoxelPathfind
         for (var i = 0; i < ancestorCount && lookBackCount < effectiveLookBack; ++i)
         {
             var ancestorIndex = ancestorChain[i];
+            var ancestorEdgeCost = Vector3.Distance(nodeSpan[ancestorIndex].Position, neighbourPosition);
 
-            if (!TryEvaluateCandidate(ancestorIndex, neighbourVoxel, neighbourPosition, true, ref bestParentIndex, ref bestPosition, ref bestScore))
+            if (!TryEvaluateCandidate(ancestorIndex, neighbourVoxel, neighbourPosition, ancestorEdgeCost, true, ref bestParentIndex, ref bestPosition, ref bestScore))
             {
                 ++lookBackCount;
                 continue;
@@ -142,7 +143,10 @@ public partial class VoxelPathfind
             }
 
             if (rootIndex != lastEvaluated)
-                TryEvaluateCandidate(rootIndex, neighbourVoxel, neighbourPosition, true, ref bestParentIndex, ref bestPosition, ref bestScore);
+            {
+                var rootEdgeCost = Vector3.Distance(nodeSpan[rootIndex].Position, neighbourPosition);
+                TryEvaluateCandidate(rootIndex, neighbourVoxel, neighbourPosition, rootEdgeCost, true, ref bestParentIndex, ref bestPosition, ref bestScore);
+            }
         }
 
         return bestParentIndex >= 0;
@@ -153,6 +157,7 @@ public partial class VoxelPathfind
         int         parentIndex,
         ulong       voxel,
         Vector3     position,
+        float       edgeCost,
         bool        requireVisibility,
         ref int     bestParentIndex,
         ref Vector3 bestPosition,
@@ -164,22 +169,20 @@ public partial class VoxelPathfind
 
         // 预 LoS 分数下界过滤：parentGScore + 直线距离是分数下界（所有惩罚项 ≥ 0）
         // 如果下界已不优于当前最优，跳过昂贵的 LoS 检查
-        var edgeCost = Vector3.Distance(parent.Position, position);
         if (parent.GScore + edgeCost >= bestScore)
             return false;
 
         if (requireVisibility && !TryLineOfSight(parentIndex, voxel, position))
             return false;
 
-        var corridorPenalty = 0f;
+        // 快路径：无横向偏置且无重访集合时，score = parentGScore + edgeCost + corridorPenalty
+        var score = parent.GScore + edgeCost;
 
         if (useGuidedCorridor && voxel != goalVoxel)
-            corridorPenalty = CalculateCorridorOverflowPenalty(position);
+            score += CalculateCorridorOverflowPenalty(position);
 
-        var score = parent.GScore +
-                    edgeCost +
-                    CalculateLongRangeLateralTraversalPenalty(parent.Voxel, parent.Position, voxel, position) +
-                    corridorPenalty;
+        if (longRangeLateralBias.Enabled)
+            score += CalculateLongRangeLateralTraversalPenalty(parent.Voxel, parent.Position, voxel, position);
 
         if (previouslyVisitedVoxels is { } visited && visited.Contains(voxel))
             score += edgeCost * REVISIT_PENALTY_SCALE;
