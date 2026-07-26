@@ -60,9 +60,6 @@ public static class VoxelIndexUtil
         return packedConnectivity;
     }
 
-    public static bool CanTraverseMixedL1Cell(bool includeNonEmpty, ulong candidateL1, ulong goalL1)
-        => includeNonEmpty && candidateL1 == goalL1;
-
     public static bool HasL1Face(ushort faceMask, int face)
         => (faceMask & (1 << face)) != 0;
 }

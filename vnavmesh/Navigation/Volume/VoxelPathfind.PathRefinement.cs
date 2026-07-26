@@ -1,6 +1,7 @@
 using System.Numerics;
 using vnavmesh.Common.Navigation.Volume.Map;
 using vnavmesh.Common.Navigation.Volume.Search;
+using vnavmesh.Navigation.Volume.Models;
 using vnavmesh.Navigation.Volume.Utils;
 
 namespace vnavmesh.Navigation.Volume;
@@ -530,7 +531,7 @@ public partial class VoxelPathfind
 
         var anchor   = path[anchorIndex];
         var probe    = path[probeIndex];
-        var cacheKey = (anchor.voxel, probe.voxel);
+        var cacheKey = new VolumeVisibilityKey(anchor.voxel, probe.voxel, anchor.p, probe.p);
 
         if (pathLoSCache.TryGetValue(cacheKey, out var cached))
             return cached;
@@ -547,7 +548,7 @@ public partial class VoxelPathfind
 
     private bool HasLineOfSight((ulong voxel, Vector3 p) from, ulong toVoxel, Vector3 toPosition)
     {
-        var cacheKey = (from.voxel, toVoxel);
+        var cacheKey = new VolumeVisibilityKey(from.voxel, toVoxel, from.p, toPosition);
 
         if (pathLoSCache.TryGetValue(cacheKey, out var cached))
             return cached;

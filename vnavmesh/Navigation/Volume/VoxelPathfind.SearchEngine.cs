@@ -8,11 +8,8 @@ namespace vnavmesh.Navigation.Volume;
 
 public partial class VoxelPathfind
 {
-    private void Start(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos, LongRangeLateralBias lateralBias = default)
+    private void Start(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos)
     {
-        ResetSearchState();
-        longRangeLateralBias = lateralBias;
-
         if (fromVoxel == VoxelMap.INVALID_VOXEL || toVoxel == VoxelMap.INVALID_VOXEL)
         {
             Service.Log.Error($"输入体素非法：{fromVoxel:X} -> {toVoxel:X}");
@@ -120,21 +117,23 @@ public partial class VoxelPathfind
         Vector3               toPos,
         bool                  returnIntermediatePoints,
         int                   maxSteps,
-        int                   attempts,
         CancellationToken     cancel,
         GuidedSearchCorridor? corridor                = null,
         float?                heuristicWeightOverride = null,
         LongRangeLateralBias  lateralBias             = default,
-        bool                  disableAncestorLookBack = false
+        bool                  disableAncestorLookBack = false,
+        bool?                 allowCoarseSteppingOverride = null
     )
     {
-        Start(fromVoxel, toVoxel, fromPos, toPos, lateralBias);
-        allowCoarseL1Stepping = maxSteps > RAYCAST_SEARCH_STEP_BUDGET;
+        ResetSearchState();
+        longRangeLateralBias  = lateralBias;
+        allowCoarseL1Stepping = allowCoarseSteppingOverride ?? maxSteps > RAYCAST_SEARCH_STEP_BUDGET;
         allowAncestorLookBack = !disableAncestorLookBack;
         useGuidedCorridor     = corridor.HasValue;
         guidedCorridor        = corridor.GetValueOrDefault();
         heuristicWeight       = heuristicWeightOverride ?? SHORT_RANGE_HEURISTIC_WEIGHT;
-        lastSearchAttempts    = attempts;
+        lastSearchAttempts    = 1;
+        Start(fromVoxel, toVoxel, fromPos, toPos);
         lastTermination       = Execute(cancel, maxSteps);
         return BuildPathToVisitedNode(bestNodeIndex, returnIntermediatePoints);
     }
@@ -240,12 +239,35 @@ public partial class VoxelPathfind
         return true;
     }
 
-    private void ResetSearchState()
+    private void BeginQuery()
     {
+        completedVisitedNodes      = 0;
+        completedGeneratedNodes    = 0;
+        completedLineOfSightChecks = 0;
+        completedLineOfSightHits   = 0;
+        completedPeakOpenListSize  = 0;
+        completedSearchAttempts    = 0;
+        coarseExpandedNodes        = 0;
+        ResetSearchState(false);
+        pathLoSCache.Clear();
+        clearanceCache.Clear();
+    }
+
+    private void ResetSearchState(bool commitTelemetry = true)
+    {
+        if (commitTelemetry)
+        {
+            completedVisitedNodes      += visitedNodes;
+            completedGeneratedNodes    += generatedNodes;
+            completedLineOfSightChecks += lineOfSightChecks;
+            completedLineOfSightHits   += lineOfSightHits;
+            completedPeakOpenListSize   = Math.Max(completedPeakOpenListSize, peakOpenListSize);
+            completedSearchAttempts    += lastSearchAttempts;
+        }
+
         nodes.Clear();
         nodeLookup.Clear();
         openList.Clear();
-        ClearVisibilityCaches();
         TrimCachesIfNeeded();
         bestNodeIndex                       = 0;
         goalReached                         = false;
@@ -325,7 +347,7 @@ public partial class VoxelPathfind
 
     internal void ReleaseRetainedState()
     {
-        ResetSearchState();
+        ResetSearchState(false);
         neighbourScratch.Clear();
         neighbourScratch.TrimExcess();
         nodes.TrimExcess();
@@ -356,23 +378,20 @@ public partial class VoxelPathfind
 
     private bool TryBuildDirectPath(ulong fromVoxel, ulong toVoxel, Vector3 fromPos, Vector3 toPos, out List<(ulong voxel, Vector3 p)> path)
     {
-        ++lineOfSightChecks;
-
-        if (!VoxelSearch.LineOfSight(Volume, fromVoxel, toVoxel, fromPos, toPos))
+        if (!TryLineOfSight(fromVoxel, fromPos, toVoxel, toPos))
         {
             path = [];
             return false;
         }
 
-        ++lineOfSightHits;
         goalVoxel          = toVoxel;
         goalPos            = toPos;
         bestNodeIndex      = 0;
         goalReached        = true;
-        visitedNodes       = 1;
-        generatedNodes     = 1;
+        visitedNodes       = Math.Max(visitedNodes,   1);
+        generatedNodes     = Math.Max(generatedNodes, 1);
         lastTermination    = VolumeSearchTermination.ReachedGoal;
-        lastSearchAttempts = 1;
+        lastSearchAttempts = Math.Max(lastSearchAttempts, 1);
         path               = [(toVoxel, toPos)];
         return true;
     }
@@ -386,5 +405,13 @@ public partial class VoxelPathfind
         var minHorizontal      = MathF.Max(leafHorizontalSize * SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_LEAF_CELLS, SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_DISTANCE);
         var minDrop            = MathF.Max(leafVerticalSize   * SHORT_RANGE_EXPLORATION_MIN_DROP_LEAF_CELLS,       SHORT_RANGE_EXPLORATION_MIN_DROP_DISTANCE);
         return horizontalDistance >= minHorizontal && verticalDrop >= minDrop;
+    }
+
+    private int ResolveShortRangeFastSearchStepBudget(float distance)
+    {
+        var minLeafExtent = MathF.Min(l2Desc.CellSize.X, MathF.Min(l2Desc.CellSize.Y, l2Desc.CellSize.Z));
+        var leafCells     = distance / MathF.Max(minLeafExtent, SCORE_EPSILON);
+        var budget        = SHORT_RANGE_FAST_SEARCH_BASE_STEP_BUDGET + (int)(leafCells * SHORT_RANGE_FAST_SEARCH_STEP_BUDGET_PER_LEAF_CELL);
+        return Math.Min(budget, SHORT_RANGE_FAST_SEARCH_MAX_STEP_BUDGET);
     }
 }

@@ -27,7 +27,7 @@ public partial class VoxelPathfind
     private readonly List<int>                               openList                     = new(256);
     private readonly Dictionary<VolumeVisibilityKey, bool>[] visibilityCaches;
     private readonly object[]                                visibilityLocks;
-    private readonly Dictionary<(ulong, ulong), bool>        pathLoSCache             = new(1024);
+    private readonly Dictionary<VolumeVisibilityKey, bool>   pathLoSCache             = new(1024);
     private readonly Dictionary<(ulong, int), float>         clearanceCache           = new(1024);
     private readonly object                                  cacheLock                = new();
     private          VolumeNeighbourEvaluation?[]            parallelEvaluationBuffer = Array.Empty<VolumeNeighbourEvaluation?>();
@@ -66,6 +66,13 @@ public partial class VoxelPathfind
     private bool                       allowCoarseL1Stepping;
     private bool                       allowAncestorLookBack = true;
     private HashSet<ulong>?            previouslyVisitedVoxels;
+    private int                        completedVisitedNodes;
+    private int                        completedGeneratedNodes;
+    private int                        completedLineOfSightChecks;
+    private int                        completedLineOfSightHits;
+    private int                        completedPeakOpenListSize;
+    private int                        completedSearchAttempts;
+    private int                        coarseExpandedNodes;
 
     public VoxelMap Volume { get; }
 
@@ -73,13 +80,14 @@ public partial class VoxelPathfind
 
     internal VolumeSearchTelemetry LastTelemetry => new
     (
-        visitedNodes,
-        generatedNodes,
-        lineOfSightChecks,
-        lineOfSightHits,
-        peakOpenListSize,
+        completedVisitedNodes       + visitedNodes,
+        completedGeneratedNodes     + generatedNodes,
+        completedLineOfSightChecks  + lineOfSightChecks,
+        completedLineOfSightHits    + lineOfSightHits,
+        Math.Max(completedPeakOpenListSize, peakOpenListSize),
+        coarseExpandedNodes,
         lastTermination,
-        lastSearchAttempts,
+        completedSearchAttempts + lastSearchAttempts,
         heuristicWeight
     );
 
@@ -112,7 +120,10 @@ public partial class VoxelPathfind
         bool              returnIntermediatePoints,
         CancellationToken cancel
     )
-        => FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, allowRelay: true);
+    {
+        BeginQuery();
+        return FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, allowRelay: true);
+    }
 
     private List<(ulong voxel, Vector3 p)> FindPathInternal
     (
@@ -165,14 +176,30 @@ public partial class VoxelPathfind
             return directPath;
 
         var straightLineDistance = Vector3.Distance(fromPos, toPos);
-        if (straightLineDistance > maxSearchRaycastDistance * 0.5f)
-            ComputeL1DistanceField(toVoxel, toPos, L1_DISTANCE_FIELD_PRECOMPUTE_BUDGET);
-
-        var searchRaycast = Vector3.Distance(fromPos, toPos) <= maxSearchRaycastDistance;
+        var searchRaycast        = straightLineDistance <= maxSearchRaycastDistance;
 
         if (searchRaycast)
         {
-            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, 1, cancel);
+            var fastSearchBudget = ResolveShortRangeFastSearchStepBudget(straightLineDistance);
+            var path = RunSearchAttempt
+            (
+                fromVoxel,
+                toVoxel,
+                fromPos,
+                toPos,
+                returnIntermediatePoints,
+                fastSearchBudget,
+                cancel,
+                heuristicWeightOverride: SHORT_RANGE_FAST_HEURISTIC_WEIGHT,
+                disableAncestorLookBack: true,
+                allowCoarseSteppingOverride: true
+            );
+
+            if (lastTermination == VolumeSearchTermination.ReachedGoal)
+                return RefineSimplifiedPath(path, cancel);
+
+            RetainClosedSetKnowledge();
+            path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, cancel);
 
             if (lastTermination != VolumeSearchTermination.ReachedGoal)
             {
@@ -192,11 +219,12 @@ public partial class VoxelPathfind
                 fromPos,
                 toPos,
                 returnIntermediatePoints,
-                GUIDED_CORRIDOR_SEARCH_STEP_BUDGET,
-                1,
+                LONG_RANGE_GUIDED_PROBE_STEP_BUDGET,
                 cancel,
                 corridor,
-                SHORT_RANGE_HEURISTIC_WEIGHT
+                SHORT_RANGE_FAST_HEURISTIC_WEIGHT,
+                disableAncestorLookBack: true,
+                allowCoarseSteppingOverride: true
             );
 
             if (lastTermination == VolumeSearchTermination.ReachedGoal)

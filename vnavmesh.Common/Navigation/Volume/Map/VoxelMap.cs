@@ -510,7 +510,26 @@ public class VoxelMap
 
                 // 算术快进到 L0 cell 边界
                 FastForwardArithmetic
-                    (l0ShiftX, l0ShiftY, l0ShiftZ, ref gx, ref gy, ref gz, stepX, stepY, stepZ, ref tMaxX, ref tMaxY, ref tMaxZ, tDeltaX, tDeltaY, tDeltaZ);
+                (
+                    l0ShiftX,
+                    l0ShiftY,
+                    l0ShiftZ,
+                    ref gx,
+                    ref gy,
+                    ref gz,
+                    goalGx,
+                    goalGy,
+                    goalGz,
+                    stepX,
+                    stepY,
+                    stepZ,
+                    ref tMaxX,
+                    ref tMaxY,
+                    ref tMaxZ,
+                    tDeltaX,
+                    tDeltaY,
+                    tDeltaZ
+                );
                 continue;
             }
 
@@ -555,7 +574,26 @@ public class VoxelMap
 
                 // 算术快进到 L1 cell 边界
                 FastForwardArithmetic
-                    (l2.ShiftXZ, l2.ShiftYX, l2ShiftZ, ref gx, ref gy, ref gz, stepX, stepY, stepZ, ref tMaxX, ref tMaxY, ref tMaxZ, tDeltaX, tDeltaY, tDeltaZ);
+                (
+                    l2.ShiftXZ,
+                    l2.ShiftYX,
+                    l2ShiftZ,
+                    ref gx,
+                    ref gy,
+                    ref gz,
+                    goalGx,
+                    goalGy,
+                    goalGz,
+                    stepX,
+                    stepY,
+                    stepZ,
+                    ref tMaxX,
+                    ref tMaxY,
+                    ref tMaxZ,
+                    tDeltaX,
+                    tDeltaY,
+                    tDeltaZ
+                );
                 continue;
             }
 
@@ -584,9 +622,13 @@ public class VoxelMap
             }
 
             // L2 cell 为空，正常 DDA 步进
-            if (tMaxX < tMaxY)
+            var nextBoundaryX = gx == goalGx ? float.MaxValue : tMaxX;
+            var nextBoundaryY = gy == goalGy ? float.MaxValue : tMaxY;
+            var nextBoundaryZ = gz == goalGz ? float.MaxValue : tMaxZ;
+
+            if (nextBoundaryX < nextBoundaryY)
             {
-                if (tMaxX < tMaxZ)
+                if (nextBoundaryX < nextBoundaryZ)
                 {
                     gx    += stepX;
                     tMaxX += tDeltaX;
@@ -599,7 +641,7 @@ public class VoxelMap
             }
             else
             {
-                if (tMaxY < tMaxZ)
+                if (nextBoundaryY < nextBoundaryZ)
                 {
                     gy    += stepY;
                     tMaxY += tDeltaY;
@@ -625,6 +667,9 @@ public class VoxelMap
         ref int   gx,
         ref int   gy,
         ref int   gz,
+        int       goalGx,
+        int       goalGy,
+        int       goalGz,
         int       stepX,
         int       stepY,
         int       stepZ,
@@ -685,23 +730,35 @@ public class VoxelMap
         // 推进 DDA 状态到 tExit（tExit >= tMax 时值非负，(int) 截断等同 Floor）
         if (stepX != 0 && tExit >= tMaxX)
         {
-            var n = (int)((tExit - tMaxX) / tDeltaX + 1e-6f) + 1;
-            gx    += stepX * n;
-            tMaxX += n     * tDeltaX;
+            var remaining = stepX > 0 ? goalGx - gx : gx - goalGx;
+            var n         = Math.Min((int)((tExit - tMaxX) / tDeltaX + 1e-6f) + 1, remaining);
+            if (n > 0)
+            {
+                gx    += stepX * n;
+                tMaxX += n     * tDeltaX;
+            }
         }
 
         if (stepY != 0 && tExit >= tMaxY)
         {
-            var n = (int)((tExit - tMaxY) / tDeltaY + 1e-6f) + 1;
-            gy    += stepY * n;
-            tMaxY += n     * tDeltaY;
+            var remaining = stepY > 0 ? goalGy - gy : gy - goalGy;
+            var n         = Math.Min((int)((tExit - tMaxY) / tDeltaY + 1e-6f) + 1, remaining);
+            if (n > 0)
+            {
+                gy    += stepY * n;
+                tMaxY += n     * tDeltaY;
+            }
         }
 
         if (stepZ != 0 && tExit >= tMaxZ)
         {
-            var n = (int)((tExit - tMaxZ) / tDeltaZ + 1e-6f) + 1;
-            gz    += stepZ * n;
-            tMaxZ += n     * tDeltaZ;
+            var remaining = stepZ > 0 ? goalGz - gz : gz - goalGz;
+            var n         = Math.Min((int)((tExit - tMaxZ) / tDeltaZ + 1e-6f) + 1, remaining);
+            if (n > 0)
+            {
+                gz    += stepZ * n;
+                tMaxZ += n     * tDeltaZ;
+            }
         }
     }
 

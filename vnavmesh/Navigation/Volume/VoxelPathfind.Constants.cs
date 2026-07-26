@@ -38,11 +38,25 @@ public partial class VoxelPathfind
         byte  EntryFace
     );
 
+    private readonly record struct L1BestEffortNode
+    (
+        float            GScore,
+        L1TraversalState Parent,
+        int              Depth
+    );
+
+    private readonly record struct L1PathNode
+    (
+        float GScore,
+        ulong Parent
+    );
+
     private readonly record struct L1BestEffortSearchResult
     (
         HashSet<ulong>       PathSet,
         IReadOnlyList<ulong> OrderedPath,
         bool                 ReachedGoal,
+        bool                 MixedGoal,
         int                  ExpandedNodes,
         float                BestDistance,
         int                  StepBudget
@@ -51,7 +65,7 @@ public partial class VoxelPathfind
     private const float  SCORE_EPSILON                                                   = 0.00001f;
     private const int    DEFAULT_MAX_SEARCH_STEPS                                        = 1_0000_0000;
     private const int    RAYCAST_SEARCH_STEP_BUDGET                                      = 400000;
-    private const int    GUIDED_CORRIDOR_SEARCH_STEP_BUDGET                              = 2_000_000;
+    private const int    LONG_RANGE_GUIDED_PROBE_STEP_BUDGET                             = 60_000;
     private const int    GUIDED_CORRIDOR_EARLY_ABORT_MIN_VISITED                         = 100_000;
     private const int    GUIDED_CORRIDOR_EARLY_ABORT_HARD_VISITED_THRESHOLD              = 150_000;
     private const int    GUIDED_CORRIDOR_EARLY_ABORT_STALL_WINDOW                        = 80_000;
@@ -59,6 +73,10 @@ public partial class VoxelPathfind
     private const int    RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD                            = 12;
     private const float  MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS                       = 96f;
     private const float  SHORT_RANGE_HEURISTIC_WEIGHT                                    = 1.0f;
+    private const float  SHORT_RANGE_FAST_HEURISTIC_WEIGHT                               = 1.35f;
+    private const int    SHORT_RANGE_FAST_SEARCH_BASE_STEP_BUDGET                        = 4_096;
+    private const int    SHORT_RANGE_FAST_SEARCH_STEP_BUDGET_PER_LEAF_CELL               = 256;
+    private const int    SHORT_RANGE_FAST_SEARCH_MAX_STEP_BUDGET                         = 50_000;
     private const float  LONG_RANGE_HEURISTIC_WEIGHT                                     = 0.85f;
     private const float  GOAL_VISIBILITY_PROBE_DISTANCE_IN_LEAF_CELLS                    = 48f;
     private const float  BEST_NODE_RELATIVE_H_TOLERANCE_LEAF_CELLS                       = 2.50f;
@@ -68,9 +86,13 @@ public partial class VoxelPathfind
     private const int    LONG_RANGE_L1_BEST_EFFORT_MAX_STEP_BUDGET                       = 2_500_000;
     private const int    LONG_RANGE_L1_GOAL_CAPTURE_BASE_STEP_BUDGET                     = 300_000;
     private const int    LONG_RANGE_L1_GOAL_CAPTURE_MAX_STEP_BUDGET                      = 1_200_000;
-    private const int    LONG_RANGE_L1_GUIDED_FULL_SEARCH_BASE_CORRIDOR_RADIUS           = 6;
-    private const int    LONG_RANGE_L1_GUIDED_FULL_SEARCH_MAX_CORRIDOR_RADIUS            = 12;
-    private const int    LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH                       = 1;
+    private const int    LONG_RANGE_L1_PROXY_MIN_EXPANSIONS                              = 100_000;
+    private const int    LONG_RANGE_L1_PROXY_STALL_WINDOW                                = 40_000;
+    private const int    LONG_RANGE_L1_PROXY_MIN_PATH_CELLS                              = 24;
+    private const int    LONG_RANGE_L1_PROXY_MIN_PROGRESS_CELLS                          = 12;
+    private const float  LONG_RANGE_L1_PROXY_MIN_PROGRESS_RATIO                          = 0.12f;
+    private const int    LONG_RANGE_L1_GUIDED_FULL_SEARCH_CORRIDOR_RADIUS                = 2;
+    private const int    LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH                       = 4;
     private const int    LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET                            = 1_500_000;
     private const float  LONG_RANGE_LATERAL_DESCENT_ENABLE_MIN_DROP_LEAF_CELLS           = 2f;
     private const float  LONG_RANGE_LATERAL_DESCENT_PRIORITY_DROP_LEAF_CELLS             = 18f;
@@ -96,7 +118,6 @@ public partial class VoxelPathfind
     private const float  LONG_RANGE_L1_GOAL_CAPTURE_DISTANCE_THRESHOLD_L1_CELLS          = 18f;
     private const float  LONG_RANGE_L1_GOAL_CAPTURE_DIRECT_DISTANCE_RATIO                = 0.18f;
     private const float  LONG_RANGE_L1_GOAL_CAPTURE_BUDGET_PER_CELL                      = 16000f;
-    private const float  LONG_RANGE_L1_GUIDED_FULL_SEARCH_GAP_RADIUS_SCALE               = 1.0f;
     private const float  LONG_RANGE_LATERAL_DOWNWARD_OPENING_MIN_ABOVE_GOAL_LEAF_CELLS   = 1.5f;
     private const float  LONG_RANGE_LATERAL_DOWNWARD_OPENING_HORIZONTAL_HEURISTIC_SCALE  = 0.82f;
     private const float  LONG_RANGE_LATERAL_DOWNWARD_OPENING_VERTICAL_HEURISTIC_SCALE    = 0.50f;
@@ -114,7 +135,6 @@ public partial class VoxelPathfind
     private const int    L1_FACE_TRANSITION_CACHE_MAX_SIZE                               = 200_000;
     private const int    VISIBILITY_CACHE_MAX_SIZE                                       = 1_000_000;
     private const int    VISIBILITY_CACHE_STRIPES                                        = 16;
-    private const int    L1_DISTANCE_FIELD_PRECOMPUTE_BUDGET                             = 200_000;
     private const float  REVISIT_PENALTY_SCALE                                           = 0.5f;
     private const int    MAX_PREVIOUSLY_VISITED                                          = 500_000;
     private const float  SHORT_RANGE_EXPLORATION_MIN_HORIZONTAL_LEAF_CELLS               = 8f;

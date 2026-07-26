@@ -7,6 +7,7 @@ internal readonly record struct VolumeSearchTelemetry
     int                     LineOfSightChecks,
     int                     LineOfSightHits,
     int                     PeakOpenListSize,
+    int                     CoarseExpandedNodes,
     VolumeSearchTermination Termination,
     int                     SearchAttempts,
     float                   HeuristicWeight

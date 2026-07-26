@@ -1,5 +1,4 @@
 using System.Numerics;
-using vnavmesh.Navigation.Planning;
 using vnavmesh.Navigation.Volume.Models;
 using vnavmesh.Navigation.Volume.Utils;
 
@@ -18,7 +17,9 @@ public partial class VoxelPathfind
         int               recursionDepth = 0
     )
     {
-        var coarsePath = SearchL1BestEffortPath(fromVoxel, fromPos, toVoxel, toPos);
+        var coarseExpandedBefore = coarseExpandedNodes;
+        var coarsePath           = SearchL1BestEffortPath(fromVoxel, fromPos, toVoxel, toPos, cancel);
+        var coarsePhaseExpanded  = coarseExpandedNodes - coarseExpandedBefore;
 
         if (coarsePath.PathSet.Count == 0)
         {
@@ -29,10 +30,10 @@ public partial class VoxelPathfind
 
         Service.Log.Debug
         (
-            $"[算路] 飞行体素粗层 best-effort 完成：到达终点 = {(coarsePath.ReachedGoal ? 1 : 0)}，粗路径单元 = {coarsePath.PathSet.Count}，扩展节点 = {coarsePath.ExpandedNodes}/{coarsePath.StepBudget}，最佳粗距离 = {coarsePath.BestDistance:f3}"
+            $"[算路] 飞行体素粗层 best-effort 完成：到达终点 = {(coarsePath.ReachedGoal ? 1 : 0)}，目标单元 = {(coarsePath.MixedGoal ? "混合" : "全空")}，粗路径单元 = {coarsePath.PathSet.Count}，扩展节点 = {coarsePath.ExpandedNodes}/{coarsePath.StepBudget}，本轮总扩展 = {coarsePhaseExpanded}，最佳粗距离 = {coarsePath.BestDistance:f3}"
         );
 
-        var guidedCorridorRadius = ResolveLongRangeGuidedFullSearchCorridorRadius(coarsePath.BestDistance);
+        var guidedCorridorRadius = LONG_RANGE_L1_GUIDED_FULL_SEARCH_CORRIDOR_RADIUS;
         var proxyGoalVoxel = coarsePath.ReachedGoal ?
                                  toVoxel :
                                  coarsePath.OrderedPath[^1];
@@ -46,8 +47,8 @@ public partial class VoxelPathfind
                 proxyGoalVoxel = resolvedLeaf;
         }
 
-        BuildL1Corridor(coarsePath.PathSet, guidedCorridorRadius);
-        ComputeL1DistanceFieldFromCoarsePath(coarsePath.OrderedPath, 0f);
+        BuildL1Corridor(coarsePath.PathSet, guidedCorridorRadius, cancel);
+        ComputeL1DistanceFieldFromCoarsePath(coarsePath.OrderedPath, 0f, cancel);
 
         var proxySearchBudget = LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET;
         var proxyPath = RunSearchAttempt
@@ -58,7 +59,6 @@ public partial class VoxelPathfind
             proxyGoalPos,
             returnIntermediatePoints,
             proxySearchBudget,
-            1,
             cancel,
             heuristicWeightOverride: SHORT_RANGE_HEURISTIC_WEIGHT,
             disableAncestorLookBack: true
@@ -92,6 +92,7 @@ public partial class VoxelPathfind
                 returnIntermediatePoints,
                 coarsePath.ReachedGoal,
                 recursionDepth,
+                Vector3.DistanceSquared(fromPos, proxyEndpoint.p) > l1Desc.CellSize.LengthSquared(),
                 out var usedLongRangeReentry,
                 cancel
             );
@@ -127,7 +128,7 @@ public partial class VoxelPathfind
         {
             Service.Log.Debug("[算路] 飞行体素兜底全搜索：代理搜索穷尽，回退无约束距离场全搜索");
             RetainClosedSetKnowledge();
-            ComputeL1DistanceField(toVoxel, toPos);
+            ComputeL1DistanceField(toVoxel, toPos, cancel);
             var fallbackPath = RunSearchAttempt
             (
                 fromVoxel,
@@ -136,7 +137,6 @@ public partial class VoxelPathfind
                 toPos,
                 returnIntermediatePoints,
                 LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
-                2,
                 cancel,
                 heuristicWeightOverride: LONG_RANGE_HEURISTIC_WEIGHT,
                 disableAncestorLookBack: true
@@ -158,6 +158,7 @@ public partial class VoxelPathfind
         bool              returnIntermediatePoints,
         bool              coarseReachedGoal,
         int               recursionDepth,
+        bool              madeProxyProgress,
         out bool          usedLongRangeReentry,
         CancellationToken cancel
     )
@@ -172,11 +173,11 @@ public partial class VoxelPathfind
 
         var remainingDistance           = Vector3.Distance(fromPos, toPos);
         var searchRaycast               = remainingDistance <= maxSearchRaycastDistance;
-        var allowLongRangeCoarseReentry = recursionDepth < LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH && !searchRaycast;
+        var allowLongRangeCoarseReentry = madeProxyProgress && recursionDepth < LONG_RANGE_PROXY_COARSE_REENTRY_MAX_DEPTH && !searchRaycast;
 
         if (searchRaycast)
         {
-            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, 1, cancel);
+            var path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, cancel);
             if (lastTermination != VolumeSearchTermination.ReachedGoal)
                 path = RunShortRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
             return path;
@@ -198,11 +199,12 @@ public partial class VoxelPathfind
                 fromPos,
                 toPos,
                 returnIntermediatePoints,
-                GUIDED_CORRIDOR_SEARCH_STEP_BUDGET,
-                1,
+                LONG_RANGE_GUIDED_PROBE_STEP_BUDGET,
                 cancel,
                 corridor,
-                SHORT_RANGE_HEURISTIC_WEIGHT
+                SHORT_RANGE_FAST_HEURISTIC_WEIGHT,
+                disableAncestorLookBack: true,
+                allowCoarseSteppingOverride: true
             );
 
             if (lastTermination == VolumeSearchTermination.ReachedGoal)
@@ -244,7 +246,7 @@ public partial class VoxelPathfind
             usedLongRangeReentry = false;
         }
 
-        ComputeL1DistanceField(toVoxel, toPos);
+        ComputeL1DistanceField(toVoxel, toPos, cancel);
         return RunSearchAttempt
         (
             fromVoxel,
@@ -253,7 +255,6 @@ public partial class VoxelPathfind
             toPos,
             returnIntermediatePoints,
             LONG_RANGE_GLOBAL_SEARCH_STEP_BUDGET,
-            2,
             cancel,
             heuristicWeightOverride: LONG_RANGE_HEURISTIC_WEIGHT
         );
@@ -269,7 +270,6 @@ public partial class VoxelPathfind
         CancellationToken cancel
     )
     {
-        var attempts                = 2;
         var useExploratoryHeuristic = ShouldUseShortRangeExploratoryHeuristic(fromPos, toPos);
         var fallbackHeuristicWeight = useExploratoryHeuristic ?
                                           LONG_RANGE_HEURISTIC_WEIGHT :
@@ -280,13 +280,13 @@ public partial class VoxelPathfind
             $"[算路] 飞行体素短距搜索进入拓扑回退：直线距离 = {Vector3.Distance(fromPos, toPos):f3}，首轮终止 = {lastTermination}，首轮访问节点 = {visitedNodes}，LoS 检查 = {lineOfSightChecks}，探索式启发 = {(useExploratoryHeuristic ? "是" : "否")}"
         );
 
-        var l1Path = SearchL1CoarsePath(fromVoxel, fromPos, toVoxel, toPos);
+        var l1Path = SearchL1CoarsePath(fromVoxel, fromPos, toVoxel, toPos, cancel);
 
         switch (l1Path)
         {
             case { Count: > 1 }:
             {
-                BuildL1Corridor(l1Path, 4);
+                BuildL1Corridor(l1Path, 4, cancel);
                 var constrainedPath = RunSearchAttempt
                 (
                     fromVoxel,
@@ -295,7 +295,6 @@ public partial class VoxelPathfind
                     toPos,
                     returnIntermediatePoints,
                     DEFAULT_MAX_SEARCH_STEPS,
-                    attempts++,
                     cancel,
                     heuristicWeightOverride: fallbackHeuristicWeight
                 );
@@ -326,7 +325,7 @@ public partial class VoxelPathfind
         }
 
         if (l1DistanceField is not { Count: > 0 })
-            ComputeL1DistanceField(toVoxel, toPos);
+            ComputeL1DistanceField(toVoxel, toPos, cancel);
 
         return RunSearchAttempt
         (
@@ -336,7 +335,6 @@ public partial class VoxelPathfind
             toPos,
             returnIntermediatePoints,
             DEFAULT_MAX_SEARCH_STEPS,
-            attempts,
             cancel,
             heuristicWeightOverride: fallbackHeuristicWeight
         );
