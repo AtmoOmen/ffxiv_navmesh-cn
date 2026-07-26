@@ -97,12 +97,14 @@ public class NavmeshBuilder
     private sealed class BuildThreadScratch
     {
         public long[]                           PhaseTicks { get; } = new long[(int)BuildPhase.Count];
+        public RcContext                        Telemetry  { get; } = new();
         public Voxelizer?                       VolumeRoot;
         public NavmeshRasterizer.ScratchBuffers Rasterizer { get; } = new();
 
         public void Reset()
         {
             Array.Clear(PhaseTicks, 0, PhaseTicks.Length);
+            Telemetry.ResetTimers();
             VolumeRoot?.Clear();
         }
     }
@@ -584,7 +586,9 @@ public class NavmeshBuilder
         if (Navmesh.Volume != null && scratch.VolumeRoot == null)
             scratch.VolumeRoot = new Voxelizer(_voxelizerNumX, _voxelizerNumY, _voxelizerNumZ);
         var totalStart          = Stopwatch.GetTimestamp();
-        var telemetry           = new RcContext();
+        var telemetry           = captureIntermediates ?
+                                      new RcContext() :
+                                      scratch.Telemetry;
         var geometryJobs        = _geometryJobs.AsSpan(input.GeometryJobStart, input.GeometryJobCount);
         var terrainJobs         = _terrainJobs.AsSpan(input.TerrainJobStart, input.TerrainJobCount);
         var totalProgressBudget = Math.Max(input.EstimatedSpanWeight, 1);
@@ -638,7 +642,7 @@ public class NavmeshBuilder
 
             long totalCost = 0;
             foreach (ref readonly var job in jobs)
-                totalCost += Math.Max(EstimateSpanWeight(job.PrimitiveCount, job.VertexCount, job.TerrainLike, 1), 1);
+                totalCost += job.EstimatedWeight;
 
             if (totalCost <= 0)
                 return null;
@@ -657,7 +661,7 @@ public class NavmeshBuilder
 
             return job =>
             {
-                consumedCost += Math.Max(EstimateSpanWeight(job.PrimitiveCount, job.VertexCount, job.TerrainLike, 1), 1);
+                consumedCost += job.EstimatedWeight;
                 var target = (int)(consumedCost * budget / totalCost);
                 var delta  = target - emitted;
                 if (delta <= 0)
@@ -733,13 +737,8 @@ public class NavmeshBuilder
         if (Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.WalkableLowHeightSpans))
             RcFilters.FilterWalkableLowHeightSpans(telemetry, _walkableHeightVoxels, shf);
 
-        var preCompactSpanCount = 0;
-        for (var cell = 0; cell < shf.spans.Length; ++cell)
-        for (var span = shf.spans[cell]; span != 0; span = shf.Span(span).next)
-            if (shf.Span(span).area != 0)
-                preCompactSpanCount++;
-
         var chf = RcCompacts.BuildCompactHeightfield(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
+        var preCompactSpanCount = chf.spanCount;
         ReportProgress(recastCompactBudget);
         RcAreas.ErodeWalkableArea(telemetry, _walkableRadiusVoxels, chf);
         RcAreas.MedianFilterWalkableArea(telemetry, chf);
@@ -829,7 +828,10 @@ public class NavmeshBuilder
                 jumpLinkBuilder = new([builderResult]);
         }
 
-        HashSet<(int Kind, int StartX, int StartY, int StartZ, int EndX, int EndY, int EndZ)> acceptedLinks = [];
+        HashSet<(int Kind, int StartX, int StartY, int StartZ, int EndX, int EndY, int EndZ)>? acceptedLinks =
+            Settings.GenerateEdgeClimbLinks || Settings.GenerateEdgeJumpLinks ?
+                [] :
+                null;
 
         int addConnections(List<DtJumpLink> links, NavmeshArea area, NavmeshPolyFlags flags, NavmeshOffMeshKind kind)
         {
@@ -859,7 +861,7 @@ public class NavmeshBuilder
                         continue;
 
                     var key = ((int)kind, Quantize(start.X), Quantize(start.Y), Quantize(start.Z), Quantize(end.X), Quantize(end.Y), Quantize(end.Z));
-                    if (!acceptedLinks.Add(key))
+                    if (!acceptedLinks!.Add(key))
                         continue;
 
                     {
@@ -1051,8 +1053,13 @@ public class NavmeshBuilder
                         Part            = part,
                         Instance        = instance,
                         WorldBounds     = worldBounds,
+                        MinTileX        = minX,
+                        MaxTileX        = maxX,
+                        MinTileZ        = minZ,
+                        MaxTileZ        = maxZ,
                         PrimitiveCount  = primitiveCount,
                         VertexCount     = vertexCount,
+                        EstimatedWeight = Math.Max(spanWeight, 1),
                         TerrainLike     = terrainLike,
                         PreparedTerrain = preparedTerrain
                     };
@@ -1133,24 +1140,20 @@ public class NavmeshBuilder
 
         foreach (var job in geometryJobs)
         {
-            GetTileRange(job.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
-
-            for (var z = minZ; z <= maxZ; ++z)
+            for (var z = job.MinTileZ; z <= job.MaxTileZ; ++z)
             {
                 var rowBase = z * NumTilesX;
-                for (var x = minX; x <= maxX; ++x)
+                for (var x = job.MinTileX; x <= job.MaxTileX; ++x)
                     geometryJobsByTile[geometryOffsets[rowBase + x]++] = job;
             }
         }
 
         foreach (var job in terrainJobs)
         {
-            GetTileRange(job.WorldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
-
-            for (var z = minZ; z <= maxZ; ++z)
+            for (var z = job.MinTileZ; z <= job.MaxTileZ; ++z)
             {
                 var rowBase = z * NumTilesX;
-                for (var x = minX; x <= maxX; ++x)
+                for (var x = job.MinTileX; x <= job.MaxTileX; ++x)
                     terrainJobsByTile[terrainOffsets[rowBase + x]++] = job;
             }
         }

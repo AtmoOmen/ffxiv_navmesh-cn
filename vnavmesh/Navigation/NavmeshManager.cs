@@ -482,13 +482,13 @@ public sealed class NavmeshManager : IDisposable
             LogCacheSegment("外置构建读取", cacheTelemetry.Volume);
             mesh.RegisterBuildTimeOffMeshConnections(buildSnapshot.Settings.OffMeshConnections);
 
-            var cacheWriteTimer = StopWatchTimer.Create();
-            WriteCache(cacheKey, cache, mesh);
-            Log($"缓存写入耗时: {cacheWriteTimer.Value().TotalMilliseconds:f1} 毫秒");
-
             customization.CustomizeMesh(mesh, layers);
             runtimeMesh = mesh with { CustomizationApplied = true };
         }
+
+        var cacheWriteTimer = StopWatchTimer.Create();
+        MoveRawBuildToCache(cacheKey, rawFile, cache);
+        Log($"缓存写入耗时: {cacheWriteTimer.Value().TotalMilliseconds:f1} 毫秒");
 
         if (runtimeMesh.Volume != null)
         {
@@ -918,6 +918,29 @@ public sealed class NavmeshManager : IDisposable
             catch
             {
                 // ignored
+            }
+        }
+    }
+
+    private static void MoveRawBuildToCache(string cacheKey, FileInfo rawFile, FileInfo cache)
+    {
+        try
+        {
+            cache.Directory?.Create();
+            File.Move(rawFile.FullName, cache.FullName, true);
+            Log($"直接转存外置构建缓存。键: {cacheKey}");
+        }
+        catch (Exception ex)
+        {
+            Log($"外置构建缓存转存失败, 回退复制。键: {cacheKey} 错误: {ex.Message}");
+            try
+            {
+                File.Copy(rawFile.FullName, cache.FullName, true);
+                TryDelete(rawFile.FullName);
+            }
+            catch (Exception fallbackException)
+            {
+                Log($"外置构建缓存复制失败。键: {cacheKey} 错误: {fallbackException}");
             }
         }
     }

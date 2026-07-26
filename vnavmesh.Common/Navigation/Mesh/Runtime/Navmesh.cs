@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
+using System.Text;
 using DotRecast.Core;
 using DotRecast.Core.Compression;
 using DotRecast.Detour;
@@ -16,7 +17,7 @@ namespace vnavmesh.Common.Navigation.Mesh.Runtime;
 public record class Navmesh
 {
     public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 37;         // 更新后触发一次全量重构建
+    public static readonly uint Version = 38;         // 更新后触发一次全量重构建
 
     public int       CustomizationVersion { get; init; }
     public string    BuildSignature       { get; init; }
@@ -113,8 +114,9 @@ public record class Navmesh
         if (segmentCount <= 0)
             throw new Exception("缓存段表无效");
 
-        CacheSegmentDescriptor? meshDescriptor   = null;
-        CacheSegmentDescriptor? volumeDescriptor = null;
+        CacheSegmentDescriptor? meshDescriptor       = null;
+        CacheSegmentDescriptor? volumeDescriptor     = null;
+        CacheSegmentDescriptor? volumeTreeDescriptor = null;
 
         for (var i = 0; i < segmentCount; ++i)
         {
@@ -128,17 +130,21 @@ public record class Navmesh
                 case CacheSegmentKind.Volume:
                     volumeDescriptor = descriptor;
                     break;
+                case CacheSegmentKind.VolumeTree:
+                    volumeTreeDescriptor = descriptor;
+                    break;
             }
         }
 
-        var meshSegment     = meshDescriptor   ?? throw new Exception("缓存缺少 Mesh 段");
-        var volumeSegment   = volumeDescriptor ?? throw new Exception("缓存缺少 Volume 段");
-        var requiresRewrite = volumeSegment.Codec != CacheCodec.FastLz;
-        var source          = reader.BaseStream;
+        var meshSegment       = meshDescriptor       ?? throw new Exception("缓存缺少 Mesh 段");
+        var volumeSegment     = volumeDescriptor     ?? throw new Exception("缓存缺少 Volume 段");
+        var volumeTreeSegment = volumeTreeDescriptor ?? throw new Exception("缓存缺少 VolumeTree 段");
+        var requiresRewrite   = volumeTreeSegment.Codec != CacheCodec.FastLz;
+        var source            = reader.BaseStream;
         var (meshPayload, meshTelemetry) = DecodeDeferredMeshSegment(meshSegment, source);
-        var (volume, volumeTelemetry) = volumeSegment.Codec == CacheCodec.FastLz ?
-                                            DecodeDeferredVolumeSegment(volumeSegment, source) :
-                                            DecodeSegment(volumeSegment, source, DeserializeVolume);
+        var (volume, volumeHeaderTelemetry) = DecodeSegment(volumeSegment, source, DeserializeVolumeHeader);
+        var volumeTreeTelemetry             = DecodeDeferredVolumeTreeSegment(volumeTreeSegment, source, volume);
+        var volumeTelemetry                 = CombineVolumeTelemetry(volumeHeaderTelemetry, volumeTreeTelemetry);
         var navmesh = new Navmesh(customizationVersion, buildSignature, customizationApplied, null!, volume);
         navmesh.SetDeferredMeshPayload(meshPayload, meshSegment.Codec, meshSegment.UncompressedBytes);
         return new(navmesh, new(meshTelemetry, volumeTelemetry), requiresRewrite);
@@ -148,12 +154,13 @@ public record class Navmesh
     {
         EnsureLittleEndian();
 
-        EncodedSegment meshSegment   = default;
-        EncodedSegment volumeSegment = default;
+        var volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.None, volumeWriter => SerializeVolumeHeader(volumeWriter, Volume));
+        EncodedSegment meshSegment       = default;
+        EncodedSegment volumeTreeSegment = default;
         Parallel.Invoke
         (
-            () => meshSegment   = EncodeSegment(CacheSegmentKind.Mesh,   CacheCodec.None,   meshWriter => SerializeMesh(meshWriter, Mesh)),
-            () => volumeSegment = EncodeSegment(CacheSegmentKind.Volume, CacheCodec.FastLz, volumeWriter => SerializeVolume(volumeWriter, Volume))
+            () => meshSegment       = EncodeSegment(CacheSegmentKind.Mesh,       CacheCodec.None,   meshWriter => SerializeMesh(meshWriter, Mesh)),
+            () => volumeTreeSegment = EncodeSegment(CacheSegmentKind.VolumeTree, CacheCodec.FastLz, volumeWriter => SerializeVolumeTree(volumeWriter, Volume))
         );
 
         writer.Write(Magic);
@@ -162,29 +169,39 @@ public record class Navmesh
         writer.Write(BuildSignature);
         writer.Write(CustomizationApplied);
 
-        writer.Write(2);
-        var payloadOffset = writer.BaseStream.Position + 2L * CacheSegmentDescriptorSize;
+        writer.Write(3);
+        var payloadOffset = writer.BaseStream.Position + 3L * CacheSegmentDescriptorSize;
         var meshDescriptor = new CacheSegmentDescriptor
         (
             CacheSegmentKind.Mesh,
             meshSegment.Codec,
             payloadOffset,
-            meshSegment.Payload.LongLength,
+            meshSegment.PayloadBytes,
             meshSegment.UncompressedBytes
         );
         var volumeDescriptor = new CacheSegmentDescriptor
         (
             CacheSegmentKind.Volume,
             volumeSegment.Codec,
-            payloadOffset + meshSegment.Payload.LongLength,
-            volumeSegment.Payload.LongLength,
+            payloadOffset + meshSegment.PayloadBytes,
+            volumeSegment.PayloadBytes,
             volumeSegment.UncompressedBytes
+        );
+        var volumeTreeDescriptor = new CacheSegmentDescriptor
+        (
+            CacheSegmentKind.VolumeTree,
+            volumeTreeSegment.Codec,
+            payloadOffset + meshSegment.PayloadBytes + volumeSegment.PayloadBytes,
+            volumeTreeSegment.PayloadBytes,
+            volumeTreeSegment.UncompressedBytes
         );
         WriteSegmentDescriptor(writer, meshDescriptor);
         WriteSegmentDescriptor(writer, volumeDescriptor);
-        writer.BaseStream.Write(meshSegment.Payload);
-        writer.BaseStream.Write(volumeSegment.Payload);
-        return new(meshSegment.Telemetry, volumeSegment.Telemetry);
+        WriteSegmentDescriptor(writer, volumeTreeDescriptor);
+        writer.BaseStream.Write(meshSegment.Payload.AsSpan(meshSegment.PayloadOffset, meshSegment.PayloadBytes));
+        writer.BaseStream.Write(volumeSegment.Payload.AsSpan(volumeSegment.PayloadOffset, volumeSegment.PayloadBytes));
+        writer.BaseStream.Write(volumeTreeSegment.Payload.AsSpan(volumeTreeSegment.PayloadOffset, volumeTreeSegment.PayloadBytes));
+        return new(meshSegment.Telemetry, CombineVolumeTelemetry(volumeSegment.Telemetry, volumeTreeSegment.Telemetry));
     }
 
     private static EncodedSegment EncodeSegment(CacheSegmentKind kind, CacheCodec codec, Action<BinaryWriter> serialize)
@@ -192,15 +209,18 @@ public record class Navmesh
         var       timer         = StopWatchTimer.Create();
         using var payloadStream = new MemoryStream();
 
-        using (var segmentWriter = new BinaryWriter(payloadStream))
+        using (var segmentWriter = new BinaryWriter(payloadStream, Encoding.UTF8, true))
         {
             serialize(segmentWriter);
             segmentWriter.Flush();
         }
 
-        var rawPayload = payloadStream.ToArray();
-        var payload    = EncodePayload(rawPayload, codec);
-        return new(codec, payload, rawPayload.LongLength, new(kind, payload.LongLength, rawPayload.LongLength, timer.Value()));
+        if (!payloadStream.TryGetBuffer(out var rawPayload))
+            throw new InvalidOperationException("无法访问缓存段缓冲区");
+
+        var rawPayloadBytes = checked((int)payloadStream.Length);
+        var (payload, payloadOffset, payloadBytes) = EncodePayload(rawPayload.Array!, rawPayload.Offset, rawPayloadBytes, codec);
+        return new(codec, payload, payloadOffset, payloadBytes, rawPayloadBytes, new(kind, payloadBytes, rawPayloadBytes, timer.Value()));
     }
 
     private static byte[] ReadSegmentPayload(Stream source, CacheSegmentDescriptor descriptor)
@@ -247,10 +267,10 @@ public record class Navmesh
         _ => throw new Exception($"不支持的缓存编码: {descriptor.Codec}")
     };
 
-    private static byte[] EncodePayload(byte[] rawPayload, CacheCodec codec) => codec switch
+    private static (byte[] Payload, int Offset, int Length) EncodePayload(byte[] rawPayload, int rawPayloadOffset, int rawPayloadBytes, CacheCodec codec) => codec switch
     {
-        CacheCodec.None   => rawPayload,
-        CacheCodec.FastLz => CompressFastLz(rawPayload),
+        CacheCodec.None   => (rawPayload, rawPayloadOffset, rawPayloadBytes),
+        CacheCodec.FastLz => CompressFastLz(rawPayload, rawPayloadOffset, rawPayloadBytes),
         _                 => throw new Exception($"不支持的缓存编码: {codec}")
     };
 
@@ -261,16 +281,14 @@ public record class Navmesh
         _                 => throw new Exception($"不支持的缓存编码: {codec}")
     };
 
-    private static byte[] CompressFastLz(byte[] rawPayload)
+    private static (byte[] Payload, int Offset, int Length) CompressFastLz(byte[] rawPayload, int rawPayloadOffset, int rawPayloadBytes)
     {
-        if (rawPayload.Length == 0)
-            return [];
+        if (rawPayloadBytes == 0)
+            return ([], 0, 0);
 
-        var compressedBuffer = GC.AllocateUninitializedArray<byte>(checked((int)FastLZ.EstimateCompressedSize(rawPayload.Length)));
-        var compressedBytes  = checked((int)FastLZ.CompressLevel(2, rawPayload, 0, rawPayload.Length, compressedBuffer));
-        var compressed       = GC.AllocateUninitializedArray<byte>(compressedBytes);
-        Buffer.BlockCopy(compressedBuffer, 0, compressed, 0, compressedBytes);
-        return compressed;
+        var compressedBuffer = GC.AllocateUninitializedArray<byte>(checked((int)FastLZ.EstimateCompressedSize(rawPayloadBytes)));
+        var compressedBytes  = checked((int)FastLZ.CompressLevel(2, rawPayload, rawPayloadOffset, rawPayloadBytes, compressedBuffer));
+        return (compressedBuffer, 0, compressedBytes);
     }
 
     private static byte[] DecompressFastLz(byte[] payload, long expectedBytes)
@@ -391,22 +409,6 @@ public record class Navmesh
     private static void SerializeMesh(BinaryWriter writer, DtNavMesh mesh) =>
         new DtMeshSetWriter().Write(writer, mesh, RcByteOrder.LITTLE_ENDIAN, false);
 
-    private static VoxelMap? DeserializeVolume(BinaryReader reader)
-    {
-        var volume = DeserializeVolumeHeader(reader);
-        if (volume == null)
-            return null;
-
-        if (TryCaptureDeferredVolumeTree(reader.BaseStream, out var payload, out var offset, out var length))
-        {
-            volume.SetDeferredTreePayload(payload, offset, length);
-            reader.BaseStream.Position = reader.BaseStream.Length;
-        }
-        else DeserializeVolumeTile(reader, volume.RootTile);
-
-        return volume;
-    }
-
     private static VoxelMap? DeserializeVolumeHeader(BinaryReader reader)
     {
         if (!reader.ReadBoolean())
@@ -424,21 +426,7 @@ public record class Navmesh
         return new(min, max, tilesPerLevel);
     }
 
-    private static VoxelMap? DeserializeCompressedDeferredVolume(byte[] payload, long expectedBytes)
-    {
-        var       decodedPayload = DecompressFastLz(payload, expectedBytes);
-        using var stream         = new MemoryStream(decodedPayload, 0, decodedPayload.Length, false, true);
-        using var reader         = new BinaryReader(stream);
-        var       volume         = DeserializeVolumeHeader(reader);
-        if (volume == null)
-            return null;
-
-        var treeOffset = checked((int)stream.Position);
-        volume.SetDeferredTreeMaterializer(v => MaterializeDeferredCompressedVolumeTree(v, payload, expectedBytes, treeOffset));
-        return volume;
-    }
-
-    private static void SerializeVolume(BinaryWriter writer, VoxelMap? volume)
+    private static void SerializeVolumeHeader(BinaryWriter writer, VoxelMap? volume)
     {
         writer.Write(volume != null);
         if (volume == null)
@@ -447,10 +435,16 @@ public record class Navmesh
         writer.Write(volume.Levels.Length);
         foreach (ref var l in volume.Levels.AsSpan())
             writer.Write(l.NumCellsX);
+        SerializeBounds(writer, volume.RootTile.BoundsMin, volume.RootTile.BoundsMax);
+    }
+
+    private static void SerializeVolumeTree(BinaryWriter writer, VoxelMap? volume)
+    {
+        if (volume == null)
+            return;
 
         volume.EnsureMaterialized();
         volume.CompactRetainedState();
-        SerializeBounds(writer, volume.RootTile.BoundsMin, volume.RootTile.BoundsMax);
         SerializeVolumeTile(writer, volume.RootTile);
     }
 
@@ -461,20 +455,29 @@ public record class Navmesh
         DeserializeVolumeTile(reader, volume.RootTile);
     }
 
-    internal static void MaterializeDeferredCompressedVolumeTree(VoxelMap volume, byte[] payload, long expectedBytes, int offset)
+    internal static void MaterializeDeferredCompressedVolumeTree(VoxelMap volume, byte[] payload, long expectedBytes)
     {
         var       decodedPayload = DecompressFastLz(payload, expectedBytes);
-        using var stream         = new MemoryStream(decodedPayload, offset, decodedPayload.Length - offset, false);
+        using var stream         = new MemoryStream(decodedPayload, false);
         using var reader         = new BinaryReader(stream);
         DeserializeVolumeTile(reader, volume.RootTile);
     }
 
-    private static (VoxelMap? Value, CacheSegmentTelemetry Telemetry) DecodeDeferredVolumeSegment(CacheSegmentDescriptor descriptor, Stream source)
+    private static CacheSegmentTelemetry DecodeDeferredVolumeTreeSegment(CacheSegmentDescriptor descriptor, Stream source, VoxelMap? volume)
     {
         var timer   = StopWatchTimer.Create();
         var payload = ReadSegmentPayload(source, descriptor);
-        var volume  = DeserializeCompressedDeferredVolume(payload, descriptor.UncompressedBytes);
-        return (volume, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
+        if (volume != null)
+        {
+            if (descriptor.Codec == CacheCodec.FastLz)
+                volume.SetDeferredTreeMaterializer(v => MaterializeDeferredCompressedVolumeTree(v, payload, descriptor.UncompressedBytes));
+            else if (descriptor.Codec == CacheCodec.None)
+                volume.SetDeferredTreePayload(payload, 0, payload.Length);
+            else
+                throw new Exception($"不支持的缓存编码: {descriptor.Codec}");
+        }
+
+        return new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value());
     }
 
     private static void DeserializeVolumeTile(BinaryReader reader, VolumeTile tile)
@@ -581,8 +584,9 @@ public record class Navmesh
 
     public enum CacheSegmentKind
     {
-        Mesh   = 1,
-        Volume = 2
+        Mesh       = 1,
+        Volume     = 2,
+        VolumeTree = 3
     }
 
     private enum CacheCodec
@@ -623,6 +627,14 @@ public record class Navmesh
         public long TotalUncompressedBytes => Mesh.UncompressedBytes + Volume.UncompressedBytes;
     }
 
+    private static CacheSegmentTelemetry CombineVolumeTelemetry(CacheSegmentTelemetry header, CacheSegmentTelemetry tree) => new
+    (
+        CacheSegmentKind.Volume,
+        header.CompressedBytes + tree.CompressedBytes,
+        header.UncompressedBytes + tree.UncompressedBytes,
+        header.Duration + tree.Duration
+    );
+
     public readonly record struct DeserializeResult
     (
         Navmesh        Navmesh,
@@ -636,6 +648,8 @@ public record class Navmesh
     (
         CacheCodec            Codec,
         byte[]                Payload,
+        int                   PayloadOffset,
+        int                   PayloadBytes,
         long                  UncompressedBytes,
         CacheSegmentTelemetry Telemetry
     );
@@ -815,8 +829,11 @@ public record class Navmesh
     public bool TryGetOffMeshLink(long polyRef, out NavmeshLink link) =>
         _offMeshLinksByPolyRef.TryGetValue(polyRef, out link);
 
-    public void RegisterBuildTimeOffMeshConnections(IEnumerable<NavmeshBuildOffMeshConnection> connections)
+    public void RegisterBuildTimeOffMeshConnections(IReadOnlyList<NavmeshBuildOffMeshConnection> connections)
     {
+        if (connections.Count == 0)
+            return;
+
         EnsureMeshMaterialized();
 
         foreach (var connection in connections)
@@ -933,22 +950,6 @@ public record class Navmesh
     private static readonly bool[] s_invalidPackedState        = BuildInvalidPackedState();
 
     private static int PackedStateBytes(int numCells) => numCells + 3 >> 2;
-
-    private static bool TryCaptureDeferredVolumeTree(Stream stream, out byte[] payload, out int offset, out int length)
-    {
-        if (stream is MemoryStream memoryStream && memoryStream.TryGetBuffer(out var buffer) && buffer.Array != null)
-        {
-            payload = buffer.Array;
-            offset  = buffer.Offset + checked((int)memoryStream.Position);
-            length  = checked((int)(memoryStream.Length - memoryStream.Position));
-            return true;
-        }
-
-        payload = [];
-        offset  = 0;
-        length  = 0;
-        return false;
-    }
 
     private static byte[] BuildSubtreeMaskByPackedState()
     {

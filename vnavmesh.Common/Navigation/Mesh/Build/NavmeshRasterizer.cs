@@ -97,8 +97,13 @@ internal sealed class RasterJob
     public required SceneExtractor.MeshPart     Part            { get; init; }
     public required SceneExtractor.MeshInstance Instance        { get; init; }
     public required AABB                        WorldBounds     { get; init; }
+    public required int                         MinTileX        { get; init; }
+    public required int                         MaxTileX        { get; init; }
+    public required int                         MinTileZ        { get; init; }
+    public required int                         MaxTileZ        { get; init; }
     public required int                         PrimitiveCount  { get; init; }
     public required int                         VertexCount     { get; init; }
+    public required int                         EstimatedWeight { get; init; }
     public required bool                        TerrainLike     { get; init; }
     public          PreparedTerrainGeometry?    PreparedTerrain { get; init; }
 }
