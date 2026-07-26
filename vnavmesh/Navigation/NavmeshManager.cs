@@ -268,13 +268,13 @@ public sealed class NavmeshManager : IDisposable
         return task;
     }
 
-    public (Vector3 Min, Vector3 Max) BuildBitmap(Vector3 startingPos, string filename, float pixelSize, AABB? mapBounds = null)
+    public (Vector3 Min, Vector3 Max) BuildBitmap(List<Vector3> startingPositions, string filename, float pixelSize, AABB? mapBounds = null)
     {
         if (Navmesh == null || Query == null)
             throw new InvalidOperationException("无法生成位图。导航路网数据未就绪");
 
-        var startPoly      = Query.FindNearestMeshPoly(startingPos);
-        var reachablePolys = Query.FindReachableMeshPolys(startPoly);
+        var startPolys     = startingPositions.Select(position => Query.FindNearestMeshPoly(position));
+        var reachablePolys = Query.FindReachableMeshPolys([.. startPolys]);
 
         HashSet<long> polysInbounds = [];
 
@@ -304,7 +304,7 @@ public sealed class NavmeshManager : IDisposable
             bitmap.RasterizePolygon(Navmesh.Mesh, p);
         bitmap.Save(filename);
 
-        Log($"已生成位图。文件名: {filename} 中心点: {startingPos} 范围: {bitmap.MinBounds}-{bitmap.MaxBounds}");
+        Log($"已生成位图。文件名: {filename} 中心点: {string.Join(", ", startingPositions)} 范围: {bitmap.MinBounds}-{bitmap.MaxBounds}");
 
         return (bitmap.MinBounds, bitmap.MaxBounds);
 

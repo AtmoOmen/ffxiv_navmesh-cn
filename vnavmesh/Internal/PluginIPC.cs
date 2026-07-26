@@ -46,7 +46,7 @@ internal class PluginIPC : IDisposable
                 this.config.Save();
             }
         );
-        RegisterFunc("Nav.BuildBitmap", (Vector3 startingPos, string filename, float pixelSize) => navmeshManager.BuildBitmap(startingPos, filename, pixelSize));
+        RegisterFunc("Nav.BuildBitmap", (Vector3 startingPos, string filename, float pixelSize) => navmeshManager.BuildBitmap([startingPos], filename, pixelSize));
         RegisterFunc
         (
             "Nav.BuildBitmapBounded",
@@ -57,7 +57,24 @@ internal class PluginIPC : IDisposable
                 Vector3 minBounds,
                 Vector3 maxBounds
             ) => navmeshManager.BuildBitmap
-                (startingPos, filename, pixelSize, new AABB { Min = minBounds, Max = maxBounds })
+                ([startingPos], filename, pixelSize, new AABB { Min = minBounds, Max = maxBounds })
+        );
+        RegisterFunc
+        (
+            "Nav.BuildBitmapMulti",
+            (List<Vector3> startingPositions, string filename, float pixelSize) => navmeshManager.BuildBitmap(startingPositions, filename, pixelSize)
+        );
+        RegisterFunc
+        (
+            "Nav.BuildBitmapMultiBounded",
+            (
+                List<Vector3> startingPositions,
+                string        filename,
+                float         pixelSize,
+                Vector3       minBounds,
+                Vector3       maxBounds
+            ) => navmeshManager.BuildBitmap
+                (startingPositions, filename, pixelSize, new AABB { Min = minBounds, Max = maxBounds })
         );
 
         RegisterFunc

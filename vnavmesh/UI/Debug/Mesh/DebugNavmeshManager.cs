@@ -295,7 +295,7 @@ internal class DebugNavmeshManager : IDisposable
                                                               "<none>";
 
     private void ExportBitmap(Vector3 startingPos) =>
-        manager.BuildBitmap(startingPos, "D:\\navmesh.bmp", 0.5f);
+        manager.BuildBitmap([startingPos], "D:\\navmesh.bmp", 0.5f);
 
     public void DrawRenderedPaths()
     {
