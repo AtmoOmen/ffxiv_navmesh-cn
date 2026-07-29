@@ -21,15 +21,8 @@ namespace vnavmesh.UI.Debug.Mesh;
 internal class DebugNavmeshManager : IDisposable
 {
     private const float DuplicateRenderedPointDistanceSq = 0.000001f;
-    private const uint  PathCornerScanColor              = 0x669B59B6u;
-    private const uint  PathCornerOriginalColor          = 0xFFB71C1Cu;
-    private const uint  PathCornerScanOriginColor        = 0xFF26A69Au;
-    private const uint  PathCornerAdjustedColor          = 0xFF66BB6Au;
-    private const uint  PathCornerInteriorColor          = 0xFF26C6DAu;
-    private const uint  PathCornerPreferredColor         = 0xFF42A5F5u;
-    private const uint  PathCornerPressureColor          = 0xFFFFA726u;
-    private const uint  PathCornerMoveColor              = 0xFFFFFF00u;
-    private const uint  PathCornerSkippedColor           = 0xFF9E9E9Eu;
+    private const uint  PathRawGroundLineColor           = 0xFF5C6BC0u;
+    private const uint  PathRawGroundPointColor          = 0xFF3949ABu;
     private const uint  PathRequestedStartLinkColor      = 0xFFEC407Au;
     private const uint  PathActualStartColor             = 0xFF8E24AAu;
     private const uint  PathConsumedPrefixColor          = 0xFF757575u;
@@ -62,7 +55,7 @@ internal class DebugNavmeshManager : IDisposable
     private bool                     renderPathFlyMode;
     private Vector3                  renderPathRequestStart;
     private bool                     renderStraightPathMode;
-    private bool                     showCornerPushDebug = true;
+    private bool                     showRawGroundPath = true;
 
     public DebugNavmeshManager
     (
@@ -126,7 +119,7 @@ internal class DebugNavmeshManager : IDisposable
             if (renderPathTask != null)
                 ImGui.TextUnformatted($"渲染算路执行中: {(renderPathFlyMode ? "空间" : "地面")} / {(renderStraightPathMode ? "StraightPath" : "普通")}");
             ImGui.TextUnformatted($"已缓存渲染路径: {renderedPaths.Count}");
-            ImGui.Checkbox("显示角点扫描/推出调试", ref showCornerPushDebug);
+            ImGui.Checkbox("显示原始漏斗路径对照", ref showRawGroundPath);
 
             ImGui.Checkbox("允许移动", ref movementExecutor.MovementAllowed);
 
@@ -303,10 +296,8 @@ internal class DebugNavmeshManager : IDisposable
         {
             DrawRenderedPath(renderedPath);
 
-            if (showCornerPushDebug)
-            {
-                DrawRenderedPathCornerDebug(renderedPath);
-            }
+            if (showRawGroundPath)
+                DrawRawGroundPath(renderedPath);
         }
     }
 
@@ -402,7 +393,7 @@ internal class DebugNavmeshManager : IDisposable
                           (renderedPath.Result.Waypoints.Count > 0 ?
                                renderedPath.Result.Waypoints[0] :
                                renderedPath.Result.FinalDestination);
-        var initialWaypointIndex = firstSegment?.GroundCorridor?.InitialWaypointIndex ?? 0;
+        var initialWaypointIndex = firstSegment?.GroundCorridor?.InitialCornerIndex ?? 0;
 
         DrawConsumedPrefix(firstSegment, actualStart, initialWaypointIndex);
 
@@ -449,52 +440,20 @@ internal class DebugNavmeshManager : IDisposable
             dd.DrawWorldLine(renderedPath.RequestStart, actualStart, PathRequestedStartLinkColor, 2);
     }
 
-    private void DrawRenderedPathCornerDebug(RenderedPath renderedPath)
+    private void DrawRawGroundPath(RenderedPath renderedPath)
     {
         foreach (var segment in renderedPath.Result.Segments)
         {
-            if (segment.GroundCorridor == null)
+            if (segment.GroundCorridor is not { RawCorners.Count: > 0 } groundCorridor)
                 continue;
 
-            for (var cornerIndex = 0; cornerIndex < segment.GroundCorridor.Corners.Count; ++cornerIndex)
+            for (var i = 0; i < groundCorridor.RawCorners.Count; ++i)
             {
-                var corner = segment.GroundCorridor.Corners[cornerIndex];
-                if (corner.Debug is not { } debug)
-                    continue;
+                var point = groundCorridor.RawCorners[i].Position;
+                if (i > 0)
+                    dd.DrawWorldLine(groundCorridor.RawCorners[i - 1].Position, point, PathRawGroundLineColor, 1);
 
-                foreach (var sample in debug.Samples)
-                    dd.DrawWorldLine(sample.Start, sample.Endpoint, ColorForClearance(sample.Clearance, debug.MaxClearance), 1);
-
-                dd.DrawWorldLine(debug.OriginalPosition, debug.ScanOrigin,                 PathCornerScanColor,      1);
-                dd.DrawWorldLine(debug.ScanOrigin,       debug.InteriorDirectionEndpoint,  PathCornerInteriorColor,  2);
-                dd.DrawWorldLine(debug.ScanOrigin,       debug.PreferredDirectionEndpoint, PathCornerPreferredColor, 2);
-                dd.DrawWorldLine(debug.ScanOrigin,       debug.WallPressureEndpoint,       PathCornerPressureColor,  2);
-
-                if (debug.PushApplied)
-                    dd.DrawWorldLine(debug.OriginalPosition, debug.AdjustedPosition, PathCornerMoveColor, 3);
-
-                var pointColor = debug.InitiallyConsumed ? PathCornerSkippedColor : debug.PushApplied ? PathCornerAdjustedColor : renderedPath.PointColor;
-                if (cornerIndex == segment.GroundCorridor.InitialCornerIndex)
-                    dd.DrawWorldPointFilled(debug.AdjustedPosition, 6, 0x33FFFFFFu);
-
-                dd.DrawWorldPointFilled
-                (
-                    debug.OriginalPosition,
-                    3,
-                    debug.InitiallyConsumed ?
-                        PathCornerSkippedColor :
-                        PathCornerOriginalColor
-                );
-                dd.DrawWorldPointFilled(debug.ScanOrigin,       3, PathCornerScanOriginColor);
-                dd.DrawWorldPointFilled(debug.AdjustedPosition, 4, pointColor);
-
-                var labelAnchor = debug.AdjustedPosition + new Vector3(0, 0.12f, 0);
-                dd.DrawWorldText
-                (
-                    labelAnchor,
-                    $"idx={debug.StraightPathIndex} skip={(debug.InitiallyConsumed ? 1 : 0)} exec={(debug.IsExecutionStart ? 1 : 0)} push={debug.PushDistance:F2} raw={debug.RawPushDistance:F2} cap={debug.DynamicPushMaxDistance:F2} w={debug.DynamicPushWidth:F2} sc={debug.DynamicPushScale:F2} min={debug.MinClearance:F2} avg={debug.AverageClearance:F2} corner={debug.CornerStrength:F2} L={debug.LeftClearance:F2}@{debug.LeftPolyRef:X} R={debug.RightClearance:F2}@{debug.RightPolyRef:X} bal={(debug.StraightBalanceSatisfied ? 1 : 0)} low={(debug.StraightLowClearanceCase ? 1 : 0)} re={(debug.Rescanned ? 1 : 0)} in={(debug.UsedInteriorDirection ? 1 : 0)} cand={debug.LocalPolyCount} scan={debug.ScanPolyRef:X} pref={debug.PreferredPolyRef:X}",
-                    0xFFFFFFFFu
-                );
+                dd.DrawWorldPointFilled(point, 2, PathRawGroundPointColor);
             }
         }
     }
@@ -520,13 +479,4 @@ internal class DebugNavmeshManager : IDisposable
         }
     }
 
-    private static uint ColorForClearance(float clearance, float maxClearance)
-    {
-        var normalized = maxClearance > 0.0001f ?
-                             Math.Clamp(clearance / maxClearance, 0f, 1f) :
-                             0f;
-        var red   = (byte)(255 * (1f - normalized));
-        var green = (byte)(255 * normalized);
-        return 0x66000000u | red | ((uint)green << 8);
-    }
 }
