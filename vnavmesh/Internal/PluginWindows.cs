@@ -42,6 +42,8 @@ internal sealed class PluginWindows : IDisposable
 
     private void Draw()
     {
+        using var font = PluginFont.UIFont.Push();
+
         ApplyUiBuilderVisibilityOptions();
         mainWindow.StartFrame();
         windowSystem.Draw();

@@ -511,8 +511,9 @@ internal static class CustomizationEditorToolbar
         string          tooltip
     )
     {
-        var size    = ImGui.GetFrameHeight();
-        var clicked = ImGui.Button($"{icon.ToIconString()}##{id}", new Vector2(size, size));
+        var size     = ImGui.GetFrameHeight();
+        var iconSize = ImGui.CalcTextSize(icon.ToIconString());
+        var clicked  = ImGui.Button($"{icon.ToIconString()}##{id}", new Vector2(size + iconSize.X, size));
 
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
             ImGui.SetTooltip(tooltip);

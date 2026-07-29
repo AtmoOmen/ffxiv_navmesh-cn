@@ -100,6 +100,7 @@ public static class DICollectionExtensions
         this IServiceProvider serviceProvider
     )
     {
+        PluginFont.Init();
         serviceProvider.GetRequiredService<PluginRuntime>();
         serviceProvider.GetRequiredService<SceneTransitionPathCleaner>();
         serviceProvider.GetRequiredService<PluginWindows>();
