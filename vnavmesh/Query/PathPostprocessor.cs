@@ -1,6 +1,5 @@
 using System.Numerics;
 using DotRecast.Detour;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Movement.Drivers;

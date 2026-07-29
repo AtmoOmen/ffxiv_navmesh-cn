@@ -2,7 +2,6 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Utils;

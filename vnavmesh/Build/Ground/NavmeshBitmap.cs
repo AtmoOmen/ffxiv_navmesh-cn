@@ -2,7 +2,6 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using DotRecast.Detour;
 using SharpDX.Win32;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Extensions;
 
 namespace vnavmesh.Build.Ground;

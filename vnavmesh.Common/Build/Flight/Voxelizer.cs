@@ -11,7 +11,13 @@ public class Voxelizer
     private readonly ulong[]  solidWords;
     private readonly ulong[]? emptyWords;
 
-    public Voxelizer(int nx, int ny, int nz, bool partial = false)
+    public Voxelizer
+    (
+        int  nx,
+        int  ny,
+        int  nz,
+        bool partial = false
+    )
     {
         if (!BitOperations.IsPow2(nx) || !BitOperations.IsPow2(ny) || !BitOperations.IsPow2(nz))
             throw new Exception($"Non-power-of-two size not supported: {nx}x{ny}x{nz}");
@@ -21,15 +27,23 @@ public class Voxelizer
         SizeZ = nz;
 
         var numCells  = nx * ny * nz;
-        var wordCount = numCells + 63 >> 6;
+        var wordCount = (numCells + 63) >> 6;
         solidWords = GC.AllocateUninitializedArray<ulong>(wordCount);
         if (partial)
             emptyWords = GC.AllocateUninitializedArray<ulong>(wordCount);
     }
 
-    public int VoxelToIndex(int x, int y, int z) => (z * SizeX + x) * SizeY + y;
+    public int VoxelToIndex
+    (
+        int x,
+        int y,
+        int z
+    ) => (((z * SizeX) + x) * SizeY) + y;
 
-    public (bool solid, bool empty) GetCellState(int index)
+    public (bool solid, bool empty) GetCellState
+    (
+        int index
+    )
     {
         var solid = GetBit(solidWords, index);
         var empty = emptyWords != null ?
@@ -38,9 +52,22 @@ public class Voxelizer
         return (solid, empty);
     }
 
-    public (bool solid, bool empty) GetCellState(int x, int y, int z) => GetCellState(VoxelToIndex(x, y, z));
+    public (bool solid, bool empty) GetCellState
+    (
+        int x,
+        int y,
+        int z
+    ) => GetCellState(VoxelToIndex(x, y, z));
 
-    public (bool solid, bool empty) ClassifyBox(int x0, int y0, int z0, int sizeX, int sizeY, int sizeZ)
+    public (bool solid, bool empty) ClassifyBox
+    (
+        int x0,
+        int y0,
+        int z0,
+        int sizeX,
+        int sizeY,
+        int sizeZ
+    )
     {
         var anySolid = false;
 
@@ -80,7 +107,13 @@ public class Voxelizer
         return (anySolid, anyEmpty);
     }
 
-    public void AddSpan(int x, int z, int y0, int y1)
+    public void AddSpan
+    (
+        int x,
+        int z,
+        int y0,
+        int y1
+    )
     {
         if ((uint)x >= (uint)SizeX || (uint)z >= (uint)SizeZ)
             return;
@@ -100,14 +133,23 @@ public class Voxelizer
             Array.Clear(emptyWords);
     }
 
-    private static bool GetBit(ulong[] words, int index)
+    private static bool GetBit
+    (
+        ulong[] words,
+        int     index
+    )
     {
         var wordIndex = index >> 6;
         var bitMask   = 1UL   << (index & 63);
         return (words[wordIndex] & bitMask) != 0;
     }
 
-    private static void SetRange(ulong[] words, int startIndex, int length)
+    private static void SetRange
+    (
+        ulong[] words,
+        int     startIndex,
+        int     length
+    )
     {
         if (length <= 0)
             return;
@@ -122,14 +164,19 @@ public class Voxelizer
             var bitCount  = Math.Min(64 - bitOffset, remaining);
             var mask = bitCount == 64 ?
                            ulong.MaxValue :
-                           (1UL << bitCount) - 1 << bitOffset;
+                           ((1UL << bitCount) - 1) << bitOffset;
             words[wordIndex] |= mask;
             index            += bitCount;
             remaining        -= bitCount;
         }
     }
 
-    private static (bool anySet, bool allSet) ClassifyRange(ulong[] words, int startIndex, int length)
+    private static (bool anySet, bool allSet) ClassifyRange
+    (
+        ulong[] words,
+        int     startIndex,
+        int     length
+    )
     {
         var index     = startIndex;
         var remaining = length;
@@ -143,7 +190,7 @@ public class Voxelizer
             var bitCount  = Math.Min(64 - bitOffset, remaining);
             var mask = bitCount == 64 ?
                            ulong.MaxValue :
-                           (1UL << bitCount) - 1 << bitOffset;
+                           ((1UL << bitCount) - 1) << bitOffset;
             var value = words[wordIndex] & mask;
             if (value != 0)
                 anySet = true;
@@ -158,7 +205,13 @@ public class Voxelizer
         return (anySet, allSet);
     }
 
-    private static (bool anySet1, bool anySet2) ClassifyRangePair(ulong[] words1, ulong[] words2, int startIndex, int length)
+    private static (bool anySet1, bool anySet2) ClassifyRangePair
+    (
+        ulong[] words1,
+        ulong[] words2,
+        int     startIndex,
+        int     length
+    )
     {
         var index     = startIndex;
         var remaining = length;
@@ -172,7 +225,7 @@ public class Voxelizer
             var bitCount  = Math.Min(64 - bitOffset, remaining);
             var mask = bitCount == 64 ?
                            ulong.MaxValue :
-                           (1UL << bitCount) - 1 << bitOffset;
+                           ((1UL << bitCount) - 1) << bitOffset;
             anySet1 |= (words1[wordIndex] & mask) != 0;
             anySet2 |= (words2[wordIndex] & mask) != 0;
             if (anySet1 && anySet2)

@@ -18,7 +18,7 @@ public static class Vector3Extension
 
         public RcVec3f ToRecast() => new(v.X, v.Y, v.Z);
     }
-    
+
     extension
     (
         RcVec3f v

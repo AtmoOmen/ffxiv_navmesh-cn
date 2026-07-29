@@ -1,22 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
-    <AssemblyName>vnavmesh.Worker</AssemblyName>
-    <DebugType>none</DebugType>
-    <DebugSymbols>false</DebugSymbols>
-    <Configurations>Release;Debug</Configurations>
-    <Platforms>x64</Platforms>
-  </PropertyGroup>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <AssemblyName>vnavmesh.Worker</AssemblyName>
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+        <Configurations>Release;Debug</Configurations>
+        <Platforms>x64</Platforms>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\vnavmesh.Common\vnavmesh.Common.csproj" />
-    <ProjectReference Include="..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj" />
-    <ProjectReference Include="..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj" />
-    <ProjectReference Include="..\DotRecast\src\DotRecast.Detour.Extras\DotRecast.Detour.Extras.csproj" />
-    <ProjectReference Include="..\DotRecast\src\DotRecast.Recast\DotRecast.Recast.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\vnavmesh.Common\vnavmesh.Common.csproj"/>
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj"/>
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj"/>
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Detour.Extras\DotRecast.Detour.Extras.csproj"/>
+        <ProjectReference Include="..\DotRecast\src\DotRecast.Recast\DotRecast.Recast.csproj"/>
+    </ItemGroup>
 </Project>

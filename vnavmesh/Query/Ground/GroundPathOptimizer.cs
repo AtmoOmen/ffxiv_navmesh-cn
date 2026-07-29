@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Numerics;
 using DotRecast.Detour;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Extensions;
 
 namespace vnavmesh.Query.Ground;

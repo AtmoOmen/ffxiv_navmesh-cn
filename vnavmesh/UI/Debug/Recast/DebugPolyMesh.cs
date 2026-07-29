@@ -1,7 +1,6 @@
 using System.Numerics;
 using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Utils;
 using vnavmesh.UI.Debug.Common;

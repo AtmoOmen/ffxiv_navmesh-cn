@@ -23,10 +23,19 @@ public class VoxelMap
     internal static readonly byte[] SubtreeCountByPackedState       = BuildSubtreeCountByPackedState();
     internal static readonly byte[] SubtreePrefixCountByPackedState = BuildSubtreePrefixCountByPackedState();
 
-    public static ulong EncodeIndex(ushort tileIndex, ulong subIndex = INVALID_VOXEL) =>
+    public static ulong EncodeIndex
+    (
+        ushort tileIndex,
+        ulong  subIndex = INVALID_VOXEL
+    ) =>
         (subIndex << INDEX_LEVEL_SHIFT) + tileIndex;
 
-    public static ulong EncodeSubIndex(ulong voxel, ushort tileIndex, int level)
+    public static ulong EncodeSubIndex
+    (
+        ulong  voxel,
+        ushort tileIndex,
+        int    level
+    )
     {
         var shift = INDEX_LEVEL_SHIFT * level;
         voxel &= ~((ulong)INDEX_LEVEL_MASK << shift);
@@ -34,23 +43,35 @@ public class VoxelMap
         return voxel;
     }
 
-    public static ushort DecodeIndex(ref ulong index)
+    public static ushort DecodeIndex
+    (
+        ref ulong index
+    )
     {
         var tileIndex = (ushort)(index & INDEX_LEVEL_MASK);
         index >>= INDEX_LEVEL_SHIFT;
         return tileIndex;
     }
 
-    internal static int PackedStateBytes(int numCells) => numCells + 3 >> 2;
+    internal static int PackedStateBytes
+    (
+        int numCells
+    ) => (numCells + 3) >> 2;
 
-    internal static VolumePackedCellState ClassifyPackedCellState(ushort value) => value switch
+    internal static VolumePackedCellState ClassifyPackedCellState
+    (
+        ushort value
+    ) => value switch
     {
         0               => VolumePackedCellState.Empty,
         ushort.MaxValue => VolumePackedCellState.SolidLeaf,
         _               => VolumePackedCellState.Subtree
     };
 
-    internal static ushort[]? BuildSubtreePrefixCounts(byte[] packedStates)
+    internal static ushort[]? BuildSubtreePrefixCounts
+    (
+        byte[] packedStates
+    )
     {
         if (packedStates.Length == 0)
             return null;
@@ -77,7 +98,7 @@ public class VoxelMap
         {
             byte count = 0;
             for (var offset = 0; offset < 4; ++offset)
-                if ((VolumePackedCellState)(packedState >> offset * 2 & 0x3) == VolumePackedCellState.Subtree)
+                if ((VolumePackedCellState)((packedState >> (offset * 2)) & 0x3) == VolumePackedCellState.Subtree)
                     ++count;
 
             table[packedState] = count;
@@ -96,8 +117,8 @@ public class VoxelMap
 
             for (var offset = 0; offset < 4; ++offset)
             {
-                table[packedState * 4 + offset] = prefix;
-                if ((VolumePackedCellState)(packedState >> offset * 2 & 0x3) == VolumePackedCellState.Subtree)
+                table[(packedState * 4) + offset] = prefix;
+                if ((VolumePackedCellState)((packedState >> (offset * 2)) & 0x3) == VolumePackedCellState.Subtree)
                     ++prefix;
             }
         }
@@ -105,7 +126,12 @@ public class VoxelMap
         return table;
     }
 
-    public VoxelMap(Vector3 boundsMin, Vector3 boundsMax, int[] tilesPerLevel)
+    public VoxelMap
+    (
+        Vector3 boundsMin,
+        Vector3 boundsMax,
+        int[]   tilesPerLevel
+    )
     {
         Levels = new VolumeLevel[tilesPerLevel.Length];
         var levelExtent = boundsMax - boundsMin;
@@ -135,7 +161,10 @@ public class VoxelMap
         l1ShiftZ = BitOperations.Log2((uint)Levels[1].NumCellsZ);
     }
 
-    public bool IsEmpty(ulong voxel)
+    public bool IsEmpty
+    (
+        ulong voxel
+    )
     {
         EnsureMaterialized();
         var tile = RootTile;
@@ -156,13 +185,20 @@ public class VoxelMap
         }
     }
 
-    public (ulong voxel, bool empty) FindLeafVoxel(Vector3 p)
+    public (ulong voxel, bool empty) FindLeafVoxel
+    (
+        Vector3 p
+    )
     {
         EnsureMaterialized();
         return RootTile.FindLeafVoxel(p);
     }
 
-    public (Vector3 min, Vector3 max) VoxelBounds(ulong voxel, float eps)
+    public (Vector3 min, Vector3 max) VoxelBounds
+    (
+        ulong voxel,
+        float eps
+    )
     {
         EnsureMaterialized();
         var tile = RootTile;
@@ -186,7 +222,11 @@ public class VoxelMap
         }
     }
 
-    public bool TryGetLeafVoxelBounds(ulong voxel, out (Vector3 min, Vector3 max) bounds)
+    public bool TryGetLeafVoxelBounds
+    (
+        ulong                          voxel,
+        out (Vector3 min, Vector3 max) bounds
+    )
     {
         if (Levels.Length != 3)
         {
@@ -215,16 +255,21 @@ public class VoxelMap
         var min = RootTile.BoundsMin +
                   new Vector3
                   (
-                      l0C.x * l0.CellSize.X + l1C.x * l1.CellSize.X + l2C.x * l2.CellSize.X,
-                      l0C.y * l0.CellSize.Y + l1C.y * l1.CellSize.Y + l2C.y * l2.CellSize.Y,
-                      l0C.z * l0.CellSize.Z + l1C.z * l1.CellSize.Z + l2C.z * l2.CellSize.Z
+                      (l0C.x * l0.CellSize.X) + (l1C.x * l1.CellSize.X) + (l2C.x * l2.CellSize.X),
+                      (l0C.y * l0.CellSize.Y) + (l1C.y * l1.CellSize.Y) + (l2C.y * l2.CellSize.Y),
+                      (l0C.z * l0.CellSize.Z) + (l1C.z * l1.CellSize.Z) + (l2C.z * l2.CellSize.Z)
                   );
 
         bounds = (min, min + l2.CellSize);
         return true;
     }
 
-    public bool TryFindLeafVoxelFast(Vector3 p, out ulong voxel, out bool empty)
+    public bool TryFindLeafVoxelFast
+    (
+        Vector3   p,
+        out ulong voxel,
+        out bool  empty
+    )
     {
         if (Levels.Length != 3)
         {
@@ -317,7 +362,12 @@ public class VoxelMap
         return true;
     }
 
-    public bool TryLineOfSightDDA(Vector3 fromPos, Vector3 toPos, out bool visible)
+    public bool TryLineOfSightDDA
+    (
+        Vector3  fromPos,
+        Vector3  toPos,
+        out bool visible
+    )
     {
         if (Levels.Length != 3)
         {
@@ -398,13 +448,13 @@ public class VoxelMap
 
         if (stepX > 0)
         {
-            tMaxX   = ((gx + 1) * cellSizeX - rel.X) * invAbX;
-            tDeltaX = cellSizeX                      * invAbX;
+            tMaxX   = (((gx + 1) * cellSizeX) - rel.X) * invAbX;
+            tDeltaX = cellSizeX                        * invAbX;
         }
         else if (stepX < 0)
         {
-            tMaxX   = (gx * cellSizeX - rel.X) * invAbX;
-            tDeltaX = -cellSizeX               * invAbX;
+            tMaxX   = ((gx * cellSizeX) - rel.X) * invAbX;
+            tDeltaX = -cellSizeX                 * invAbX;
         }
         else
         {
@@ -414,13 +464,13 @@ public class VoxelMap
 
         if (stepY > 0)
         {
-            tMaxY   = ((gy + 1) * cellSizeY - rel.Y) * invAbY;
-            tDeltaY = cellSizeY                      * invAbY;
+            tMaxY   = (((gy + 1) * cellSizeY) - rel.Y) * invAbY;
+            tDeltaY = cellSizeY                        * invAbY;
         }
         else if (stepY < 0)
         {
-            tMaxY   = (gy * cellSizeY - rel.Y) * invAbY;
-            tDeltaY = -cellSizeY               * invAbY;
+            tMaxY   = ((gy * cellSizeY) - rel.Y) * invAbY;
+            tDeltaY = -cellSizeY                 * invAbY;
         }
         else
         {
@@ -430,13 +480,13 @@ public class VoxelMap
 
         if (stepZ > 0)
         {
-            tMaxZ   = ((gz + 1) * cellSizeZ - rel.Z) * invAbZ;
-            tDeltaZ = cellSizeZ                      * invAbZ;
+            tMaxZ   = (((gz + 1) * cellSizeZ) - rel.Z) * invAbZ;
+            tDeltaZ = cellSizeZ                        * invAbZ;
         }
         else if (stepZ < 0)
         {
-            tMaxZ   = (gz * cellSizeZ - rel.Z) * invAbZ;
-            tDeltaZ = -cellSizeZ               * invAbZ;
+            tMaxZ   = ((gz * cellSizeZ) - rel.Z) * invAbZ;
+            tDeltaZ = -cellSizeZ                 * invAbZ;
         }
         else
         {
@@ -500,7 +550,7 @@ public class VoxelMap
             if ((l0Data & VOXEL_OCCUPIED_BIT) == 0)
             {
                 // L0 uniform empty: 目标在同一 L0 cell 内则可见
-                if ((goalGx >> l0ShiftX) == curL0X && (goalGy >> l0ShiftY) == curL0Y && (goalGz >> l0ShiftZ) == curL0Z)
+                if (goalGx >> l0ShiftX == curL0X && goalGy >> l0ShiftY == curL0Y && goalGz >> l0ShiftZ == curL0Z)
                 {
                     visible = true;
                     return true;
@@ -562,9 +612,9 @@ public class VoxelMap
             if ((l1Data & VOXEL_OCCUPIED_BIT) == 0)
             {
                 // L1 uniform empty: 目标在同一 L1 cell 内则可见
-                if ((goalGx >> l2.ShiftXZ) == (gx >> l2.ShiftXZ) &&
-                    (goalGy >> l2.ShiftYX) == (gy >> l2.ShiftYX) &&
-                    (goalGz >> l2ShiftZ)   == (gz >> l2ShiftZ))
+                if (goalGx >> l2.ShiftXZ == gx >> l2.ShiftXZ &&
+                    goalGy >> l2.ShiftYX == gy >> l2.ShiftYX &&
+                    goalGz >> l2ShiftZ   == gz >> l2ShiftZ)
                 {
                     visible = true;
                     return true;
@@ -620,9 +670,15 @@ public class VoxelMap
             }
 
             // L2 cell 为空，正常 DDA 步进
-            var nextBoundaryX = gx == goalGx ? float.MaxValue : tMaxX;
-            var nextBoundaryY = gy == goalGy ? float.MaxValue : tMaxY;
-            var nextBoundaryZ = gz == goalGz ? float.MaxValue : tMaxZ;
+            var nextBoundaryX = gx == goalGx ?
+                                    float.MaxValue :
+                                    tMaxX;
+            var nextBoundaryY = gy == goalGy ?
+                                    float.MaxValue :
+                                    tMaxY;
+            var nextBoundaryZ = gz == goalGz ?
+                                    float.MaxValue :
+                                    tMaxZ;
 
             if (nextBoundaryX < nextBoundaryY)
             {
@@ -680,33 +736,33 @@ public class VoxelMap
     )
     {
         // 计算各轴退出当前 cell 的 t 值
-        float tExit = float.MaxValue;
+        var tExit = float.MaxValue;
 
         if (stepX > 0)
         {
             var cellEnd = ((gx >> shiftX) + 1) << shiftX;
             var nCross  = cellEnd - gx;
-            tExit = tMaxX + (nCross - 1) * tDeltaX;
+            tExit = tMaxX + ((nCross - 1) * tDeltaX);
         }
         else if (stepX < 0)
         {
             var cellStart = (gx >> shiftX) << shiftX;
-            var nCross    = gx      - cellStart + 1;
-            tExit = tMaxX + (nCross - 1) * tDeltaX;
+            var nCross    = gx - cellStart + 1;
+            tExit = tMaxX + ((nCross - 1) * tDeltaX);
         }
 
         if (stepY > 0)
         {
             var cellEnd               = ((gy >> shiftY) + 1) << shiftY;
             var nCross                = cellEnd - gy;
-            var tExitY                = tMaxY   + (nCross - 1) * tDeltaY;
+            var tExitY                = tMaxY   + ((nCross - 1) * tDeltaY);
             if (tExitY < tExit) tExit = tExitY;
         }
         else if (stepY < 0)
         {
             var cellStart             = (gy >> shiftY) << shiftY;
             var nCross                = gy - cellStart + 1;
-            var tExitY                = tMaxY          + (nCross - 1) * tDeltaY;
+            var tExitY                = tMaxY          + ((nCross - 1) * tDeltaY);
             if (tExitY < tExit) tExit = tExitY;
         }
 
@@ -714,22 +770,25 @@ public class VoxelMap
         {
             var cellEnd               = ((gz >> shiftZ) + 1) << shiftZ;
             var nCross                = cellEnd - gz;
-            var tExitZ                = tMaxZ   + (nCross - 1) * tDeltaZ;
+            var tExitZ                = tMaxZ   + ((nCross - 1) * tDeltaZ);
             if (tExitZ < tExit) tExit = tExitZ;
         }
         else if (stepZ < 0)
         {
             var cellStart             = (gz >> shiftZ) << shiftZ;
             var nCross                = gz - cellStart + 1;
-            var tExitZ                = tMaxZ          + (nCross - 1) * tDeltaZ;
+            var tExitZ                = tMaxZ          + ((nCross - 1) * tDeltaZ);
             if (tExitZ < tExit) tExit = tExitZ;
         }
 
         // 推进 DDA 状态到 tExit（tExit >= tMax 时值非负，(int) 截断等同 Floor）
         if (stepX != 0 && tExit >= tMaxX)
         {
-            var remaining = stepX > 0 ? goalGx - gx : gx - goalGx;
-            var n         = Math.Min((int)((tExit - tMaxX) / tDeltaX + 1e-6f) + 1, remaining);
+            var remaining = stepX > 0 ?
+                                goalGx - gx :
+                                gx     - goalGx;
+            var n = Math.Min((int)(((tExit - tMaxX) / tDeltaX) + 1e-6f) + 1, remaining);
+
             if (n > 0)
             {
                 gx    += stepX * n;
@@ -739,8 +798,11 @@ public class VoxelMap
 
         if (stepY != 0 && tExit >= tMaxY)
         {
-            var remaining = stepY > 0 ? goalGy - gy : gy - goalGy;
-            var n         = Math.Min((int)((tExit - tMaxY) / tDeltaY + 1e-6f) + 1, remaining);
+            var remaining = stepY > 0 ?
+                                goalGy - gy :
+                                gy     - goalGy;
+            var n = Math.Min((int)(((tExit - tMaxY) / tDeltaY) + 1e-6f) + 1, remaining);
+
             if (n > 0)
             {
                 gy    += stepY * n;
@@ -750,8 +812,11 @@ public class VoxelMap
 
         if (stepZ != 0 && tExit >= tMaxZ)
         {
-            var remaining = stepZ > 0 ? goalGz - gz : gz - goalGz;
-            var n         = Math.Min((int)((tExit - tMaxZ) / tDeltaZ + 1e-6f) + 1, remaining);
+            var remaining = stepZ > 0 ?
+                                goalGz - gz :
+                                gz     - goalGz;
+            var n = Math.Min((int)(((tExit - tMaxZ) / tDeltaZ) + 1e-6f) + 1, remaining);
+
             if (n > 0)
             {
                 gz    += stepZ * n;
@@ -760,7 +825,12 @@ public class VoxelMap
         }
     }
 
-    public Vector3 ClampPointToVoxel(ulong voxel, Vector3 p, float eps = 0.1f)
+    public Vector3 ClampPointToVoxel
+    (
+        ulong   voxel,
+        Vector3 p,
+        float   eps = 0.1f
+    )
     {
         EnsureMaterialized();
         var tile = RootTile;
@@ -787,7 +857,12 @@ public class VoxelMap
 
     internal bool HasDeferredTree => deferredTreePayload != null || deferredTreeMaterializer != null;
 
-    internal void SetDeferredTreePayload(byte[] payload, int offset, int length)
+    internal void SetDeferredTreePayload
+    (
+        byte[] payload,
+        int    offset,
+        int    length
+    )
     {
         deferredTreePayload      = payload;
         deferredTreeOffset       = offset;
@@ -795,7 +870,10 @@ public class VoxelMap
         deferredTreeMaterializer = null;
     }
 
-    internal void SetDeferredTreeMaterializer(Action<VoxelMap> materializer)
+    internal void SetDeferredTreeMaterializer
+    (
+        Action<VoxelMap> materializer
+    )
     {
         deferredTreePayload      = null;
         deferredTreeOffset       = 0;
@@ -853,7 +931,12 @@ public class VoxelMap
         RootTile.CompactRetainedState();
     }
 
-    public VolumeRootColumnBuildResult BuildRootColumn(Voxelizer vox, int tx, int tz)
+    public VolumeRootColumnBuildResult BuildRootColumn
+    (
+        Voxelizer vox,
+        int       tx,
+        int       tz
+    )
     {
         var ny          = Levels[0].NumCellsY;
         var contents    = GC.AllocateUninitializedArray<ushort>(ny);
@@ -863,7 +946,12 @@ public class VoxelMap
         return new() { Contents = contents, Subdivision = subdivision };
     }
 
-    private static int AppendSubdivision(List<VolumeTile>? list, VolumeTile? tile, VolumeTile child)
+    private static int AppendSubdivision
+    (
+        List<VolumeTile>? list,
+        VolumeTile?       tile,
+        VolumeTile        child
+    )
     {
         if (tile != null)
         {
@@ -924,9 +1012,9 @@ public class VoxelMap
                 x,
                 y,
                 z,
-                leafX + x * childScaleX,
-                leafY + y * childScaleY,
-                leafZ + z * childScaleZ
+                leafX + (x * childScaleX),
+                leafY + (y * childScaleY),
+                leafZ + (z * childScaleZ)
             );
 
         return (ushort)(VOXEL_OCCUPIED_BIT | localId);
@@ -978,9 +1066,9 @@ public class VoxelMap
                 x,
                 y,
                 z,
-                cellX * l.NumCellsX + x,
-                cellY * l.NumCellsY + y,
-                cellZ * l.NumCellsZ + z
+                (cellX * l.NumCellsX) + x,
+                (cellY * l.NumCellsY) + y,
+                (cellZ * l.NumCellsZ) + z
             );
 
         return (ushort)(VOXEL_OCCUPIED_BIT | localId);
