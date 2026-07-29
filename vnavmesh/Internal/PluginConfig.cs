@@ -78,7 +78,12 @@ public class PluginConfig : IPluginConfiguration
         DrawSliderFloat("脱困冷却期 (秒)",  ref UnstuckCooldownSeconds,  0.5f, 10f, "%.1f", "每次随机位移脱困结束后，暂停重新判定卡住的时间。");
     }
 
-    private static void DrawSection(string title, string description, Action drawContent)
+    private static void DrawSection
+    (
+        string title,
+        string description,
+        Action drawContent
+    )
     {
         if (!ImGui.CollapsingHeader(title, DEFAULT_SECTION_FLAGS))
             return;
@@ -95,7 +100,12 @@ public class PluginConfig : IPluginConfiguration
         ImGui.Spacing();
     }
 
-    private void DrawCheckbox(string label, ref bool value, string? help = null)
+    private void DrawCheckbox
+    (
+        string   label,
+        ref bool value,
+        string?  help = null
+    )
     {
         if (ImGui.Checkbox(label, ref value))
             Save();
@@ -103,7 +113,15 @@ public class PluginConfig : IPluginConfiguration
         DrawHelp(help);
     }
 
-    private void DrawSliderFloat(string label, ref float value, float min, float max, string format, string? help = null)
+    private void DrawSliderFloat
+    (
+        string    label,
+        ref float value,
+        float     min,
+        float     max,
+        string    format,
+        string?   help = null
+    )
     {
         ImGui.SetNextItemWidth(CONFIG_VALUE_WIDTH);
         if (ImGui.SliderFloat(label, ref value, min, max, format))
@@ -112,7 +130,15 @@ public class PluginConfig : IPluginConfiguration
         DrawHelp(help);
     }
 
-    private void DrawSliderInt(string label, ref int value, int min, int max, string format, string? help = null)
+    private void DrawSliderInt
+    (
+        string  label,
+        ref int value,
+        int     min,
+        int     max,
+        string  format,
+        string? help = null
+    )
     {
         ImGui.SetNextItemWidth(CONFIG_VALUE_WIDTH);
         if (ImGui.SliderInt(label, ref value, min, max, format))
@@ -121,7 +147,10 @@ public class PluginConfig : IPluginConfiguration
         DrawHelp(help);
     }
 
-    private static void DrawHelp(string? help)
+    private static void DrawHelp
+    (
+        string? help
+    )
     {
         if (string.IsNullOrWhiteSpace(help))
             return;

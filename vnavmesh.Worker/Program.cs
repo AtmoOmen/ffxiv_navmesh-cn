@@ -1,19 +1,17 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO.Pipes;
-using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using vnavmesh.Common.Ipc;
-using vnavmesh.Common.Navigation.Mesh.Build;
-using vnavmesh.Common.Navigation.Scene;
+using vnavmesh.Common.Build;
 
-var pipeName = ReadOption(args, "--pipe");
+var pipeName     = ReadOption(args, "--pipe");
 var manifestPath = ReadOption(args, "--manifest");
 var manifestJsonOptions = new JsonSerializerOptions
 {
     IncludeFields = true
 };
+
 if (string.IsNullOrWhiteSpace(pipeName) || string.IsNullOrWhiteSpace(manifestPath))
 {
     Console.Error.WriteLine("Usage: vnavmesh.Worker --pipe <name> --manifest <path>");
@@ -25,10 +23,11 @@ await pipe.ConnectAsync(30000);
 var writeGate         = new SemaphoreSlim(1, 1);
 var progressDone      = 0;
 var progressPermille  = 0;
-var progressSentValue  = -1;
+var progressSentValue = -1;
 var reporterTask      = Task.CompletedTask;
 
 var timer = Stopwatch.StartNew();
+
 try
 {
     var manifestJson = await File.ReadAllTextAsync(manifestPath, Encoding.UTF8);
@@ -41,34 +40,35 @@ try
     using (var sceneReader = new BinaryReader(sceneStream, Encoding.UTF8, true))
         scene = BuildScene.Read(sceneReader);
 
-    var builder = new NavmeshBuilder(scene, manifest.Settings);
+    var builder             = new NavmeshBuilder(scene, manifest.Settings);
     var totalProgressWeight = Math.Max(builder.TotalEstimatedTileWeight, 1);
     var finishedWeight      = 0L;
-    reporterTask = Task.Run(async () =>
-    {
-        while (Volatile.Read(ref progressDone) == 0)
+    reporterTask = Task.Run
+    (async () =>
         {
+            while (Volatile.Read(ref progressDone) == 0)
+            {
+                await ReportProgressIfNeeded();
+                await Task.Delay(100);
+            }
+
             await ReportProgressIfNeeded();
-            await Task.Delay(100);
+
+            async Task ReportProgressIfNeeded()
+            {
+                var current = Volatile.Read(ref progressPermille);
+                if (current == progressSentValue)
+                    return;
+
+                progressSentValue = current;
+                await WriteMessageAsync(new NavmeshBuildMessage("progress", new(current / 1000d), null));
+            }
         }
-
-        await ReportProgressIfNeeded();
-
-        async Task ReportProgressIfNeeded()
-        {
-            var current = Volatile.Read(ref progressPermille);
-            if (current == progressSentValue)
-                return;
-
-            progressSentValue = current;
-            await WriteMessageAsync(new NavmeshBuildMessage("progress", new(current / 1000d), null));
-        }
-    });
+    );
 
     WriteProgress(0);
     builder.Build
-    (
-        weight =>
+    (weight =>
         {
             var progress = Math.Min(0.99, Interlocked.Add(ref finishedWeight, weight) / (double)totalProgressWeight * 0.99);
             WriteProgress(progress);
@@ -81,6 +81,7 @@ try
         builder.Navmesh.Volume.CompactRetainedState();
 
     Directory.CreateDirectory(Path.GetDirectoryName(manifest.RawNavmeshPath) ?? ".");
+
     await using (var rawStream = new FileStream(manifest.RawNavmeshPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 22, FileOptions.SequentialScan))
     using (var rawWriter = new BinaryWriter(rawStream, Encoding.UTF8, true))
     {
@@ -99,16 +100,23 @@ catch (Exception ex)
     return 1;
 }
 
-void WriteProgress(double progress) =>
+void WriteProgress
+(
+    double progress
+) =>
     Interlocked.Exchange(ref progressPermille, (int)Math.Clamp(Math.Round(progress * 1000d), 0, 999));
 
-async Task WriteMessageAsync(NavmeshBuildMessage message)
+async Task WriteMessageAsync
+(
+    NavmeshBuildMessage message
+)
 {
     await writeGate.WaitAsync();
+
     try
     {
         var payload = JsonSerializer.SerializeToUtf8Bytes(message, manifestJsonOptions);
-        var length = new byte[sizeof(int)];
+        var length  = new byte[sizeof(int)];
         BinaryPrimitives.WriteInt32LittleEndian(length, payload.Length);
         await pipe.WriteAsync(length);
         await pipe.WriteAsync(payload);
@@ -134,7 +142,11 @@ async Task StopProgressReporter()
     }
 }
 
-static string? ReadOption(string[] args, string name)
+static string? ReadOption
+(
+    string[] args,
+    string   name
+)
 {
     for (var i = 0; i < args.Length - 1; ++i)
         if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))

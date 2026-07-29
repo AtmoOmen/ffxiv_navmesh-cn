@@ -7,15 +7,15 @@ using Dalamud.Interface.Utility;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using vnavmesh.Build.Scene;
 using vnavmesh.Common.Models;
 using vnavmesh.Internal;
-using vnavmesh.Navigation.Scene;
-using vnavmesh.Shared.Models;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Debug.Layout;
 using vnavmesh.UI.Rendering;
+using AABB = FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB;
+using Matrix4x3 = FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.Matrix4x3;
 using Matrix4x4 = System.Numerics.Matrix4x4;
 using Vector3 = System.Numerics.Vector3;
 using Vector4 = System.Numerics.Vector4;
@@ -60,13 +60,23 @@ public unsafe partial class DebugGameCollision : IDisposable
     private EffectMesh.Data          _meshDynamicData;
     private EffectMesh.Data.Builder? _meshDynamicBuilder;
 
-    private delegate bool RaycastDelegate(SceneWrapper* self, RaycastHit* result, ulong layerMask, RaycastParams* param);
+    private delegate bool RaycastDelegate
+    (
+        SceneWrapper*  self,
+        RaycastHit*    result,
+        ulong          layerMask,
+        RaycastParams* param
+    );
 
     private Hook<RaycastDelegate>? _raycastHook;
 
     private RaycastHit? _savedHit;
 
-    public DebugGameCollision(PluginConfig config, DebugDrawer dd)
+    public DebugGameCollision
+    (
+        PluginConfig config,
+        DebugDrawer  dd
+    )
     {
         _config          = config;
         _dd              = dd;
@@ -133,7 +143,10 @@ public unsafe partial class DebugGameCollision : IDisposable
         }
     }
 
-    public void DrawPath(Span<PathSegment> pathSegments)
+    public void DrawPath
+    (
+        Span<PathSegment> pathSegments
+    )
     {
         for (var i = 1; i < pathSegments.Length; i++)
         {
@@ -143,7 +156,11 @@ public unsafe partial class DebugGameCollision : IDisposable
         }
     }
 
-    private void DrawSceneColliders(Scene* s, int index)
+    private void DrawSceneColliders
+    (
+        Scene* s,
+        int    index
+    )
     {
         using var n = _tree.Node($"场景 {index}：{s->NumColliders} 个碰撞体，{s->NumLoading} 个正在加载，流式加载={SphereStr(s->StreamingSphere)}###scene_{index}");
 
@@ -163,7 +180,11 @@ public unsafe partial class DebugGameCollision : IDisposable
         }
     }
 
-    private void DrawSceneQuadtree(Quadtree* tree, int index)
+    private void DrawSceneQuadtree
+    (
+        Quadtree* tree,
+        int       index
+    )
     {
         using var n = _tree.Node
         (
@@ -190,8 +211,8 @@ public unsafe partial class DebugGameCollision : IDisposable
                     continue;
 
                 var coord = Quadtree.CellCoords((uint)i);
-                var cellX = tree->MinX + coord.x * cellSizeX;
-                var cellZ = tree->MinZ + coord.z * cellSizeZ;
+                var cellX = tree->MinX + (coord.x * cellSizeX);
+                var cellZ = tree->MinZ + (coord.z * cellSizeZ);
                 using var cn = _tree.Node
                     ($"[{coord.x}, {coord.z}] ([{cellX}x{cellZ}]-[{cellX + cellSizeX}x{cellZ + cellSizeZ}])###node_{level}_{i}", node.Node.NodeLink.Next == null);
 
@@ -211,7 +232,11 @@ public unsafe partial class DebugGameCollision : IDisposable
         }
     }
 
-    private void DrawSceneRaycasts(SceneWrapper* s, int index)
+    private void DrawSceneRaycasts
+    (
+        SceneWrapper* s,
+        int           index
+    )
     {
         using var n = _tree.Node($"场景 {index}：射线检测");
         if (!n.Opened)
@@ -247,12 +272,17 @@ public unsafe partial class DebugGameCollision : IDisposable
         else _tree.LeafNode("射线检测：无");
     }
 
-    private RaycastHit? GetRaycastHit(SceneWrapper* s, int index, Vector2 screenPos)
+    private RaycastHit? GetRaycastHit
+    (
+        SceneWrapper* s,
+        int           index,
+        Vector2       screenPos
+    )
     {
         if (_savedHit != null)
             return _savedHit;
 
-        var clipPos = new Vector3(2 * screenPos.X / _dd.ViewportSize.X - 1, 1 - 2 * screenPos.Y / _dd.ViewportSize.Y, 1);
+        var clipPos = new Vector3((2 * screenPos.X / _dd.ViewportSize.X) - 1, 1 - (2 * screenPos.Y / _dd.ViewportSize.Y), 1);
         Matrix4x4.Invert(_dd.ViewProj, out var invViewProj);
         var cameraPosAtPlaneP = Vector4.Transform(clipPos, invViewProj);
         var cameraPosAtPlane = new Vector3
@@ -276,7 +306,10 @@ public unsafe partial class DebugGameCollision : IDisposable
         return null;
     }
 
-    private void DrawCollider(Collider* coll)
+    private void DrawCollider
+    (
+        Collider* coll
+    )
     {
         if (coll == null || !FilterCollider(coll))
             return;
@@ -289,7 +322,7 @@ public unsafe partial class DebugGameCollision : IDisposable
                         globalVisitFlag ? "全局访问" : "无";
 
         var type           = coll->GetColliderType();
-        var layoutInstance = LayoutUtil.FindInstance(LayoutWorld.Instance()->ActiveLayout, coll->LayoutObjectId << 32 | coll->LayoutObjectId >> 32);
+        var layoutInstance = LayoutUtil.FindInstance(LayoutWorld.Instance()->ActiveLayout, (coll->LayoutObjectId << 32) | (coll->LayoutObjectId >> 32));
         var color = layoutInstance == null || layoutInstance->Id.Type is not InstanceType.BgPart and not InstanceType.CollisionBox ?
                         0xff00ffff :
                         0xffffffff;
@@ -408,7 +441,10 @@ public unsafe partial class DebugGameCollision : IDisposable
             DebugLayout.DrawInstance(_tree, "Layout instance:", LayoutWorld.Instance()->ActiveLayout, layoutInstance, this);
     }
 
-    private void DrawColliderMesh(ColliderMesh* coll)
+    private void DrawColliderMesh
+    (
+        ColliderMesh* coll
+    )
     {
         DrawResource(coll->Resource);
 
@@ -445,15 +481,26 @@ public unsafe partial class DebugGameCollision : IDisposable
             ("Root", mesh->RootNode, ref coll->World, coll->Collider.ObjectMaterialValue & coll->Collider.ObjectMaterialMask, ~coll->Collider.ObjectMaterialMask);
     }
 
-    private void DrawColliderMeshPCBNode(string tag, MeshPCB.FileNode* node, ref Matrix4x3 world, ulong objMatId, ulong objMatInvMask)
+    private void DrawColliderMeshPCBNode
+    (
+        string            tag,
+        MeshPCB.FileNode* node,
+        ref Matrix4x3     world,
+        ulong             objMatId,
+        ulong             objMatInvMask
+    )
     {
         if (node == null)
             return;
 
         using var n = _tree.Node(tag);
+
         if (n.SelectedOrHovered)
+        {
             VisualizeColliderMeshPCBNode
                 (node, ref world, new(1, 1, 0, 0.7f), objMatId, objMatId, _materialId, _materialMask, Service.ObjectTable.LocalPlayer?.Position);
+        }
+
         if (!n.Opened)
             return;
 
@@ -492,19 +539,35 @@ public unsafe partial class DebugGameCollision : IDisposable
         DrawColliderMeshPCBNode($"Child 2 (+{node->Child2Offset})", node->Child2, ref world, objMatId, objMatId);
     }
 
-    private void DrawResource(Resource* res)
+    private void DrawResource
+    (
+        Resource* res
+    )
     {
         if (res != null) _tree.LeafNode($"Resource: {(nint)res:X} '{res->PathString}'");
         else _tree.LeafNode("Resource: null");
     }
 
-    private string SphereStr(Vector4 s) => $"[{s.X:f3}, {s.Y:f3}, {s.Z:f3}] R{s.W:f3}";
+    private string SphereStr
+    (
+        Vector4 s
+    ) => $"[{s.X:f3}, {s.Y:f3}, {s.Z:f3}] R{s.W:f3}";
 
-    private string Vec3Str(Vector3 v) => $"[{v.X:f3}, {v.Y:f3}, {v.Z:f3}]";
+    private string Vec3Str
+    (
+        Vector3 v
+    ) => $"[{v.X:f3}, {v.Y:f3}, {v.Z:f3}]";
 
-    private string AABBStr(AABB bb) => $"{Vec3Str(bb.Min)} - {Vec3Str(bb.Max)}";
+    private string AABBStr
+    (
+        AABB bb
+    ) => $"{Vec3Str(bb.Min)} - {Vec3Str(bb.Max)}";
 
-    private void DrawMat4x3(string tag, ref Matrix4x3 mat)
+    private void DrawMat4x3
+    (
+        string        tag,
+        ref Matrix4x3 mat
+    )
     {
         _tree.LeafNode($"{tag} R0: {Vec3Str(mat.Row0)}");
         _tree.LeafNode($"{tag} R1: {Vec3Str(mat.Row1)}");
@@ -512,7 +575,10 @@ public unsafe partial class DebugGameCollision : IDisposable
         _tree.LeafNode($"{tag} R3: {Vec3Str(mat.Row3)}");
     }
 
-    private void ContextCollider(Collider* coll)
+    private void ContextCollider
+    (
+        Collider* coll
+    )
     {
         var activeLayers = new BitMask(coll->LayerMask);
 
@@ -538,7 +604,13 @@ public unsafe partial class DebugGameCollision : IDisposable
 
     private EffectMesh.Data.Builder GetDynamicMeshes() => _meshDynamicBuilder ??= _meshDynamicData.Map(_dd.RenderContext);
 
-    private bool RaycastDetour(SceneWrapper* self, RaycastHit* result, ulong layerMask, RaycastParams* param)
+    private bool RaycastDetour
+    (
+        SceneWrapper*  self,
+        RaycastHit*    result,
+        ulong          layerMask,
+        RaycastParams* param
+    )
     {
         Service.Log.Debug
         (

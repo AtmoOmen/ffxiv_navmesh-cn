@@ -1,7 +1,7 @@
 using System.Numerics;
 using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Common.Utilities;
+using vnavmesh.Common.Utils;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Rendering;
@@ -21,11 +21,19 @@ public class DebugSolidHeightfield : DebugRecast
     private static Vector4 _colAreaNull     = new(0.25f, 0.25f, 0.25f, 0.7f);
     private static Vector4 _colAreaWalkable = new(0.25f, 0.5f, 0.63f, 0.7f);
 
-    private static Vector4 AreaColor(int area) => area == 0 ?
-                                                      _colAreaNull :
-                                                      _colAreaWalkable; // TODO: other colors for other areas
+    private static Vector4 AreaColor
+    (
+        int area
+    ) => area == 0 ?
+             _colAreaNull :
+             _colAreaWalkable; // TODO: other colors for other areas
 
-    public DebugSolidHeightfield(RcHeightfield hf, UITree tree, DebugDrawer dd)
+    public DebugSolidHeightfield
+    (
+        RcHeightfield hf,
+        UITree        tree,
+        DebugDrawer   dd
+    )
     {
         _hf   = hf;
         _tree = tree;
@@ -76,7 +84,7 @@ public class DebugSolidHeightfield : DebugRecast
 
             for (var x = 0; x < _hf.width; ++x)
             {
-                var span = _hf.spans[z * _hf.width + x];
+                var span = _hf.spans[(z * _hf.width) + x];
                 if (span == 0)
                     continue;
 
@@ -115,13 +123,13 @@ public class DebugSolidHeightfield : DebugRecast
             using var builder = _visu.Map(_dd.RenderContext);
             var       box     = new AnalyticMeshBox(builder);
 
-            var timer = StopWatchTimer.Create();
+            var       timer = StopWatchTimer.Create();
             // TODO: one thing i don't like about current visualization is the lack of edges and/or any depth cues
             var       icell = 0;
             var       icnt  = 0;
             Matrix4x3 world = new() { M11 = _hf.cs * 0.5f, M33 = _hf.cs * 0.5f }; // x/z scale never changes
-            world.M43 = _hf.bmin.Z + _hf.cs * 0.5f;
-            var x0  = _hf.bmin.X + _hf.cs * 0.5f;
+            world.M43 = _hf.bmin.Z + (_hf.cs * 0.5f);
+            var x0  = _hf.bmin.X + (_hf.cs * 0.5f);
             var chh = _hf.ch * 0.5f;
 
             for (var z = 0; z < _hf.height; ++z)
@@ -136,7 +144,7 @@ public class DebugSolidHeightfield : DebugRecast
                     {
                         ref var spanRef = ref _hf.Span(span);
                         world.M22 = (spanRef.smax - spanRef.smin) * chh;
-                        world.M42 = _hf.bmin.Y + (spanRef.smin + spanRef.smax) * chh;
+                        world.M42 = _hf.bmin.Y + ((spanRef.smin + spanRef.smax) * chh);
                         builder.AddInstance(new(world, AreaColor(spanRef.area)));
                         builder.AddMesh(box.FirstVertex, box.FirstPrimitive, box.NumPrimitives, icnt++, 1);
                         span = spanRef.next;
@@ -157,10 +165,14 @@ public class DebugSolidHeightfield : DebugRecast
     private void Visualize() =>
         _dd.EffectMesh?.Draw(_dd.RenderContext, GetOrInitVisualizer());
 
-    private void VisualizeCell(int x, int z)
+    private void VisualizeCell
+    (
+        int x,
+        int z
+    )
     {
         var numSpans = 0;
-        var span     = _hf.spans[z * _hf.width + x];
+        var span     = _hf.spans[(z * _hf.width) + x];
 
         while (span != 0)
         {
@@ -172,6 +184,9 @@ public class DebugSolidHeightfield : DebugRecast
             _dd.EffectMesh?.DrawSubset(_dd.RenderContext, GetOrInitVisualizer(), _spanCellOffsets[x, z], numSpans);
     }
 
-    private void VisualizeSpan(int spanIndex) =>
+    private void VisualizeSpan
+    (
+        int spanIndex
+    ) =>
         _dd.EffectMesh?.DrawSubset(_dd.RenderContext, GetOrInitVisualizer(), spanIndex, 1);
 }

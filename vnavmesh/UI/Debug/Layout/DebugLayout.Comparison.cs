@@ -2,13 +2,17 @@ using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.Interop;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Build.Scene;
 
 namespace vnavmesh.UI.Debug.Layout;
 
 public unsafe partial class DebugLayout
 {
-    private T* FindSection<T>(FileHeader* header, uint magic) where T : unmanaged
+    private T* FindSection<T>
+    (
+        FileHeader* header,
+        uint        magic
+    ) where T : unmanaged
     {
         foreach (var s in header->Sections)
         {
@@ -19,7 +23,12 @@ public unsafe partial class DebugLayout
         return null;
     }
 
-    private void FillInstancesFromFileScene(FileSceneHeader* scene, uint filterId, Span<GameMain.Festival> festivals)
+    private void FillInstancesFromFileScene
+    (
+        FileSceneHeader*        scene,
+        uint                    filterId,
+        Span<GameMain.Festival> festivals
+    )
     {
         if (scene == null)
             return;
@@ -39,7 +48,12 @@ public unsafe partial class DebugLayout
         }
     }
 
-    private void FillInstancesFromFileLayerGroup(FileLayerGroupHeader* lg, uint filterId, Span<GameMain.Festival> festivals)
+    private void FillInstancesFromFileLayerGroup
+    (
+        FileLayerGroupHeader*   lg,
+        uint                    filterId,
+        Span<GameMain.Festival> festivals
+    )
     {
         if (lg == null)
             return;
@@ -52,7 +66,15 @@ public unsafe partial class DebugLayout
         }
     }
 
-    private void FillInstancesFromFilePrefab(FileSceneHeader* scene, int layerGroupId, ushort layerId, ulong prefabKey, int subShift, bool expectedInGame)
+    private void FillInstancesFromFilePrefab
+    (
+        FileSceneHeader* scene,
+        int              layerGroupId,
+        ushort           layerId,
+        ulong            prefabKey,
+        int              subShift,
+        bool             expectedInGame
+    )
     {
         if (scene == null || subShift < 0)
             return;
@@ -76,14 +98,22 @@ public unsafe partial class DebugLayout
         FillInstancesFromFileLayer(lg.Layer(lg.LayerOffsets[0]), layerGroupId, layerId, prefabKey, subShift, expectedInGame);
     }
 
-    private void FillInstancesFromFileLayer(FileLayerGroupLayer* layer, int layerGroupId, ushort layerId, ulong prefabKey, int subShift, bool expectedInGame)
+    private void FillInstancesFromFileLayer
+    (
+        FileLayerGroupLayer* layer,
+        int                  layerGroupId,
+        ushort               layerId,
+        ulong                prefabKey,
+        int                  subShift,
+        bool                 expectedInGame
+    )
     {
         foreach (var instOffset in layer->InstanceOffsets)
         {
             var inst = layer->Instance(instOffset);
             var key = prefabKey == 0 ?
                           (ulong)inst->Key << 32 :
-                          prefabKey | inst->Key << subShift;
+                          prefabKey | (inst->Key << subShift);
 
             if (_insts.ContainsKey(key))
             {
@@ -114,14 +144,19 @@ public unsafe partial class DebugLayout
                 if (sgb != null)
                 {
                     fixed (byte* sgbData = &sgb.Data[0])
+                    {
                         FillInstancesFromFilePrefab
                             (FindSection<FileSceneHeader>((FileHeader*)sgbData, 0x314E4353), layerGroupId, layerId, key, subShift - 8, expectedInGame);
+                    }
                 }
             }
         }
     }
 
-    private void FillInstancesFromGame(LayoutManager* layout)
+    private void FillInstancesFromGame
+    (
+        LayoutManager* layout
+    )
     {
         foreach (var (_, ikv) in layout->InstancesByType)
         {
@@ -148,7 +183,10 @@ public unsafe partial class DebugLayout
         }
     }
 
-    private void DrawInstancesByLayerGroup(IEnumerable<InstanceData> insts)
+    private void DrawInstancesByLayerGroup
+    (
+        IEnumerable<InstanceData> insts
+    )
     {
         if (_groupByLayerGroup)
         {
@@ -162,7 +200,10 @@ public unsafe partial class DebugLayout
         else DrawInstancesByLayer(insts);
     }
 
-    private void DrawInstancesByLayer(IEnumerable<InstanceData> insts)
+    private void DrawInstancesByLayer
+    (
+        IEnumerable<InstanceData> insts
+    )
     {
         if (_groupByLayer)
         {
@@ -176,7 +217,10 @@ public unsafe partial class DebugLayout
         else DrawInstancesByType(insts);
     }
 
-    private void DrawInstancesByType(IEnumerable<InstanceData> insts)
+    private void DrawInstancesByType
+    (
+        IEnumerable<InstanceData> insts
+    )
     {
         if (_groupByInstanceType)
         {
@@ -190,7 +234,10 @@ public unsafe partial class DebugLayout
         else DrawInstancesByMaterial(insts);
     }
 
-    private void DrawInstancesByMaterial(IEnumerable<InstanceData> insts)
+    private void DrawInstancesByMaterial
+    (
+        IEnumerable<InstanceData> insts
+    )
     {
         if (_groupByMaterial)
         {
@@ -210,7 +257,10 @@ public unsafe partial class DebugLayout
         else DrawInstances(insts);
     }
 
-    private void DrawInstances(IEnumerable<InstanceData> insts)
+    private void DrawInstances
+    (
+        IEnumerable<InstanceData> insts
+    )
     {
         foreach (var inst in insts)
         {

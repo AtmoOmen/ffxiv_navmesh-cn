@@ -1,5 +1,6 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
+using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Models;
 using vnavmesh.Movement.Execution;
 
@@ -17,10 +18,16 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
     private DateTime     stateEnteredAtUtc;
     private int          alignedFrameCount;
 
-    public void Enter(MovementExecutionContext context) =>
+    public void Enter
+    (
+        MovementExecutionContext context
+    ) =>
         TransitionTo(TakeoffState.Align);
 
-    public SegmentDriverUpdate Update(MovementExecutionContext context)
+    public SegmentDriverUpdate Update
+    (
+        MovementExecutionContext context
+    )
     {
         if (IsAirborne)
             return new(CreateIdleCommand(context.Player.Position));
@@ -42,9 +49,15 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
         };
     }
 
-    public bool ShouldAdvance(MovementExecutionContext context) => IsAirborne;
+    public bool ShouldAdvance
+    (
+        MovementExecutionContext context
+    ) => IsAirborne;
 
-    public void Exit(MovementExecutionContext context)
+    public void Exit
+    (
+        MovementExecutionContext context
+    )
     {
         TransitionTo(TakeoffState.Align);
         alignedFrameCount = 0;
@@ -52,7 +65,12 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
 
     private static bool IsAirborne => Service.Condition[ConditionFlag.InFlight] || Service.Condition[ConditionFlag.Diving];
 
-    private SegmentDriverUpdate UpdateAlignState(MovementExecutionContext context, Vector3 target, Angle desiredFacing)
+    private SegmentDriverUpdate UpdateAlignState
+    (
+        MovementExecutionContext context,
+        Vector3                  target,
+        Angle                    desiredFacing
+    )
     {
         var currentFacing = context.Player.Rotation.Radians();
         var aligned       = (desiredFacing - currentFacing).Normalized().Abs().Rad <= FACING_TOLERANCE_RAD;
@@ -70,7 +88,11 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
         return new(CreateFacingCommand(target, desiredFacing, false));
     }
 
-    private SegmentDriverUpdate UpdateWaitAirborneState(Vector3 target, Angle desiredFacing)
+    private SegmentDriverUpdate UpdateWaitAirborneState
+    (
+        Vector3 target,
+        Angle   desiredFacing
+    )
     {
         if (ElapsedSinceStateEntered() >= RetryJumpInterval)
         {
@@ -81,13 +103,20 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
         return new(CreateFacingCommand(target, desiredFacing, false));
     }
 
-    private SegmentDriverUpdate UpdateJumpState(Vector3 target, Angle desiredFacing)
+    private SegmentDriverUpdate UpdateJumpState
+    (
+        Vector3 target,
+        Angle   desiredFacing
+    )
     {
         TransitionTo(TakeoffState.WaitAirborne);
         return new(CreateFacingCommand(target, desiredFacing, true));
     }
 
-    private static Vector3 ResolveTakeoffWaypoint(MovementExecutionContext context)
+    private static Vector3 ResolveTakeoffWaypoint
+    (
+        MovementExecutionContext context
+    )
     {
         if (context.TryGetFirstElevatedRemainingWaypoint(ELEVATED_WAYPOINT_DELTA_Y, out var elevatedWaypoint))
             return elevatedWaypoint;
@@ -98,7 +127,12 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
         return context.Plan.FinalDestination;
     }
 
-    private static Angle ResolveDesiredFacing(Vector3 playerPosition, Angle currentFacing, Vector3 target)
+    private static Angle ResolveDesiredFacing
+    (
+        Vector3 playerPosition,
+        Angle   currentFacing,
+        Vector3 target
+    )
     {
         var delta = new Vector3(target.X - playerPosition.X, 0, target.Z - playerPosition.Z);
         return delta.LengthSquared() > 0.000001f ?
@@ -106,15 +140,26 @@ internal sealed class TakeoffDriver : IMovementSegmentDriver
                    currentFacing;
     }
 
-    private static MovementFrameCommand CreateFacingCommand(Vector3 desired, Angle desiredFacing, bool requestJump) =>
+    private static MovementFrameCommand CreateFacingCommand
+    (
+        Vector3 desired,
+        Angle   desiredFacing,
+        bool    requestJump
+    ) =>
         new(desired, false, false, false, default, default, requestJump, true, desiredFacing);
 
-    private static MovementFrameCommand CreateIdleCommand(Vector3 current) =>
+    private static MovementFrameCommand CreateIdleCommand
+    (
+        Vector3 current
+    ) =>
         new(current, false, false, false, default, default, false, false, default);
 
     private TimeSpan ElapsedSinceStateEntered() => DateTime.UtcNow - stateEnteredAtUtc;
 
-    private void TransitionTo(TakeoffState state)
+    private void TransitionTo
+    (
+        TakeoffState state
+    )
     {
         this.state        = state;
         stateEnteredAtUtc = DateTime.UtcNow;

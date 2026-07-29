@@ -38,7 +38,10 @@ public class EffectMesh : IDisposable
         public int V2;
         public int V3;
 
-        public Triangle((int v1, int v2, int v3) tuple) => (V1, V2, V3) = tuple;
+        public Triangle
+        (
+            (int v1, int v2, int v3) tuple
+        ) => (V1, V2, V3) = tuple;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -49,7 +52,11 @@ public class EffectMesh : IDisposable
         public Vector4 WorldColZ;
         public Vector4 Color;
 
-        public Instance(Matrix4x3 world, Vector4 color)
+        public Instance
+        (
+            Matrix4x3 world,
+            Vector4   color
+        )
         {
             WorldColX = new(world.M11, world.M21, world.M31, world.M41);
             WorldColY = new(world.M12, world.M22, world.M32, world.M42);
@@ -71,7 +78,11 @@ public class EffectMesh : IDisposable
             public int NumPrimitives => _primitives.CurElements;
             public int NumInstances  => _instances.CurElements;
 
-            internal Builder(RenderContext ctx, Data data)
+            internal Builder
+            (
+                RenderContext ctx,
+                Data          data
+            )
             {
                 _data       = data;
                 _vertices   = data._vertexBuffer.Map(ctx);
@@ -89,13 +100,31 @@ public class EffectMesh : IDisposable
             }
 
             // manually fill the mesh
-            public void AddVertex(Vector3 v) => _vertices.Add(v);
+            public void AddVertex
+            (
+                Vector3 v
+            ) => _vertices.Add(v);
 
-            public void AddTriangle(int v1, int v2, int v3) => _primitives.Add(new((v1, v2, v3)));
+            public void AddTriangle
+            (
+                int v1,
+                int v2,
+                int v3
+            ) => _primitives.Add(new((v1, v2, v3)));
 
-            public void AddInstance(Instance i) => _instances.Add(ref i);
+            public void AddInstance
+            (
+                Instance i
+            ) => _instances.Add(ref i);
 
-            public void AddMesh(int firstVertex, int firstPrimitive, int numPrimitives, int firstInstance, int numInstances) => _data._meshes.Add
+            public void AddMesh
+            (
+                int firstVertex,
+                int firstPrimitive,
+                int numPrimitives,
+                int firstInstance,
+                int numInstances
+            ) => _data._meshes.Add
                 (new(firstVertex, firstPrimitive, numPrimitives, firstInstance, numInstances));
         }
 
@@ -106,7 +135,14 @@ public class EffectMesh : IDisposable
 
         public IReadOnlyList<Mesh> Meshes => _meshes;
 
-        public Data(RenderContext ctx, int maxVertices, int maxPrimitives, int maxInstances, bool dynamic)
+        public Data
+        (
+            RenderContext ctx,
+            int           maxVertices,
+            int           maxPrimitives,
+            int           maxInstances,
+            bool          dynamic
+        )
         {
             _vertexBuffer   = new(ctx, maxVertices, BindFlags.VertexBuffer, dynamic);
             _primBuffer     = new(ctx, maxPrimitives, BindFlags.IndexBuffer, dynamic);
@@ -120,10 +156,16 @@ public class EffectMesh : IDisposable
             _instanceBuffer.Dispose();
         }
 
-        public Builder Map(RenderContext ctx) => new(ctx, this);
+        public Builder Map
+        (
+            RenderContext ctx
+        ) => new(ctx, this);
 
         // bind buffers without drawing - useful for drawing multiple meshes manually in a loop
-        public void Bind(RenderContext ctx)
+        public void Bind
+        (
+            RenderContext ctx
+        )
         {
             ctx.Context.InputAssembler.SetVertexBuffers
             (
@@ -135,18 +177,30 @@ public class EffectMesh : IDisposable
         }
 
         // draw custom mesh; assumes both effect and data were bound
-        public void DrawManual(RenderContext ctx, Mesh mesh) => ctx.Context.DrawIndexedInstanced
+        public void DrawManual
+        (
+            RenderContext ctx,
+            Mesh          mesh
+        ) => ctx.Context.DrawIndexedInstanced
             (mesh.NumPrimitives * 3, mesh.NumInstances, mesh.FirstPrimitive * 3, mesh.FirstVertex, mesh.FirstInstance);
 
         // Draw* should be called after Bind set up its state
-        public void DrawSubset(RenderContext ctx, int firstMesh, int numMeshes)
+        public void DrawSubset
+        (
+            RenderContext ctx,
+            int           firstMesh,
+            int           numMeshes
+        )
         {
             Bind(ctx);
             foreach (var m in _meshes.Skip(firstMesh).Take(numMeshes))
                 DrawManual(ctx, m);
         }
 
-        public void DrawAll(RenderContext ctx)
+        public void DrawAll
+        (
+            RenderContext ctx
+        )
         {
             Bind(ctx);
             foreach (var m in _meshes)
@@ -161,7 +215,10 @@ public class EffectMesh : IDisposable
     private PixelShader     _ps;
     private RasterizerState _rsWireframe;
 
-    public EffectMesh(RenderContext ctx)
+    public EffectMesh
+    (
+        RenderContext ctx
+    )
     {
         var shader = """
                      struct Vertex
@@ -277,13 +334,22 @@ public class EffectMesh : IDisposable
         _rsWireframe.Dispose();
     }
 
-    public void UpdateConstants(RenderContext ctx, Constants consts)
+    public void UpdateConstants
+    (
+        RenderContext ctx,
+        Constants     consts
+    )
     {
         consts.ViewProj = Matrix4x4.Transpose(consts.ViewProj);
         ctx.Context.UpdateSubresource(ref consts, _constantBuffer);
     }
 
-    public void Bind(RenderContext ctx, bool unlit, bool wireframe)
+    public void Bind
+    (
+        RenderContext ctx,
+        bool          unlit,
+        bool          wireframe
+    )
     {
         ctx.Context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
         ctx.Context.InputAssembler.InputLayout       = _il;
@@ -301,19 +367,34 @@ public class EffectMesh : IDisposable
     }
 
     // shortcut to bind + draw
-    public void Draw(RenderContext ctx, Data data)
+    public void Draw
+    (
+        RenderContext ctx,
+        Data          data
+    )
     {
         Bind(ctx, false, false);
         data.DrawAll(ctx);
     }
 
-    public void DrawSubset(RenderContext ctx, Data data, int firstMesh, int numMeshes)
+    public void DrawSubset
+    (
+        RenderContext ctx,
+        Data          data,
+        int           firstMesh,
+        int           numMeshes
+    )
     {
         Bind(ctx, false, false);
         data.DrawSubset(ctx, firstMesh, numMeshes);
     }
 
-    public void DrawSingle(RenderContext ctx, Data data, int index)
+    public void DrawSingle
+    (
+        RenderContext ctx,
+        Data          data,
+        int           index
+    )
     {
         Bind(ctx, false, false);
         data.DrawSubset(ctx, index, 1);

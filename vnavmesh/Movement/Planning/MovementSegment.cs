@@ -1,5 +1,5 @@
 using System.Numerics;
-using vnavmesh.Navigation.Planning;
+using vnavmesh.Query.Ground;
 
 namespace vnavmesh.Movement.Planning;
 

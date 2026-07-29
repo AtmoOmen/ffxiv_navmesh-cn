@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Numerics;
 using Dalamud.Game.Command;
+using vnavmesh.Build;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Query.Utils;
 
 namespace vnavmesh.Internal;
 
@@ -66,7 +66,11 @@ internal sealed class PluginCommands : IDisposable
         Service.CommandManager.RemoveHandler("/vnavmesh");
     }
 
-    private void OnCommand(string command, string arguments)
+    private void OnCommand
+    (
+        string command,
+        string arguments
+    )
     {
         Service.Log.Debug($"命令: '{command}'，参数: '{arguments}'");
 
@@ -139,7 +143,12 @@ internal sealed class PluginCommands : IDisposable
         }
     }
 
-    private void MoveToCommand(string[] args, bool relativeToPlayer, bool fly)
+    private void MoveToCommand
+    (
+        string[] args,
+        bool     relativeToPlayer,
+        bool     fly
+    )
     {
         if (args.Length < 4)
             return;
@@ -157,7 +166,10 @@ internal sealed class PluginCommands : IDisposable
         asyncMove.MoveTo(origin + offset, fly);
     }
 
-    private void MoveFlagCommand(bool fly)
+    private void MoveFlagCommand
+    (
+        bool fly
+    )
     {
         if (navmeshManager.Query == null)
             return;
@@ -169,7 +181,10 @@ internal sealed class PluginCommands : IDisposable
         asyncMove.MoveTo(point.Value, fly);
     }
 
-    private void AlignCameraCommand(string argument)
+    private void AlignCameraCommand
+    (
+        string argument
+    )
     {
         var normalized = argument.ToLowerInvariant();
         config.AlignCameraToMovement = normalized switch

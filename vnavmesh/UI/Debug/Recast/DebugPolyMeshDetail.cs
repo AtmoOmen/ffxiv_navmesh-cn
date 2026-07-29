@@ -1,7 +1,7 @@
 using System.Numerics;
 using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Common.Utilities;
+using vnavmesh.Common.Utils;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Rendering;
@@ -15,7 +15,12 @@ public class DebugPolyMeshDetail : DebugRecast
     private DebugDrawer      _dd;
     private EffectMesh.Data? _visu;
 
-    public DebugPolyMeshDetail(RcPolyMeshDetail mesh, UITree tree, DebugDrawer dd)
+    public DebugPolyMeshDetail
+    (
+        RcPolyMeshDetail mesh,
+        UITree           tree,
+        DebugDrawer      dd
+    )
     {
         _mesh = mesh;
         _tree = tree;
@@ -41,9 +46,9 @@ public class DebugPolyMeshDetail : DebugRecast
         for (var i = 0; i < _mesh.nmeshes; ++i)
         {
             var       vertexBase  = _mesh.meshes[i * 4];
-            var       vertexCount = _mesh.meshes[i * 4 + 1];
-            var       triBase     = _mesh.meshes[i * 4 + 2];
-            var       triCount    = _mesh.meshes[i * 4 + 3];
+            var       vertexCount = _mesh.meshes[(i * 4) + 1];
+            var       triBase     = _mesh.meshes[(i * 4) + 2];
+            var       triCount    = _mesh.meshes[(i * 4) + 3];
             using var nmesh       = _tree.Node($"网格 {i}：{vertexCount} 个顶点 (起始于 {vertexBase})，{triCount} 个三角形 (起始于 {triBase})");
             if (nmesh.SelectedOrHovered)
                 VisualizeMesh(i);
@@ -53,9 +58,9 @@ public class DebugPolyMeshDetail : DebugRecast
             for (var j = 0; j < triCount; ++j)
             {
                 var v1    = _mesh.tris[(triBase + j) * 4];
-                var v2    = _mesh.tris[(triBase + j) * 4 + 1];
-                var v3    = _mesh.tris[(triBase + j) * 4 + 2];
-                var flags = _mesh.tris[(triBase + j) * 4 + 3];
+                var v2    = _mesh.tris[((triBase + j) * 4) + 1];
+                var v3    = _mesh.tris[((triBase + j) * 4) + 2];
+                var flags = _mesh.tris[((triBase + j) * 4) + 3];
                 using var ntri = _tree.Node
                     ($"三角形 {j}：{v1}x{v2}x{v3} ({GetVertex(vertexBase + v1):f3}x{GetVertex(vertexBase + v2):f3}x{GetVertex(vertexBase + v3):f3})，标志={flags:X}");
                 if (ntri.SelectedOrHovered)
@@ -75,12 +80,12 @@ public class DebugPolyMeshDetail : DebugRecast
             for (var i = 0; i < _mesh.nverts; ++i)
                 builder.AddVertex(GetVertex(i));
             for (var i = 0; i < _mesh.ntris; ++i)
-                builder.AddTriangle(_mesh.tris[i * 4], _mesh.tris[i * 4 + 2], _mesh.tris[i * 4 + 1]); // invert winding for dx
+                builder.AddTriangle(_mesh.tris[i * 4], _mesh.tris[(i * 4) + 2], _mesh.tris[(i * 4) + 1]); // invert winding for dx
 
             for (var i = 0; i < _mesh.nmeshes; ++i)
             {
                 builder.AddInstance(new(Matrix4x3.Identity, IntColor(i, 0.75f)));
-                builder.AddMesh(_mesh.meshes[i * 4], _mesh.meshes[i * 4 + 2], _mesh.meshes[i * 4 + 3], i, 1);
+                builder.AddMesh(_mesh.meshes[i * 4], _mesh.meshes[(i * 4) + 2], _mesh.meshes[(i * 4) + 3], i, 1);
             }
 
             Service.Log.Debug($"detail polymesh visualization build time: {timer.Value().TotalMilliseconds:f3}ms");
@@ -96,30 +101,42 @@ public class DebugPolyMeshDetail : DebugRecast
             VisualizeMeshEdges(i);
     }
 
-    public void VisualizeMesh(int i)
+    public void VisualizeMesh
+    (
+        int i
+    )
     {
         _dd.EffectMesh?.DrawSingle(_dd.RenderContext, GetOrInitVisualizer(), i);
         VisualizeMeshEdges(i);
     }
 
-    private void VisualizeMeshEdges(int i)
+    private void VisualizeMeshEdges
+    (
+        int i
+    )
     {
         var vertexBase = _mesh.meshes[i * 4];
-        var triBase    = _mesh.meshes[i * 4 + 2];
-        var triCount   = _mesh.meshes[i * 4 + 3];
+        var triBase    = _mesh.meshes[(i * 4) + 2];
+        var triCount   = _mesh.meshes[(i * 4) + 3];
         for (var j = 0; j < triCount; ++j)
             VisualizeTriangle(triBase + j, vertexBase, 1, 2);
     }
 
-    private void VisualizeTriangle(int index, int vertexBase, int thicknessInternal, int thicknessExternal)
+    private void VisualizeTriangle
+    (
+        int index,
+        int vertexBase,
+        int thicknessInternal,
+        int thicknessExternal
+    )
     {
-        var v1    = GetVertex(vertexBase + _mesh.tris[index * 4]);
-        var v2    = GetVertex(vertexBase + _mesh.tris[index * 4 + 1]);
-        var v3    = GetVertex(vertexBase + _mesh.tris[index * 4 + 2]);
-        var flags = _mesh.tris[index * 4 + 3];
-        var ext1  = (flags      & 3) != 0;
-        var ext2  = (flags >> 2 & 3) != 0;
-        var ext3  = (flags >> 4 & 3) != 0;
+        var v1    = GetVertex(vertexBase   + _mesh.tris[index * 4]);
+        var v2    = GetVertex(vertexBase   + _mesh.tris[(index * 4) + 1]);
+        var v3    = GetVertex(vertexBase   + _mesh.tris[(index * 4) + 2]);
+        var flags = _mesh.tris[(index * 4) + 3];
+        var ext1  = (flags        & 3) != 0;
+        var ext2  = ((flags >> 2) & 3) != 0;
+        var ext3  = ((flags >> 4) & 3) != 0;
         _dd.DrawWorldLine
         (
             v1,
@@ -149,5 +166,8 @@ public class DebugPolyMeshDetail : DebugRecast
         );
     }
 
-    private Vector3 GetVertex(int index) => new(_mesh.verts[3 * index], _mesh.verts[3 * index + 1], _mesh.verts[3 * index + 2]);
+    private Vector3 GetVertex
+    (
+        int index
+    ) => new(_mesh.verts[3 * index], _mesh.verts[(3 * index) + 1], _mesh.verts[(3 * index) + 2]);
 }

@@ -7,7 +7,11 @@ internal static class FlightWaypointNormalizer
     private const float AIRBORNE_START_DELTA_Y         = 0.001f;
     private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
 
-    public static List<Vector3> NormalizeForTakeoff(IReadOnlyList<Vector3> waypoints, Vector3 startPosition)
+    public static List<Vector3> NormalizeForTakeoff
+    (
+        IReadOnlyList<Vector3> waypoints,
+        Vector3                startPosition
+    )
     {
         if (waypoints.Count == 0)
             return [];

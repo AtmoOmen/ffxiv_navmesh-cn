@@ -14,7 +14,11 @@ public class DebugExportObj
         public List<Vector3>                  Vertices  = new();
         public List<(int v1, int v2, int v3)> Triangles = new();
 
-        public unsafe void AddPCB(MeshPCB.FileNode* node, ref Matrix4x3 world)
+        public unsafe void AddPCB
+        (
+            MeshPCB.FileNode* node,
+            ref Matrix4x3     world
+        )
         {
             if (node == null)
                 return;
@@ -28,7 +32,11 @@ public class DebugExportObj
         }
     }
 
-    public unsafe string BuildObjFromScene(bool includeStreamedMeshes, bool includeStandaloneMeshes)
+    public unsafe string BuildObjFromScene
+    (
+        bool includeStreamedMeshes,
+        bool includeStandaloneMeshes
+    )
     {
         var res = new MegaMesh();
 

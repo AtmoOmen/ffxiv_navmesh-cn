@@ -1,12 +1,14 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using vnavmesh.Build;
+using vnavmesh.Common.Build.Flight;
+using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Models;
-using vnavmesh.Common.Navigation.Volume.Map;
-using vnavmesh.Common.Navigation.Volume.Search;
 using vnavmesh.Internal;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navigation;
+using vnavmesh.Query;
+using vnavmesh.Query.Flight;
 
 namespace vnavmesh.Movement.Execution;
 
@@ -45,7 +47,11 @@ internal sealed class MovementUnstuckController
         IsRunning           = false;
     }
 
-    public UnstuckUpdate Update(MovementExecutionContext context, bool suspended)
+    public UnstuckUpdate Update
+    (
+        MovementExecutionContext context,
+        bool                     suspended
+    )
     {
         if (IsRunning)
             return UpdateRunning(context);
@@ -113,7 +119,10 @@ internal sealed class MovementUnstuckController
         return new(BuildRecoveryCommand(context, recoveryTarget, IsFlightSegment(context), false), true);
     }
 
-    private UnstuckUpdate UpdateRunning(MovementExecutionContext context)
+    private UnstuckUpdate UpdateRunning
+    (
+        MovementExecutionContext context
+    )
     {
         if (DateTime.Now.Subtract(unstuckStartTime).TotalSeconds > UNSTUCK_DURATION_SECONDS)
         {
@@ -125,7 +134,13 @@ internal sealed class MovementUnstuckController
         return new(BuildRecoveryCommand(context, recoveryTarget, IsFlightSegment(context), false), true);
     }
 
-    private static MovementFrameCommand BuildRecoveryCommand(MovementExecutionContext context, Vector3 desired, bool allowVerticalControl, bool requestJump)
+    private static MovementFrameCommand BuildRecoveryCommand
+    (
+        MovementExecutionContext context,
+        Vector3                  desired,
+        bool                     allowVerticalControl,
+        bool                     requestJump
+    )
     {
         var delta = desired - context.Player.Position;
         return new
@@ -156,7 +171,13 @@ internal sealed class MovementUnstuckController
         lastPosition     = default;
     }
 
-    internal static bool TryResolveRecoveryTarget(NavmeshQuery query, Vector3 origin, bool fly, out Vector3 target)
+    internal static bool TryResolveRecoveryTarget
+    (
+        NavmeshQuery query,
+        Vector3      origin,
+        bool         fly,
+        out Vector3  target
+    )
     {
         target = default;
 
@@ -175,7 +196,11 @@ internal sealed class MovementUnstuckController
         return false;
     }
 
-    private static Vector3? ResolveRandomGroundTarget(NavmeshQuery query, Vector3 origin)
+    private static Vector3? ResolveRandomGroundTarget
+    (
+        NavmeshQuery query,
+        Vector3      origin
+    )
     {
         var radius = RandomDistance();
         var target = query.FindRandomPointOnMeshAroundCircle(origin, radius, false);
@@ -184,7 +209,11 @@ internal sealed class MovementUnstuckController
                    null;
     }
 
-    private static Vector3? ResolveRandomFlightTarget(NavmeshQuery query, Vector3 origin)
+    private static Vector3? ResolveRandomFlightTarget
+    (
+        NavmeshQuery query,
+        Vector3      origin
+    )
     {
         var volume = query.VolumeQuery?.Volume;
         if (volume == null)
@@ -207,7 +236,12 @@ internal sealed class MovementUnstuckController
     private static float RandomDistance() =>
         (Random.Shared.NextSingle() * (MAX_RECOVERY_TARGET_DISTANCE - MIN_RECOVERY_TARGET_DISTANCE)) + MIN_RECOVERY_TARGET_DISTANCE;
 
-    private static bool IsValidRecoveryTarget(Vector3 origin, Vector3 target, bool flatten)
+    private static bool IsValidRecoveryTarget
+    (
+        Vector3 origin,
+        Vector3 target,
+        bool    flatten
+    )
     {
         var delta = target - origin;
         return flatten ?
@@ -215,14 +249,28 @@ internal sealed class MovementUnstuckController
                    delta.Length()                         >= MIN_RECOVERY_TARGET_DISTANCE;
     }
 
-    private static Vector3 ResolvePathGoal(MovementExecutionContext context) =>
+    private static Vector3 ResolvePathGoal
+    (
+        MovementExecutionContext context
+    ) =>
         context.ActiveWaypoint ?? context.Plan.FinalDestination;
 
-    private static bool IsGroundSegment(MovementExecutionContext context) => context.Segment.Kind == MovementSegmentKind.GroundTraverse;
+    private static bool IsGroundSegment
+    (
+        MovementExecutionContext context
+    ) => context.Segment.Kind == MovementSegmentKind.GroundTraverse;
 
-    private static bool IsFlightSegment(MovementExecutionContext context) => context.Segment.Kind == MovementSegmentKind.FlightTraverse;
+    private static bool IsFlightSegment
+    (
+        MovementExecutionContext context
+    ) => context.Segment.Kind == MovementSegmentKind.FlightTraverse;
 
-    private static float MeasureDistance(Vector3 from, Vector3 to, bool flatten)
+    private static float MeasureDistance
+    (
+        Vector3 from,
+        Vector3 to,
+        bool    flatten
+    )
     {
         var delta = to - from;
         return flatten ?
@@ -230,7 +278,10 @@ internal sealed class MovementUnstuckController
                    delta.Length();
     }
 
-    private static bool CanAttemptJump(MovementExecutionContext context)
+    private static bool CanAttemptJump
+    (
+        MovementExecutionContext context
+    )
     {
         if (!IsGroundSegment(context)                 ||
             Service.Condition[ConditionFlag.InFlight] ||

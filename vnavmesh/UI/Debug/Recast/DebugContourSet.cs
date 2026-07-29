@@ -1,12 +1,13 @@
 using System.Numerics;
 using DotRecast.Recast;
-using vnavmesh.Common.Utilities;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Extensions;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 
 namespace vnavmesh.UI.Debug.Recast;
 
-using static DotRecast.Recast.RcRecast;
+using static RcRecast;
 
 public class DebugContourSet : DebugRecast
 {
@@ -14,7 +15,12 @@ public class DebugContourSet : DebugRecast
     private UITree       _tree;
     private DebugDrawer  _dd;
 
-    public DebugContourSet(RcContourSet cset, UITree tree, DebugDrawer dd)
+    public DebugContourSet
+    (
+        RcContourSet cset,
+        UITree       tree,
+        DebugDrawer  dd
+    )
     {
         _cset = cset;
         _tree = tree;
@@ -64,10 +70,10 @@ public class DebugContourSet : DebugRecast
                             {
                                 for (var iv = 0; iv < c.nverts; ++iv)
                                 {
-                                    var reg = c.verts[iv * 4 + 3];
+                                    var reg = c.verts[(iv * 4) + 3];
                                     if (_tree.LeafNode
                                         (
-                                            $"{iv}: {c.verts[iv * 4]}x{c.verts[iv * 4 + 1]}x{c.verts[iv * 4 + 2]}, reg={reg & RC_CONTOUR_REG_MASK}, border={(reg & RC_BORDER_VERTEX) != 0}, areaborder={(reg & RC_AREA_BORDER) != 0}"
+                                            $"{iv}: {c.verts[iv * 4]}x{c.verts[(iv * 4) + 1]}x{c.verts[(iv * 4) + 2]}, reg={reg & RC_CONTOUR_REG_MASK}, border={(reg & RC_BORDER_VERTEX) != 0}, areaborder={(reg & RC_AREA_BORDER) != 0}"
                                         ).SelectedOrHovered)
                                         VisualizeVertex(c.verts, iv, hOffset, RegionColor(reg, true, 1), 10);
                                 }
@@ -86,10 +92,10 @@ public class DebugContourSet : DebugRecast
                             {
                                 for (var iv = 0; iv < c.nrverts; ++iv)
                                 {
-                                    var reg = c.rverts[iv * 4 + 3];
+                                    var reg = c.rverts[(iv * 4) + 3];
                                     if (_tree.LeafNode
                                         (
-                                            $"{iv}: {c.rverts[iv * 4]}x{c.rverts[iv * 4 + 1]}x{c.rverts[iv * 4 + 2]}, reg={reg & RC_CONTOUR_REG_MASK}, border={(reg & RC_BORDER_VERTEX) != 0}, areaborder={(reg & RC_AREA_BORDER) != 0}"
+                                            $"{iv}: {c.rverts[iv * 4]}x{c.rverts[(iv * 4) + 1]}x{c.rverts[(iv * 4) + 2]}, reg={reg & RC_CONTOUR_REG_MASK}, border={(reg & RC_BORDER_VERTEX) != 0}, areaborder={(reg & RC_AREA_BORDER) != 0}"
                                         ).SelectedOrHovered)
                                         VisualizeVertex(c.rverts, iv, hOffset, RegionColor(reg, true, 1), 10);
                                 }
@@ -122,7 +128,15 @@ public class DebugContourSet : DebugRecast
         }
     }
 
-    private void VisualizeContour(int[] verts, int numVerts, int hOffset, int reg, float alpha, bool withVertices)
+    private void VisualizeContour
+    (
+        int[] verts,
+        int   numVerts,
+        int   hOffset,
+        int   reg,
+        float alpha,
+        bool  withVertices
+    )
     {
         if (numVerts <= 0)
             return;
@@ -134,9 +148,16 @@ public class DebugContourSet : DebugRecast
             VisualizeVertex(verts, i, hOffset, vcolor, 5);
     }
 
-    private void VisualizeVertex(int[] verts, int index, int hOffset, uint color, float radius)
+    private void VisualizeVertex
+    (
+        int[] verts,
+        int   index,
+        int   hOffset,
+        uint  color,
+        float radius
+    )
     {
-        var isBorder = (verts[4 * index + 3] & RC_BORDER_VERTEX) != 0;
+        var isBorder = (verts[(4 * index) + 3] & RC_BORDER_VERTEX) != 0;
         _dd.DrawWorldPoint
         (
             GetContourVertex
@@ -165,7 +186,7 @@ public class DebugContourSet : DebugRecast
 
             for (var iv = 0; iv < c.nverts; ++iv)
             {
-                var reg = c.verts[4 * iv + 3] & RC_CONTOUR_REG_MASK;
+                var reg = c.verts[(4 * iv) + 3] & RC_CONTOUR_REG_MASK;
                 if (reg == 0 || reg < c.reg)
                     continue;
                 var other = _cset.conts.FirstOrDefault(cand => cand.reg == reg);
@@ -178,31 +199,44 @@ public class DebugContourSet : DebugRecast
     }
 
     private Vector3 GetContourVertex
-        (int[] verts, int index, int hOffset) => _cset.bmin.RecastToSystem() +
-                                                 new Vector3(_cset.cs,         _cset.ch,                       _cset.cs) *
-                                                 new Vector3(verts[4 * index], verts[4 * index + 1] + hOffset, verts[4 * index + 2]);
+    (
+        int[] verts,
+        int   index,
+        int   hOffset
+    ) => _cset.bmin.ToSystem() +
+         (new Vector3(_cset.cs,         _cset.ch,                         _cset.cs) *
+          new Vector3(verts[4 * index], verts[(4 * index) + 1] + hOffset, verts[(4 * index) + 2]));
 
-    private Vector3 GetContourCenter(int[] verts, int numVerts)
+    private Vector3 GetContourCenter
+    (
+        int[] verts,
+        int   numVerts
+    )
     {
         Vector3 res = new();
 
         if (numVerts > 0)
         {
             for (var i = 0; i < numVerts; ++i)
-                res += new Vector3(verts[4 * i], verts[4 * i + 1] + 4, verts[4 * i + 2]);
-            res = _cset.bmin.RecastToSystem() + new Vector3(_cset.cs, _cset.ch, _cset.cs) * res / numVerts;
+                res += new Vector3(verts[4 * i], verts[(4 * i) + 1] + 4, verts[(4 * i) + 2]);
+            res = _cset.bmin.ToSystem() + (new Vector3(_cset.cs, _cset.ch, _cset.cs) * res / numVerts);
         }
 
         return res;
     }
 
-    private uint RegionColor(int reg, bool darken, float alpha)
+    private uint RegionColor
+    (
+        int   reg,
+        bool  darken,
+        float alpha
+    )
     {
         var fcolor = IntColor(reg, 0);
         if (darken)
             fcolor *= 0.5f;
         fcolor.W =  alpha;
         fcolor   *= 255;
-        return ((uint)fcolor.W & 0xFF) << 24 | ((uint)fcolor.Z & 0xFF) << 16 | ((uint)fcolor.Y & 0xFF) << 8 | (uint)fcolor.X & 0xFF;
+        return (((uint)fcolor.W & 0xFF) << 24) | (((uint)fcolor.Z & 0xFF) << 16) | (((uint)fcolor.Y & 0xFF) << 8) | ((uint)fcolor.X & 0xFF);
     }
 }

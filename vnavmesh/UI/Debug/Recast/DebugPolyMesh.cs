@@ -1,14 +1,16 @@
 using System.Numerics;
 using DotRecast.Recast;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Common.Utilities;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Extensions;
+using vnavmesh.Common.Utils;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Rendering;
 
 namespace vnavmesh.UI.Debug.Recast;
 
-using static DotRecast.Recast.RcRecast;
+using static RcRecast;
 
 public class DebugPolyMesh : DebugRecast
 {
@@ -21,7 +23,12 @@ public class DebugPolyMesh : DebugRecast
     private static Vector4 _colAreaNull     = new(0, 0, 0, 0.25f);
     private static Vector4 _colAreaWalkable = new(0, 0.75f, 1.0f, 0.25f);
 
-    public DebugPolyMesh(RcPolyMesh mesh, UITree tree, DebugDrawer dd)
+    public DebugPolyMesh
+    (
+        RcPolyMesh  mesh,
+        UITree      tree,
+        DebugDrawer dd
+    )
     {
         _mesh = mesh;
         _tree = tree;
@@ -45,7 +52,7 @@ public class DebugPolyMesh : DebugRecast
             if (nv.Opened)
             {
                 for (var i = 0; i < _mesh.nverts; ++i)
-                    if (_tree.LeafNode($"{i}: {_mesh.verts[3 * i]}x{_mesh.verts[3 * i + 1]}x{_mesh.verts[3 * i + 2]}").SelectedOrHovered)
+                    if (_tree.LeafNode($"{i}: {_mesh.verts[3 * i]}x{_mesh.verts[(3 * i) + 1]}x{_mesh.verts[(3 * i) + 2]}").SelectedOrHovered)
                         VisualizeVertex(i);
             }
         }
@@ -67,17 +74,18 @@ public class DebugPolyMesh : DebugRecast
                     {
                         for (var j = 0; j < _mesh.nvp; ++j)
                         {
-                            var vertex = _mesh.polys[i * 2 * _mesh.nvp + j];
+                            var vertex = _mesh.polys[(i * 2 * _mesh.nvp) + j];
                             if (vertex == RC_MESH_NULL_IDX)
                                 break;
                             if (_tree.LeafNode
-                                    ($"顶点 {j}：#{vertex} = {_mesh.verts[3 * vertex]}x{_mesh.verts[3 * vertex + 1]}x{_mesh.verts[3 * vertex + 2]}").SelectedOrHovered)
+                                         ($"顶点 {j}：#{vertex} = {_mesh.verts[3 * vertex]}x{_mesh.verts[(3 * vertex) + 1]}x{_mesh.verts[(3 * vertex) + 2]}")
+                                     .SelectedOrHovered)
                                 VisualizeVertex(vertex);
                         }
 
                         for (var j = 0; j < _mesh.nvp; ++j)
                         {
-                            var adj = _mesh.polys[i * 2 * _mesh.nvp + _mesh.nvp + j];
+                            var adj = _mesh.polys[(i * 2 * _mesh.nvp) + _mesh.nvp + j];
                             if (adj == RC_MESH_NULL_IDX)
                                 break;
                             if (_tree.LeafNode($"邻接 {j}：{adj}").SelectedOrHovered)
@@ -145,13 +153,19 @@ public class DebugPolyMesh : DebugRecast
             VisualizeEdges(i);
     }
 
-    private void VisualizePolygon(int index)
+    private void VisualizePolygon
+    (
+        int index
+    )
     {
         _dd.EffectMesh?.DrawSingle(_dd.RenderContext, GetOrInitVisualizer(), index);
         VisualizeEdges(index);
     }
 
-    private void VisualizeEdges(int index)
+    private void VisualizeEdges
+    (
+        int index
+    )
     {
         var offset = index * _mesh.nvp * 2;
 
@@ -175,7 +189,12 @@ public class DebugPolyMesh : DebugRecast
         }
     }
 
-    private void VisualizeEdge(Vector3 from, Vector3 to, int adj) => _dd.DrawWorldLine
+    private void VisualizeEdge
+    (
+        Vector3 from,
+        Vector3 to,
+        int     adj
+    ) => _dd.DrawWorldLine
     (
         from,
         to,
@@ -187,10 +206,15 @@ public class DebugPolyMesh : DebugRecast
             1
     );
 
-    private void VisualizeVertex(int index) => _dd.DrawWorldPoint(GetVertex(index), 5, 0xff0000ff);
+    private void VisualizeVertex
+    (
+        int index
+    ) => _dd.DrawWorldPoint(GetVertex(index), 5, 0xff0000ff);
 
     private Vector3 GetVertex
-        (int index) => _mesh.bmin.RecastToSystem() +
-                       new Vector3(_mesh.cs,               _mesh.ch,                                   _mesh.cs) *
-                       new Vector3(_mesh.verts[3 * index], _mesh.verts[3 * index + 1] + _heightOffset, _mesh.verts[3 * index + 2]);
+    (
+        int index
+    ) => _mesh.bmin.ToSystem() +
+         (new Vector3(_mesh.cs,               _mesh.ch,                                     _mesh.cs) *
+          new Vector3(_mesh.verts[3 * index], _mesh.verts[(3 * index) + 1] + _heightOffset, _mesh.verts[(3 * index) + 2]));
 }

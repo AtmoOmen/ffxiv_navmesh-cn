@@ -1,7 +1,7 @@
 using Dalamud.Game.Gui.Dtr;
+using vnavmesh.Build;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation;
 
 namespace vnavmesh.Internal;
 
@@ -29,13 +29,9 @@ public class PluginDTR
             float buildProgress;
 
             if (loadProgress >= 0)
-            {
                 buildProgress = loadProgress;
-            }
             else
-            {
                 buildProgress = manager.ExternalBuildProgress;
-            }
 
             var meshStatus = buildProgress >= 0 ? $"{buildProgress * 100:f0}%" : manager.Navmesh != null ? "就绪" : "未就绪";
 

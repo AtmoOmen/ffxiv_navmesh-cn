@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Navigation.Custom.Editor;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Build.Custom.Editor;
+using vnavmesh.Build.Scene;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Editor.Types;
@@ -14,11 +14,25 @@ namespace vnavmesh.UI.Editor;
 
 internal static unsafe class CustomizationEditorWorldOverlay
 {
-    public delegate void AddColliderInsertionDelegate(Vector3 a, Vector3 b, DraftSceneColliderInsertionKind kind);
+    public delegate void AddColliderInsertionDelegate
+    (
+        Vector3                         a,
+        Vector3                         b,
+        DraftSceneColliderInsertionKind kind
+    );
 
-    public delegate void AddMeshLinkDelegate(Vector3 a, Vector3 b, DraftMeshLinkKind kind);
+    public delegate void AddMeshLinkDelegate
+    (
+        Vector3           a,
+        Vector3           b,
+        DraftMeshLinkKind kind
+    );
 
-    public delegate void AddOffMeshConnectionDelegate(Vector3 a, Vector3 b);
+    public delegate void AddOffMeshConnectionDelegate
+    (
+        Vector3 a,
+        Vector3 b
+    );
 
     public struct DraftEditState
     {
@@ -149,7 +163,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
             var color = selected                                                     ? 0xFFFFD94A
                         : insertion.Kind == DraftSceneColliderInsertionKind.Cylinder ? 0xFF00FF00
                                                                                        : 0xFF00FFFF;
+
             if (insertion.Kind == DraftSceneColliderInsertionKind.Cylinder)
+            {
                 dd.DrawWorldCylinder
                 (
                     (insertion.Min + insertion.Max) * 0.5f,
@@ -159,7 +175,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         3 :
                         2
                 );
+            }
             else
+            {
                 dd.DrawWorldAABB
                 (
                     (insertion.Min + insertion.Max) * 0.5f,
@@ -169,6 +187,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         3 :
                         2
                 );
+            }
         }
 
         for (var i = 0; i < workspace.Draft.MeshLinks.Count; ++i)
@@ -249,7 +268,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
                                     20f :
                                     15f;
 
-                Vector3 EvalArc(float u)
+                Vector3 EvalArc
+                (
+                    float u
+                )
                 {
                     var res   = link.Start + (u * delta);
                     var coeff = (u              * 2f) - 1f;
@@ -668,7 +690,15 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return true;
     }
 
-    private static float RaySegmentDistance(Vector3 rayOrigin, Vector3 rayDir, Vector3 p0, Vector3 p1, out float tOnRay, out float uOnSegment)
+    private static float RaySegmentDistance
+    (
+        Vector3   rayOrigin,
+        Vector3   rayDir,
+        Vector3   p0,
+        Vector3   p1,
+        out float tOnRay,
+        out float uOnSegment
+    )
     {
         var u = p1 - p0;
         var v = rayDir;
@@ -719,7 +749,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return Vector3.Distance(closestOnRay, closestOnSegment);
     }
 
-    private static bool TryGetWorldSelectionRay(DebugDrawer dd, out Vector3 origin, out Vector3 direction)
+    private static bool TryGetWorldSelectionRay
+    (
+        DebugDrawer dd,
+        out Vector3 origin,
+        out Vector3 direction
+    )
     {
         origin    = default;
         direction = default;
@@ -1024,8 +1059,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         ref DraftEditState draftEditState,
         Vector3            start,
         Vector3            end
-    )
-    {
+    ) =>
         DrawHandle
         (
             center,
@@ -1046,7 +1080,6 @@ internal static unsafe class CustomizationEditorWorldOverlay
             },
             "拖拽整体位置"
         );
-    }
 
     private static void DrawHandle
     (
@@ -1187,7 +1220,13 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private static bool TryGetScreenDistance(DebugDrawer dd, Vector3 worldPosition, Vector2 screenPos, out float distance)
+    private static bool TryGetScreenDistance
+    (
+        DebugDrawer dd,
+        Vector3     worldPosition,
+        Vector2     screenPos,
+        out float   distance
+    )
     {
         if (!dd.TryWorldToScreen(worldPosition, out var handlePos))
         {
@@ -1228,7 +1267,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return true;
     }
 
-    private static bool TryGetViewportCursorPosition(out Vector2 screenPos)
+    private static bool TryGetViewportCursorPosition
+    (
+        out Vector2 screenPos
+    )
     {
         if (!GetCursorPos(out var cursor))
         {
@@ -1241,7 +1283,13 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return screenPos.X >= 0 && screenPos.X <= windowSize.X && screenPos.Y >= 0 && screenPos.Y <= windowSize.Y;
     }
 
-    private static bool RayIntersectsAabb(Vector3 origin, Vector3 direction, AABB bounds, out float distance)
+    private static bool RayIntersectsAabb
+    (
+        Vector3   origin,
+        Vector3   direction,
+        AABB      bounds,
+        out float distance
+    )
     {
         var tMin = 0f;
         var tMax = float.MaxValue;
@@ -1258,7 +1306,15 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return tMax >= 0f;
     }
 
-    private static bool IntersectsAxis(float origin, float direction, float min, float max, ref float tMin, ref float tMax)
+    private static bool IntersectsAxis
+    (
+        float     origin,
+        float     direction,
+        float     min,
+        float     max,
+        ref float tMin,
+        ref float tMax
+    )
     {
         const float EPSILON = 0.000001f;
         if (MathF.Abs(direction) < EPSILON)
@@ -1275,7 +1331,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return tMin <= tMax;
     }
 
-    private static void DrawPreviewInstancesOverlay(Selection selection, CustomizationPreviewBuilder previewBuilder, DebugDrawer dd)
+    private static void DrawPreviewInstancesOverlay
+    (
+        Selection                   selection,
+        CustomizationPreviewBuilder previewBuilder,
+        DebugDrawer                 dd
+    )
     {
         if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return;
@@ -1296,7 +1357,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private static void DrawPreviewVertexOverlay(Selection selection, CustomizationPreviewBuilder previewBuilder, DebugDrawer dd)
+    private static void DrawPreviewVertexOverlay
+    (
+        Selection                   selection,
+        CustomizationPreviewBuilder previewBuilder,
+        DebugDrawer                 dd
+    )
     {
         if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return;
@@ -1320,7 +1386,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private static void DrawPreviewPrimitiveOverlay(Selection selection, CustomizationPreviewBuilder previewBuilder, DebugDrawer dd)
+    private static void DrawPreviewPrimitiveOverlay
+    (
+        Selection                   selection,
+        CustomizationPreviewBuilder previewBuilder,
+        DebugDrawer                 dd
+    )
     {
         if (previewBuilder.CurrentState != CustomizationPreviewBuilder.State.Ready || previewBuilder.Extractor == null)
             return;
@@ -1430,9 +1501,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         // 清空重用池及临时缓存中的 Mesh 强引用，以防引起大对象内存泄漏
         for (var i = 0; i < OverlayPoolUsed; ++i)
-        {
             OverlayPool[i].Mesh = null!;
-        }
 
         OverlaysCache.Clear();
     }
@@ -1533,7 +1602,13 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private static void DrawBoundsCross(AABB bounds, DebugDrawer dd, uint color, int thickness)
+    private static void DrawBoundsCross
+    (
+        AABB        bounds,
+        DebugDrawer dd,
+        uint        color,
+        int         thickness
+    )
     {
         dd.DrawWorldLine(bounds.Min,                                    bounds.Max,                                    color, thickness);
         dd.DrawWorldLine(new(bounds.Min.X, bounds.Min.Y, bounds.Max.Z), new(bounds.Max.X, bounds.Max.Y, bounds.Min.Z), color, thickness);
@@ -1569,7 +1644,11 @@ internal static unsafe class CustomizationEditorWorldOverlay
         dd.DrawWorldText(anchor, string.Join("\n", lines), color);
     }
 
-    private static string FormatFlagOperation(string prefix, SceneExtractor.PrimitiveFlags flags)
+    private static string FormatFlagOperation
+    (
+        string                        prefix,
+        SceneExtractor.PrimitiveFlags flags
+    )
     {
         if (flags == SceneExtractor.PrimitiveFlags.None)
             return string.Empty;
@@ -1625,7 +1704,14 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return true;
     }
 
-    private static void DrawMeshPreview(SceneExtractor.MeshPart part, Matrix4x3 transform, DebugDrawer dd, uint color = 0xFF00FFAA, int thickness = 1)
+    private static void DrawMeshPreview
+    (
+        SceneExtractor.MeshPart part,
+        Matrix4x3               transform,
+        DebugDrawer             dd,
+        uint                    color     = 0xFF00FFAA,
+        int                     thickness = 1
+    )
     {
         foreach (var primitive in part.Primitives)
         {
@@ -1644,7 +1730,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
     private static readonly List<InstanceOverlayInfo>                                                              OverlayPool   = [];
     private static          int                                                                                    OverlayPoolUsed;
 
-    private static InstanceOverlayInfo GetOrCreateOverlay(SceneExtractor.Mesh mesh, Matrix4x3 transform, AABB bounds)
+    private static InstanceOverlayInfo GetOrCreateOverlay
+    (
+        SceneExtractor.Mesh mesh,
+        Matrix4x3           transform,
+        AABB                bounds
+    )
     {
         if (OverlayPoolUsed < OverlayPool.Count)
         {
@@ -1652,14 +1743,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
             existing.Reset(mesh, transform, bounds);
             return existing;
         }
-        else
-        {
-            var newOverlay = new InstanceOverlayInfo();
-            newOverlay.Reset(mesh, transform, bounds);
-            OverlayPool.Add(newOverlay);
-            OverlayPoolUsed++;
-            return newOverlay;
-        }
+
+        var newOverlay = new InstanceOverlayInfo();
+        newOverlay.Reset(mesh, transform, bounds);
+        OverlayPool.Add(newOverlay);
+        OverlayPoolUsed++;
+        return newOverlay;
     }
 
     private sealed class InstanceOverlayInfo
@@ -1674,7 +1763,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         public SceneExtractor.PrimitiveFlags FlagSetMask;
         public SceneExtractor.PrimitiveFlags FlagClearMask;
 
-        public void Reset(SceneExtractor.Mesh mesh, Matrix4x3 transform, AABB bounds)
+        public void Reset
+        (
+            SceneExtractor.Mesh mesh,
+            Matrix4x3           transform,
+            AABB                bounds
+        )
         {
             Mesh          = mesh;
             Transform     = transform;
@@ -1688,7 +1782,13 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private static void DrawPendingPickPreview(PickKind pickKind, Vector3 first, Vector3 current, DebugDrawer dd)
+    private static void DrawPendingPickPreview
+    (
+        PickKind    pickKind,
+        Vector3     first,
+        Vector3     current,
+        DebugDrawer dd
+    )
     {
         switch (pickKind)
         {
@@ -1718,7 +1818,11 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private static void NormalizeBounds(ref Vector3 min, ref Vector3 max)
+    private static void NormalizeBounds
+    (
+        ref Vector3 min,
+        ref Vector3 max
+    )
     {
         if (MathF.Abs(max.Y - min.Y) < 0.1f)
         {
@@ -1728,7 +1832,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
-    private static bool TakeWorldPickClick(ref bool lastPickMouseDown)
+    private static bool TakeWorldPickClick
+    (
+        ref bool lastPickMouseDown
+    )
     {
         var clicked = TakeKeyPress(VK_LBUTTON, ref lastPickMouseDown);
         if (!clicked)
@@ -1737,7 +1844,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return IsWorldClickAllowed();
     }
 
-    private static bool TakeWorldSelectClick(ref bool lastWorldSelectMouseDown)
+    private static bool TakeWorldSelectClick
+    (
+        ref bool lastWorldSelectMouseDown
+    )
     {
         var clicked = TakeKeyPress(VK_LBUTTON, ref lastWorldSelectMouseDown);
         if (!clicked)
@@ -1749,7 +1859,11 @@ internal static unsafe class CustomizationEditorWorldOverlay
     private static bool IsWorldClickAllowed() =>
         !ImGui.GetIO().WantCaptureMouse && !ImGui.IsAnyItemHovered() && !ImGui.IsAnyItemActive();
 
-    internal static bool TakeKeyPress(int virtualKey, ref bool lastDown)
+    internal static bool TakeKeyPress
+    (
+        int      virtualKey,
+        ref bool lastDown
+    )
     {
         var down    = IsKeyDown(virtualKey);
         var pressed = down && !lastDown;
@@ -1757,10 +1871,16 @@ internal static unsafe class CustomizationEditorWorldOverlay
         return pressed;
     }
 
-    private static bool IsKeyDown(int virtualKey) =>
+    private static bool IsKeyDown
+    (
+        int virtualKey
+    ) =>
         (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
 
-    internal static string GetPickKindTitle(PickKind kind) =>
+    internal static string GetPickKindTitle
+    (
+        PickKind kind
+    ) =>
         kind switch
         {
             PickKind.SelectCollider => "选中碰撞体",
@@ -1775,10 +1895,16 @@ internal static unsafe class CustomizationEditorWorldOverlay
         };
 
     [DllImport("user32.dll", ExactSpelling = true)]
-    private static extern short GetAsyncKeyState(int virtualKey);
+    private static extern short GetAsyncKeyState
+    (
+        int virtualKey
+    );
 
     [DllImport("user32.dll", ExactSpelling = true)]
-    private static extern bool GetCursorPos(out CursorPoint point);
+    private static extern bool GetCursorPos
+    (
+        out CursorPoint point
+    );
 
     private struct CursorPoint
     {

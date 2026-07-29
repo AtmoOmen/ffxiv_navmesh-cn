@@ -1,11 +1,10 @@
 using System.Reflection;
 using Dalamud.Plugin;
 using Microsoft.Extensions.DependencyInjection;
+using vnavmesh.Build;
 using vnavmesh.Internal;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation;
-using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Windows;
 
 namespace vnavmesh;
@@ -17,7 +16,10 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose() =>
         serviceProvider.Dispose();
 
-    public Plugin(IDalamudPluginInterface dalamud)
+    public Plugin
+    (
+        IDalamudPluginInterface dalamud
+    )
     {
         MarkCurrentThreadAsMainThread();
 
@@ -47,13 +49,20 @@ public sealed class Plugin : IDalamudPlugin
         }
     }
 
-    public static void DuoLog(Exception ex)
+    public static void DuoLog
+    (
+        Exception ex
+    )
     {
         DuoLog(ex, ex.Message);
         throw ex;
     }
 
-    public static void DuoLog(Exception ex, string message)
+    public static void DuoLog
+    (
+        Exception ex,
+        string    message
+    )
     {
         Service.ChatGui.Print($"[{Service.PluginInterface.Manifest.Name}] {message}");
         Service.Log.Error(ex, message);
@@ -62,7 +71,10 @@ public sealed class Plugin : IDalamudPlugin
 
 public static class DICollectionExtensions
 {
-    public static IServiceCollection AddPluginServices(this IServiceCollection services)
+    public static IServiceCollection AddPluginServices
+    (
+        this IServiceCollection services
+    )
     {
         var pluginFile      = new FileInfo(Service.PluginInterface.AssemblyLocation.FullName);
         var pluginDirectory = pluginFile.Directory ?? throw new InvalidOperationException("无法定位插件目录");
@@ -83,7 +95,10 @@ public static class DICollectionExtensions
         return services;
     }
 
-    public static void ActivatePluginServices(this IServiceProvider serviceProvider)
+    public static void ActivatePluginServices
+    (
+        this IServiceProvider serviceProvider
+    )
     {
         serviceProvider.GetRequiredService<PluginRuntime>();
         serviceProvider.GetRequiredService<SceneTransitionPathCleaner>();

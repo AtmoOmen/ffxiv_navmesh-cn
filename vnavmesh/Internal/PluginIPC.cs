@@ -1,9 +1,9 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using vnavmesh.Build;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Query.Utils;
 
 namespace vnavmesh.Internal;
 
@@ -151,63 +151,99 @@ internal class PluginIPC : IDisposable
             a();
     }
 
-    private void RegisterFunc<TRet>(string name, Func<TRet> func)
+    private void RegisterFunc<TRet>
+    (
+        string     name,
+        Func<TRet> func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
         disposeActions.Add(p.UnregisterFunc);
     }
 
-    private void RegisterFunc<TRet, T1>(string name, Func<T1, TRet> func)
+    private void RegisterFunc<TRet, T1>
+    (
+        string         name,
+        Func<T1, TRet> func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
         disposeActions.Add(p.UnregisterFunc);
     }
 
-    private void RegisterFunc<TRet, T1, T2>(string name, Func<T1, T2, TRet> func)
+    private void RegisterFunc<TRet, T1, T2>
+    (
+        string             name,
+        Func<T1, T2, TRet> func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
         disposeActions.Add(p.UnregisterFunc);
     }
 
-    private void RegisterFunc<TRet, T1, T2, T3>(string name, Func<T1, T2, T3, TRet> func)
+    private void RegisterFunc<TRet, T1, T2, T3>
+    (
+        string                 name,
+        Func<T1, T2, T3, TRet> func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, T3, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
         disposeActions.Add(p.UnregisterFunc);
     }
 
-    private void RegisterFunc<TRet, T1, T2, T3, T4>(string name, Func<T1, T2, T3, T4, TRet> func)
+    private void RegisterFunc<TRet, T1, T2, T3, T4>
+    (
+        string                     name,
+        Func<T1, T2, T3, T4, TRet> func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, T3, T4, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
         disposeActions.Add(p.UnregisterFunc);
     }
 
-    private void RegisterFunc<TRet, T1, T2, T3, T4, T5>(string name, Func<T1, T2, T3, T4, T5, TRet> func)
+    private void RegisterFunc<TRet, T1, T2, T3, T4, T5>
+    (
+        string                         name,
+        Func<T1, T2, T3, T4, T5, TRet> func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, T3, T4, T5, TRet>("vnavmesh." + name);
         p.RegisterFunc(func);
         disposeActions.Add(p.UnregisterFunc);
     }
 
-    private void RegisterAction(string name, Action func)
+    private void RegisterAction
+    (
+        string name,
+        Action func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<object>("vnavmesh." + name);
         p.RegisterAction(func);
         disposeActions.Add(p.UnregisterAction);
     }
 
-    private void RegisterAction<T1>(string name, Action<T1> func)
+    private void RegisterAction<T1>
+    (
+        string     name,
+        Action<T1> func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, object>("vnavmesh." + name);
         p.RegisterAction(func);
         disposeActions.Add(p.UnregisterAction);
     }
 
-    private void RegisterAction<T1, T2>(string name, Action<T1, T2> func)
+    private void RegisterAction<T1, T2>
+    (
+        string         name,
+        Action<T1, T2> func
+    )
     {
         var p = Service.PluginInterface.GetIpcProvider<T1, T2, object>("vnavmesh." + name);
         p.RegisterAction(func);

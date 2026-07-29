@@ -2,7 +2,7 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using vnavmesh.Internal;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navigation;
+using vnavmesh.Query;
 
 namespace vnavmesh.Movement.Execution;
 
@@ -26,13 +26,25 @@ internal sealed class MovementExecutionContext
                                           Segment.Waypoints[ActiveWaypointIndex] :
                                           null;
 
-    public bool TryGetFirstRemainingWaypoint(out Vector3 waypoint) =>
+    public bool TryGetFirstRemainingWaypoint
+    (
+        out Vector3 waypoint
+    ) =>
         TryFindRemainingWaypoint(static (_, _) => true, out waypoint);
 
-    public bool TryGetFirstElevatedRemainingWaypoint(float minHeightDelta, out Vector3 waypoint) =>
+    public bool TryGetFirstElevatedRemainingWaypoint
+    (
+        float       minHeightDelta,
+        out Vector3 waypoint
+    ) =>
         TryFindRemainingWaypoint(static (candidate, minimumY) => candidate.Y > minimumY, out waypoint, Player.Position.Y + minHeightDelta);
 
-    private bool TryFindRemainingWaypoint(Func<Vector3, float, bool> predicate, out Vector3 waypoint, float threshold = 0)
+    private bool TryFindRemainingWaypoint
+    (
+        Func<Vector3, float, bool> predicate,
+        out Vector3                waypoint,
+        float                      threshold = 0
+    )
     {
         for (var segmentIndex = SegmentIndex; segmentIndex < Plan.Segments.Count; segmentIndex++)
         {
@@ -57,7 +69,12 @@ internal sealed class MovementExecutionContext
         return false;
     }
 
-    public bool TryGetCurrentTraverseSegment(int traverseSegmentIndex, out Vector3 start, out Vector3 end)
+    public bool TryGetCurrentTraverseSegment
+    (
+        int         traverseSegmentIndex,
+        out Vector3 start,
+        out Vector3 end
+    )
     {
         if (traverseSegmentIndex < 0 || traverseSegmentIndex >= WaypointCount)
         {

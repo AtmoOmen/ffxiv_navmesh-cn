@@ -22,7 +22,11 @@ public class RenderBuffer<T> : IDisposable where T : unmanaged
 
         public int CurElements => _buffer.CurElements;
 
-        internal Builder(RenderContext ctx, RenderBuffer<T> buffer)
+        internal Builder
+        (
+            RenderContext   ctx,
+            RenderBuffer<T> buffer
+        )
         {
             _ctx               = ctx;
             _buffer            = buffer;
@@ -57,7 +61,10 @@ public class RenderBuffer<T> : IDisposable where T : unmanaged
             }
         }
 
-        public unsafe void Add(ref T item)
+        public unsafe void Add
+        (
+            ref T item
+        )
         {
             if (_buffer.CurElements >= _buffer.MaxElements)
                 throw new ArgumentOutOfRangeException("Buffer overflow");
@@ -65,7 +72,10 @@ public class RenderBuffer<T> : IDisposable where T : unmanaged
             _stream.Write((nint)Unsafe.AsPointer(ref item), 0, sizeof(T));
         }
 
-        public void Add(T item) => Add(ref item);
+        public void Add
+        (
+            T item
+        ) => Add(ref item);
     }
 
     public bool   Dynamic     { get; init; }
@@ -74,7 +84,13 @@ public class RenderBuffer<T> : IDisposable where T : unmanaged
     public int    CurElements { get; private set; }
     public Buffer Buffer      { get; init; }
 
-    public unsafe RenderBuffer(RenderContext ctx, int maxElements, BindFlags bindFlags, bool dynamic)
+    public unsafe RenderBuffer
+    (
+        RenderContext ctx,
+        int           maxElements,
+        BindFlags     bindFlags,
+        bool          dynamic
+    )
     {
         dynamic     = true; // TODO: figure why it doesn't work as expected..
         Dynamic     = dynamic;
@@ -100,5 +116,8 @@ public class RenderBuffer<T> : IDisposable where T : unmanaged
     public void Dispose() =>
         Buffer.Dispose();
 
-    public Builder Map(RenderContext ctx) => new(ctx, this);
+    public Builder Map
+    (
+        RenderContext ctx
+    ) => new(ctx, this);
 }

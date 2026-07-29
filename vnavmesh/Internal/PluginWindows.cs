@@ -9,7 +9,11 @@ internal sealed class PluginWindows : IDisposable
     private readonly MainWindow   mainWindow;
     private readonly PluginConfig config;
 
-    public PluginWindows(MainWindow mainWindow, PluginConfig config)
+    public PluginWindows
+    (
+        MainWindow   mainWindow,
+        PluginConfig config
+    )
     {
         this.mainWindow = mainWindow;
         this.config     = config;

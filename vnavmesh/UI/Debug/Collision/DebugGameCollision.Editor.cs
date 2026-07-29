@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
@@ -9,7 +8,10 @@ namespace vnavmesh.UI.Debug.Collision;
 
 public unsafe partial class DebugGameCollision
 {
-    public bool TryGetMouseRaycastHit(out RaycastHit hit)
+    public bool TryGetMouseRaycastHit
+    (
+        out RaycastHit hit
+    )
     {
         var module = Framework.Instance()->BGCollisionModule;
 
@@ -46,7 +48,10 @@ public unsafe partial class DebugGameCollision
         return found;
     }
 
-    private static bool TryGetViewportCursorPosition(out Vector2 screenPos)
+    private static bool TryGetViewportCursorPosition
+    (
+        out Vector2 screenPos
+    )
     {
         if (!GetCursorPos(out var cursor))
         {
@@ -59,9 +64,15 @@ public unsafe partial class DebugGameCollision
         return screenPos.X >= 0 && screenPos.X <= windowSize.X && screenPos.Y >= 0 && screenPos.Y <= windowSize.Y;
     }
 
-    private bool TryRaycastScene(SceneWrapper* scene, int index, Vector2 screenPos, out RaycastHit hit)
+    private bool TryRaycastScene
+    (
+        SceneWrapper*  scene,
+        int            index,
+        Vector2        screenPos,
+        out RaycastHit hit
+    )
     {
-        var clipPos = new Vector3(2 * screenPos.X / _dd.ViewportSize.X - 1, 1 - 2 * screenPos.Y / _dd.ViewportSize.Y, 1);
+        var clipPos = new Vector3((2 * screenPos.X / _dd.ViewportSize.X) - 1, 1 - (2 * screenPos.Y / _dd.ViewportSize.Y), 1);
         Matrix4x4.Invert(_dd.ViewProj, out var invViewProj);
         var cameraPosAtPlaneP = Vector4.Transform(clipPos, invViewProj);
         var cameraPosAtPlane = new Vector3
@@ -84,7 +95,10 @@ public unsafe partial class DebugGameCollision
     }
 
     [DllImport("user32.dll", ExactSpelling = true)]
-    private static extern bool GetCursorPos(out CursorPoint point);
+    private static extern bool GetCursorPos
+    (
+        out CursorPoint point
+    );
 
     private struct CursorPoint
     {

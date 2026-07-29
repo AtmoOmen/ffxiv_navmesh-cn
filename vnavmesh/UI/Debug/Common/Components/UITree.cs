@@ -16,7 +16,13 @@ public class UITree
 
         public bool SelectedOrHovered => Selected || Hovered;
 
-        public NodeRaii(bool selected, bool opened, bool hovered, bool realOpened)
+        public NodeRaii
+        (
+            bool selected,
+            bool opened,
+            bool hovered,
+            bool realOpened
+        )
         {
             Selected    = selected;
             Opened      = opened;
@@ -35,7 +41,12 @@ public class UITree
         }
     }
 
-    public NodeRaii Node(string text, bool leaf = false, uint color = 0xffffffff)
+    public NodeRaii Node
+    (
+        string text,
+        bool   leaf  = false,
+        uint   color = 0xffffffff
+    )
     {
         var id    = ImGui.GetID(text);
         var flags = ImGuiTreeNodeFlags.None;
@@ -56,7 +67,11 @@ public class UITree
     }
 
     // returned node is auto disposed
-    public NodeRaii LeafNode(string text, uint color = 0xffffffff)
+    public NodeRaii LeafNode
+    (
+        string text,
+        uint   color = 0xffffffff
+    )
     {
         var n = Node(text, true, color);
         n.Dispose();

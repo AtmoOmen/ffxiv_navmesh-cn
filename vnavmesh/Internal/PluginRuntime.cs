@@ -1,7 +1,7 @@
 using Dalamud.Plugin.Services;
+using vnavmesh.Build;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation;
 
 namespace vnavmesh.Internal;
 
@@ -31,7 +31,10 @@ internal sealed class PluginRuntime : IDisposable
     public void Dispose() =>
         Service.Framework.Update -= OnUpdate;
 
-    private void OnUpdate(IFramework framework)
+    private void OnUpdate
+    (
+        IFramework framework
+    )
     {
         navmeshManager.Update();
         movementExecutor.Update(framework);

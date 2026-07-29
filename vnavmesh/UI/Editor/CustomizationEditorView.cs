@@ -1,19 +1,15 @@
 using System.Diagnostics;
-using System.Drawing;
 using System.Globalization;
 using System.Numerics;
-using System.Threading;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface;
 using Lumina.Excel.Sheets;
-using vnavmesh.Common.Navigation.Mesh.Runtime;
-using vnavmesh.Common.Utilities;
+using vnavmesh.Build;
+using vnavmesh.Build.Custom;
+using vnavmesh.Build.Custom.Abstractions;
+using vnavmesh.Build.Custom.Editor;
+using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
 using vnavmesh.Internal;
-using vnavmesh.Navigation;
-using vnavmesh.Navigation.Custom;
-using vnavmesh.Navigation.Custom.Abstractions;
-using vnavmesh.Navigation.Custom.Editor;
-using vnavmesh.Navigation.Scene;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Editor.Types;
@@ -272,13 +268,9 @@ internal sealed class CustomizationEditorView
         try
         {
             if (pendingWorkspaceCreation.IsCanceled)
-            {
                 statusText = "工作区创建已取消";
-            }
             else if (pendingWorkspaceCreation.IsFaulted)
-            {
                 statusText = $"工作区创建失败: {pendingWorkspaceCreation.Exception?.GetBaseException().Message}";
-            }
             else
             {
                 var (created, scene, extractor, navmesh) = pendingWorkspaceCreation.Result;
@@ -321,9 +313,7 @@ internal sealed class CustomizationEditorView
         }
 
         if (store.SchemaVersion == 0)
-        {
             UpgradeLegacyWorkspace();
-        }
 
         workspace                     = ResolveCurrentWorkspace() ?? store.Workspaces[0];
         store.CurrentWorkspaceId      = workspace.WorkspaceId;
@@ -341,7 +331,10 @@ internal sealed class CustomizationEditorView
         store.Workspaces.FirstOrDefault(x => x.WorkspaceId == store.CurrentWorkspaceId);
 
     private async Task<(CustomizationEditorWorkspace Workspace, SceneDefinition Scene, SceneExtractor Extractor, Navmesh Navmesh)> CreateWorkspaceAsync
-        (string name, CancellationToken cancel)
+    (
+        string            name,
+        CancellationToken cancel
+    )
     {
         var scene = new SceneDefinition();
         scene.FillFromActiveLayout();
@@ -366,7 +359,7 @@ internal sealed class CustomizationEditorView
                               );
         cancel.ThrowIfCancellationRequested();
 
-        var     buildSignature = Common.Navigation.Mesh.Build.NavmeshBuilder.ComputeBuildSignature(customizedScene, settings);
+        var     buildSignature = NavmeshBuilder.ComputeBuildSignature(customizedScene, settings);
         Navmesh navmesh;
         manager.ExternalBuildProgress = 0f;
 
@@ -465,9 +458,16 @@ internal sealed class CustomizationEditorView
         statusText = $"已删除工作区, 当前为: {workspace.WorkspaceName}";
     }
 
-    private void SelectWorkspace(string workspaceId) => SelectWorkspace(workspaceId, false);
+    private void SelectWorkspace
+    (
+        string workspaceId
+    ) => SelectWorkspace(workspaceId, false);
 
-    private void SelectWorkspace(string workspaceId, bool avoidClear)
+    private void SelectWorkspace
+    (
+        string workspaceId,
+        bool   avoidClear
+    )
     {
         CancelPendingWorkspaceCreation();
 
@@ -517,7 +517,11 @@ internal sealed class CustomizationEditorView
         SaveWorkspace(true);
     }
 
-    private static void MergeDraft(CustomizationDraft target, CustomizationDraft overlay)
+    private static void MergeDraft
+    (
+        CustomizationDraft target,
+        CustomizationDraft overlay
+    )
     {
         target.FlyingSupportedOverride = overlay.FlyingSupportedOverride ?? target.FlyingSupportedOverride;
         target.BuildProfile            = overlay.BuildProfile;
@@ -555,7 +559,10 @@ internal sealed class CustomizationEditorView
         ImGui.TextUnformatted($"预览: {CustomizationEditorWidgets.FormatPreviewStateDisplayName(previewBuilder.CurrentState)}  |  {statusSummary}");
     }
 
-    private void RebuildSceneExtract(uint territoryID)
+    private void RebuildSceneExtract
+    (
+        uint territoryID
+    )
     {
         var scene = new SceneDefinition();
         scene.FillFromActiveLayout();
@@ -565,7 +572,12 @@ internal sealed class CustomizationEditorView
         previewBuilder.Rebuild(scene, customization, false);
     }
 
-    private void AddColliderInsertion(Vector3 a, Vector3 b, DraftSceneColliderInsertionKind kind)
+    private void AddColliderInsertion
+    (
+        Vector3                         a,
+        Vector3                         b,
+        DraftSceneColliderInsertionKind kind
+    )
     {
         var min = Vector3.Min(a, b);
         var max = Vector3.Max(a, b);
@@ -592,8 +604,12 @@ internal sealed class CustomizationEditorView
         );
     }
 
-    private void AddMeshLink(Vector3 a, Vector3 b, DraftMeshLinkKind kind)
-    {
+    private void AddMeshLink
+    (
+        Vector3           a,
+        Vector3           b,
+        DraftMeshLinkKind kind
+    ) =>
         ApplyDraftChange
         (() =>
             {
@@ -608,10 +624,12 @@ internal sealed class CustomizationEditorView
                 };
             }
         );
-    }
 
-    private void AddOffMeshConnection(Vector3 a, Vector3 b)
-    {
+    private void AddOffMeshConnection
+    (
+        Vector3 a,
+        Vector3 b
+    ) =>
         ApplyDraftChange
         (() =>
             {
@@ -620,9 +638,11 @@ internal sealed class CustomizationEditorView
                 statusText = "已添加离网连接";
             }
         );
-    }
 
-    private void AddMeshRemovalFromPreview(string key)
+    private void AddMeshRemovalFromPreview
+    (
+        string key
+    )
     {
         var existingIndex = workspace.Draft.MeshRemovals.FindIndex(x => x.MeshKey == key);
 
@@ -643,7 +663,13 @@ internal sealed class CustomizationEditorView
         );
     }
 
-    private void AddInstancePatchFromPreview(SceneExtractor.Mesh mesh, string key, int index, DraftSceneInstancePatchKind kind)
+    private void AddInstancePatchFromPreview
+    (
+        SceneExtractor.Mesh         mesh,
+        string                      key,
+        int                         index,
+        DraftSceneInstancePatchKind kind
+    )
     {
         var inst = mesh.Instances[index];
         var existingIndex = workspace.Draft.InstancePatches.FindIndex
@@ -678,7 +704,14 @@ internal sealed class CustomizationEditorView
         );
     }
 
-    private void AddPartPatchFromPreview(SceneExtractor.Mesh mesh, string key, int partIndex, DraftScenePartPatchKind kind, int subIndex = -1)
+    private void AddPartPatchFromPreview
+    (
+        SceneExtractor.Mesh     mesh,
+        string                  key,
+        int                     partIndex,
+        DraftScenePartPatchKind kind,
+        int                     subIndex = -1
+    )
     {
         var part = mesh.Parts[partIndex];
         var vertexIndex = kind == DraftScenePartPatchKind.Vertex && subIndex >= 0 && subIndex < part.Vertices.Count ?
@@ -747,7 +780,13 @@ internal sealed class CustomizationEditorView
         );
     }
 
-    private void RemoveMatchingPartPatch(string key, int partIndex, DraftScenePartPatchKind kind, int subIndex)
+    private void RemoveMatchingPartPatch
+    (
+        string                  key,
+        int                     partIndex,
+        DraftScenePartPatchKind kind,
+        int                     subIndex
+    )
     {
         var patch = workspace.Draft.PartPatches.FirstOrDefault(x => CustomizationEditorInspector.PartPatchMatches(x, key, partIndex, kind, subIndex));
         if (patch == null)
@@ -771,7 +810,10 @@ internal sealed class CustomizationEditorView
         previewBuilder.Rebuild(scene, customization, true);
     }
 
-    private NavmeshCustomization BuildPreviewCustomization(SceneDefinition scene)
+    private NavmeshCustomization BuildPreviewCustomization
+    (
+        SceneDefinition scene
+    )
     {
         if (!workspace.IsApplied)
             return new NavmeshCustomization();
@@ -816,7 +858,10 @@ internal sealed class CustomizationEditorView
         SaveWorkspace();
     }
 
-    private void ApplyDraftChange(Action action)
+    private void ApplyDraftChange
+    (
+        Action action
+    )
     {
         action();
         CommitDraftChange();
@@ -856,7 +901,10 @@ internal sealed class CustomizationEditorView
         SaveWorkspace();
     }
 
-    private void SaveWorkspace(bool force = false)
+    private void SaveWorkspace
+    (
+        bool force = false
+    )
     {
         if (!workspaceLoaded)
             return;
@@ -878,7 +926,11 @@ internal sealed class CustomizationEditorView
             persistence.Save(store);
     }
 
-    private static void NormalizeBounds(ref Vector3 min, ref Vector3 max)
+    private static void NormalizeBounds
+    (
+        ref Vector3 min,
+        ref Vector3 max
+    )
     {
         if (MathF.Abs(max.Y - min.Y) < 0.1f)
         {

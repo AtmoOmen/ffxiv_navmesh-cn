@@ -3,15 +3,15 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using vnavmesh.Common.Navigation.Mesh.Runtime;
-using vnavmesh.Common.Navigation.Volume.Map;
-using vnavmesh.Common.Utilities;
+using vnavmesh.Build;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Flight;
+using vnavmesh.Common.Extensions;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation;
-using vnavmesh.Navigation.Planning;
-using vnavmesh.Navigation.Scene;
-using vnavmesh.Navigation.Volume;
+using vnavmesh.Query;
+using vnavmesh.Query.Models;
+using vnavmesh.Query.Utils;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Debug.Volume;
@@ -246,12 +246,16 @@ internal class DebugNavmeshManager : IDisposable
         }
     }
 
-    private void DrawPosition(string tag, Vector3 position)
+    private void DrawPosition
+    (
+        string  tag,
+        Vector3 position
+    )
     {
         if (position == Vector3.Zero)
             return;
 
-        manager.Navmesh!.Mesh.CalcTileLoc(position.SystemToRecast(), out var tileX, out var tileZ);
+        manager.Navmesh!.Mesh.CalcTileLoc(position.ToRecast(), out var tileX, out var tileZ);
         var nearestAll            = manager.Query!.FindNearestMeshPoly(position);
         var nearestReachable      = manager.Query.FindNearestMeshPoly(position, allowUnreachable: false);
         var nearestPointAll       = manager.Query.FindNearestPointOnMesh(position);
@@ -279,15 +283,24 @@ internal class DebugNavmeshManager : IDisposable
             debugVoxelMap?.VisualizeVoxel(voxelSurface.Voxel);
     }
 
-    private static string FormatPolyRef(long polyRef) => polyRef != 0 ?
-                                                             polyRef.ToString("X") :
-                                                             "<none>";
+    private static string FormatPolyRef
+    (
+        long polyRef
+    ) => polyRef != 0 ?
+             polyRef.ToString("X") :
+             "<none>";
 
-    private static string FormatVector(Vector3? value) => value is { } point ?
-                                                              point.ToString("f3") :
-                                                              "<none>";
+    private static string FormatVector
+    (
+        Vector3? value
+    ) => value is { } point ?
+             point.ToString("f3") :
+             "<none>";
 
-    private void ExportBitmap(Vector3 startingPos) =>
+    private void ExportBitmap
+    (
+        Vector3 startingPos
+    ) =>
         manager.BuildBitmap([startingPos], "D:\\navmesh.bmp", 0.5f);
 
     public void DrawRenderedPaths()
@@ -301,7 +314,11 @@ internal class DebugNavmeshManager : IDisposable
         }
     }
 
-    private void OnNavmeshChanged(Navmesh? navmesh, NavmeshQuery? query)
+    private void OnNavmeshChanged
+    (
+        Navmesh?      navmesh,
+        NavmeshQuery? query
+    )
     {
         CancelRenderPathTask();
         renderedPaths.Clear();
@@ -311,7 +328,13 @@ internal class DebugNavmeshManager : IDisposable
         debugVoxelMap = null;
     }
 
-    private void StartRenderedPathQuery(Vector3 from, Vector3 to, bool fly, bool straightPath)
+    private void StartRenderedPathQuery
+    (
+        Vector3 from,
+        Vector3 to,
+        bool    fly,
+        bool    straightPath
+    )
     {
         CancelRenderPathTask();
         renderPathFlyMode      = fly;
@@ -385,7 +408,10 @@ internal class DebugNavmeshManager : IDisposable
         renderPathCancelSource = null;
     }
 
-    private void DrawRenderedPath(RenderedPath renderedPath)
+    private void DrawRenderedPath
+    (
+        RenderedPath renderedPath
+    )
     {
         List<Vector3> points       = [];
         var           firstSegment = renderedPath.Result.Segments.FirstOrDefault();
@@ -440,7 +466,10 @@ internal class DebugNavmeshManager : IDisposable
             dd.DrawWorldLine(renderedPath.RequestStart, actualStart, PathRequestedStartLinkColor, 2);
     }
 
-    private void DrawRawGroundPath(RenderedPath renderedPath)
+    private void DrawRawGroundPath
+    (
+        RenderedPath renderedPath
+    )
     {
         foreach (var segment in renderedPath.Result.Segments)
         {
@@ -451,14 +480,19 @@ internal class DebugNavmeshManager : IDisposable
             {
                 var point = groundCorridor.RawCorners[i].Position;
                 if (i > 0)
-                    dd.DrawWorldLine(groundCorridor.RawCorners[i - 1].Position, point, PathRawGroundLineColor, 1);
+                    dd.DrawWorldLine(groundCorridor.RawCorners[i - 1].Position, point, PathRawGroundLineColor);
 
                 dd.DrawWorldPointFilled(point, 2, PathRawGroundPointColor);
             }
         }
     }
 
-    private void DrawConsumedPrefix(PostprocessedPathSegment? firstSegment, Vector3 actualStart, int initialWaypointIndex)
+    private void DrawConsumedPrefix
+    (
+        PostprocessedPathSegment? firstSegment,
+        Vector3                   actualStart,
+        int                       initialWaypointIndex
+    )
     {
         if (firstSegment == null || initialWaypointIndex <= 0 || firstSegment.Waypoints.Count == 0)
             return;
@@ -474,9 +508,8 @@ internal class DebugNavmeshManager : IDisposable
 
         for (var i = 1; i < prefix.Count; ++i)
         {
-            dd.DrawWorldLine(prefix[i - 1], prefix[i], PathConsumedPrefixColor, 1);
+            dd.DrawWorldLine(prefix[i - 1], prefix[i], PathConsumedPrefixColor);
             dd.DrawWorldPointFilled(prefix[i], 2, PathConsumedPrefixColor);
         }
     }
-
 }

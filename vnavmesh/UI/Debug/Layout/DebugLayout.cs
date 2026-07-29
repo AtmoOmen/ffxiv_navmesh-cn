@@ -6,7 +6,7 @@ using FFXIVClientStructs.FFXIV.Client.System.Resource.Handle;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using FFXIVClientStructs.Interop;
 using Lumina.Excel.Sheets;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Build.Scene;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
@@ -38,7 +38,11 @@ public unsafe partial class DebugLayout : IDisposable
     private bool                            _groupByMaterial;
     private string                          _filterById = "";
 
-    public DebugLayout(DebugDrawer dd, DebugGameCollision coll)
+    public DebugLayout
+    (
+        DebugDrawer        dd,
+        DebugGameCollision coll
+    )
     {
         _dd   = dd;
         _coll = coll;
@@ -68,7 +72,10 @@ public unsafe partial class DebugLayout : IDisposable
         HasCollider    = 1 << 3
     }
 
-    private static InstanceFlags GetFlags(InstanceData inst)
+    private static InstanceFlags GetFlags
+    (
+        InstanceData inst
+    )
     {
         var flags = InstanceFlags.None;
         if (inst.InFile)
@@ -83,7 +90,10 @@ public unsafe partial class DebugLayout : IDisposable
         return flags;
     }
 
-    private static uint ColorInstance(InstanceFlags flags)
+    private static uint ColorInstance
+    (
+        InstanceFlags flags
+    )
     {
         if (!flags.HasFlag(InstanceFlags.InFile))
             return 0xFF0000FF;
@@ -100,7 +110,14 @@ public unsafe partial class DebugLayout : IDisposable
         return 0xFFFFFFFF;
     }
 
-    public static bool DrawInstance(UITree tree, string tag, LayoutManager* layout, ILayoutInstance* inst, DebugGameCollision coll)
+    public static bool DrawInstance
+    (
+        UITree             tree,
+        string             tag,
+        LayoutManager*     layout,
+        ILayoutInstance*   inst,
+        DebugGameCollision coll
+    )
     {
         using var ni = tree.Node
         (
@@ -231,13 +248,21 @@ public unsafe partial class DebugLayout : IDisposable
         return ni.SelectedOrHovered;
     }
 
-    private UITree.NodeRaii DrawManagerBase(string tag, IManagerBase* manager, string extra) => _tree.Node
+    private UITree.NodeRaii DrawManagerBase
+    (
+        string        tag,
+        IManagerBase* manager,
+        string        extra
+    ) => _tree.Node
     (
         $"{tag} {(nint)manager:X}{(manager != null ? $" (owner={(nint)manager->Owner:X}, id={manager->Id:X})" : "")} {extra}###{tag}_{(nint)manager:X}",
         manager == null
     );
 
-    private static (ulong mat, ulong mask) GetMaterial(ILayoutInstance* inst)
+    private static (ulong mat, ulong mask) GetMaterial
+    (
+        ILayoutInstance* inst
+    )
     {
         if (inst == null)
             return (0, 0);
@@ -246,12 +271,12 @@ public unsafe partial class DebugLayout : IDisposable
         {
             case InstanceType.BgPart:
                 var instBgPart = (BgPartsLayoutInstance*)inst;
-                return (instBgPart->CollisionMaterialIdHigh      << 32 | instBgPart->CollisionMaterialIdLow,
-                           instBgPart->CollisionMaterialMaskHigh << 32 | instBgPart->CollisionMaterialMaskLow);
+                return ((instBgPart->CollisionMaterialIdHigh      << 32) | instBgPart->CollisionMaterialIdLow,
+                           (instBgPart->CollisionMaterialMaskHigh << 32) | instBgPart->CollisionMaterialMaskLow);
             case InstanceType.CollisionBox:
                 var instCollGeneric = (CollisionBoxLayoutInstance*)inst;
-                return (instCollGeneric->MaterialIdHigh      << 32 | instCollGeneric->MaterialIdLow,
-                           instCollGeneric->MaterialMaskHigh << 32 | instCollGeneric->MaterialMaskLow);
+                return ((instCollGeneric->MaterialIdHigh      << 32) | instCollGeneric->MaterialIdLow,
+                           (instCollGeneric->MaterialMaskHigh << 32) | instCollGeneric->MaterialMaskLow);
             case InstanceType.SharedGroup:
                 ulong mat  = 0;
                 ulong mask = 0;
@@ -262,7 +287,12 @@ public unsafe partial class DebugLayout : IDisposable
         }
     }
 
-    private static void SumMaterials(SharedGroupLayoutInstance* inst, ref ulong mat, ref ulong mask)
+    private static void SumMaterials
+    (
+        SharedGroupLayoutInstance* inst,
+        ref ulong                  mat,
+        ref ulong                  mask
+    )
     {
         foreach (var part in inst->Instances.Instances)
         {
@@ -272,7 +302,10 @@ public unsafe partial class DebugLayout : IDisposable
         }
     }
 
-    private void DrawWorld(LayoutWorld* w)
+    private void DrawWorld
+    (
+        LayoutWorld* w
+    )
     {
         using var nw = DrawManagerBase("世界 (World)", &w->IManagerBase, $"t={w->MillisecondsSinceLastUpdate}ms");
         if (!nw.Opened)
@@ -304,7 +337,11 @@ public unsafe partial class DebugLayout : IDisposable
         //}
     }
 
-    private void DrawLayout(string tag, LayoutManager* manager)
+    private void DrawLayout
+    (
+        string         tag,
+        LayoutManager* manager
+    )
     {
         using var nr = DrawManagerBase($"{tag} 布局", &manager->IManagerBase, "");
         if (!nr.Opened)
@@ -403,7 +440,12 @@ public unsafe partial class DebugLayout : IDisposable
         }
     }
 
-    private void DrawLayer(string tag, LayoutManager* layout, LayerManager* layer)
+    private void DrawLayer
+    (
+        string         tag,
+        LayoutManager* layout,
+        LayerManager*  layer
+    )
     {
         var unks = ""; // $", u1F={layer->u1F}, u20={layer->u20:X4}";
         using var nl = _tree.Node
@@ -416,7 +458,12 @@ public unsafe partial class DebugLayout : IDisposable
         foreach (var (ik, iv) in layer->Instances) DrawInstance($"{ik:X8}", layout, iv.Value);
     }
 
-    private void DrawInstance(string tag, LayoutManager* layout, ILayoutInstance* inst)
+    private void DrawInstance
+    (
+        string           tag,
+        LayoutManager*   layout,
+        ILayoutInstance* inst
+    )
     {
         if (DrawInstance(_tree, tag, layout, inst, _coll))
         {
@@ -437,7 +484,10 @@ public unsafe partial class DebugLayout : IDisposable
         }
     }
 
-    private void DrawStringTable(ref StringTable strings)
+    private void DrawStringTable
+    (
+        ref StringTable strings
+    )
     {
         using var n = _tree.Node($"字符串表 ({strings.Strings.Count} 个，其中 {strings.NumNulls} 个为空)###strings", strings.Strings.Count == 0);
         if (!n.Opened)
@@ -446,7 +496,11 @@ public unsafe partial class DebugLayout : IDisposable
             _tree.LeafNode($"[{str.Value->NumRefs}] {str.Value->DataString}");
     }
 
-    private void DrawResourceHandle(string tag, ResourceHandle* rsrc)
+    private void DrawResourceHandle
+    (
+        string          tag,
+        ResourceHandle* rsrc
+    )
     {
         if (rsrc == null)
             _tree.LeafNode($"{tag}: null");
@@ -454,7 +508,11 @@ public unsafe partial class DebugLayout : IDisposable
             _tree.LeafNode($"{tag}: {rsrc->FileName}");
     }
 
-    private void DrawFile(string tag, string path)
+    private void DrawFile
+    (
+        string tag,
+        string path
+    )
     {
         using var n = _tree.Node($"{tag}: '{path}'");
         if (!n.Opened)
@@ -468,11 +526,14 @@ public unsafe partial class DebugLayout : IDisposable
             DrawFileData((FileHeader*)data);
     }
 
-    private void DrawFileData(FileHeader* header)
+    private void DrawFileData
+    (
+        FileHeader* header
+    )
     {
         using var n = _tree.Node
         (
-            $"{(char)(header->Magic & 0xFF)}{(char)(header->Magic >> 8 & 0xFF)}{(char)(header->Magic >> 16 & 0xFF)}{(char)(header->Magic >> 24 & 0xFF)} (size={header->TotalSize}): {header->NumSections} sections"
+            $"{(char)(header->Magic & 0xFF)}{(char)((header->Magic >> 8) & 0xFF)}{(char)((header->Magic >> 16) & 0xFF)}{(char)((header->Magic >> 24) & 0xFF)} (size={header->TotalSize}): {header->NumSections} sections"
         );
         if (!n.Opened)
             return;
@@ -480,7 +541,7 @@ public unsafe partial class DebugLayout : IDisposable
         foreach (var section in header->Sections)
         {
             var tag =
-                $"{(char)(section->Magic & 0xFF)}{(char)(section->Magic >> 8 & 0xFF)}{(char)(section->Magic >> 16 & 0xFF)}{(char)(section->Magic >> 24 & 0xFF)} (size={section->TotalSize})";
+                $"{(char)(section->Magic & 0xFF)}{(char)((section->Magic >> 8) & 0xFF)}{(char)((section->Magic >> 16) & 0xFF)}{(char)((section->Magic >> 24) & 0xFF)} (size={section->TotalSize})";
             var _ = section->Magic switch
             {
                 0x314E4353 => DrawFileSectionScene(tag, section->Data<FileSceneHeader>()),
@@ -490,7 +551,11 @@ public unsafe partial class DebugLayout : IDisposable
         }
     }
 
-    private bool DrawFileSectionScene(string tag, FileSceneHeader* header)
+    private bool DrawFileSectionScene
+    (
+        string           tag,
+        FileSceneHeader* header
+    )
     {
         using var n = _tree.Node($"{tag}: general at +{header->OffsetGeneral}");
         if (!n.Opened)
@@ -542,7 +607,11 @@ public unsafe partial class DebugLayout : IDisposable
         return true;
     }
 
-    private bool DrawFileSectionLayerGroup(string tag, FileLayerGroupHeader* header)
+    private bool DrawFileSectionLayerGroup
+    (
+        string                tag,
+        FileLayerGroupHeader* header
+    )
     {
         using var n = _tree.Node
         (
@@ -635,7 +704,10 @@ public unsafe partial class DebugLayout : IDisposable
         return true;
     }
 
-    private void DrawComparison(LayoutManager* layout)
+    private void DrawComparison
+    (
+        LayoutManager* layout
+    )
     {
         var activeFilter = LayoutUtil.FindFilter(layout);
         var terrId = activeFilter != null ?
@@ -681,7 +753,12 @@ public unsafe partial class DebugLayout : IDisposable
     }
 
 
-    private static void DrawAnalyticShape(UITree tree, string tag, AnalyticShapeData v)
+    private static void DrawAnalyticShape
+    (
+        UITree            tree,
+        string            tag,
+        AnalyticShapeData v
+    )
     {
         var unks = ""; //$" {v.u8:X} {v.uC} {v.u3C} {v.u60} {v.u64}";
         tree.LeafNode

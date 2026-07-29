@@ -5,9 +5,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Graphics.Kernel;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using SharpDX;
-using vnavmesh.Common.Models;
-using vnavmesh.Shared.Models;
-using vnavmesh.Shared.Utils;
+using vnavmesh.Common.Extensions;
 using vnavmesh.UI.Rendering;
 using Vector2 = System.Numerics.Vector2;
 using Vector3 = System.Numerics.Vector3;
@@ -113,19 +111,36 @@ public unsafe class DebugDrawer : IDisposable
         _viewportTexts.Clear();
     }
 
-    public void DrawWorldLine(Vector3 start, Vector3 end, uint color, int thickness = 1)
+    public void DrawWorldLine
+    (
+        Vector3 start,
+        Vector3 end,
+        uint    color,
+        int     thickness = 1
+    )
     {
         if (ClipLineToNearPlane(ref start, ref end))
             _viewportLines.Add((WorldToScreen(start), WorldToScreen(end), color, thickness));
     }
 
-    public void DrawWorldPolygon(IEnumerable<Vector3> points, uint color, int thickness = 1)
+    public void DrawWorldPolygon
+    (
+        IEnumerable<Vector3> points,
+        uint                 color,
+        int                  thickness = 1
+    )
     {
         foreach (var (a, b) in AdjacentPairs(points))
             DrawWorldLine(a, b, color, thickness);
     }
 
-    public void DrawWorldAABB(Vector3 origin, Vector3 halfSize, uint color, int thickness = 1)
+    public void DrawWorldAABB
+    (
+        Vector3 origin,
+        Vector3 halfSize,
+        uint    color,
+        int     thickness = 1
+    )
     {
         var min = origin - halfSize;
         var max = origin + halfSize;
@@ -151,10 +166,21 @@ public unsafe class DebugDrawer : IDisposable
         DrawWorldLine(bab, bbb, color, thickness);
     }
 
-    public void DrawWorldAABB(AABB aabb, uint color, int thickness = 1) => DrawWorldAABB
+    public void DrawWorldAABB
+    (
+        AABB aabb,
+        uint color,
+        int  thickness = 1
+    ) => DrawWorldAABB
         ((aabb.Min + aabb.Max) * 0.5f, (aabb.Max - aabb.Min) * 0.5f, color, thickness);
 
-    public void DrawWorldCylinder(Vector3 origin, Vector3 halfSize, uint color, int thickness = 1)
+    public void DrawWorldCylinder
+    (
+        Vector3 origin,
+        Vector3 halfSize,
+        uint    color,
+        int     thickness = 1
+    )
     {
         var radius      = MathF.Max(MathF.Max(MathF.Abs(halfSize.X), MathF.Abs(halfSize.Z)), 0.01f);
         var numSegments = Math.Max(24, CurveApproxUtil.CalculateCircleSegments(radius, 360.Degrees(), 0.08f));
@@ -178,10 +204,21 @@ public unsafe class DebugDrawer : IDisposable
         }
     }
 
-    public void DrawWorldCylinder(AABB aabb, uint color, int thickness = 1) => DrawWorldCylinder
+    public void DrawWorldCylinder
+    (
+        AABB aabb,
+        uint color,
+        int  thickness = 1
+    ) => DrawWorldCylinder
         ((aabb.Min + aabb.Max) * 0.5f, (aabb.Max - aabb.Min) * 0.5f, color, thickness);
 
-    public void DrawWorldSphere(Vector3 center, float radius, uint color, int thickness = 1)
+    public void DrawWorldSphere
+    (
+        Vector3 center,
+        float   radius,
+        uint    color,
+        int     thickness = 1
+    )
     {
         var numSegments = CurveApproxUtil.CalculateCircleSegments(radius, 360.Degrees(), 0.1f);
         var prev1       = center + new Vector3(0,      0,      radius);
@@ -190,10 +227,10 @@ public unsafe class DebugDrawer : IDisposable
 
         for (var i = 1; i <= numSegments; ++i)
         {
-            var dir   = (i * 360.0f / numSegments).Degrees().ToDirection();
-            var curr1 = center + radius * new Vector3(dir.X, 0,     dir.Y);
-            var curr2 = center + radius * new Vector3(0,     dir.Y, dir.X);
-            var curr3 = center + radius * new Vector3(dir.Y, dir.X, 0);
+            var dir   = (i * 360.0f      / numSegments).Degrees().ToDirection();
+            var curr1 = center + (radius * new Vector3(dir.X, 0,     dir.Y));
+            var curr2 = center + (radius * new Vector3(0,     dir.Y, dir.X));
+            var curr3 = center + (radius * new Vector3(dir.Y, dir.X, 0));
             DrawWorldLine(curr1, prev1, color, thickness);
             DrawWorldLine(curr2, prev2, color, thickness);
             DrawWorldLine(curr3, prev3, color, thickness);
@@ -203,14 +240,27 @@ public unsafe class DebugDrawer : IDisposable
         }
     }
 
-    public void DrawWorldTriangle(Vector3 v1, Vector3 v2, Vector3 v3, uint color, int thickness = 1)
+    public void DrawWorldTriangle
+    (
+        Vector3 v1,
+        Vector3 v2,
+        Vector3 v3,
+        uint    color,
+        int     thickness = 1
+    )
     {
         DrawWorldLine(v1, v2, color, thickness);
         DrawWorldLine(v2, v3, color, thickness);
         DrawWorldLine(v3, v1, color, thickness);
     }
 
-    public void DrawWorldPoint(Vector3 p, float radius, uint color, int thickness = 1)
+    public void DrawWorldPoint
+    (
+        Vector3 p,
+        float   radius,
+        uint    color,
+        int     thickness = 1
+    )
     {
         if (Vector4.Dot(new(p, 1), NearPlane) >= 0)
             return;
@@ -220,14 +270,24 @@ public unsafe class DebugDrawer : IDisposable
             _viewportLines.Add((from, to, color, thickness));
     }
 
-    public void DrawWorldPointFilled(Vector3 p, float radius, uint color)
+    public void DrawWorldPointFilled
+    (
+        Vector3 p,
+        float   radius,
+        uint    color
+    )
     {
         if (Vector4.Dot(new(p, 1), NearPlane) >= 0)
             return;
         _viewportCircles.Add((WorldToScreen(p), radius, color));
     }
 
-    public void DrawWorldText(Vector3 p, string text, uint color)
+    public void DrawWorldText
+    (
+        Vector3 p,
+        string  text,
+        uint    color
+    )
     {
         if (string.IsNullOrWhiteSpace(text) || Vector4.Dot(new(p, 1), NearPlane) >= 0)
             return;
@@ -235,7 +295,11 @@ public unsafe class DebugDrawer : IDisposable
         _viewportTexts.Add((WorldToScreen(p), color, text));
     }
 
-    public bool TryWorldToScreen(Vector3 p, out Vector2 screen)
+    public bool TryWorldToScreen
+    (
+        Vector3     p,
+        out Vector2 screen
+    )
     {
         if (Vector4.Dot(new(p, 1), NearPlane) >= 0)
         {
@@ -248,7 +312,14 @@ public unsafe class DebugDrawer : IDisposable
     }
 
     // arrow with pointer at p coming from the direction of q
-    public void DrawWorldArrowPoint(Vector3 p, Vector3 q, float l, uint color, int thickness = 1)
+    public void DrawWorldArrowPoint
+    (
+        Vector3 p,
+        Vector3 q,
+        float   l,
+        uint    color,
+        int     thickness = 1
+    )
     {
         if (Vector4.Dot(new(p, 1), NearPlane) >= 0)
             return;
@@ -262,17 +333,31 @@ public unsafe class DebugDrawer : IDisposable
         _viewportLines.Add((ps, ps + d - n, color, thickness));
     }
 
-    public void DrawWorldArc(Vector3 a, Vector3 b, float h, float arrowA, float arrowB, uint color, int thickness = 1)
+    public void DrawWorldArc
+    (
+        Vector3 a,
+        Vector3 b,
+        float   h,
+        float   arrowA,
+        float   arrowB,
+        uint    color,
+        int     thickness = 1
+    )
     {
         var delta = b - a;
         var len   = delta.Length();
         h *= len;
 
-        Vector3 Eval(Vector3 from, Vector3 delta, float u)
+        Vector3 Eval
+        (
+            Vector3 from,
+            Vector3 delta,
+            float   u
+        )
         {
-            var res   = from + u * delta;
-            var coeff = u        * 2 - 1;
-            res.Y += h * (1          - coeff * coeff);
+            var res   = from + (u * delta);
+            var coeff = (u        * 2) - 1;
+            res.Y += h * (1            - (coeff * coeff));
             return res;
         }
 
@@ -280,7 +365,7 @@ public unsafe class DebugDrawer : IDisposable
 
         const int   NumPoints = 8;
         const float u0        = 0.05f;
-        const float du        = (1.0f - u0 * 2) / NumPoints;
+        const float du        = (1.0f - (u0 * 2)) / NumPoints;
         var         from      = Eval(a, delta, u0);
 
         if (arrowA > 1)
@@ -288,16 +373,19 @@ public unsafe class DebugDrawer : IDisposable
 
         for (var i = 1; i <= NumPoints; ++i)
         {
-            var to = Eval(a, delta, u0 + i * du);
+            var to = Eval(a, delta, u0 + (i * du));
             DrawWorldLine(from, to, color, thickness);
             from = to;
         }
 
         if (arrowB > 1)
-            DrawWorldArrowPoint(from, Eval(a, delta, 1 - 2 * u0), arrowB, color, thickness);
+            DrawWorldArrowPoint(from, Eval(a, delta, 1 - (2 * u0)), arrowB, color, thickness);
     }
 
-    private Matrix ReadMatrix(nint address)
+    private Matrix ReadMatrix
+    (
+        nint address
+    )
     {
         var    p   = (float*)address;
         Matrix mtx = new();
@@ -306,13 +394,20 @@ public unsafe class DebugDrawer : IDisposable
         return mtx;
     }
 
-    private SharpDX.Vector2 ReadVec2(nint address)
+    private SharpDX.Vector2 ReadVec2
+    (
+        nint address
+    )
     {
         var p = (float*)address;
         return new(p[0], p[1]);
     }
 
-    private bool ClipLineToNearPlane(ref Vector3 a, ref Vector3 b)
+    private bool ClipLineToNearPlane
+    (
+        ref Vector3 a,
+        ref Vector3 b
+    )
     {
         var an = Vector4.Dot(new(a, 1), NearPlane);
         var bn = Vector4.Dot(new(b, 1), NearPlane);
@@ -324,7 +419,7 @@ public unsafe class DebugDrawer : IDisposable
             var ab  = b - a;
             var abn = Vector3.Dot(ab, new(NearPlane.X, NearPlane.Y, NearPlane.Z));
             var t   = -an / abn;
-            var p   = a + t * ab;
+            var p   = a + (t * ab);
             if (an > 0)
                 a = p;
             else
@@ -334,14 +429,20 @@ public unsafe class DebugDrawer : IDisposable
         return true;
     }
 
-    private Vector2 WorldToScreen(Vector3 w)
+    private Vector2 WorldToScreen
+    (
+        Vector3 w
+    )
     {
         var pp = Vector4.Transform(w, ViewProj);
         var iw = 1 / pp.W;
-        return new Vector2(0.5f * ViewportSize.X * (1 + pp.X * iw), 0.5f * ViewportSize.Y * (1 - pp.Y * iw)) + ImGuiHelpers.MainViewport.Pos;
+        return new Vector2(0.5f * ViewportSize.X * (1 + (pp.X * iw)), 0.5f * ViewportSize.Y * (1 - (pp.Y * iw))) + ImGuiHelpers.MainViewport.Pos;
     }
 
-    private static IEnumerable<(T, T)> AdjacentPairs<T>(IEnumerable<T> v) where T : struct
+    private static IEnumerable<(T, T)> AdjacentPairs<T>
+    (
+        IEnumerable<T> v
+    ) where T : struct
     {
         var en = v.GetEnumerator();
         if (!en.MoveNext())

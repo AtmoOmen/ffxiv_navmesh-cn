@@ -1,8 +1,8 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Navigation.Custom.Editor;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Build.Custom.Editor;
+using vnavmesh.Build.Scene;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Editor.Types;
@@ -11,11 +11,27 @@ namespace vnavmesh.UI.Editor;
 
 internal static class CustomizationEditorLeftPanel
 {
-    public delegate void AddMeshRemovalDelegate(string key);
+    public delegate void AddMeshRemovalDelegate
+    (
+        string key
+    );
 
-    public delegate void AddInstancePatchDelegate(SceneExtractor.Mesh mesh, string key, int index, DraftSceneInstancePatchKind kind);
+    public delegate void AddInstancePatchDelegate
+    (
+        SceneExtractor.Mesh         mesh,
+        string                      key,
+        int                         index,
+        DraftSceneInstancePatchKind kind
+    );
 
-    public delegate void AddPartPatchDelegate(SceneExtractor.Mesh mesh, string key, int partIndex, DraftScenePartPatchKind kind, int subIndex = -1);
+    public delegate void AddPartPatchDelegate
+    (
+        SceneExtractor.Mesh     mesh,
+        string                  key,
+        int                     partIndex,
+        DraftScenePartPatchKind kind,
+        int                     subIndex = -1
+    );
 
     public static void Draw
     (
@@ -282,7 +298,13 @@ internal static class CustomizationEditorLeftPanel
         }
     }
 
-    private static void DrawMeshPreview(SceneExtractor.MeshPart part, Matrix4x3 transform, DebugDrawer dd, uint color = 0xFF00FFAA)
+    private static void DrawMeshPreview
+    (
+        SceneExtractor.MeshPart part,
+        Matrix4x3               transform,
+        DebugDrawer             dd,
+        uint                    color = 0xFF00FFAA
+    )
     {
         foreach (var primitive in part.Primitives)
         {
@@ -296,7 +318,12 @@ internal static class CustomizationEditorLeftPanel
         }
     }
 
-    private static void DrawPreviewVertex(SceneExtractor.Mesh mesh, Vector3 vertex, DebugDrawer dd)
+    private static void DrawPreviewVertex
+    (
+        SceneExtractor.Mesh mesh,
+        Vector3             vertex,
+        DebugDrawer         dd
+    )
     {
         if (mesh.Instances.Count == 0)
         {
@@ -307,7 +334,13 @@ internal static class CustomizationEditorLeftPanel
         dd.DrawWorldPointFilled(mesh.Instances[0].WorldTransform.TransformCoordinate(vertex), 3, 0xFF00FF00);
     }
 
-    private static void DrawPreviewPrimitive(SceneExtractor.Mesh mesh, SceneExtractor.MeshPart part, SceneExtractor.Primitive primitive, DebugDrawer dd)
+    private static void DrawPreviewPrimitive
+    (
+        SceneExtractor.Mesh      mesh,
+        SceneExtractor.MeshPart  part,
+        SceneExtractor.Primitive primitive,
+        DebugDrawer              dd
+    )
     {
         if (mesh.Instances.Count == 0)
             return;
@@ -460,7 +493,11 @@ internal static class CustomizationEditorLeftPanel
     }
 
     private static List<DraftListEntry> BuildMeshRemovalEntries
-        (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
+    (
+        CustomizationEditorWorkspace workspace,
+        CustomizationPreviewBuilder  previewBuilder,
+        DebugGameCollision           collision
+    )
     {
         List<DraftListEntry> entries = [];
 
@@ -476,7 +513,11 @@ internal static class CustomizationEditorLeftPanel
     }
 
     private static List<DraftListEntry> BuildInstancePatchEntries
-        (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
+    (
+        CustomizationEditorWorkspace workspace,
+        CustomizationPreviewBuilder  previewBuilder,
+        DebugGameCollision           collision
+    )
     {
         List<DraftListEntry> entries = [];
 
@@ -492,7 +533,11 @@ internal static class CustomizationEditorLeftPanel
     }
 
     private static List<DraftListEntry> BuildPartPatchEntries
-        (CustomizationEditorWorkspace workspace, CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision)
+    (
+        CustomizationEditorWorkspace workspace,
+        CustomizationPreviewBuilder  previewBuilder,
+        DebugGameCollision           collision
+    )
     {
         List<DraftListEntry> entries = [];
 
@@ -511,7 +556,11 @@ internal static class CustomizationEditorLeftPanel
         return entries;
     }
 
-    private static List<DraftListEntry> BuildColliderInsertionEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
+    private static List<DraftListEntry> BuildColliderInsertionEntries
+    (
+        CustomizationEditorWorkspace workspace,
+        DebugGameCollision           collision
+    )
     {
         List<DraftListEntry> entries = [];
 
@@ -529,7 +578,11 @@ internal static class CustomizationEditorLeftPanel
         return entries;
     }
 
-    private static List<DraftListEntry> BuildMeshLinkEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
+    private static List<DraftListEntry> BuildMeshLinkEntries
+    (
+        CustomizationEditorWorkspace workspace,
+        DebugGameCollision           collision
+    )
     {
         List<DraftListEntry> entries = [];
 
@@ -547,7 +600,11 @@ internal static class CustomizationEditorLeftPanel
         return entries;
     }
 
-    private static List<DraftListEntry> BuildOffMeshConnectionEntries(CustomizationEditorWorkspace workspace, DebugGameCollision collision)
+    private static List<DraftListEntry> BuildOffMeshConnectionEntries
+    (
+        CustomizationEditorWorkspace workspace,
+        DebugGameCollision           collision
+    )
     {
         List<DraftListEntry> entries = [];
 
@@ -566,53 +623,73 @@ internal static class CustomizationEditorLeftPanel
     }
 
     private static DraftDistanceInfo DescribeMeshRemoval
-        (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftSceneMeshRemoval item)
+    (
+        CustomizationPreviewBuilder previewBuilder,
+        DebugGameCollision          collision,
+        DraftSceneMeshRemoval       item
+    )
     {
         if (previewBuilder.Extractor == null                                         ||
             !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
             !TryGetNearestInstanceBounds(mesh, collision, out var bounds))
-        {
             return DraftDistanceInfo.Unknown;
-        }
 
         return DescribeBounds(collision, bounds);
     }
 
     private static DraftDistanceInfo DescribeInstancePatch
-        (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftSceneInstancePatch item)
+    (
+        CustomizationPreviewBuilder previewBuilder,
+        DebugGameCollision          collision,
+        DraftSceneInstancePatch     item
+    )
     {
         if (previewBuilder.Extractor == null                                         ||
             !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
             !TryGetInstancePatchBounds(mesh, item, out var bounds))
-        {
             return DraftDistanceInfo.Unknown;
-        }
 
         return DescribeBounds(collision, bounds);
     }
 
     private static DraftDistanceInfo DescribePartPatch
-        (CustomizationPreviewBuilder previewBuilder, DebugGameCollision collision, DraftScenePartPatch item)
+    (
+        CustomizationPreviewBuilder previewBuilder,
+        DebugGameCollision          collision,
+        DraftScenePartPatch         item
+    )
     {
         if (previewBuilder.Extractor == null                                         ||
             !previewBuilder.Extractor.Meshes.TryGetValue(item.MeshKey, out var mesh) ||
             !TryGetNearestInstanceBounds(mesh, collision, out var bounds))
-        {
             return DraftDistanceInfo.Unknown;
-        }
 
         return DescribeBounds(collision, bounds);
     }
 
-    private static DraftDistanceInfo DescribeBounds(DebugGameCollision collision, AABB bounds) =>
+    private static DraftDistanceInfo DescribeBounds
+    (
+        DebugGameCollision collision,
+        AABB               bounds
+    ) =>
         collision.HasRenderDistanceReferencePosition ?
             new(collision.GetHorizontalDistanceToBounds(bounds), collision.IsBoundsWithinEditorRenderDistance(bounds)) :
             DraftDistanceInfo.Unknown;
 
-    private static DraftListEntry CreateDraftEntry(int index, string label, string note, bool enabled, DraftDistanceInfo info) =>
+    private static DraftListEntry CreateDraftEntry
+    (
+        int               index,
+        string            label,
+        string            note,
+        bool              enabled,
+        DraftDistanceInfo info
+    ) =>
         new(index, FormatDraftLabel(label, note, enabled, info.IsInRange), info.Distance, enabled, info.IsInRange);
 
-    private static void SortDraftEntries(List<DraftListEntry> entries) =>
+    private static void SortDraftEntries
+    (
+        List<DraftListEntry> entries
+    ) =>
         entries.Sort
         (static (a, b) =>
             {
@@ -630,22 +707,37 @@ internal static class CustomizationEditorLeftPanel
             }
         );
 
-    private static string FormatDraftLabel(string fallbackLabel, string note, bool enabled, bool isInRange)
-    {
-        return string.IsNullOrWhiteSpace(note) ?
-                   fallbackLabel :
-                   note.Trim();
-    }
+    private static string FormatDraftLabel
+    (
+        string fallbackLabel,
+        string note,
+        bool   enabled,
+        bool   isInRange
+    ) =>
+        string.IsNullOrWhiteSpace(note) ?
+            fallbackLabel :
+            note.Trim();
 
-    private static string FormatMeshRemovalLabel(DraftSceneMeshRemoval item) =>
+    private static string FormatMeshRemovalLabel
+    (
+        DraftSceneMeshRemoval item
+    ) =>
         item.MeshKey;
 
-    private static string FormatInstancePatchLabel(DraftSceneInstancePatch item) =>
+    private static string FormatInstancePatchLabel
+    (
+        DraftSceneInstancePatch item
+    ) =>
         item.Kind == DraftSceneInstancePatchKind.ClearInstances ?
             $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}" :
             $"{item.MeshKey} #{item.InstanceIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}";
 
-    private static bool TryGetNearestInstanceBounds(SceneExtractor.Mesh mesh, DebugGameCollision collision, out AABB bounds)
+    private static bool TryGetNearestInstanceBounds
+    (
+        SceneExtractor.Mesh mesh,
+        DebugGameCollision  collision,
+        out AABB            bounds
+    )
     {
         if (mesh.Instances.Count == 0)
         {
@@ -673,7 +765,12 @@ internal static class CustomizationEditorLeftPanel
         return true;
     }
 
-    private static bool TryGetInstancePatchBounds(SceneExtractor.Mesh mesh, DraftSceneInstancePatch patch, out AABB bounds)
+    private static bool TryGetInstancePatchBounds
+    (
+        SceneExtractor.Mesh     mesh,
+        DraftSceneInstancePatch patch,
+        out AABB                bounds
+    )
     {
         if (patch.Kind == DraftSceneInstancePatchKind.ClearInstances)
         {
@@ -697,7 +794,12 @@ internal static class CustomizationEditorLeftPanel
         return false;
     }
 
-    private static bool TryResolveInstance(SceneExtractor.Mesh mesh, DraftSceneInstancePatch patch, out SceneExtractor.MeshInstance instance)
+    private static bool TryResolveInstance
+    (
+        SceneExtractor.Mesh             mesh,
+        DraftSceneInstancePatch         patch,
+        out SceneExtractor.MeshInstance instance
+    )
     {
         if (patch.InstanceId != 0)
         {
@@ -716,21 +818,32 @@ internal static class CustomizationEditorLeftPanel
         return false;
     }
 
-    private static List<int> GetVisiblePreviewInstanceIndices(SceneExtractor.Mesh mesh, DebugGameCollision collision, bool forceFocused, int focusedInstanceIndex)
+    private static List<int> GetVisiblePreviewInstanceIndices
+    (
+        SceneExtractor.Mesh mesh,
+        DebugGameCollision  collision,
+        bool                forceFocused,
+        int                 focusedInstanceIndex
+    )
     {
         List<int> visibleIndices = [];
 
         for (var i = 0; i < mesh.Instances.Count; ++i)
         {
             var visible = collision.IsBoundsWithinEditorRenderDistance(mesh.Instances[i].WorldBounds);
-            if (visible || forceFocused && i == focusedInstanceIndex)
+            if (visible || (forceFocused && i == focusedInstanceIndex))
                 visibleIndices.Add(i);
         }
 
         return visibleIndices;
     }
 
-    private static bool TryGetVisibleMeshBounds(SceneExtractor.Mesh mesh, List<int> visibleInstanceIndices, out AABB bounds)
+    private static bool TryGetVisibleMeshBounds
+    (
+        SceneExtractor.Mesh mesh,
+        List<int>           visibleInstanceIndices,
+        out AABB            bounds
+    )
     {
         if (visibleInstanceIndices.Count == 0)
         {
@@ -750,7 +863,12 @@ internal static class CustomizationEditorLeftPanel
         return true;
     }
 
-    private static bool TryGetFocusedPreviewInstance(Selection? focusSelection, string meshKey, out int focusedInstanceIndex)
+    private static bool TryGetFocusedPreviewInstance
+    (
+        Selection? focusSelection,
+        string     meshKey,
+        out int    focusedInstanceIndex
+    )
     {
         if (focusSelection is { Kind: SelectionKind.PreviewInstance, Key: not null, Index: >= 0 } && focusSelection.Key == meshKey)
         {
@@ -762,23 +880,44 @@ internal static class CustomizationEditorLeftPanel
         return false;
     }
 
-    private static bool ShouldAutoOpenPreviewRoot(Selection? focusSelection) =>
+    private static bool ShouldAutoOpenPreviewRoot
+    (
+        Selection? focusSelection
+    ) =>
         focusSelection?.Kind == SelectionKind.PreviewInstance;
 
-    private static bool ShouldAutoOpenDraftRoot(Selection? focusSelection) =>
+    private static bool ShouldAutoOpenDraftRoot
+    (
+        Selection? focusSelection
+    ) =>
         focusSelection != null && IsDraftSelectionKind(focusSelection.Kind);
 
-    private static bool ShouldAutoOpenGeometrySection(Selection? focusSelection) =>
+    private static bool ShouldAutoOpenGeometrySection
+    (
+        Selection? focusSelection
+    ) =>
         focusSelection is { Kind: SelectionKind.MeshRemoval or SelectionKind.InstancePatch or SelectionKind.PartPatch or SelectionKind.ColliderInsertion };
 
-    private static bool ShouldAutoOpenConnectivitySection(Selection? focusSelection) =>
+    private static bool ShouldAutoOpenConnectivitySection
+    (
+        Selection? focusSelection
+    ) =>
         focusSelection is { Kind: SelectionKind.MeshLink or SelectionKind.OffMeshConnection };
 
-    private static bool IsDraftSelectionKind(SelectionKind kind) =>
+    private static bool IsDraftSelectionKind
+    (
+        SelectionKind kind
+    ) =>
         kind is SelectionKind.MeshRemoval or SelectionKind.InstancePatch or SelectionKind.PartPatch or SelectionKind.ColliderInsertion or SelectionKind.MeshLink
             or SelectionKind.OffMeshConnection;
 
-    private static string BuildInstancePatchTag(CustomizationEditorWorkspace workspace, string meshKey, int instanceIndex, ulong instanceId)
+    private static string BuildInstancePatchTag
+    (
+        CustomizationEditorWorkspace workspace,
+        string                       meshKey,
+        int                          instanceIndex,
+        ulong                        instanceId
+    )
     {
         List<string> tags = [];
 

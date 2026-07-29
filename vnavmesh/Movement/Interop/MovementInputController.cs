@@ -4,6 +4,7 @@ using Dalamud.Game.Config;
 using Dalamud.Hooking;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
+using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Models;
 
 namespace vnavmesh.Movement.Interop;
@@ -67,7 +68,10 @@ public unsafe class MovementInputController : IDisposable
 
     private const float FULL_TURN_INPUT_ANGLE = MathF.PI / 4;
 
-    private delegate bool RMIWalkIsInputEnabled(void* self);
+    private delegate bool RMIWalkIsInputEnabled
+    (
+        void* self
+    );
 
     [Signature("E8 ?? ?? ?? ?? 84 C0 75 10 38 43 3C")]
     private readonly RMIWalkIsInputEnabled rmiWalkIsInputEnabled1 = null!;
@@ -76,12 +80,24 @@ public unsafe class MovementInputController : IDisposable
     private readonly RMIWalkIsInputEnabled rmiWalkIsInputEnabled2 = null!;
 
     private delegate void RMIWalkDelegate
-        (void* self, float* sumLeft, float* sumForward, float* sumTurnLeft, byte* haveBackwardOrStrafe, byte* a6, byte bAdditiveUnk);
+    (
+        void*  self,
+        float* sumLeft,
+        float* sumForward,
+        float* sumTurnLeft,
+        byte*  haveBackwardOrStrafe,
+        byte*  a6,
+        byte   bAdditiveUnk
+    );
 
     [Signature("E8 ?? ?? ?? ?? 80 7B 3E 00 48 8D 3D", DetourName = nameof(RMIWalkDetour))]
     private Hook<RMIWalkDelegate> rmiWalkHook = null!;
 
-    private delegate void RMIFlyDelegate(void* self, PlayerMoveControllerFlyInput* result);
+    private delegate void RMIFlyDelegate
+    (
+        void*                         self,
+        PlayerMoveControllerFlyInput* result
+    );
 
     [Signature("E8 ?? ?? ?? ?? 0F B6 0D ?? ?? ?? ?? B8", DetourName = nameof(RMIFlyDetour))]
     private Hook<RMIFlyDelegate> rmiFlyHook = null!;
@@ -100,7 +116,16 @@ public unsafe class MovementInputController : IDisposable
         rmiFlyHook.Dispose();
     }
 
-    private void RMIWalkDetour(void* self, float* sumLeft, float* sumForward, float* sumTurnLeft, byte* haveBackwardOrStrafe, byte* a6, byte bAdditiveUnk)
+    private void RMIWalkDetour
+    (
+        void*  self,
+        float* sumLeft,
+        float* sumForward,
+        float* sumTurnLeft,
+        byte*  haveBackwardOrStrafe,
+        byte*  a6,
+        byte   bAdditiveUnk
+    )
     {
         rmiWalkHook.Original(self, sumLeft, sumForward, sumTurnLeft, haveBackwardOrStrafe, a6, bAdditiveUnk);
         var movementAllowed = bAdditiveUnk == 0 && rmiWalkIsInputEnabled1(self) && rmiWalkIsInputEnabled2(self);
@@ -117,7 +142,11 @@ public unsafe class MovementInputController : IDisposable
             *sumTurnLeft = turnInput;
     }
 
-    private void RMIFlyDetour(void* self, PlayerMoveControllerFlyInput* result)
+    private void RMIFlyDetour
+    (
+        void*                         self,
+        PlayerMoveControllerFlyInput* result
+    )
     {
         rmiFlyHook.Original(self, result);
         UserInput = result->Forward != 0 || result->Left != 0 || result->Up != 0;
@@ -136,7 +165,10 @@ public unsafe class MovementInputController : IDisposable
             result->Turn = turnInput;
     }
 
-    private (Angle h, Angle v)? DirectionToDestination(bool allowVertical)
+    private (Angle h, Angle v)? DirectionToDestination
+    (
+        bool allowVertical
+    )
     {
         var player = Service.ObjectTable.LocalPlayer;
         if (player == null)
@@ -172,7 +204,11 @@ public unsafe class MovementInputController : IDisposable
         return Math.Clamp(delta / FULL_TURN_INPUT_ANGLE, -1f, 1f);
     }
 
-    private void OnConfigChanged(object? sender, ConfigChangeEvent evt) => UpdateLegacyMode();
+    private void OnConfigChanged
+    (
+        object?           sender,
+        ConfigChangeEvent evt
+    ) => UpdateLegacyMode();
 
     private void UpdateLegacyMode() => legacyMode = Service.GameConfig.UiControl.TryGetUInt("MoveMode", out var mode) && mode == 1;
 }

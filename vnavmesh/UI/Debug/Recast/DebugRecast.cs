@@ -1,6 +1,6 @@
 using System.Numerics;
 using DotRecast.Core.Numerics;
-using vnavmesh.Shared.Models;
+using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 
 namespace vnavmesh.UI.Debug.Recast;
@@ -9,13 +9,29 @@ public abstract class DebugRecast : IDisposable
 {
     public abstract void Dispose();
 
-    public static void DrawBaseInfo(UITree _tree, int gridW, int gridH, RcVec3f bbMin, RcVec3f bbMax, float cellSize, float cellHeight)
+    public static void DrawBaseInfo
+    (
+        UITree  _tree,
+        int     gridW,
+        int     gridH,
+        RcVec3f bbMin,
+        RcVec3f bbMax,
+        float   cellSize,
+        float   cellHeight
+    )
     {
         _tree.LeafNode($"单元格数量：{gridW}x{gridH}");
         DrawBaseInfo(_tree, bbMin, bbMax, cellSize, cellHeight);
     }
 
-    public static void DrawBaseInfo(UITree _tree, RcVec3f bbMin, RcVec3f bbMax, float cellSize, float cellHeight)
+    public static void DrawBaseInfo
+    (
+        UITree  _tree,
+        RcVec3f bbMin,
+        RcVec3f bbMax,
+        float   cellSize,
+        float   cellHeight
+    )
     {
         var playerPos = Service.ObjectTable.LocalPlayer?.Position ?? default;
         _tree.LeafNode($"边界：[{bbMin}] - [{bbMax}]");
@@ -24,7 +40,11 @@ public abstract class DebugRecast : IDisposable
             ($"玩家所在单元格：{(int)((playerPos.X - bbMin.X) / cellSize)}x{(int)((playerPos.Y - bbMin.Y) / cellHeight)}x{(int)((playerPos.Z - bbMin.Z) / cellSize)}");
     }
 
-    public static Vector4 IntColor(int v, float a)
+    public static Vector4 IntColor
+    (
+        int   v,
+        float a
+    )
     {
         var mask = new BitMask((ulong)v);
         var r = (mask[1] ?

@@ -2,11 +2,13 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
-  <Project Path="DotRecast/src/DotRecast.Core/DotRecast.Core.csproj" />
-  <Project Path="DotRecast/src/DotRecast.Detour.Crowd/DotRecast.Detour.Crowd.csproj" />
-  <Project Path="DotRecast/src/DotRecast.Detour.Extras/DotRecast.Detour.Extras.csproj" />
-  <Project Path="DotRecast/src/DotRecast.Detour/DotRecast.Detour.csproj" />
-  <Project Path="DotRecast/src/DotRecast.Recast/DotRecast.Recast.csproj" />
+  <Folder Name="/libs/">
+    <Project Path="DotRecast/src/DotRecast.Core/DotRecast.Core.csproj" />
+    <Project Path="DotRecast/src/DotRecast.Detour.Crowd/DotRecast.Detour.Crowd.csproj" />
+    <Project Path="DotRecast/src/DotRecast.Detour.Extras/DotRecast.Detour.Extras.csproj" />
+    <Project Path="DotRecast/src/DotRecast.Detour/DotRecast.Detour.csproj" />
+    <Project Path="DotRecast/src/DotRecast.Recast/DotRecast.Recast.csproj" />
+  </Folder>
   <Project Path="vnavmesh.Common/vnavmesh.Common.csproj">
     <Platform Project="x64" />
   </Project>

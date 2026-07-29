@@ -2,8 +2,10 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Common.Navigation.Mesh.Runtime;
-using vnavmesh.Common.Utilities;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Extensions;
+using vnavmesh.Common.Utils;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Debug.Recast;
@@ -11,7 +13,7 @@ using vnavmesh.UI.Rendering;
 
 namespace vnavmesh.UI.Debug.Mesh;
 
-using static DotRecast.Detour.DtDetour;
+using static DtDetour;
 
 public class DebugDetourNavmesh : DebugRecast
 {
@@ -57,7 +59,14 @@ public class DebugDetourNavmesh : DebugRecast
         Count
     }
 
-    public DebugDetourNavmesh(DtNavMesh navmesh, DtNavMeshQuery? query, List<long> queryPath, UITree tree, DebugDrawer dd)
+    public DebugDetourNavmesh
+    (
+        DtNavMesh       navmesh,
+        DtNavMeshQuery? query,
+        List<long>      queryPath,
+        UITree          tree,
+        DebugDrawer     dd
+    )
     {
         _navmesh = navmesh;
         _query   = query;
@@ -246,12 +255,15 @@ public class DebugDetourNavmesh : DebugRecast
             if (node.SelectedOrHovered || queried)
             {
                 VisualizeRoughPolygon(n.id, true, node.SelectedOrHovered);
-                VisualizeVertex(n.pos.RecastToSystem());
+                VisualizeVertex(n.pos.ToSystem());
             }
         }
     }
 
-    private EffectMesh.Data GetOrInitVisualizerRough(int tileIndex)
+    private EffectMesh.Data GetOrInitVisualizerRough
+    (
+        int tileIndex
+    )
     {
         ref var perTile = ref _perTile[tileIndex];
 
@@ -307,7 +319,10 @@ public class DebugDetourNavmesh : DebugRecast
         return perTile.VisuRough;
     }
 
-    private EffectMesh.Data GetOrInitVisualizerDetail(int tileIndex)
+    private EffectMesh.Data GetOrInitVisualizerDetail
+    (
+        int tileIndex
+    )
     {
         ref var perTile = ref _perTile[tileIndex];
 
@@ -388,7 +403,11 @@ public class DebugDetourNavmesh : DebugRecast
         }
     }
 
-    private void VisualizeRoughPolygons(DtMeshTile tile, bool colorByArea)
+    private void VisualizeRoughPolygons
+    (
+        DtMeshTile tile,
+        bool       colorByArea
+    )
     {
         if (_dd.EffectMesh == null)
             return;
@@ -399,7 +418,13 @@ public class DebugDetourNavmesh : DebugRecast
             VisualizeRoughPolygon(tile, visu, tile.data.polys[i], colorByArea, false);
     }
 
-    private void VisualizeRoughPolygon(DtMeshTile tile, DtPoly poly, bool colorByArea, bool highlight = false)
+    private void VisualizeRoughPolygon
+    (
+        DtMeshTile tile,
+        DtPoly     poly,
+        bool       colorByArea,
+        bool       highlight = false
+    )
     {
         if (_dd.EffectMesh == null)
             return;
@@ -409,14 +434,26 @@ public class DebugDetourNavmesh : DebugRecast
         VisualizeRoughPolygon(tile, visu, poly, colorByArea, highlight);
     }
 
-    private void VisualizeRoughPolygon(long refs, bool colorByArea, bool highlight = false)
+    private void VisualizeRoughPolygon
+    (
+        long refs,
+        bool colorByArea,
+        bool highlight = false
+    )
     {
         if (_navmesh.GetTileAndPolyByRef(refs, out var tile, out var poly).Succeeded())
             VisualizeRoughPolygon(tile, poly, colorByArea, highlight);
     }
 
     // effect + data are expected to be already bound
-    private void VisualizeRoughPolygon(DtMeshTile tile, EffectMesh.Data visu, DtPoly poly, bool colorByArea, bool highlight)
+    private void VisualizeRoughPolygon
+    (
+        DtMeshTile      tile,
+        EffectMesh.Data visu,
+        DtPoly          poly,
+        bool            colorByArea,
+        bool            highlight
+    )
     {
         if (poly.GetPolyType() != DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
         {
@@ -510,7 +547,12 @@ public class DebugDetourNavmesh : DebugRecast
         }
     }
 
-    private void VisualizeDetailSubmesh(DtMeshTile tile, int index, bool colorByArea)
+    private void VisualizeDetailSubmesh
+    (
+        DtMeshTile tile,
+        int        index,
+        bool       colorByArea
+    )
     {
         if (_dd.EffectMesh == null)
             return;
@@ -529,7 +571,14 @@ public class DebugDetourNavmesh : DebugRecast
             _dd.DrawWorldPointFilled(GetDetailVertex(tile, sub.vertBase + i), 2, 0xff0000ff);
     }
 
-    private void VisualizeDetailSubmeshWithEdges(DtMeshTile tile, EffectMesh.Data visu, DtPoly poly, bool colorByArea, bool highlight)
+    private void VisualizeDetailSubmeshWithEdges
+    (
+        DtMeshTile      tile,
+        EffectMesh.Data visu,
+        DtPoly          poly,
+        bool            colorByArea,
+        bool            highlight
+    )
     {
         // triangles
         var polyRef = EncodePolyId(tile.salt, tile.index, poly.index);
@@ -585,7 +634,14 @@ public class DebugDetourNavmesh : DebugRecast
         }
     }
 
-    private bool ShouldVisualizeDetailSubmesh(DtMeshTile tile, DtPoly poly, Vector3? playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    private bool ShouldVisualizeDetailSubmesh
+    (
+        DtMeshTile tile,
+        DtPoly     poly,
+        Vector3?   playerPosition,
+        float      maxHorizontalDistance,
+        float      maxVerticalDistance
+    )
     {
         if (playerPosition == null)
             return true;
@@ -633,14 +689,26 @@ public class DebugDetourNavmesh : DebugRecast
         return Vector2.DistanceSquared(playerXZ, closest) <= maxHorizontalDistance * maxHorizontalDistance;
     }
 
-    private static bool IsVertexWithinClosedListRenderDistance(Vector3 playerPosition, Vector3 vertex, float maxHorizontalDistance, float maxVerticalDistance)
+    private static bool IsVertexWithinClosedListRenderDistance
+    (
+        Vector3 playerPosition,
+        Vector3 vertex,
+        float   maxHorizontalDistance,
+        float   maxVerticalDistance
+    )
     {
         var horizontalDelta = new Vector2(playerPosition.X - vertex.X, playerPosition.Z - vertex.Z);
         var verticalDelta   = MathF.Abs(playerPosition.Y   - vertex.Y);
         return horizontalDelta.LengthSquared() <= maxHorizontalDistance * maxHorizontalDistance && verticalDelta <= maxVerticalDistance;
     }
 
-    private static Vector2 ClosestPointOnTriangleXZ(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
+    private static Vector2 ClosestPointOnTriangleXZ
+    (
+        Vector2 point,
+        Vector2 a,
+        Vector2 b,
+        Vector2 c
+    )
     {
         if (TryProjectPointInsideTriangleXZ(point, a, b, c, out var projected))
             return projected;
@@ -660,7 +728,14 @@ public class DebugDetourNavmesh : DebugRecast
                    ca;
     }
 
-    private static bool TryProjectPointInsideTriangleXZ(Vector2 point, Vector2 a, Vector2 b, Vector2 c, out Vector2 projected)
+    private static bool TryProjectPointInsideTriangleXZ
+    (
+        Vector2     point,
+        Vector2     a,
+        Vector2     b,
+        Vector2     c,
+        out Vector2 projected
+    )
     {
         var v0  = b     - a;
         var v1  = c     - a;
@@ -670,7 +745,7 @@ public class DebugDetourNavmesh : DebugRecast
         var d11 = Vector2.Dot(v1, v1);
         var d20 = Vector2.Dot(v2, v0);
         var d21 = Vector2.Dot(v2, v1);
-        var den = d00 * d11 - d01 * d01;
+        var den = (d00 * d11) - (d01 * d01);
 
         if (MathF.Abs(den) <= float.Epsilon)
         {
@@ -678,8 +753,8 @@ public class DebugDetourNavmesh : DebugRecast
             return false;
         }
 
-        var v = (d11 * d20 - d01 * d21) / den;
-        var w = (d00 * d21 - d01 * d20) / den;
+        var v = ((d11 * d20) - (d01 * d21)) / den;
+        var w = ((d00 * d21) - (d01 * d20)) / den;
         var u = 1 - v - w;
 
         if (u < 0 || v < 0 || w < 0)
@@ -688,11 +763,16 @@ public class DebugDetourNavmesh : DebugRecast
             return false;
         }
 
-        projected = u * a + v * b + w * c;
+        projected = (u * a) + (v * b) + (w * c);
         return true;
     }
 
-    private static Vector2 ClosestPointOnSegmentXZ(Vector2 point, Vector2 a, Vector2 b)
+    private static Vector2 ClosestPointOnSegmentXZ
+    (
+        Vector2 point,
+        Vector2 a,
+        Vector2 b
+    )
     {
         var ab       = b - a;
         var lengthSq = ab.LengthSquared();
@@ -700,19 +780,33 @@ public class DebugDetourNavmesh : DebugRecast
             return a;
 
         var progress = Math.Clamp(Vector2.Dot(point - a, ab) / lengthSq, 0f, 1f);
-        return a + progress * ab;
+        return a + (progress * ab);
     }
 
-    private void VisualizeTriangle(Vector3 v1, Vector3 v2, Vector3 v3, uint color, int thickness)
+    private void VisualizeTriangle
+    (
+        Vector3 v1,
+        Vector3 v2,
+        Vector3 v3,
+        uint    color,
+        int     thickness
+    )
     {
         _dd.DrawWorldLine(v1, v2, color, thickness);
         _dd.DrawWorldLine(v2, v3, color, thickness);
         _dd.DrawWorldLine(v3, v1, color, thickness);
     }
 
-    private void VisualizeVertex(Vector3 v) => _dd.DrawWorldPoint(v, 5, 0xff0000ff, 2);
+    private void VisualizeVertex
+    (
+        Vector3 v
+    ) => _dd.DrawWorldPoint(v, 5, 0xff0000ff, 2);
 
-    private InstanceID InstanceForPoly(long polyRef, NavmeshArea area)
+    private InstanceID InstanceForPoly
+    (
+        long        polyRef,
+        NavmeshArea area
+    )
     {
         if (TryGetPolyFlags(polyRef, out var flags) && (flags & (int)NavmeshPolyFlags.Unreachable) != 0)
             return InstanceID.AreaUnreachable;
@@ -720,9 +814,16 @@ public class DebugDetourNavmesh : DebugRecast
         return InstanceForArea(area);
     }
 
-    private bool TryGetPolyFlags(long polyRef, out int flags) => _navmesh.GetPolyFlags(polyRef, out flags).Succeeded();
+    private bool TryGetPolyFlags
+    (
+        long    polyRef,
+        out int flags
+    ) => _navmesh.GetPolyFlags(polyRef, out flags).Succeeded();
 
-    private static InstanceID InstanceForArea(NavmeshArea area) => area switch
+    private static InstanceID InstanceForArea
+    (
+        NavmeshArea area
+    ) => area switch
     {
         NavmeshArea.Null               => InstanceID.AreaNull,
         NavmeshArea.Ground             => InstanceID.AreaGround,
@@ -735,11 +836,15 @@ public class DebugDetourNavmesh : DebugRecast
         _                              => InstanceID.AreaGround
     };
 
-    private Vector3 GetVertex(DtMeshTile tile, int i)
+    private Vector3 GetVertex
+    (
+        DtMeshTile tile,
+        int        i
+    )
     {
         try
         {
-            return new(tile.data.verts[i * 3], tile.data.verts[i * 3 + 1], tile.data.verts[i * 3 + 2]);
+            return new(tile.data.verts[i * 3], tile.data.verts[(i * 3) + 1], tile.data.verts[(i * 3) + 2]);
         }
         catch (IndexOutOfRangeException)
         {
@@ -748,15 +853,24 @@ public class DebugDetourNavmesh : DebugRecast
         }
     }
 
-    private Vector3 GetDetailVertex(DtMeshTile tile, int i) => new(tile.data.detailVerts[i * 3], tile.data.detailVerts[i * 3 + 1], tile.data.detailVerts[i * 3 + 2]);
+    private Vector3 GetDetailVertex
+    (
+        DtMeshTile tile,
+        int        i
+    ) => new(tile.data.detailVerts[i * 3], tile.data.detailVerts[(i * 3) + 1], tile.data.detailVerts[(i * 3) + 2]);
 
-    private Vector3 GetDetailVertex(DtMeshTile tile, DtPoly poly, int localIndex) => localIndex < poly.vertCount ?
-                                                                                         GetVertex(tile, poly.verts[localIndex]) :
-                                                                                         GetDetailVertex
-                                                                                         (
-                                                                                             tile,
-                                                                                             tile.data.detailMeshes[poly.index].vertBase +
-                                                                                             localIndex -
-                                                                                             poly.vertCount
-                                                                                         );
+    private Vector3 GetDetailVertex
+    (
+        DtMeshTile tile,
+        DtPoly     poly,
+        int        localIndex
+    ) => localIndex < poly.vertCount ?
+             GetVertex(tile, poly.verts[localIndex]) :
+             GetDetailVertex
+             (
+                 tile,
+                 tile.data.detailMeshes[poly.index].vertBase +
+                 localIndex -
+                 poly.vertCount
+             );
 }

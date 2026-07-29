@@ -1,11 +1,14 @@
 using Dalamud.Game.ClientState.Conditions;
-using vnavmesh.Navigation.Planning;
+using vnavmesh.Query.Models;
 
 namespace vnavmesh.Movement.Planning;
 
 internal sealed class MovementPlanBuilder
 {
-    public MovementPlan Build(PostprocessedPath path)
+    public MovementPlan Build
+    (
+        PostprocessedPath path
+    )
     {
         var segments                      = new List<MovementSegment>();
         var shouldNormalizeTakeoffSegment = path.RequestedMode == MovementMode.Flight && !IsAirborne;
@@ -48,7 +51,10 @@ internal sealed class MovementPlanBuilder
         };
     }
 
-    private static PostprocessedPathSegment NormalizeTakeoffSegment(PostprocessedPathSegment segment)
+    private static PostprocessedPathSegment NormalizeTakeoffSegment
+    (
+        PostprocessedPathSegment segment
+    )
     {
         var normalizedWaypoints = FlightWaypointNormalizer.NormalizeForTakeoff(segment.Waypoints, segment.StartPosition);
         return new()
@@ -63,7 +69,10 @@ internal sealed class MovementPlanBuilder
         };
     }
 
-    private static MovementSegment BuildSegment(PostprocessedPathSegment segment) =>
+    private static MovementSegment BuildSegment
+    (
+        PostprocessedPathSegment segment
+    ) =>
         new()
         {
             Kind                = segment.SegmentKind,

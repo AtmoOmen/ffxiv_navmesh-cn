@@ -1,10 +1,10 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
-using vnavmesh.Navigation;
-using vnavmesh.Navigation.Custom;
-using vnavmesh.Navigation.Custom.Editor;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Build;
+using vnavmesh.Build.Custom;
+using vnavmesh.Build.Custom.Editor;
+using vnavmesh.Build.Scene;
 using vnavmesh.UI.Editor.Types;
 
 namespace vnavmesh.UI.Editor;
@@ -17,17 +17,45 @@ internal static class CustomizationEditorInspector
 
     public delegate void WorkspaceDeleteDelegate();
 
-    public delegate void WorkspaceSelectDelegate(string workspaceId);
+    public delegate void WorkspaceSelectDelegate
+    (
+        string workspaceId
+    );
 
-    public delegate void AddMeshRemovalDelegate(string key);
+    public delegate void AddMeshRemovalDelegate
+    (
+        string key
+    );
 
-    public delegate void AddInstancePatchDelegate(SceneExtractor.Mesh mesh, string key, int index, DraftSceneInstancePatchKind kind);
+    public delegate void AddInstancePatchDelegate
+    (
+        SceneExtractor.Mesh         mesh,
+        string                      key,
+        int                         index,
+        DraftSceneInstancePatchKind kind
+    );
 
-    public delegate void AddPartPatchDelegate(SceneExtractor.Mesh mesh, string key, int partIndex, DraftScenePartPatchKind kind, int subIndex = -1);
+    public delegate void AddPartPatchDelegate
+    (
+        SceneExtractor.Mesh     mesh,
+        string                  key,
+        int                     partIndex,
+        DraftScenePartPatchKind kind,
+        int                     subIndex = -1
+    );
 
-    public delegate void RemoveMatchingPartPatchDelegate(string key, int partIndex, DraftScenePartPatchKind kind, int subIndex);
+    public delegate void RemoveMatchingPartPatchDelegate
+    (
+        string                  key,
+        int                     partIndex,
+        DraftScenePartPatchKind kind,
+        int                     subIndex
+    );
 
-    public delegate void RebuildSceneExtractDelegate(uint territoryID);
+    public delegate void RebuildSceneExtractDelegate
+    (
+        uint territoryID
+    );
 
     public delegate void RebuildFullDelegate();
 
@@ -131,14 +159,20 @@ internal static class CustomizationEditorInspector
         }
     }
 
-    private static void DrawInspectorHeader(Selection selection)
+    private static void DrawInspectorHeader
+    (
+        Selection selection
+    )
     {
         ImGui.TextUnformatted(GetSelectionTitle(selection));
         ImGui.TextDisabled(GetSelectionHelp(selection));
         ImGui.Separator();
     }
 
-    private static string GetSelectionTitle(Selection selection) =>
+    private static string GetSelectionTitle
+    (
+        Selection selection
+    ) =>
         selection.Kind switch
         {
             SelectionKind.Workspace         => "工作区",
@@ -160,7 +194,10 @@ internal static class CustomizationEditorInspector
             _                               => "自定义编辑器"
         };
 
-    private static string GetSelectionHelp(Selection selection) =>
+    private static string GetSelectionHelp
+    (
+        Selection selection
+    ) =>
         selection.Kind switch
         {
             SelectionKind.Workspace         => "管理草稿保存、自动重建和 C# 导出位置",
@@ -258,7 +295,12 @@ internal static class CustomizationEditorInspector
     }
 
     private static void DrawBuildProfileInspector
-        (ref CustomizationEditorWorkspace workspace, NavmeshBuildProfile profileDefaults, NavmeshSettings settingsDefaults, CommitDelegate onCommit)
+    (
+        ref CustomizationEditorWorkspace workspace,
+        NavmeshBuildProfile              profileDefaults,
+        NavmeshSettings                  settingsDefaults,
+        CommitDelegate                   onCommit
+    )
     {
         var changed = false;
 
@@ -384,7 +426,12 @@ internal static class CustomizationEditorInspector
         if (changed) onCommit();
     }
 
-    private static void DrawBuildSettingsInspector(ref CustomizationEditorWorkspace workspace, NavmeshSettings settingsDefaults, CommitDelegate onCommit)
+    private static void DrawBuildSettingsInspector
+    (
+        ref CustomizationEditorWorkspace workspace,
+        NavmeshSettings                  settingsDefaults,
+        CommitDelegate                   onCommit
+    )
     {
         var changed = false;
 
@@ -644,7 +691,11 @@ internal static class CustomizationEditorInspector
         if (changed) onCommit();
     }
 
-    private static void DrawFlyingInspector(ref CustomizationEditorWorkspace workspace, CommitDelegate onCommit)
+    private static void DrawFlyingInspector
+    (
+        ref CustomizationEditorWorkspace workspace,
+        CommitDelegate                   onCommit
+    )
     {
         var current = workspace.Draft.FlyingSupportedOverride;
         var next = current switch
@@ -666,7 +717,12 @@ internal static class CustomizationEditorInspector
         }
     }
 
-    private static void DrawMeshRemovalInspector(ref CustomizationEditorWorkspace workspace, ref Selection selection, CommitDelegate onCommit)
+    private static void DrawMeshRemovalInspector
+    (
+        ref CustomizationEditorWorkspace workspace,
+        ref Selection                    selection,
+        CommitDelegate                   onCommit
+    )
     {
         if (!TryGetItem(workspace.Draft.MeshRemovals, selection.Index, out var item))
             return;
@@ -691,7 +747,12 @@ internal static class CustomizationEditorInspector
             onCommit();
     }
 
-    private static void DrawInstancePatchInspector(ref CustomizationEditorWorkspace workspace, ref Selection selection, CommitDelegate onCommit)
+    private static void DrawInstancePatchInspector
+    (
+        ref CustomizationEditorWorkspace workspace,
+        ref Selection                    selection,
+        CommitDelegate                   onCommit
+    )
     {
         if (!TryGetItem(workspace.Draft.InstancePatches, selection.Index, out var item))
             return;
@@ -721,7 +782,12 @@ internal static class CustomizationEditorInspector
         if (changed) onCommit();
     }
 
-    private static void DrawPartPatchInspector(ref CustomizationEditorWorkspace workspace, ref Selection selection, CommitDelegate onCommit)
+    private static void DrawPartPatchInspector
+    (
+        ref CustomizationEditorWorkspace workspace,
+        ref Selection                    selection,
+        CommitDelegate                   onCommit
+    )
     {
         if (!TryGetItem(workspace.Draft.PartPatches, selection.Index, out var item))
             return;
@@ -820,7 +886,12 @@ internal static class CustomizationEditorInspector
             onCommit();
     }
 
-    private static void DrawColliderInsertionInspector(ref CustomizationEditorWorkspace workspace, ref Selection selection, CommitDelegate onCommit)
+    private static void DrawColliderInsertionInspector
+    (
+        ref CustomizationEditorWorkspace workspace,
+        ref Selection                    selection,
+        CommitDelegate                   onCommit
+    )
     {
         if (!TryGetItem(workspace.Draft.ColliderInsertions, selection.Index, out var item))
             return;
@@ -847,7 +918,12 @@ internal static class CustomizationEditorInspector
         if (changed) onCommit();
     }
 
-    private static void DrawMeshLinkInspector(ref CustomizationEditorWorkspace workspace, ref Selection selection, CommitDelegate onCommit)
+    private static void DrawMeshLinkInspector
+    (
+        ref CustomizationEditorWorkspace workspace,
+        ref Selection                    selection,
+        CommitDelegate                   onCommit
+    )
     {
         if (!TryGetItem(workspace.Draft.MeshLinks, selection.Index, out var item))
             return;
@@ -874,7 +950,12 @@ internal static class CustomizationEditorInspector
         if (changed) onCommit();
     }
 
-    private static void DrawOffMeshInspector(ref CustomizationEditorWorkspace workspace, ref Selection selection, CommitDelegate onCommit)
+    private static void DrawOffMeshInspector
+    (
+        ref CustomizationEditorWorkspace workspace,
+        ref Selection                    selection,
+        CommitDelegate                   onCommit
+    )
     {
         if (!TryGetItem(workspace.Draft.OffMeshConnections, selection.Index, out var item))
             return;
@@ -954,29 +1035,40 @@ internal static class CustomizationEditorInspector
             if (ImGui.TreeNodeEx("构建阶段", ImGuiTreeNodeFlags.DefaultOpen))
             {
                 foreach (var phase in telemetry.Phases)
+                {
                     ImGui.TextUnformatted
                     (
                         $"{phase.Name}: {phase.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms, " +
                         $"占比 {phase.ShareOfPhaseTicks:P1}, 最慢 {phase.SlowestTileX}x{phase.SlowestTileZ}"
                     );
+                }
+
                 ImGui.TreePop();
             }
 
             if (telemetry.SlowTiles.Count > 0 && ImGui.TreeNodeEx("慢瓦片"))
             {
                 foreach (var tile in telemetry.SlowTiles)
+                {
                     ImGui.TextUnformatted
                     (
                         $"{tile.TileX}x{tile.TileZ}: {tile.TotalTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms, " +
                         $"几何 {tile.GeometryJobCount}, 地形 {tile.TerrainJobCount}, "                                     +
                         $"Poly {tile.PolyCount}, Vert {tile.VertCount}, Tri {tile.DetailTriCount}"
                     );
+                }
+
                 ImGui.TreePop();
             }
         }
     }
 
-    private static void DrawPreviewMeshInspector(Selection selection, CustomizationPreviewBuilder previewBuilder, AddMeshRemovalDelegate onAddMeshRemoval)
+    private static void DrawPreviewMeshInspector
+    (
+        Selection                   selection,
+        CustomizationPreviewBuilder previewBuilder,
+        AddMeshRemovalDelegate      onAddMeshRemoval
+    )
     {
         if (selection.Key == null || previewBuilder.Extractor == null || !previewBuilder.Extractor.Meshes.TryGetValue(selection.Key, out var mesh))
             return;
@@ -1103,17 +1195,11 @@ internal static class CustomizationEditorInspector
         ImGui.Separator();
 
         if (selectedVertexIndex >= 0 && selectedVertexIndex < part.Vertices.Count)
-        {
             DrawPreviewVertexInfo(workspace, part, selKey, selIndex, selectedVertexIndex, mesh, onAddPartPatch);
-        }
         else if (selectedPrimitiveIndex >= 0 && selectedPrimitiveIndex < part.Primitives.Count)
-        {
             DrawPreviewPrimitiveInfo(workspace, part, selKey, selIndex, selectedPrimitiveIndex, mesh, onAddPartPatch);
-        }
         else
-        {
             ImGui.TextDisabled("在左侧树中选择顶点或三角以查看详情");
-        }
     }
 
     private static void DrawPreviewVertexInfo
@@ -1146,9 +1232,7 @@ internal static class CustomizationEditorInspector
             ImGui.Separator();
 
             if (ImGui.Button("创建位置补丁"))
-            {
                 onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.Vertex, vertexIndex);
-            }
 
             ImGui.SameLine();
             ImGui.TextDisabled("将以当前位置创建补丁");
@@ -1187,9 +1271,7 @@ internal static class CustomizationEditorInspector
         else
         {
             if (ImGui.Button("创建标记补丁"))
-            {
                 onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.PrimitiveFlags, primitiveIndex);
-            }
 
             ImGui.SameLine();
             ImGui.TextDisabled("将以当前标记创建补丁");
@@ -1207,9 +1289,7 @@ internal static class CustomizationEditorInspector
         else
         {
             if (ImGui.Button("创建高级编辑补丁"))
-            {
                 onAddPartPatch(mesh, meshKey, partIndex, DraftScenePartPatchKind.PrimitiveEdit, primitiveIndex);
-            }
 
             ImGui.SameLine();
             ImGui.TextDisabled("将以当前值创建补丁");
@@ -1222,7 +1302,14 @@ internal static class CustomizationEditorInspector
         }
     }
 
-    internal static bool PartPatchMatches(DraftScenePartPatch patch, string key, int partIndex, DraftScenePartPatchKind kind, int subIndex)
+    internal static bool PartPatchMatches
+    (
+        DraftScenePartPatch     patch,
+        string                  key,
+        int                     partIndex,
+        DraftScenePartPatchKind kind,
+        int                     subIndex
+    )
     {
         if (patch.MeshKey != key || patch.PartIndex != partIndex || patch.Kind != kind)
             return false;
@@ -1232,7 +1319,12 @@ internal static class CustomizationEditorInspector
                    patch.PrimitiveIndex == subIndex;
     }
 
-    private static bool TryGetItem<T>(List<T> items, int index, out T item)
+    private static bool TryGetItem<T>
+    (
+        List<T> items,
+        int     index,
+        out T   item
+    )
     {
         if (index < 0 || index >= items.Count)
         {
@@ -1244,7 +1336,10 @@ internal static class CustomizationEditorInspector
         return true;
     }
 
-    private static bool DrawEnabledWithDelete(ref bool enabled)
+    private static bool DrawEnabledWithDelete
+    (
+        ref bool enabled
+    )
     {
         CustomizationEditorWidgets.DrawBool("启用", ref enabled);
         ImGui.SameLine();

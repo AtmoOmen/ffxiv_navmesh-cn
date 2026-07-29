@@ -2,7 +2,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
-using vnavmesh.Shared.Models;
+using vnavmesh.UI.Debug.Common;
 
 namespace vnavmesh.UI.Debug.Collision;
 
@@ -52,7 +52,10 @@ public unsafe partial class DebugGameCollision
         }
     }
 
-    private bool FilterCollider(Collider* coll)
+    private bool FilterCollider
+    (
+        Collider* coll
+    )
     {
         if (coll->LayerMask == 0 ?
                 !_showZeroLayer :

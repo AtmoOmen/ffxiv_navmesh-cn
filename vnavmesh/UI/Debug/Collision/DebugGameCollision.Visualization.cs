@@ -1,8 +1,7 @@
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
-using vnavmesh.Common.Models;
-using vnavmesh.Shared.Models;
-using vnavmesh.Shared.Utils;
+using vnavmesh.Common.Extensions;
+using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Rendering;
 using Vector3 = System.Numerics.Vector3;
 using Vector4 = System.Numerics.Vector4;
@@ -14,14 +13,21 @@ public unsafe partial class DebugGameCollision
     public bool HasRenderDistanceReferencePosition =>
         Service.ObjectTable.LocalPlayer != null;
 
-    public bool IsBoundsWithinEditorRenderDistance(AABB bounds)
+    public bool IsBoundsWithinEditorRenderDistance
+    (
+        AABB bounds
+    )
     {
         var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
         return playerPosition == null ||
                IsBoundsWithinRenderDistance(bounds.Min, bounds.Max, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance);
     }
 
-    public bool IsSegmentWithinEditorRenderDistance(Vector3 start, Vector3 end)
+    public bool IsSegmentWithinEditorRenderDistance
+    (
+        Vector3 start,
+        Vector3 end
+    )
     {
         var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
         if (playerPosition == null)
@@ -31,7 +37,10 @@ public unsafe partial class DebugGameCollision
         return IsBoundsWithinRenderDistance(bounds.Min, bounds.Max, playerPosition.Value, _renderHorizontalDistance, _renderVerticalDistance);
     }
 
-    public float GetHorizontalDistanceToBounds(AABB bounds)
+    public float GetHorizontalDistanceToBounds
+    (
+        AABB bounds
+    )
     {
         var playerPosition = Service.ObjectTable.LocalPlayer?.Position;
         if (playerPosition == null)
@@ -41,10 +50,16 @@ public unsafe partial class DebugGameCollision
         var closestZ = Math.Clamp(playerPosition.Value.Z, bounds.Min.Z, bounds.Max.Z);
         var dx       = playerPosition.Value.X - closestX;
         var dz       = playerPosition.Value.Z - closestZ;
-        return MathF.Sqrt(dx * dx             + dz * dz);
+        return MathF.Sqrt((dx * dx)           + (dz * dz));
     }
 
-    public void VisualizeCollider(Collider* coll, BitMask filterId, BitMask filterMask, bool drawLine = true)
+    public void VisualizeCollider
+    (
+        Collider* coll,
+        BitMask   filterId,
+        BitMask   filterMask,
+        bool      drawLine = true
+    )
     {
         if (coll == null)
             return;
@@ -129,7 +144,14 @@ public unsafe partial class DebugGameCollision
         _dd.DrawWorldLine(Service.ObjectTable.LocalPlayer?.Position ?? default, trans, 0xFFFF00FF);
     }
 
-    private void VisualizeColliderMesh(ColliderMesh* coll, Vector4 color, BitMask filterId, BitMask filterMask, Vector3? playerPosition)
+    private void VisualizeColliderMesh
+    (
+        ColliderMesh* coll,
+        Vector4       color,
+        BitMask       filterId,
+        BitMask       filterMask,
+        Vector3?      playerPosition
+    )
     {
         if (coll != null && !coll->MeshIsSimple && coll->Mesh != null)
         {
@@ -185,7 +207,7 @@ public unsafe partial class DebugGameCollision
 
                 if (filterMask.Any())
                 {
-                    var effMat = objMatId | objMatInvMask & prim.Material;
+                    var effMat = objMatId | (objMatInvMask & prim.Material);
                     pass = (filterMask.Raw & (effMat ^ filterId.Raw)) == 0;
                 }
 
@@ -203,7 +225,12 @@ public unsafe partial class DebugGameCollision
         VisualizeColliderMeshPCBNode(node->Child2, ref world, color, objMatId, objMatInvMask, filterId, filterMask, playerPosition);
     }
 
-    private void VisualizeOBB(ref AABB localBB, ref Matrix4x3 world, uint color)
+    private void VisualizeOBB
+    (
+        ref AABB      localBB,
+        ref Matrix4x3 world,
+        uint          color
+    )
     {
         var aaa = world.TransformCoordinate(new(localBB.Min.X, localBB.Min.Y, localBB.Min.Z));
         var aab = world.TransformCoordinate(new(localBB.Min.X, localBB.Min.Y, localBB.Max.Z));
@@ -227,7 +254,11 @@ public unsafe partial class DebugGameCollision
         _dd.DrawWorldLine(bab, bbb, color);
     }
 
-    private void VisualizeCylinder(ref Matrix4x3 world, uint color)
+    private void VisualizeCylinder
+    (
+        ref Matrix4x3 world,
+        uint          color
+    )
     {
         var numSegments = CurveApproxUtil.CalculateCircleSegments(world.Row0.Length(), 360.Degrees(), 0.1f);
         var prev1       = world.TransformCoordinate(new(0, +1, 1));
@@ -246,9 +277,17 @@ public unsafe partial class DebugGameCollision
         }
     }
 
-    private void VisualizeSphere(Vector4 sphere, uint color) => _dd.DrawWorldSphere(new(sphere.X, sphere.Y, sphere.Z), sphere.W, color);
+    private void VisualizeSphere
+    (
+        Vector4 sphere,
+        uint    color
+    ) => _dd.DrawWorldSphere(new(sphere.X, sphere.Y, sphere.Z), sphere.W, color);
 
-    private void VisualizeVertex(Vector3 worldPos, uint color)
+    private void VisualizeVertex
+    (
+        Vector3 worldPos,
+        uint    color
+    )
     {
         _dd.DrawWorldSphere(worldPos, 0.1f, color);
         if (Service.ObjectTable.LocalPlayer is { } p)
@@ -256,7 +295,12 @@ public unsafe partial class DebugGameCollision
     }
 
     private void VisualizeTriangle
-        (MeshPCB.FileNode* node, ref FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Mesh.Primitive prim, ref Matrix4x3 world, uint color)
+    (
+        MeshPCB.FileNode*                                                        node,
+        ref FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Mesh.Primitive prim,
+        ref Matrix4x3                                                            world,
+        uint                                                                     color
+    )
     {
         var v1 = world.TransformCoordinate(node->Vertex(prim.V1));
         var v2 = world.TransformCoordinate(node->Vertex(prim.V2));
@@ -266,7 +310,11 @@ public unsafe partial class DebugGameCollision
         _dd.DrawWorldLine(v3, v1, color);
     }
 
-    private void GatherMeshNodeMaterials(MeshPCB.FileNode* node, BitMask invMask)
+    private void GatherMeshNodeMaterials
+    (
+        MeshPCB.FileNode* node,
+        BitMask           invMask
+    )
     {
         if (node == null)
             return;
@@ -276,7 +324,13 @@ public unsafe partial class DebugGameCollision
         GatherMeshNodeMaterials(node->Child2, invMask);
     }
 
-    private bool CanAddDynamicMesh(EffectMesh.Data.Builder renderer, int numVertices, int numPrimitives, int numInstances)
+    private bool CanAddDynamicMesh
+    (
+        EffectMesh.Data.Builder renderer,
+        int                     numVertices,
+        int                     numPrimitives,
+        int                     numInstances
+    )
     {
         if (renderer.NumVertices + numVertices > 4 * 1024 * 1024)
             return false;
@@ -287,7 +341,11 @@ public unsafe partial class DebugGameCollision
         return true;
     }
 
-    private bool ShouldVisualizeCollider(Collider* coll, Vector3? playerPosition)
+    private bool ShouldVisualizeCollider
+    (
+        Collider* coll,
+        Vector3?  playerPosition
+    )
     {
         if (coll        == null || playerPosition == null)
             return coll != null;
@@ -322,11 +380,25 @@ public unsafe partial class DebugGameCollision
         };
     }
 
-    private bool IsNodeWithinRenderDistance(MeshPCB.FileNode* node, Matrix4x3 world, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    private bool IsNodeWithinRenderDistance
+    (
+        MeshPCB.FileNode* node,
+        Matrix4x3         world,
+        Vector3           playerPosition,
+        float             maxHorizontalDistance,
+        float             maxVerticalDistance
+    )
         => IsLocalBoundsWithinRenderDistance(ref world, node->LocalBounds.Min, node->LocalBounds.Max, playerPosition, maxHorizontalDistance, maxVerticalDistance);
 
     private bool IsLocalBoundsWithinRenderDistance
-        (ref Matrix4x3 world, Vector3 localMin, Vector3 localMax, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    (
+        ref Matrix4x3 world,
+        Vector3       localMin,
+        Vector3       localMax,
+        Vector3       playerPosition,
+        float         maxHorizontalDistance,
+        float         maxVerticalDistance
+    )
     {
         var min = world.TransformCoordinate(localMin);
         var max = min;
@@ -340,29 +412,54 @@ public unsafe partial class DebugGameCollision
         return IsBoundsWithinRenderDistance(min, max, playerPosition, maxHorizontalDistance, maxVerticalDistance);
     }
 
-    private static bool IsSphereWithinRenderDistance(Vector3 center, float radius, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    private static bool IsSphereWithinRenderDistance
+    (
+        Vector3 center,
+        float   radius,
+        Vector3 playerPosition,
+        float   maxHorizontalDistance,
+        float   maxVerticalDistance
+    )
     {
         var extent = new Vector3(radius);
         return IsBoundsWithinRenderDistance(center - extent, center + extent, playerPosition, maxHorizontalDistance, maxVerticalDistance);
     }
 
-    private static bool IsPointWithinRenderDistance(Vector3 point, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    private static bool IsPointWithinRenderDistance
+    (
+        Vector3 point,
+        Vector3 playerPosition,
+        float   maxHorizontalDistance,
+        float   maxVerticalDistance
+    )
     {
         if (MathF.Abs(playerPosition.Y - point.Y) > maxVerticalDistance)
             return false;
 
         var dx = playerPosition.X - point.X;
         var dz = playerPosition.Z - point.Z;
-        return dx * dx + dz * dz <= maxHorizontalDistance * maxHorizontalDistance;
+        return (dx * dx) + (dz * dz) <= maxHorizontalDistance * maxHorizontalDistance;
     }
 
-    private static void ExpandBounds(ref Vector3 min, ref Vector3 max, Vector3 point)
+    private static void ExpandBounds
+    (
+        ref Vector3 min,
+        ref Vector3 max,
+        Vector3     point
+    )
     {
         min = Vector3.Min(min, point);
         max = Vector3.Max(max, point);
     }
 
-    private static bool IsBoundsWithinRenderDistance(Vector3 min, Vector3 max, Vector3 playerPosition, float maxHorizontalDistance, float maxVerticalDistance)
+    private static bool IsBoundsWithinRenderDistance
+    (
+        Vector3 min,
+        Vector3 max,
+        Vector3 playerPosition,
+        float   maxHorizontalDistance,
+        float   maxVerticalDistance
+    )
     {
         if (playerPosition.Y < min.Y - maxVerticalDistance || playerPosition.Y > max.Y + maxVerticalDistance)
             return false;
@@ -371,6 +468,6 @@ public unsafe partial class DebugGameCollision
         var closestZ = Math.Clamp(playerPosition.Z, min.Z, max.Z);
         var dx       = playerPosition.X - closestX;
         var dz       = playerPosition.Z - closestZ;
-        return dx * dx + dz * dz <= maxHorizontalDistance * maxHorizontalDistance;
+        return (dx * dx) + (dz * dz) <= maxHorizontalDistance * maxHorizontalDistance;
     }
 }

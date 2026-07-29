@@ -2,9 +2,9 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
-using vnavmesh.Common.Utilities;
-using vnavmesh.Navigation;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Build;
+using vnavmesh.Build.Scene;
+using vnavmesh.Common.Utils;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Rendering;
@@ -22,7 +22,15 @@ public class DebugExtractedCollision : IDisposable
     private EffectMesh.Data?   _visu;
     private string             _configDirectory;
 
-    public DebugExtractedCollision(SceneDefinition scene, SceneExtractor extractor, UITree tree, DebugDrawer dd, DebugGameCollision coll, string configDir)
+    public DebugExtractedCollision
+    (
+        SceneDefinition    scene,
+        SceneExtractor     extractor,
+        UITree             tree,
+        DebugDrawer        dd,
+        DebugGameCollision coll,
+        string             configDir
+    )
     {
         _scene           = scene;
         _extractor       = extractor;
@@ -126,7 +134,11 @@ public class DebugExtractedCollision : IDisposable
         }
     }
 
-    private void DrawTransform(string tag, Transform transform)
+    private void DrawTransform
+    (
+        string    tag,
+        Transform transform
+    )
     {
         _tree.LeafNode($"{tag} 位置：{transform.Translation}");
         _tree.LeafNode($"{tag} 旋转：{transform.Rotation}");
@@ -292,10 +304,18 @@ public class DebugExtractedCollision : IDisposable
     private void Visualize() =>
         _dd.EffectMesh?.Draw(_dd.RenderContext, GetOrInitVisualizer());
 
-    private void VisualizeMeshInstances(int meshIndex) =>
+    private void VisualizeMeshInstances
+    (
+        int meshIndex
+    ) =>
         _dd.EffectMesh?.DrawSingle(_dd.RenderContext, GetOrInitVisualizer(), meshIndex);
 
-    private void VisualizeMeshPart(SceneExtractor.Mesh mesh, int meshIndex, int partIndex)
+    private void VisualizeMeshPart
+    (
+        SceneExtractor.Mesh mesh,
+        int                 meshIndex,
+        int                 partIndex
+    )
     {
         if (_dd.EffectMesh == null)
             return;
@@ -308,7 +328,11 @@ public class DebugExtractedCollision : IDisposable
         visu.DrawManual(_dd.RenderContext, visuMesh);
     }
 
-    private void VisualizeMeshInstance(int meshIndex, int instIndex)
+    private void VisualizeMeshInstance
+    (
+        int meshIndex,
+        int instIndex
+    )
     {
         if (_dd.EffectMesh == null)
             return;
@@ -321,13 +345,23 @@ public class DebugExtractedCollision : IDisposable
         visu.DrawManual(_dd.RenderContext, visuMesh);
     }
 
-    private void VisualizeVertex(SceneExtractor.Mesh mesh, Vector3 v)
+    private void VisualizeVertex
+    (
+        SceneExtractor.Mesh mesh,
+        Vector3             v
+    )
     {
         foreach (var i in mesh.Instances)
             _dd.DrawWorldPoint(i.WorldTransform.TransformCoordinate(v), 5, 0xff0000ff);
     }
 
-    private void VisualizeTriangle(SceneExtractor.Mesh mesh, Vector3 v1, Vector3 v2, Vector3 v3)
+    private void VisualizeTriangle
+    (
+        SceneExtractor.Mesh mesh,
+        Vector3             v1,
+        Vector3             v2,
+        Vector3             v3
+    )
     {
         foreach (var i in mesh.Instances)
         {
@@ -336,7 +370,11 @@ public class DebugExtractedCollision : IDisposable
         }
     }
 
-    private unsafe Collider* FindCollider(InstanceType type, ulong key)
+    private unsafe Collider* FindCollider
+    (
+        InstanceType type,
+        ulong        key
+    )
     {
         var layout = LayoutWorld.Instance()->ActiveLayout;
         var insts = layout != null ?
@@ -351,7 +389,10 @@ public class DebugExtractedCollision : IDisposable
         return coll;
     }
 
-    private Vector4 MeshColor(SceneExtractor.Mesh mesh) =>
+    private Vector4 MeshColor
+    (
+        SceneExtractor.Mesh mesh
+    ) =>
         mesh.MeshType.HasFlag(SceneExtractor.MeshType.Terrain)  ? new(0, 1, 0, 0.55f) :
         mesh.MeshType.HasFlag(SceneExtractor.MeshType.FileMesh) ? new(1, 1, 0, 0.55f) :
                                                                   new(1, 0, 0, 0.55f);

@@ -12,7 +12,10 @@ public class AnalyticMeshQuad
 
     private EffectMesh.Data.Builder _builder;
 
-    public AnalyticMeshQuad(EffectMesh.Data.Builder builder)
+    public AnalyticMeshQuad
+    (
+        EffectMesh.Data.Builder builder
+    )
     {
         _builder       = builder;
         FirstVertex    = builder.NumVertices;
@@ -30,10 +33,22 @@ public class AnalyticMeshQuad
         NumPrimitives = builder.NumPrimitives - FirstPrimitive;
     }
 
-    public EffectMesh.Instance BuildInstance(Vector3 center, Vector3 wx, Vector3 wy, Vector4 color)
+    public EffectMesh.Instance BuildInstance
+    (
+        Vector3 center,
+        Vector3 wx,
+        Vector3 wy,
+        Vector4 color
+    )
         => new() { WorldColX = new(wx.X, wy.X, 0, center.X), WorldColY = new(wx.Y, wy.Y, 0, center.Y), WorldColZ = new(wx.Z, wy.Z, 0, center.Z), Color = color };
 
-    public void Add(Vector3 center, Vector3 wx, Vector3 wy, Vector4 color)
+    public void Add
+    (
+        Vector3 center,
+        Vector3 wx,
+        Vector3 wy,
+        Vector4 color
+    )
     {
         var icnt = _builder.NumInstances;
         _builder.AddInstance(BuildInstance(center, wx, wy, color));

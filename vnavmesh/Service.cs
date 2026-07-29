@@ -58,6 +58,9 @@ public class Service
     [PluginService]
     public static IGameConfig GameConfig { get; private set; } = null!;
 
-    public static T? LuminaRow<T>(uint row) where T : struct, IExcelRow<T> =>
+    public static T? LuminaRow<T>
+    (
+        uint row
+    ) where T : struct, IExcelRow<T> =>
         DataManager.GameData.GetExcelSheet<T>()?.GetRowOrDefault(row);
 }

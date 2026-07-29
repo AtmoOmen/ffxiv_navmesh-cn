@@ -243,7 +243,9 @@ internal static class CustomizationEditorToolbar
         if (pickKind != PickKind.None)
         {
             ImGui.SameLine();
+
             if (ImGui.Button("退出模式 (Esc)"))
+            {
                 CancelPick
                 (
                     PickKind.None,
@@ -256,6 +258,7 @@ internal static class CustomizationEditorToolbar
                     ref statusText,
                     "已退出当前工具"
                 );
+            }
         }
     }
 
@@ -271,6 +274,7 @@ internal static class CustomizationEditorToolbar
     )
     {
         if (pickKind != PickKind.None && CustomizationEditorWorldOverlay.TakeKeyPress(VK_ESCAPE, ref lastPickEscapeDown))
+        {
             CancelPick
             (
                 PickKind.None,
@@ -283,6 +287,7 @@ internal static class CustomizationEditorToolbar
                 ref statusText,
                 "已退出当前工具模式"
             );
+        }
     }
 
     private static void DrawModeButton
@@ -311,6 +316,7 @@ internal static class CustomizationEditorToolbar
         if (ImGui.Button(label))
         {
             if (kind == PickKind.None)
+            {
                 CancelPick
                 (
                     PickKind.None,
@@ -323,7 +329,9 @@ internal static class CustomizationEditorToolbar
                     ref statusText,
                     "已切换为浏览模式"
                 );
+            }
             else
+            {
                 BeginPick
                 (
                     kind,
@@ -335,6 +343,7 @@ internal static class CustomizationEditorToolbar
                     ref lastPickEscapeDown,
                     ref statusText
                 );
+            }
         }
 
         if (ImGui.IsItemHovered())
@@ -393,9 +402,15 @@ internal static class CustomizationEditorToolbar
         };
     }
 
-    private static bool IsKeyDown(int virtualKey) =>
+    private static bool IsKeyDown
+    (
+        int virtualKey
+    ) =>
         (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
 
     [DllImport("user32.dll", ExactSpelling = true)]
-    private static extern short GetAsyncKeyState(int virtualKey);
+    private static extern short GetAsyncKeyState
+    (
+        int virtualKey
+    );
 }

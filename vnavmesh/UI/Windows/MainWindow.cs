@@ -1,9 +1,9 @@
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using vnavmesh.Build;
 using vnavmesh.Internal;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Navigation;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Layout;

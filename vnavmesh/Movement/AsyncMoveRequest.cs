@@ -1,8 +1,8 @@
 using System.Numerics;
+using vnavmesh.Build;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Navigation;
-using vnavmesh.Navigation.Planning;
+using vnavmesh.Query.Models;
 
 namespace vnavmesh.Movement;
 
@@ -22,7 +22,11 @@ public class AsyncMoveRequest : IDisposable
 
     public bool TaskInProgress => pendingTask != null;
 
-    public AsyncMoveRequest(NavmeshManager manager, MovementPlanExecutor executor)
+    public AsyncMoveRequest
+    (
+        NavmeshManager       manager,
+        MovementPlanExecutor executor
+    )
     {
         this.manager  = manager;
         this.executor = executor;
@@ -135,7 +139,12 @@ public class AsyncMoveRequest : IDisposable
         }
     }
 
-    public bool MoveTo(Vector3 dest, bool fly, float range = 0)
+    public bool MoveTo
+    (
+        Vector3 dest,
+        bool    fly,
+        float   range = 0
+    )
         => MoveToInternal(dest, fly, range, PathRequestOrigin.Normal);
 
     public void Stop()
@@ -162,7 +171,13 @@ public class AsyncMoveRequest : IDisposable
         pendingTaskCancelSource = null;
     }
 
-    private bool MoveToInternal(Vector3 dest, bool fly, float range, PathRequestOrigin origin)
+    private bool MoveToInternal
+    (
+        Vector3           dest,
+        bool              fly,
+        float             range,
+        PathRequestOrigin origin
+    )
     {
         var externalRequest = new ExternalMoveRequest(dest, fly, range);
 
@@ -193,13 +208,23 @@ public class AsyncMoveRequest : IDisposable
         return true;
     }
 
-    private MovementPlan BuildPlan(PostprocessedPath result)
+    private MovementPlan BuildPlan
+    (
+        PostprocessedPath result
+    )
         => planBuilder.Build(result);
 
-    private bool IsDuplicateExternalRequest(ExternalMoveRequest request)
+    private bool IsDuplicateExternalRequest
+    (
+        ExternalMoveRequest request
+    )
         => IsEquivalentExternalRequest(pendingMoveRequest, request) || IsEquivalentExternalRequest(activeExternalMoveRequest, request);
 
-    private static bool IsEquivalentExternalRequest(PendingMoveRequest? existing, ExternalMoveRequest request)
+    private static bool IsEquivalentExternalRequest
+    (
+        PendingMoveRequest? existing,
+        ExternalMoveRequest request
+    )
     {
         if (existing is not { } current)
             return false;
@@ -208,7 +233,11 @@ public class AsyncMoveRequest : IDisposable
                IsEquivalentExternalRequest(new ExternalMoveRequest(current.Destination, current.Fly, current.Range), request);
     }
 
-    private static bool IsEquivalentExternalRequest(ExternalMoveRequest? existing, ExternalMoveRequest request)
+    private static bool IsEquivalentExternalRequest
+    (
+        ExternalMoveRequest? existing,
+        ExternalMoveRequest  request
+    )
     {
         if (existing is not { } current)
             return false;
@@ -218,7 +247,10 @@ public class AsyncMoveRequest : IDisposable
                Vector3.DistanceSquared(current.Destination, request.Destination) <= DUPLICATE_REQUEST_DISTANCE_SQ;
     }
 
-    private void HandleFailedRepathAfterUnstuck(PendingMoveRequest request)
+    private void HandleFailedRepathAfterUnstuck
+    (
+        PendingMoveRequest request
+    )
     {
         if (Service.ObjectTable.LocalPlayer is not { } player)
         {

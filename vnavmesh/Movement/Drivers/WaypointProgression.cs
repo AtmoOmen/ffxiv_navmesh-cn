@@ -1,6 +1,6 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
-using vnavmesh.Common.Navigation.Mesh.Runtime;
+using vnavmesh.Common.Build.Ground;
 using vnavmesh.Movement.Execution;
 
 namespace vnavmesh.Movement.Drivers;
@@ -10,19 +10,42 @@ internal static class WaypointProgression
     private const float MinSegmentLengthSq      = 0.000001f;
     private const float SegmentEndCaptureRadius = 0.05f;
 
-    public static int ConsumeGroundWaypoints(Vector3 currentPosition, Vector3? previousPosition, Vector3 startPosition, IReadOnlyList<Vector3> waypoints) =>
+    public static int ConsumeGroundWaypoints
+    (
+        Vector3                currentPosition,
+        Vector3?               previousPosition,
+        Vector3                startPosition,
+        IReadOnlyList<Vector3> waypoints
+    ) =>
         ConsumeTraverseWaypoints(currentPosition, previousPosition, startPosition, waypoints, true);
 
-    public static int ConsumeFlightWaypoints(Vector3 currentPosition, Vector3? previousPosition, Vector3 startPosition, IReadOnlyList<Vector3> waypoints) =>
+    public static int ConsumeFlightWaypoints
+    (
+        Vector3                currentPosition,
+        Vector3?               previousPosition,
+        Vector3                startPosition,
+        IReadOnlyList<Vector3> waypoints
+    ) =>
         ConsumeTraverseWaypoints(currentPosition, previousPosition, startPosition, waypoints, false);
 
-    public static int ConsumeGroundWaypoints(MovementExecutionContext context) =>
+    public static int ConsumeGroundWaypoints
+    (
+        MovementExecutionContext context
+    ) =>
         ConsumeTraverseSegments(context, true);
 
-    public static int ConsumeFlightWaypoints(MovementExecutionContext context) =>
+    public static int ConsumeFlightWaypoints
+    (
+        MovementExecutionContext context
+    ) =>
         ConsumeTraverseSegments(context, false);
 
-    public static float DistanceToLineSegment(Vector3 v, Vector3 a, Vector3 b)
+    public static float DistanceToLineSegment
+    (
+        Vector3 v,
+        Vector3 a,
+        Vector3 b
+    )
     {
         var ab = b - a;
         var av = v - a;
@@ -37,7 +60,11 @@ internal static class WaypointProgression
         return Vector3.Cross(ab, av).Length() / ab.Length();
     }
 
-    private static int ConsumeTraverseSegments(MovementExecutionContext context, bool flatten)
+    private static int ConsumeTraverseSegments
+    (
+        MovementExecutionContext context,
+        bool                     flatten
+    )
     {
         var currentTraverseSegmentIndex = context.ActiveWaypointIndex;
         var current                     = Project(context.Player.Position,                             flatten);
@@ -98,7 +125,14 @@ internal static class WaypointProgression
         return currentTraverseSegmentIndex;
     }
 
-    private static bool TryGetTraverseSegment(Vector3 startPosition, IReadOnlyList<Vector3> waypoints, int traverseSegmentIndex, out Vector3 start, out Vector3 end)
+    private static bool TryGetTraverseSegment
+    (
+        Vector3                startPosition,
+        IReadOnlyList<Vector3> waypoints,
+        int                    traverseSegmentIndex,
+        out Vector3            start,
+        out Vector3            end
+    )
     {
         if (traverseSegmentIndex < 0 || traverseSegmentIndex >= waypoints.Count)
         {
@@ -114,7 +148,14 @@ internal static class WaypointProgression
         return true;
     }
 
-    private static bool ShouldAdvanceTraverseSegment(Vector3 current, Vector3 previous, Vector3 segmentStart, Vector3 segmentEnd, bool flatten)
+    private static bool ShouldAdvanceTraverseSegment
+    (
+        Vector3 current,
+        Vector3 previous,
+        Vector3 segmentStart,
+        Vector3 segmentEnd,
+        bool    flatten
+    )
     {
         var projectedStart = Project(segmentStart, flatten);
         var projectedEnd   = Project(segmentEnd,   flatten);
@@ -129,7 +170,12 @@ internal static class WaypointProgression
         return DistanceToLineSegment(projectedEnd, previous, current) <= SegmentEndCaptureRadius;
     }
 
-    private static float ComputeProjectionParameter(Vector3 position, Vector3 start, Vector3 end)
+    private static float ComputeProjectionParameter
+    (
+        Vector3 position,
+        Vector3 start,
+        Vector3 end
+    )
     {
         var segment      = end - start;
         var segmentLenSq = segment.LengthSquared();
@@ -138,11 +184,20 @@ internal static class WaypointProgression
                    1f;
     }
 
-    private static Vector3 Project(Vector3 value, bool flatten) => flatten ?
-                                                                       new(value.X, 0, value.Z) :
-                                                                       value;
+    private static Vector3 Project
+    (
+        Vector3 value,
+        bool    flatten
+    ) => flatten ?
+             new(value.X, 0, value.Z) :
+             value;
 
-    private static bool ShouldHoldForClientPath(MovementExecutionContext context, int waypointIndex, out bool proceed)
+    private static bool ShouldHoldForClientPath
+    (
+        MovementExecutionContext context,
+        int                      waypointIndex,
+        out bool                 proceed
+    )
     {
         proceed = false;
 

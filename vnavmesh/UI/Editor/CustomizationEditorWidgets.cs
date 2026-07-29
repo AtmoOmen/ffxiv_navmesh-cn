@@ -3,18 +3,24 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
-using vnavmesh.Common.Navigation.Mesh.Runtime;
-using vnavmesh.Navigation.Custom.Editor;
-using vnavmesh.Navigation.Scene;
+using vnavmesh.Build.Custom.Editor;
+using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build.Ground;
 
 namespace vnavmesh.UI.Editor;
 
 internal static class CustomizationEditorWidgets
 {
-    public static string FormatEnumDisplayName<T>(T value) where T : struct, Enum =>
+    public static string FormatEnumDisplayName<T>
+    (
+        T value
+    ) where T : struct, Enum =>
         GetEnumDisplayName(value);
 
-    public static string FormatPreviewStateDisplayName(CustomizationPreviewBuilder.State value) =>
+    public static string FormatPreviewStateDisplayName
+    (
+        CustomizationPreviewBuilder.State value
+    ) =>
         value switch
         {
             CustomizationPreviewBuilder.State.NotBuilt   => "未构建",
@@ -24,7 +30,10 @@ internal static class CustomizationEditorWidgets
             _                                            => value.ToString()
         };
 
-    private static string GetFlagsDisplayName<T>(T value) where T : struct, Enum
+    private static string GetFlagsDisplayName<T>
+    (
+        T value
+    ) where T : struct, Enum
     {
         var raw = Convert.ToUInt64(value);
         if (raw == 0)
@@ -47,7 +56,10 @@ internal static class CustomizationEditorWidgets
                    value.ToString();
     }
 
-    private static string GetEnumDisplayName<T>(T value) where T : struct, Enum =>
+    private static string GetEnumDisplayName<T>
+    (
+        T value
+    ) where T : struct, Enum =>
         value switch
         {
             DraftSceneInstancePatchKind.ClearInstances    => "清空实例",
@@ -95,10 +107,18 @@ internal static class CustomizationEditorWidgets
             _                                             => value.ToString()
         };
 
-    public static bool DrawBool(string label, ref bool value) =>
+    public static bool DrawBool
+    (
+        string   label,
+        ref bool value
+    ) =>
         ImGui.Checkbox(label, ref value);
 
-    public static bool DrawString(string label, ref string value)
+    public static bool DrawString
+    (
+        string     label,
+        ref string value
+    )
     {
         var next = value;
         if (!ImGui.InputText(label, ref next))
@@ -108,10 +128,18 @@ internal static class CustomizationEditorWidgets
         return true;
     }
 
-    public static bool DrawInt(string label, ref int value) =>
+    public static bool DrawInt
+    (
+        string  label,
+        ref int value
+    ) =>
         ImGui.InputInt(label, ref value);
 
-    public static bool DrawUInt64(string label, ref ulong value)
+    public static bool DrawUInt64
+    (
+        string    label,
+        ref ulong value
+    )
     {
         var text = value.ToString("X", CultureInfo.InvariantCulture);
         if (!ImGui.InputText(label, ref text))
@@ -141,10 +169,21 @@ internal static class CustomizationEditorWidgets
         return false;
     }
 
-    public static bool DrawFloat(string label, ref float value, float speed, float min = -10000f, float max = 10000f) =>
+    public static bool DrawFloat
+    (
+        string    label,
+        ref float value,
+        float     speed,
+        float     min = -10000f,
+        float     max = 10000f
+    ) =>
         ImGui.DragFloat(label, ref value, speed, min, max, "%.3f");
 
-    public static bool DrawVector3(string label, ref Vector3 value)
+    public static bool DrawVector3
+    (
+        string      label,
+        ref Vector3 value
+    )
     {
         var changed = false;
 
@@ -160,7 +199,12 @@ internal static class CustomizationEditorWidgets
         return changed;
     }
 
-    public static bool DrawBoundsEditor(string label, ref Vector3 min, ref Vector3 max)
+    public static bool DrawBoundsEditor
+    (
+        string      label,
+        ref Vector3 min,
+        ref Vector3 max
+    )
     {
         var changed = false;
         if (!ImGui.TreeNodeEx(label, ImGuiTreeNodeFlags.DefaultOpen))
@@ -189,7 +233,11 @@ internal static class CustomizationEditorWidgets
         return changed;
     }
 
-    public static bool DrawMatrix(string label, ref DraftMatrix4x3 matrix)
+    public static bool DrawMatrix
+    (
+        string             label,
+        ref DraftMatrix4x3 matrix
+    )
     {
         var changed = false;
         if (!ImGui.TreeNodeEx(label, ImGuiTreeNodeFlags.DefaultOpen))
@@ -215,7 +263,13 @@ internal static class CustomizationEditorWidgets
         return changed;
     }
 
-    public static bool DrawNullableFloat(string label, ref float? value, float fallback, string help = "")
+    public static bool DrawNullableFloat
+    (
+        string     label,
+        ref float? value,
+        float      fallback,
+        string     help = ""
+    )
     {
         var enabled = value.HasValue;
 
@@ -254,7 +308,13 @@ internal static class CustomizationEditorWidgets
         return false;
     }
 
-    public static bool DrawNullableInt(string label, ref int? value, int fallback, string help = "")
+    public static bool DrawNullableInt
+    (
+        string   label,
+        ref int? value,
+        int      fallback,
+        string   help = ""
+    )
     {
         var enabled = value.HasValue;
 
@@ -293,7 +353,13 @@ internal static class CustomizationEditorWidgets
         return false;
     }
 
-    public static bool DrawNullableBool(string label, ref bool? value, bool fallback, string help = "")
+    public static bool DrawNullableBool
+    (
+        string    label,
+        ref bool? value,
+        bool      fallback,
+        string    help = ""
+    )
     {
         var enabled = value.HasValue;
 
@@ -332,7 +398,13 @@ internal static class CustomizationEditorWidgets
         return false;
     }
 
-    public static bool DrawNullableEnum<T>(string label, ref T? value, T? fallback, string help = "") where T : struct, Enum
+    public static bool DrawNullableEnum<T>
+    (
+        string label,
+        ref T? value,
+        T?     fallback,
+        string help = ""
+    ) where T : struct, Enum
     {
         var enabled = value.HasValue;
 
@@ -371,7 +443,13 @@ internal static class CustomizationEditorWidgets
         return false;
     }
 
-    public static bool DrawNullableIntArray(string label, ref int[]? value, int[] fallback, string help = "")
+    public static bool DrawNullableIntArray
+    (
+        string     label,
+        ref int[]? value,
+        int[]      fallback,
+        string     help = ""
+    )
     {
         var enabled = value != null;
 
@@ -423,7 +501,13 @@ internal static class CustomizationEditorWidgets
         return false;
     }
 
-    public static bool DrawNullableFlags<T>(string label, ref T? value, T? fallback, string help = "") where T : struct, Enum
+    public static bool DrawNullableFlags<T>
+    (
+        string label,
+        ref T? value,
+        T?     fallback,
+        string help = ""
+    ) where T : struct, Enum
     {
         var enabled = value.HasValue;
 
@@ -462,7 +546,11 @@ internal static class CustomizationEditorWidgets
         return false;
     }
 
-    public static bool DrawEnumCombo<T>(string label, ref T value) where T : struct, Enum
+    public static bool DrawEnumCombo<T>
+    (
+        string label,
+        ref T  value
+    ) where T : struct, Enum
     {
         var       changed = false;
         using var combo   = ImRaii.Combo(label, GetEnumDisplayName(value));
@@ -486,7 +574,12 @@ internal static class CustomizationEditorWidgets
         return changed;
     }
 
-    public static bool DrawEnumCombo(string label, ref int value, string[] options)
+    public static bool DrawEnumCombo
+    (
+        string   label,
+        ref int  value,
+        string[] options
+    )
     {
         var       changed = false;
         using var combo   = ImRaii.Combo(label, options[Math.Clamp(value, 0, options.Length - 1)]);
@@ -510,7 +603,11 @@ internal static class CustomizationEditorWidgets
         return changed;
     }
 
-    public static bool DrawFlags<T>(string label, ref T value) where T : struct, Enum
+    public static bool DrawFlags<T>
+    (
+        string label,
+        ref T  value
+    ) where T : struct, Enum
     {
         using var combo = ImRaii.Combo(label, GetFlagsDisplayName(value));
         if (!combo)

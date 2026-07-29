@@ -20,7 +20,13 @@ public class RenderTarget : IDisposable
 
     public ImTextureID ImguiHandle => new(_rtSRV.NativePointer);
 
-    public RenderTarget(RenderContext ctx, int width, int height, bool inverseZ = true)
+    public RenderTarget
+    (
+        RenderContext ctx,
+        int           width,
+        int           height,
+        bool          inverseZ = true
+    )
     {
         Size      = new(width, height);
         _inverseZ = inverseZ;
@@ -118,7 +124,10 @@ public class RenderTarget : IDisposable
         _dss.Dispose();
     }
 
-    public void Bind(RenderContext ctx)
+    public void Bind
+    (
+        RenderContext ctx
+    )
     {
         ctx.Context.ClearRenderTargetView(_rtRTV, new());
         ctx.Context.ClearDepthStencilView

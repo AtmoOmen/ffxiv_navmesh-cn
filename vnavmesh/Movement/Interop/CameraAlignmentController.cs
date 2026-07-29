@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Dalamud.Hooking;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
+using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Models;
 
 namespace vnavmesh.Movement.Interop;
@@ -61,7 +62,13 @@ public unsafe class CameraAlignmentController : IDisposable
     public float SmoothTimeH     { get; set; } = 0.25f;
     public float SmoothTimeV     { get; set; } = 0.25f;
 
-    private delegate void RMICameraDelegate(CameraEx* self, int inputMode, float speedH, float speedV);
+    private delegate void RMICameraDelegate
+    (
+        CameraEx* self,
+        int       inputMode,
+        float     speedH,
+        float     speedV
+    );
 
     [Signature("48 8B C4 53 48 81 EC ?? ?? ?? ?? 44 0F 29 50 ??", DetourName = nameof(RMICameraDetour))]
     private Hook<RMICameraDelegate> rmiCameraHook = null!;
@@ -84,7 +91,13 @@ public unsafe class CameraAlignmentController : IDisposable
         velocityV = 0;
     }
 
-    private void RMICameraDetour(CameraEx* self, int inputMode, float speedH, float speedV)
+    private void RMICameraDetour
+    (
+        CameraEx* self,
+        int       inputMode,
+        float     speedH,
+        float     speedV
+    )
     {
         rmiCameraHook.Original(self, inputMode, speedH, speedV);
 
@@ -116,7 +129,15 @@ public unsafe class CameraAlignmentController : IDisposable
         }
     }
 
-    private static float SmoothDamp(float current, float target, ref float currentVelocity, float smoothTime, float maxSpeed, float deltaTime)
+    private static float SmoothDamp
+    (
+        float     current,
+        float     target,
+        ref float currentVelocity,
+        float     smoothTime,
+        float     maxSpeed,
+        float     deltaTime
+    )
     {
         if (smoothTime <= 0)
             return target;

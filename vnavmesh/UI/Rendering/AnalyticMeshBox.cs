@@ -12,7 +12,10 @@ public class AnalyticMeshBox
 
     private EffectMesh.Data.Builder _builder;
 
-    public AnalyticMeshBox(EffectMesh.Data.Builder builder)
+    public AnalyticMeshBox
+    (
+        EffectMesh.Data.Builder builder
+    )
     {
         _builder       = builder;
         FirstVertex    = builder.NumVertices;
@@ -44,14 +47,24 @@ public class AnalyticMeshBox
         NumPrimitives = builder.NumPrimitives - FirstPrimitive;
     }
 
-    public EffectMesh.Instance BuildInstance(Vector3 min, Vector3 max, Vector4 color)
+    public EffectMesh.Instance BuildInstance
+    (
+        Vector3 min,
+        Vector3 max,
+        Vector4 color
+    )
     {
         var center = (max + min) * 0.5f;
         var extent = (max - min) * 0.5f;
         return new(new() { M11 = extent.X, M22 = extent.Y, M33 = extent.Z, M41 = center.X, M42 = center.Y, M43 = center.Z }, color);
     }
 
-    public void Add(Vector3 min, Vector3 max, Vector4 color)
+    public void Add
+    (
+        Vector3 min,
+        Vector3 max,
+        Vector4 color
+    )
     {
         var icnt = _builder.NumInstances;
         _builder.AddInstance(BuildInstance(min, max, color));
