@@ -14,6 +14,63 @@ internal static class CustomizationEditorToolbar
     private const int VK_LBUTTON = 0x01;
     private const int VK_ESCAPE  = 0x1B;
 
+    private static readonly ToolDefinition[] SelectionTools =
+    [
+        new(FontAwesomeIcon.MousePointer, "浏览",   PickKind.None,           "查看和选择对象, 左侧选中后右侧显示可编辑内容"),
+        new(FontAwesomeIcon.Cube,         "碰撞体", PickKind.SelectCollider, "在游戏画面点选碰撞体, 选中后右侧直接编辑"),
+        new(FontAwesomeIcon.DrawPolygon,  "三角形", PickKind.SelectTriangle, "在游戏画面点选三角形, 选中后右侧直接编辑")
+    ];
+
+    private static readonly ToolDefinition[] VolumeTools =
+    [
+        new(FontAwesomeIcon.Cube,   "AABB",     PickKind.Aabb,             "在画面点两个世界点生成轴对齐障碍体"),
+        new(FontAwesomeIcon.Cube,   "旋转箱体", PickKind.OrientedBox,      "沿画面中两个世界点的水平连线生成旋转箱体障碍"),
+        new(FontAwesomeIcon.Circle, "圆柱",     PickKind.Cylinder,         "在画面点两个世界点生成圆柱障碍体"),
+        new(FontAwesomeIcon.Circle, "定向圆柱", PickKind.OrientedCylinder, "沿画面中两个世界点生成任意方向圆柱体"),
+        new(FontAwesomeIcon.Circle, "球体",     PickKind.Sphere,           "先选择中心, 再选择表面点生成球形体积")
+    ];
+
+    private static readonly ToolDefinition[] SurfaceTools =
+    [
+        new(FontAwesomeIcon.DrawPolygon, "地面", PickKind.WalkableFloor, "在画面点两个世界点生成可行走地面"),
+        new(FontAwesomeIcon.DrawPolygon, "墙体", PickKind.Wall,          "沿两个世界点的水平连线生成双面墙"),
+        new(FontAwesomeIcon.Route,       "斜坡", PickKind.Ramp,          "以较低点和较高点生成可行走斜坡")
+    ];
+
+    private static readonly ToolDefinition[] RegionTools =
+    [
+        new(FontAwesomeIcon.Cube, "移除实例", PickKind.RemoveInstancesVolume, "框选世界范围并批量移除相交的场景实例"),
+        new(FontAwesomeIcon.Cube, "标记实例", PickKind.SetInstanceFlagsVolume, "框选世界范围并批量覆盖相交实例的碰撞标记")
+    ];
+
+    private static readonly ToolDefinition[] ConnectionTools =
+    [
+        new(FontAwesomeIcon.Link,  "直连",       PickKind.LinkPoints,     "在画面点两个世界点生成网格连接点"),
+        new(FontAwesomeIcon.Route, "捷径",       PickKind.LinkShortcut,   "在画面点两个世界点生成普通移动捷径"),
+        new(FontAwesomeIcon.Route, "客户端路径", PickKind.LinkClientPath, "在画面点两个世界点生成客户端路径连接"),
+        new(FontAwesomeIcon.Link,  "离网",       PickKind.OffMesh,        "在画面点两个世界点生成构建期离网连接")
+    ];
+
+    private static readonly (string Label, ToolDefinition[] Tools)[] ToolSections =
+    [
+        ("选择", SelectionTools),
+        ("体积", VolumeTools),
+        ("表面", SurfaceTools),
+        ("区域", RegionTools),
+        ("连接", ConnectionTools)
+    ];
+
+    private static readonly FontAwesomeIcon[] CommandIcons =
+    [
+        FontAwesomeIcon.Undo,
+        FontAwesomeIcon.Redo,
+        FontAwesomeIcon.SyncAlt,
+        FontAwesomeIcon.Save,
+        FontAwesomeIcon.FileExport,
+        FontAwesomeIcon.FolderOpen,
+        FontAwesomeIcon.Times
+    ];
+
     public static void Draw
     (
         ref PickKind pickKind,
@@ -46,340 +103,361 @@ internal static class CustomizationEditorToolbar
             ref statusText
         );
 
-        using var group = ImRaii.Group();
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+        var commandBarWidth = CalculateCommandBarWidth();
+        var toolbarSpacing = ImGui.GetStyle().ItemSpacing.X;
+        var useCompactPicker = availableWidth < CalculateExpandedToolAreaWidth() + commandBarWidth + toolbarSpacing;
+        var stackCommands = availableWidth < CalculateCompactToolAreaWidth() + commandBarWidth + toolbarSpacing;
 
-        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
+        using (ImRaii.Group())
         {
-            DrawGroupLabel("选择");
-            DrawModeButton
-            (
-                FontAwesomeIcon.MousePointer,
-                "浏览",
-                PickKind.None,
-                "查看和选择对象, 左侧选中后右侧显示可编辑内容",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+            using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
+            {
+                using var group = ImRaii.Group();
+
+                DrawGroupLabel("工具");
+                if (useCompactPicker)
+                {
+                    DrawCompactToolPicker
+                    (
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+                }
+                else
+                {
+                    DrawModeButton
+                    (
+                        SelectionTools[0].Icon,
+                        SelectionTools[0].Label,
+                        SelectionTools[0].Kind,
+                        SelectionTools[0].Tooltip,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+
+                    ImGui.SameLine();
+                    DrawModeButton
+                    (
+                        SelectionTools[1].Icon,
+                        SelectionTools[1].Label,
+                        SelectionTools[1].Kind,
+                        SelectionTools[1].Tooltip,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+
+                    ImGui.SameLine();
+                    DrawModeButton
+                    (
+                        SelectionTools[2].Icon,
+                        SelectionTools[2].Label,
+                        SelectionTools[2].Kind,
+                        SelectionTools[2].Tooltip,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+
+                    DrawToolGroup
+                    (
+                        FontAwesomeIcon.Cube,
+                        "体积",
+                        "volume",
+                        VolumeTools,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+                    DrawToolGroup
+                    (
+                        FontAwesomeIcon.DrawPolygon,
+                        "表面",
+                        "surface",
+                        SurfaceTools,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+                    DrawToolGroup
+                    (
+                        FontAwesomeIcon.Cube,
+                        "区域",
+                        "region",
+                        RegionTools,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+                    DrawToolGroup
+                    (
+                        FontAwesomeIcon.Link,
+                        "连接",
+                        "connection",
+                        ConnectionTools,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+                }
+            }
+
+            if (!stackCommands)
+                ImGui.SameLine();
+
+            using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || undoCount == 0))
+            {
+                if (DrawCommandButton(FontAwesomeIcon.Undo, "undo", $"撤销上一步 ({undoCount})"))
+                    onUndo();
+            }
 
             ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Cube,
-                "碰撞体",
-                PickKind.SelectCollider,
-                "在游戏画面点选碰撞体, 选中后右侧直接编辑",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+
+            using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || redoCount == 0))
+            {
+                if (DrawCommandButton(FontAwesomeIcon.Redo, "redo", $"重做下一步 ({redoCount})"))
+                    onRedo();
+            }
 
             ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.DrawPolygon,
-                "三角形",
-                PickKind.SelectTriangle,
-                "在游戏画面点选三角形, 选中后右侧直接编辑",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
 
-            DrawGroupLabel("体积");
-            DrawModeButton
-            (
-                FontAwesomeIcon.Cube,
-                "AABB",
-                PickKind.Aabb,
-                "在画面点两个世界点生成轴对齐障碍体",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+            using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
+            {
+                if (DrawCommandButton(FontAwesomeIcon.SyncAlt, "rebuild", "重建导航预览"))
+                    onRebuildPreview();
+            }
 
             ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Cube,
-                "旋转箱体",
-                PickKind.OrientedBox,
-                "沿画面中两个世界点的水平连线生成旋转箱体障碍",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+
+            using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
+            {
+                if (DrawCommandButton(FontAwesomeIcon.Save, "save", "保存当前工作区"))
+                    onSaveWorkspace();
+            }
 
             ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Circle,
-                "圆柱",
-                PickKind.Cylinder,
-                "在画面点两个世界点生成圆柱障碍体",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+
+            using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
+            {
+                if (DrawCommandButton(FontAwesomeIcon.FileExport, "export", "导出 C# 自定义代码"))
+                    onExportDraft();
+            }
 
             ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Circle,
-                "定向圆柱",
-                PickKind.OrientedCylinder,
-                "沿画面中两个世界点生成任意方向圆柱体",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+
+            using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
+            {
+                if (DrawCommandButton(FontAwesomeIcon.FolderOpen, "open_export", "打开导出目录"))
+                    onOpenExportedDirectory();
+            }
 
             ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Circle,
-                "球体",
-                PickKind.Sphere,
-                "先选择中心, 再选择表面点生成球形体积",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
 
-            DrawGroupLabel("表面");
-            DrawModeButton
-            (
-                FontAwesomeIcon.DrawPolygon,
-                "地面",
-                PickKind.WalkableFloor,
-                "在画面点两个世界点生成可行走地面",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+            using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || pickKind == PickKind.None))
+            {
+                if (DrawCommandButton(FontAwesomeIcon.Times, "cancel_tool", "退出当前工具"))
+                {
+                    CancelPick
+                    (
+                        PickKind.None,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText,
+                        "已退出当前工具"
+                    );
+                }
+            }
 
-            ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.DrawPolygon,
-                "墙体",
-                PickKind.Wall,
-                "沿两个世界点的水平连线生成双面墙",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+        }
+    }
 
-            ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Route,
-                "斜坡",
-                PickKind.Ramp,
-                "以较低点和较高点生成可行走斜坡",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+    private static void DrawCompactToolPicker
+    (
+        ref PickKind pickKind,
+        ref Vector3? pendingPickPoint,
+        ref Vector3? currentPickPoint,
+        ref bool     lastPickMouseDown,
+        ref bool     lastWorldSelectMouseDown,
+        ref bool     lastPickEscapeDown,
+        ref string   statusText
+    )
+    {
+        var activeTool = FindActiveTool(pickKind) ?? SelectionTools[0];
+        var buttonText = $"{activeTool.Icon.ToIconString()}  {activeTool.Label}  {FontAwesomeIcon.CaretDown.ToIconString()}";
 
-            DrawGroupLabel("区域");
-            DrawModeButton
-            (
-                FontAwesomeIcon.Cube,
-                "移除实例",
-                PickKind.RemoveInstancesVolume,
-                "框选世界范围并批量移除相交的场景实例",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+        ImGui.PushStyleColor(ImGuiCol.Button,        new Vector4(0.22f, 0.45f, 0.75f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.28f, 0.55f, 0.9f,  1f));
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive,  new Vector4(0.18f, 0.38f, 0.66f, 1f));
 
-            ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Cube,
-                "标记实例",
-                PickKind.SetInstanceFlagsVolume,
-                "框选世界范围并批量覆盖相交实例的碰撞标记",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+        if (ImGui.Button($"{buttonText}##compact_tool_picker", new Vector2(CalculateCompactToolPickerWidth(), 0)))
+            ImGui.OpenPopup("##compact_tool_picker_popup");
 
-            DrawGroupLabel("连接");
-            DrawModeButton
-            (
-                FontAwesomeIcon.Link,
-                "直连",
-                PickKind.LinkPoints,
-                "在画面点两个世界点生成网格连接点",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(activeTool.Tooltip);
 
-            ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Route,
-                "捷径",
-                PickKind.LinkShortcut,
-                "在画面点两个世界点生成普通移动捷径",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+        ImGui.PopStyleColor(3);
 
-            ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Route,
-                "客户端路径",
-                PickKind.LinkClientPath,
-                "在画面点两个世界点生成客户端路径连接",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+        if (!ImGui.BeginPopup("##compact_tool_picker_popup"))
+            return;
 
-            ImGui.SameLine();
-            DrawModeButton
-            (
-                FontAwesomeIcon.Link,
-                "离网",
-                PickKind.OffMesh,
-                "在画面点两个世界点生成构建期离网连接",
-                ref pickKind,
-                ref pendingPickPoint,
-                ref currentPickPoint,
-                ref lastPickMouseDown,
-                ref lastWorldSelectMouseDown,
-                ref lastPickEscapeDown,
-                ref statusText
-            );
+        if (ImGui.BeginTable("##compact_tool_picker_sections", 2, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.BordersInnerV))
+        {
+            ImGui.TableSetupColumn("left",  ImGuiTableColumnFlags.WidthFixed);
+            ImGui.TableSetupColumn("right", ImGuiTableColumnFlags.WidthFixed);
+            ImGui.TableNextRow();
+
+            for (var column = 0; column < 2; column++)
+            {
+                ImGui.TableNextColumn();
+                var firstSection = column == 0 ? 0 : 2;
+                var lastSection = column == 0 ? 2 : ToolSections.Length;
+
+                for (var i = firstSection; i < lastSection; i++)
+                {
+                    if (i > firstSection)
+                        ImGui.Spacing();
+
+                    ImGui.TextDisabled(ToolSections[i].Label);
+                    ImGui.Separator();
+                    DrawToolOptions
+                    (
+                        ToolSections[i].Tools,
+                        ref pickKind,
+                        ref pendingPickPoint,
+                        ref currentPickPoint,
+                        ref lastPickMouseDown,
+                        ref lastWorldSelectMouseDown,
+                        ref lastPickEscapeDown,
+                        ref statusText
+                    );
+                }
+            }
+
+            ImGui.EndTable();
         }
 
+        ImGui.EndPopup();
+    }
+
+    private static void DrawToolGroup
+    (
+        FontAwesomeIcon  icon,
+        string           label,
+        string           id,
+        ToolDefinition[] tools,
+        ref PickKind     pickKind,
+        ref Vector3?     pendingPickPoint,
+        ref Vector3?     currentPickPoint,
+        ref bool         lastPickMouseDown,
+        ref bool         lastWorldSelectMouseDown,
+        ref bool         lastPickEscapeDown,
+        ref string       statusText
+    )
+    {
+        ImGui.SameLine();
+
+        var activeTool = FindTool(tools, pickKind);
+        var buttonIcon = activeTool?.Icon ?? icon;
+        var buttonText = activeTool?.Label ?? label;
+        var buttonWidth = CalculateToolGroupWidth(icon, label, tools);
+        if (activeTool is not null)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Button,        new Vector4(0.22f, 0.45f, 0.75f, 1f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, new Vector4(0.28f, 0.55f, 0.9f,  1f));
+            ImGui.PushStyleColor(ImGuiCol.ButtonActive,  new Vector4(0.18f, 0.38f, 0.66f, 1f));
+        }
+
+        if (ImGui.Button($"{buttonIcon.ToIconString()}  {buttonText}##tool_group_{id}", new Vector2(buttonWidth, 0)))
+            ImGui.OpenPopup($"##tool_group_popup_{id}");
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(activeTool?.Tooltip ?? $"选择{label}工具");
+
+        if (activeTool is not null)
+            ImGui.PopStyleColor(3);
+
+        if (!ImGui.BeginPopup($"##tool_group_popup_{id}"))
+            return;
+
+        ImGui.TextDisabled(label);
         ImGui.Separator();
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextDisabled("草稿");
+        DrawToolOptions
+        (
+            tools,
+            ref pickKind,
+            ref pendingPickPoint,
+            ref currentPickPoint,
+            ref lastPickMouseDown,
+            ref lastWorldSelectMouseDown,
+            ref lastPickEscapeDown,
+            ref statusText
+        );
 
-        ImGui.SameLine();
+        ImGui.EndPopup();
+    }
 
-        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || undoCount == 0))
+    private static void DrawToolOptions
+    (
+        ToolDefinition[] tools,
+        ref PickKind     pickKind,
+        ref Vector3?     pendingPickPoint,
+        ref Vector3?     currentPickPoint,
+        ref bool         lastPickMouseDown,
+        ref bool         lastWorldSelectMouseDown,
+        ref bool         lastPickEscapeDown,
+        ref string       statusText
+    )
+    {
+        foreach (var tool in tools)
         {
-            if (DrawCommandButton(FontAwesomeIcon.Undo, "undo", $"撤销上一步 ({undoCount})"))
-                onUndo();
-        }
+            var selected = ImGui.Selectable($"{tool.Icon.ToIconString()}  {tool.Label}", pickKind == tool.Kind);
 
-        ImGui.SameLine();
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip(tool.Tooltip);
 
-        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || redoCount == 0))
-        {
-            if (DrawCommandButton(FontAwesomeIcon.Redo, "redo", $"重做下一步 ({redoCount})"))
-                onRedo();
-        }
+            if (!selected)
+                continue;
 
-        ImGui.SameLine();
-
-        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
-        {
-            if (DrawCommandButton(FontAwesomeIcon.SyncAlt, "rebuild", "重建导航预览"))
-                onRebuildPreview();
-        }
-
-        ImGui.SameLine();
-
-        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
-        {
-            if (DrawCommandButton(FontAwesomeIcon.Save, "save", "保存当前工作区"))
-                onSaveWorkspace();
-        }
-
-        ImGui.SameLine();
-
-        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
-        {
-            if (DrawCommandButton(FontAwesomeIcon.FileExport, "export", "导出 C# 自定义代码"))
-                onExportDraft();
-        }
-
-        ImGui.SameLine();
-
-        using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
-        {
-            if (DrawCommandButton(FontAwesomeIcon.FolderOpen, "open_export", "打开导出目录"))
-                onOpenExportedDirectory();
-        }
-
-        if (pickKind != PickKind.None)
-        {
-            ImGui.SameLine();
-
-            if (DrawCommandButton(FontAwesomeIcon.Times, "cancel_tool", "退出当前工具"))
+            if (tool.Kind == PickKind.None)
             {
                 CancelPick
                 (
@@ -391,14 +469,108 @@ internal static class CustomizationEditorToolbar
                     ref lastWorldSelectMouseDown,
                     ref lastPickEscapeDown,
                     ref statusText,
-                    "已退出当前工具"
+                    "已切换为浏览模式"
+                );
+            }
+            else
+            {
+                BeginPick
+                (
+                    tool.Kind,
+                    ref pickKind,
+                    ref pendingPickPoint,
+                    ref currentPickPoint,
+                    ref lastPickMouseDown,
+                    ref lastWorldSelectMouseDown,
+                    ref lastPickEscapeDown,
+                    ref statusText
                 );
             }
 
-            ImGui.SameLine();
-            ImGui.AlignTextToFramePadding();
-            ImGui.TextColored(new Vector4(0.35f, 0.72f, 1f, 1f), GetActiveToolStatus(pickKind, pendingPickPoint.HasValue));
+            ImGui.CloseCurrentPopup();
         }
+    }
+
+    private static ToolDefinition? FindActiveTool
+    (
+        PickKind pickKind
+    )
+    {
+        foreach (var section in ToolSections)
+            if (FindTool(section.Tools, pickKind) is { } tool)
+                return tool;
+
+        return null;
+    }
+
+    private static ToolDefinition? FindTool
+    (
+        ToolDefinition[] tools,
+        PickKind         pickKind
+    )
+    {
+        foreach (var tool in tools)
+            if (tool.Kind == pickKind)
+                return tool;
+
+        return null;
+    }
+
+    private static float CalculateToolGroupWidth
+    (
+        FontAwesomeIcon  icon,
+        string           label,
+        ToolDefinition[] tools
+    )
+    {
+        var width = ImGui.CalcTextSize($"{icon.ToIconString()}  {label}").X;
+
+        foreach (var tool in tools)
+            width = Math.Max(width, ImGui.CalcTextSize($"{tool.Icon.ToIconString()}  {tool.Label}").X);
+
+        return width + ImGui.GetStyle().FramePadding.X * 2;
+    }
+
+    private static float CalculateExpandedToolAreaWidth()
+    {
+        var style = ImGui.GetStyle();
+        var width = ImGui.CalcTextSize("工具").X;
+
+        foreach (var tool in SelectionTools)
+            width += ImGui.CalcTextSize($"{tool.Icon.ToIconString()}  {tool.Label}").X + style.FramePadding.X * 2;
+
+        width += CalculateToolGroupWidth(FontAwesomeIcon.Cube,        "体积", VolumeTools);
+        width += CalculateToolGroupWidth(FontAwesomeIcon.DrawPolygon, "表面", SurfaceTools);
+        width += CalculateToolGroupWidth(FontAwesomeIcon.Cube,        "区域", RegionTools);
+        width += CalculateToolGroupWidth(FontAwesomeIcon.Link,        "连接", ConnectionTools);
+
+        return width + style.ItemSpacing.X * 7;
+    }
+
+    private static float CalculateCompactToolAreaWidth() =>
+        ImGui.CalcTextSize("工具").X + ImGui.GetStyle().ItemSpacing.X + CalculateCompactToolPickerWidth();
+
+    private static float CalculateCompactToolPickerWidth()
+    {
+        var width = 0f;
+        var caret = FontAwesomeIcon.CaretDown.ToIconString();
+
+        foreach (var section in ToolSections)
+            foreach (var tool in section.Tools)
+                width = Math.Max(width, ImGui.CalcTextSize($"{tool.Icon.ToIconString()}  {tool.Label}  {caret}").X);
+
+        return width + ImGui.GetStyle().FramePadding.X * 2;
+    }
+
+    private static float CalculateCommandBarWidth()
+    {
+        var frameHeight = ImGui.GetFrameHeight();
+        var width = 0f;
+
+        foreach (var icon in CommandIcons)
+            width += frameHeight + ImGui.CalcTextSize(icon.ToIconString()).X;
+
+        return width + ImGui.GetStyle().ItemSpacing.X * (CommandIcons.Length - 1);
     }
 
     private static void DrawGroupLabel
@@ -593,5 +765,13 @@ internal static class CustomizationEditorToolbar
     private static extern short GetAsyncKeyState
     (
         int virtualKey
+    );
+
+    private readonly record struct ToolDefinition
+    (
+        FontAwesomeIcon Icon,
+        string          Label,
+        PickKind        Kind,
+        string          Tooltip
     );
 }

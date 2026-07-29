@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Utility.Numerics;
 using Lumina.Excel.Sheets;
 using vnavmesh.Build;
 using vnavmesh.Build.Custom;
@@ -101,13 +102,15 @@ internal sealed class CustomizationEditorView
         );
         DrawStatus();
 
+        var childSize = ImGui.GetContentRegionAvail().WithX(0) - new Vector2(0, 0.5f * ImGui.GetTextLineHeight());
+
         if (ImGui.BeginTable("##customization_editor_split", 2, ImGuiTableFlags.Resizable | ImGuiTableFlags.BordersInnerV))
         {
             ImGui.TableSetupColumn("left",  ImGuiTableColumnFlags.WidthFixed, leftPaneWidth);
             ImGui.TableSetupColumn("right", ImGuiTableColumnFlags.WidthStretch);
 
             ImGui.TableNextColumn();
-            ImGui.BeginChild("##customization_editor_left", new Vector2(0, 0));
+            ImGui.BeginChild("##customization_editor_left", childSize);
 
             if (workspaceLoaded && hasWorkspace)
             {
@@ -152,7 +155,7 @@ internal sealed class CustomizationEditorView
                 leftPaneWidth = Math.Clamp(ImGui.GetColumnWidth(0), 280, 560);
 
             ImGui.TableNextColumn();
-            ImGui.BeginChild("##customization_editor_right", new Vector2(0, 0));
+            ImGui.BeginChild("##customization_editor_right", childSize);
 
             if (workspaceLoaded)
             {
@@ -549,24 +552,6 @@ internal sealed class CustomizationEditorView
         var workspaceSummary = hasWorkspace ? workspace.WorkspaceName : "暂无工作区";
         var sourceSummary = hasWorkspace && workspace.IsApplied ? workspace.WorkspaceName : "默认场景";
         var previewSummary = CustomizationEditorWidgets.FormatPreviewStateDisplayName(previewBuilder.CurrentState);
-
-        if (ImGui.BeginTable("##customization_editor_status", 4, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
-        {
-            ImGui.TableSetupColumn("区域", ImGuiTableColumnFlags.WidthStretch, 2f);
-            ImGui.TableSetupColumn("工作区", ImGuiTableColumnFlags.WidthStretch, 1.4f);
-            ImGui.TableSetupColumn("生效来源", ImGuiTableColumnFlags.WidthStretch, 1.4f);
-            ImGui.TableSetupColumn("预览", ImGuiTableColumnFlags.WidthStretch, 1f);
-            ImGui.TableNextRow();
-            DrawStatusCell("区域", $"{territoryName} · {territoryID} · {territoryKey}");
-            DrawStatusCell("工作区", workspaceSummary);
-            DrawStatusCell("生效来源", sourceSummary);
-
-            ImGui.TableNextColumn();
-            ImGui.TextDisabled("预览");
-            ImGui.TextColored(GetPreviewStateColor(previewBuilder.CurrentState), previewSummary);
-            ImGui.EndTable();
-        }
-
         var statusSummary = previewBuilder.CurrentState switch
         {
             CustomizationPreviewBuilder.State.InProgress when previewBuilder.BuildProgress >= 0
@@ -578,10 +563,28 @@ internal sealed class CustomizationEditorView
                      statusText
         };
 
-        if (previewBuilder.CurrentState == CustomizationPreviewBuilder.State.Failed)
-            ImGui.TextColored(GetPreviewStateColor(previewBuilder.CurrentState), statusSummary);
-        else
-            ImGui.TextDisabled(statusSummary);
+        if (ImGui.BeginTable("##customization_editor_status", 5, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
+        {
+            ImGui.TableSetupColumn("区域",   ImGuiTableColumnFlags.WidthStretch, 2.4f);
+            ImGui.TableSetupColumn("工作区", ImGuiTableColumnFlags.WidthStretch, 1.2f);
+            ImGui.TableSetupColumn("来源",   ImGuiTableColumnFlags.WidthStretch, 1.2f);
+            ImGui.TableSetupColumn("预览",   ImGuiTableColumnFlags.WidthStretch, 0.9f);
+            ImGui.TableSetupColumn("状态",   ImGuiTableColumnFlags.WidthStretch, 1.8f);
+            ImGui.TableNextRow();
+            DrawStatusCell("区域", $"{territoryName} · {territoryID} · {territoryKey}");
+            DrawStatusCell("工作区", workspaceSummary);
+            DrawStatusCell("来源", sourceSummary);
+            DrawStatusCell("预览", previewSummary, GetPreviewStateColor(previewBuilder.CurrentState));
+            DrawStatusCell
+            (
+                "状态",
+                statusSummary,
+                previewBuilder.CurrentState == CustomizationPreviewBuilder.State.Failed ?
+                    GetPreviewStateColor(previewBuilder.CurrentState) :
+                    null
+            );
+            ImGui.EndTable();
+        }
 
         if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.InProgress, BuildProgress: >= 0 })
             ImGui.ProgressBar(previewBuilder.BuildProgress, new Vector2(-1, 3), string.Empty);
@@ -590,12 +593,22 @@ internal sealed class CustomizationEditorView
     private static void DrawStatusCell
     (
         string label,
-        string value
+        string value,
+        Vector4? color = null
     )
     {
         ImGui.TableNextColumn();
-        ImGui.TextDisabled(label);
-        ImGui.TextUnformatted(value);
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextDisabled($"{label}:");
+        ImGui.SameLine(0, 4);
+
+        if (color is { } textColor)
+            ImGui.TextColored(textColor, value);
+        else
+            ImGui.TextUnformatted(value);
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip(value);
     }
 
     private static Vector4 GetPreviewStateColor
