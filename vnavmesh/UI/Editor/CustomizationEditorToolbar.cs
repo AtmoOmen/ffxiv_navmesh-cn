@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Utility.Raii;
 using vnavmesh.UI.Editor.Types;
 
@@ -47,15 +48,12 @@ internal static class CustomizationEditorToolbar
 
         using var group = ImRaii.Group();
 
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("工具");
-
-        ImGui.SameLine();
-
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
+            DrawGroupLabel("选择");
             DrawModeButton
             (
+                FontAwesomeIcon.MousePointer,
                 "浏览",
                 PickKind.None,
                 "查看和选择对象, 左侧选中后右侧显示可编辑内容",
@@ -71,7 +69,8 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
-                "选碰撞体",
+                FontAwesomeIcon.Cube,
+                "碰撞体",
                 PickKind.SelectCollider,
                 "在游戏画面点选碰撞体, 选中后右侧直接编辑",
                 ref pickKind,
@@ -86,7 +85,8 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
-                "选三角形",
+                FontAwesomeIcon.DrawPolygon,
+                "三角形",
                 PickKind.SelectTriangle,
                 "在游戏画面点选三角形, 选中后右侧直接编辑",
                 ref pickKind,
@@ -98,10 +98,11 @@ internal static class CustomizationEditorToolbar
                 ref statusText
             );
 
-            ImGui.SameLine();
+            DrawGroupLabel("体积");
             DrawModeButton
             (
-                "AABB 障碍",
+                FontAwesomeIcon.Cube,
+                "AABB",
                 PickKind.Aabb,
                 "在画面点两个世界点生成轴对齐障碍体",
                 ref pickKind,
@@ -116,7 +117,24 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
-                "圆柱障碍",
+                FontAwesomeIcon.Cube,
+                "旋转箱体",
+                PickKind.OrientedBox,
+                "沿画面中两个世界点的水平连线生成旋转箱体障碍",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            ImGui.SameLine();
+            DrawModeButton
+            (
+                FontAwesomeIcon.Circle,
+                "圆柱",
                 PickKind.Cylinder,
                 "在画面点两个世界点生成圆柱障碍体",
                 ref pickKind,
@@ -131,7 +149,104 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
-                "网格连线",
+                FontAwesomeIcon.Circle,
+                "定向圆柱",
+                PickKind.OrientedCylinder,
+                "沿画面中两个世界点生成任意方向圆柱体",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            ImGui.SameLine();
+            DrawModeButton
+            (
+                FontAwesomeIcon.Circle,
+                "球体",
+                PickKind.Sphere,
+                "先选择中心, 再选择表面点生成球形体积",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            DrawGroupLabel("表面");
+            DrawModeButton
+            (
+                FontAwesomeIcon.DrawPolygon,
+                "墙体",
+                PickKind.Wall,
+                "沿两个世界点的水平连线生成双面墙",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            ImGui.SameLine();
+            DrawModeButton
+            (
+                FontAwesomeIcon.Route,
+                "斜坡",
+                PickKind.Ramp,
+                "以较低点和较高点生成可行走斜坡",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            DrawGroupLabel("区域");
+            DrawModeButton
+            (
+                FontAwesomeIcon.Cube,
+                "移除实例",
+                PickKind.RemoveInstancesVolume,
+                "框选世界范围并批量移除相交的场景实例",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            ImGui.SameLine();
+            DrawModeButton
+            (
+                FontAwesomeIcon.Cube,
+                "标记实例",
+                PickKind.SetInstanceFlagsVolume,
+                "框选世界范围并批量覆盖相交实例的碰撞标记",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            DrawGroupLabel("连接");
+            DrawModeButton
+            (
+                FontAwesomeIcon.Link,
+                "直连",
                 PickKind.LinkPoints,
                 "在画面点两个世界点生成网格连接点",
                 ref pickKind,
@@ -146,6 +261,7 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
+                FontAwesomeIcon.Route,
                 "捷径",
                 PickKind.LinkShortcut,
                 "在画面点两个世界点生成普通移动捷径",
@@ -161,6 +277,7 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
+                FontAwesomeIcon.Route,
                 "客户端路径",
                 PickKind.LinkClientPath,
                 "在画面点两个世界点生成客户端路径连接",
@@ -176,7 +293,8 @@ internal static class CustomizationEditorToolbar
             ImGui.SameLine();
             DrawModeButton
             (
-                "离网连接",
+                FontAwesomeIcon.Link,
+                "离网",
                 PickKind.OffMesh,
                 "在画面点两个世界点生成构建期离网连接",
                 ref pickKind,
@@ -189,14 +307,15 @@ internal static class CustomizationEditorToolbar
             );
         }
 
+        ImGui.Separator();
         ImGui.AlignTextToFramePadding();
-        ImGui.TextUnformatted("草稿");
+        ImGui.TextDisabled("草稿");
 
         ImGui.SameLine();
 
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || undoCount == 0))
         {
-            if (ImGui.Button("撤销"))
+            if (DrawCommandButton(FontAwesomeIcon.Undo, "undo", $"撤销上一步 ({undoCount})"))
                 onUndo();
         }
 
@@ -204,7 +323,7 @@ internal static class CustomizationEditorToolbar
 
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace || redoCount == 0))
         {
-            if (ImGui.Button("重做"))
+            if (DrawCommandButton(FontAwesomeIcon.Redo, "redo", $"重做下一步 ({redoCount})"))
                 onRedo();
         }
 
@@ -212,7 +331,7 @@ internal static class CustomizationEditorToolbar
 
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
-            if (ImGui.Button("重建预览"))
+            if (DrawCommandButton(FontAwesomeIcon.SyncAlt, "rebuild", "重建导航预览"))
                 onRebuildPreview();
         }
 
@@ -220,7 +339,7 @@ internal static class CustomizationEditorToolbar
 
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
-            if (ImGui.Button("保存草稿"))
+            if (DrawCommandButton(FontAwesomeIcon.Save, "save", "保存当前工作区"))
                 onSaveWorkspace();
         }
 
@@ -228,7 +347,7 @@ internal static class CustomizationEditorToolbar
 
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
-            if (ImGui.Button("导出 C#"))
+            if (DrawCommandButton(FontAwesomeIcon.FileExport, "export", "导出 C# 自定义代码"))
                 onExportDraft();
         }
 
@@ -236,7 +355,7 @@ internal static class CustomizationEditorToolbar
 
         using (ImRaii.Disabled(!workspaceLoaded || !hasWorkspace))
         {
-            if (ImGui.Button("打开导出文件夹"))
+            if (DrawCommandButton(FontAwesomeIcon.FolderOpen, "open_export", "打开导出目录"))
                 onOpenExportedDirectory();
         }
 
@@ -244,7 +363,7 @@ internal static class CustomizationEditorToolbar
         {
             ImGui.SameLine();
 
-            if (ImGui.Button("退出模式 (Esc)"))
+            if (DrawCommandButton(FontAwesomeIcon.Times, "cancel_tool", "退出当前工具"))
             {
                 CancelPick
                 (
@@ -259,7 +378,21 @@ internal static class CustomizationEditorToolbar
                     "已退出当前工具"
                 );
             }
+
+            ImGui.SameLine();
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(new Vector4(0.35f, 0.72f, 1f, 1f), GetActiveToolStatus(pickKind, pendingPickPoint.HasValue));
         }
+    }
+
+    private static void DrawGroupLabel
+    (
+        string label
+    )
+    {
+        ImGui.AlignTextToFramePadding();
+        ImGui.TextDisabled(label);
+        ImGui.SameLine();
     }
 
     internal static void HandleKeyboardShortcuts
@@ -292,6 +425,7 @@ internal static class CustomizationEditorToolbar
 
     private static void DrawModeButton
     (
+        FontAwesomeIcon icon,
         string       label,
         PickKind     kind,
         string       tooltip,
@@ -305,6 +439,7 @@ internal static class CustomizationEditorToolbar
     )
     {
         var active = pickKind == kind;
+        var buttonLabel = $"{icon.ToIconString()}  {label}";
 
         if (active)
         {
@@ -313,7 +448,7 @@ internal static class CustomizationEditorToolbar
             ImGui.PushStyleColor(ImGuiCol.ButtonActive,  new Vector4(0.18f, 0.38f, 0.66f, 1f));
         }
 
-        if (ImGui.Button(label))
+        if (ImGui.Button(buttonLabel))
         {
             if (kind == PickKind.None)
             {
@@ -352,6 +487,35 @@ internal static class CustomizationEditorToolbar
         if (active)
             ImGui.PopStyleColor(3);
     }
+
+    private static bool DrawCommandButton
+    (
+        FontAwesomeIcon icon,
+        string          id,
+        string          tooltip
+    )
+    {
+        var size    = ImGui.GetFrameHeight();
+        var clicked = ImGui.Button($"{icon.ToIconString()}##{id}", new Vector2(size, size));
+
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(tooltip);
+
+        return clicked;
+    }
+
+    private static string GetActiveToolStatus
+    (
+        PickKind kind,
+        bool     hasFirstPoint
+    ) =>
+        kind switch
+        {
+            PickKind.SelectCollider => "选择碰撞体",
+            PickKind.SelectTriangle => "选择三角形",
+            _ when hasFirstPoint    => $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)} · 选择终点",
+            _                       => $"{CustomizationEditorWorldOverlay.GetPickKindTitle(kind)} · 选择起点"
+        };
 
     internal static void CancelPick
     (

@@ -38,6 +38,8 @@ internal static class CustomizationEditorLeftPanel
         ref CustomizationEditorWorkspace workspace,
         ref Selection                    selection,
         ref Selection?                   pendingFocusSelection,
+        ref EditorPanelMode              panelMode,
+        ref string                       searchText,
         CustomizationPreviewBuilder      previewBuilder,
         DebugGameCollision               collision,
         DebugDrawer                      dd,
@@ -49,42 +51,71 @@ internal static class CustomizationEditorLeftPanel
         var focusSelection = pendingFocusSelection;
         var focusConsumed  = false;
 
-        if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, Extractor: not null })
+        if (focusSelection != null)
         {
-            if (ShouldAutoOpenPreviewRoot(focusSelection))
-                ImGui.SetNextItemOpen(true);
-
-            if (ImGui.TreeNodeEx("预览对象", ImGuiTreeNodeFlags.DefaultOpen))
-            {
-                ImGui.TextDisabled("左键选择, 右键加入草稿补丁");
-                DrawPreviewMeshes
-                (
-                    workspace,
-                    previewBuilder.Extractor,
-                    ref selection,
-                    focusSelection,
-                    ref focusConsumed,
-                    collision,
-                    dd,
-                    onAddMeshRemoval,
-                    onAddInstancePatch,
-                    onAddPartPatch
-                );
-                ImGui.TreePop();
-            }
+            panelMode = IsPreviewSelectionKind(focusSelection.Kind) ? EditorPanelMode.Scene : EditorPanelMode.Draft;
+            searchText = string.Empty;
         }
 
-        if (ShouldAutoOpenDraftRoot(focusSelection))
-            ImGui.SetNextItemOpen(true);
+        var panelButtonWidth = (ImGui.GetContentRegionAvail().X - ImGui.GetStyle().ItemSpacing.X) * 0.5f;
+        DrawPanelModeButton("草稿", EditorPanelMode.Draft, panelButtonWidth, ref panelMode);
+        ImGui.SameLine();
+        DrawPanelModeButton("场景", EditorPanelMode.Scene, panelButtonWidth, ref panelMode);
 
-        if (ImGui.TreeNodeEx("草稿与设置", ImGuiTreeNodeFlags.DefaultOpen))
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("##customization_editor_search", "搜索名称、编号或备注", ref searchText);
+        ImGui.Separator();
+
+        var query = searchText.Trim();
+
+        if (panelMode == EditorPanelMode.Draft)
         {
-            DrawDraftTree(ref selection, focusSelection, ref focusConsumed, workspace, previewBuilder, collision);
-            ImGui.TreePop();
+            DrawDraftTree(ref selection, focusSelection, ref focusConsumed, workspace, previewBuilder, collision, query);
+        }
+        else if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, Extractor: not null })
+        {
+            DrawPreviewMeshes
+            (
+                workspace,
+                previewBuilder.Extractor,
+                ref selection,
+                focusSelection,
+                ref focusConsumed,
+                query,
+                collision,
+                dd,
+                onAddMeshRemoval,
+                onAddInstancePatch,
+                onAddPartPatch
+            );
+        }
+        else
+        {
+            ImGui.TextDisabled($"场景预览 · {CustomizationEditorWidgets.FormatPreviewStateDisplayName(previewBuilder.CurrentState)}");
         }
 
         if (focusConsumed)
             pendingFocusSelection = null;
+    }
+
+    private static void DrawPanelModeButton
+    (
+        string              label,
+        EditorPanelMode     mode,
+        float               width,
+        ref EditorPanelMode panelMode
+    )
+    {
+        var active = panelMode == mode;
+
+        if (active)
+            ImGui.PushStyleColor(ImGuiCol.Button, ImGui.GetStyle().Colors[(int)ImGuiCol.Header]);
+
+        if (ImGui.Button($"{label}##panel_{mode}", new Vector2(width, 0)))
+            panelMode = mode;
+
+        if (active)
+            ImGui.PopStyleColor();
     }
 
     private static void DrawPreviewMeshes
@@ -94,6 +125,7 @@ internal static class CustomizationEditorLeftPanel
         ref Selection                selection,
         Selection?                   focusSelection,
         ref bool                     focusConsumed,
+        string                       query,
         DebugGameCollision           collision,
         DebugDrawer                  dd,
         AddMeshRemovalDelegate       onAddMeshRemoval,
@@ -103,14 +135,18 @@ internal static class CustomizationEditorLeftPanel
     {
         foreach (var (key, mesh) in extractor.Meshes.OrderBy(static x => x.Key, StringComparer.Ordinal))
         {
+            if (!MatchesSearch(query, key))
+                continue;
+
+            var focusedPreview         = IsFocusedPreviewSelection(focusSelection, key);
             var focusedPreviewInstance = TryGetFocusedPreviewInstance(focusSelection, key, out var focusedInstanceIndex);
             var visibleInstanceIndices = GetVisiblePreviewInstanceIndices(mesh, collision, focusedPreviewInstance, focusedInstanceIndex);
             if (visibleInstanceIndices.Count == 0)
                 continue;
 
-            var meshLabel    = $"{key} [{mesh.Parts.Count} parts, {visibleInstanceIndices.Count}/{mesh.Instances.Count} inst]";
+            var meshLabel    = $"{key} · {mesh.Parts.Count} 部件 · {visibleInstanceIndices.Count}/{mesh.Instances.Count} 实例";
             var meshSelected = selection is { Kind: SelectionKind.PreviewMesh, Key: var meshKey } && meshKey == key;
-            if (focusedPreviewInstance)
+            if (focusedPreview)
                 ImGui.SetNextItemOpen(true);
 
             var meshOpen = ImGui.TreeNodeEx
@@ -137,16 +173,23 @@ internal static class CustomizationEditorLeftPanel
             if (!meshOpen)
                 continue;
 
-            if (ImGui.TreeNodeEx($"组件##parts_{key}"))
+            var focusedPartIndex = GetFocusedPreviewPartIndex(focusSelection, key);
+            if (focusedPartIndex >= 0)
+                ImGui.SetNextItemOpen(true);
+
+            if (ImGui.TreeNodeEx($"部件##parts_{key}"))
             {
                 var partIndex = 0;
 
                 foreach (var part in mesh.Parts)
                 {
-                    var partLabel = $"Part {partIndex} [{part.Vertices.Count} v, {part.Primitives.Count} t]";
+                    var partLabel = $"部件 {partIndex} · {part.Vertices.Count} 顶点 · {part.Primitives.Count} 三角";
                     var partSelected = selection.Key   == key       &&
                                        selection.Index == partIndex &&
                                        selection.Kind is SelectionKind.PreviewPart or SelectionKind.PreviewVertex or SelectionKind.PreviewPrimitive;
+
+                    if (partIndex == focusedPartIndex)
+                        ImGui.SetNextItemOpen(true);
 
                     var partOpen = ImGui.TreeNodeEx
                     (
@@ -174,71 +217,57 @@ internal static class CustomizationEditorLeftPanel
 
                     if (partOpen)
                     {
-                        if (ImGui.TreeNodeEx($"顶点##verts_{key}_{partIndex}", ImGuiTreeNodeFlags.DefaultOpen))
+                        var focusVertex = focusSelection is
+                                          {
+                                              Kind: SelectionKind.PreviewVertex, Key: var vertexKey, Index: var vertexPartIndex
+                                          }                               &&
+                                          vertexKey       == key           &&
+                                          vertexPartIndex == partIndex;
+                        if (focusVertex)
+                            ImGui.SetNextItemOpen(true);
+
+                        if (ImGui.TreeNodeEx($"顶点 ({part.Vertices.Count})##verts_{key}_{partIndex}"))
                         {
-                            var vertexIndex = 0;
-
-                            foreach (var vertex in part.Vertices)
-                            {
-                                var vertexLabel = $"[{vertexIndex}] {vertex:f3}";
-                                var vertexSelected = selection is
-                                                     {
-                                                         Kind: SelectionKind.PreviewVertex, Key: var vertexKey, Index: var selectedPartIndex,
-                                                         SubIndex: var selectedVertexIndex
-                                                     }                                &&
-                                                     vertexKey           == key       &&
-                                                     selectedPartIndex   == partIndex &&
-                                                     selectedVertexIndex == vertexIndex;
-                                if (ImGui.Selectable(vertexLabel, vertexSelected))
-                                    selection = new(SelectionKind.PreviewVertex, partIndex, vertexIndex, key);
-
-                                if (ImGui.BeginPopupContextItem($"##preview_vertex_popup_{key}_{partIndex}_{vertexIndex}"))
-                                {
-                                    if (ImGui.MenuItem("加入顶点位置补丁"))
-                                        onAddPartPatch(mesh, key, partIndex, DraftScenePartPatchKind.Vertex, vertexIndex);
-                                    ImGui.EndPopup();
-                                }
-
-                                if (ImGui.IsItemHovered())
-                                    DrawPreviewVertex(mesh, vertex, dd);
-                                ++vertexIndex;
-                            }
-
+                            DrawPreviewVertices
+                            (
+                                mesh,
+                                part,
+                                key,
+                                partIndex,
+                                visibleInstanceIndices[0],
+                                ref selection,
+                                focusSelection,
+                                ref focusConsumed,
+                                dd,
+                                onAddPartPatch
+                            );
                             ImGui.TreePop();
                         }
 
-                        if (ImGui.TreeNodeEx($"三角##prims_{key}_{partIndex}", ImGuiTreeNodeFlags.DefaultOpen))
+                        var focusPrimitive = focusSelection is
+                                             {
+                                                 Kind: SelectionKind.PreviewPrimitive, Key: var primitiveKey, Index: var primitivePartIndex
+                                             }                                  &&
+                                             primitiveKey       == key           &&
+                                             primitivePartIndex == partIndex;
+                        if (focusPrimitive)
+                            ImGui.SetNextItemOpen(true);
+
+                        if (ImGui.TreeNodeEx($"三角 ({part.Primitives.Count})##prims_{key}_{partIndex}"))
                         {
-                            var primIndex = 0;
-
-                            foreach (var prim in part.Primitives)
-                            {
-                                var primLabel = $"[{primIndex}] {prim.V1}x{prim.V2}x{prim.V3} {prim.Flags}";
-                                var primitiveSelected = selection is
-                                                        {
-                                                            Kind: SelectionKind.PreviewPrimitive, Key: var primitiveKey, Index: var selectedPartIndex,
-                                                            SubIndex: var selectedPrimitiveIndex
-                                                        }                                   &&
-                                                        primitiveKey           == key       &&
-                                                        selectedPartIndex      == partIndex &&
-                                                        selectedPrimitiveIndex == primIndex;
-                                if (ImGui.Selectable(primLabel, primitiveSelected))
-                                    selection = new(SelectionKind.PreviewPrimitive, partIndex, primIndex, key);
-
-                                if (ImGui.BeginPopupContextItem($"##preview_primitive_popup_{key}_{partIndex}_{primIndex}"))
-                                {
-                                    if (ImGui.MenuItem("加入三角 flags 补丁"))
-                                        onAddPartPatch(mesh, key, partIndex, DraftScenePartPatchKind.PrimitiveFlags, primIndex);
-                                    if (ImGui.MenuItem("加入三角高级编辑补丁"))
-                                        onAddPartPatch(mesh, key, partIndex, DraftScenePartPatchKind.PrimitiveEdit, primIndex);
-                                    ImGui.EndPopup();
-                                }
-
-                                if (ImGui.IsItemHovered())
-                                    DrawPreviewPrimitive(mesh, part, prim, dd);
-                                ++primIndex;
-                            }
-
+                            DrawPreviewPrimitives
+                            (
+                                mesh,
+                                part,
+                                key,
+                                partIndex,
+                                visibleInstanceIndices[0],
+                                ref selection,
+                                focusSelection,
+                                ref focusConsumed,
+                                dd,
+                                onAddPartPatch
+                            );
                             ImGui.TreePop();
                         }
 
@@ -270,6 +299,8 @@ internal static class CustomizationEditorLeftPanel
 
                     if (ImGui.BeginPopupContextItem($"##preview_instance_popup_{key}_{instanceIndex}"))
                     {
+                        if (ImGui.MenuItem("复制为新实例"))
+                            onAddInstancePatch(mesh, key, instanceIndex, DraftSceneInstancePatchKind.Insert);
                         if (ImGui.MenuItem("加入实例变换补丁"))
                             onAddInstancePatch(mesh, key, instanceIndex, DraftSceneInstancePatchKind.Transform);
                         if (ImGui.MenuItem("加入实例 flags 补丁"))
@@ -318,9 +349,158 @@ internal static class CustomizationEditorLeftPanel
         }
     }
 
+    private static unsafe void DrawPreviewVertices
+    (
+        SceneExtractor.Mesh          mesh,
+        SceneExtractor.MeshPart      part,
+        string                       key,
+        int                          partIndex,
+        int                          instanceIndex,
+        ref Selection                selection,
+        Selection?                   focusSelection,
+        ref bool                     focusConsumed,
+        DebugDrawer                  dd,
+        AddPartPatchDelegate         onAddPartPatch
+    )
+    {
+        var clipper = ImGui.ImGuiListClipper();
+
+        try
+        {
+            clipper.Begin(part.Vertices.Count);
+
+            if (focusSelection is { Kind: SelectionKind.PreviewVertex, SubIndex: >= 0 } &&
+                focusSelection.Key   == key                                                     &&
+                focusSelection.Index == partIndex)
+                clipper.ForceDisplayRangeByIndices(focusSelection.SubIndex, focusSelection.SubIndex + 1);
+
+            while (clipper.Step())
+            {
+                for (var vertexIndex = clipper.DisplayStart; vertexIndex < clipper.DisplayEnd; ++vertexIndex)
+                {
+                    var vertex = part.Vertices[vertexIndex];
+                    var vertexSelected = selection is
+                                         {
+                                             Kind: SelectionKind.PreviewVertex, Key: var vertexKey, Index: var selectedPartIndex,
+                                             SubIndex: var selectedVertexIndex
+                                         }                                &&
+                                         vertexKey           == key       &&
+                                         selectedPartIndex   == partIndex &&
+                                         selectedVertexIndex == vertexIndex;
+
+                    if (ImGui.Selectable($"[{vertexIndex}] {vertex:f3}", vertexSelected))
+                        selection = new(SelectionKind.PreviewVertex, partIndex, vertexIndex, key);
+
+                    if (ImGui.BeginPopupContextItem($"##preview_vertex_popup_{key}_{partIndex}_{vertexIndex}"))
+                    {
+                        if (ImGui.MenuItem("加入顶点位置补丁"))
+                            onAddPartPatch(mesh, key, partIndex, DraftScenePartPatchKind.Vertex, vertexIndex);
+                        ImGui.EndPopup();
+                    }
+
+                    if (ImGui.IsItemHovered())
+                        DrawPreviewVertex(mesh, instanceIndex, vertex, dd);
+
+                    if (!focusConsumed && focusSelection is
+                        {
+                            Kind: SelectionKind.PreviewVertex, Key: var focusKey, Index: var focusPartIndex, SubIndex: var focusVertexIndex
+                        }                                 &&
+                        focusKey         == key           &&
+                        focusPartIndex   == partIndex     &&
+                        focusVertexIndex == vertexIndex)
+                    {
+                        ImGui.SetScrollHereY();
+                        focusConsumed = true;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            clipper.Destroy();
+        }
+    }
+
+    private static unsafe void DrawPreviewPrimitives
+    (
+        SceneExtractor.Mesh          mesh,
+        SceneExtractor.MeshPart      part,
+        string                       key,
+        int                          partIndex,
+        int                          instanceIndex,
+        ref Selection                selection,
+        Selection?                   focusSelection,
+        ref bool                     focusConsumed,
+        DebugDrawer                  dd,
+        AddPartPatchDelegate         onAddPartPatch
+    )
+    {
+        var clipper = ImGui.ImGuiListClipper();
+
+        try
+        {
+            clipper.Begin(part.Primitives.Count);
+
+            if (focusSelection is { Kind: SelectionKind.PreviewPrimitive, SubIndex: >= 0 } &&
+                focusSelection.Key   == key                                                        &&
+                focusSelection.Index == partIndex)
+                clipper.ForceDisplayRangeByIndices(focusSelection.SubIndex, focusSelection.SubIndex + 1);
+
+            while (clipper.Step())
+            {
+                for (var primitiveIndex = clipper.DisplayStart; primitiveIndex < clipper.DisplayEnd; ++primitiveIndex)
+                {
+                    var primitive = part.Primitives[primitiveIndex];
+                    var primitiveSelected = selection is
+                                            {
+                                                Kind: SelectionKind.PreviewPrimitive, Key: var primitiveKey, Index: var selectedPartIndex,
+                                                SubIndex: var selectedPrimitiveIndex
+                                            }                                   &&
+                                            primitiveKey           == key       &&
+                                            selectedPartIndex      == partIndex &&
+                                            selectedPrimitiveIndex == primitiveIndex;
+
+                    var label = $"[{primitiveIndex}] {primitive.V1} / {primitive.V2} / {primitive.V3} · {primitive.Flags}";
+                    if (ImGui.Selectable(label, primitiveSelected))
+                        selection = new(SelectionKind.PreviewPrimitive, partIndex, primitiveIndex, key);
+
+                    if (ImGui.BeginPopupContextItem($"##preview_primitive_popup_{key}_{partIndex}_{primitiveIndex}"))
+                    {
+                        if (ImGui.MenuItem("加入三角标记补丁"))
+                            onAddPartPatch(mesh, key, partIndex, DraftScenePartPatchKind.PrimitiveFlags, primitiveIndex);
+                        if (ImGui.MenuItem("加入三角编辑补丁"))
+                            onAddPartPatch(mesh, key, partIndex, DraftScenePartPatchKind.PrimitiveEdit, primitiveIndex);
+                        ImGui.EndPopup();
+                    }
+
+                    if (ImGui.IsItemHovered())
+                        DrawPreviewPrimitive(mesh, part, instanceIndex, primitive, dd);
+
+                    if (!focusConsumed && focusSelection is
+                        {
+                            Kind: SelectionKind.PreviewPrimitive, Key: var focusKey, Index: var focusPartIndex,
+                            SubIndex: var focusPrimitiveIndex
+                        }                                    &&
+                        focusKey            == key           &&
+                        focusPartIndex      == partIndex     &&
+                        focusPrimitiveIndex == primitiveIndex)
+                    {
+                        ImGui.SetScrollHereY();
+                        focusConsumed = true;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            clipper.Destroy();
+        }
+    }
+
     private static void DrawPreviewVertex
     (
         SceneExtractor.Mesh mesh,
+        int                 instanceIndex,
         Vector3             vertex,
         DebugDrawer         dd
     )
@@ -331,13 +511,14 @@ internal static class CustomizationEditorLeftPanel
             return;
         }
 
-        dd.DrawWorldPointFilled(mesh.Instances[0].WorldTransform.TransformCoordinate(vertex), 3, 0xFF00FF00);
+        dd.DrawWorldPointFilled(mesh.Instances[instanceIndex].WorldTransform.TransformCoordinate(vertex), 3, 0xFF00FF00);
     }
 
     private static void DrawPreviewPrimitive
     (
         SceneExtractor.Mesh      mesh,
         SceneExtractor.MeshPart  part,
+        int                      instanceIndex,
         SceneExtractor.Primitive primitive,
         DebugDrawer              dd
     )
@@ -345,7 +526,7 @@ internal static class CustomizationEditorLeftPanel
         if (mesh.Instances.Count == 0)
             return;
 
-        var transform = mesh.Instances[0].WorldTransform;
+        var transform = mesh.Instances[instanceIndex].WorldTransform;
         dd.DrawWorldTriangle
         (
             transform.TransformCoordinate(part.Vertices[primitive.V1]),
@@ -362,18 +543,19 @@ internal static class CustomizationEditorLeftPanel
         ref bool                     focusConsumed,
         CustomizationEditorWorkspace workspace,
         CustomizationPreviewBuilder  previewBuilder,
-        DebugGameCollision           collision
+        DebugGameCollision           collision,
+        string                       query
     )
     {
-        if (ImGui.Selectable("工作区", selection.Kind == SelectionKind.Workspace))
+        if (MatchesSearch(query, "工作区") && ImGui.Selectable("工作区", selection.Kind == SelectionKind.Workspace))
             selection = new(SelectionKind.Workspace);
-        if (ImGui.Selectable("构建参数", selection.Kind == SelectionKind.BuildProfile))
+        if (MatchesSearch(query, "构建参数") && ImGui.Selectable("构建参数", selection.Kind == SelectionKind.BuildProfile))
             selection = new(SelectionKind.BuildProfile);
-        if (ImGui.Selectable("构建设置", selection.Kind == SelectionKind.BuildSettings))
+        if (MatchesSearch(query, "构建设置") && ImGui.Selectable("构建设置", selection.Kind == SelectionKind.BuildSettings))
             selection = new(SelectionKind.BuildSettings);
-        if (ImGui.Selectable("飞行支持", selection.Kind == SelectionKind.FlyingOverride))
+        if (MatchesSearch(query, "飞行支持") && ImGui.Selectable("飞行支持", selection.Kind == SelectionKind.FlyingOverride))
             selection = new(SelectionKind.FlyingOverride);
-        if (ImGui.Selectable("诊断", selection.Kind == SelectionKind.Diagnostics))
+        if (MatchesSearch(query, "诊断") && ImGui.Selectable("诊断", selection.Kind == SelectionKind.Diagnostics))
             selection = new(SelectionKind.Diagnostics);
 
         if (ShouldAutoOpenGeometrySection(focusSelection))
@@ -388,7 +570,8 @@ internal static class CustomizationEditorLeftPanel
                 SelectionKind.MeshRemoval,
                 ref selection,
                 focusSelection,
-                ref focusConsumed
+                ref focusConsumed,
+                query
             );
             DrawDraftItems
             (
@@ -397,7 +580,8 @@ internal static class CustomizationEditorLeftPanel
                 SelectionKind.InstancePatch,
                 ref selection,
                 focusSelection,
-                ref focusConsumed
+                ref focusConsumed,
+                query
             );
             DrawDraftItems
             (
@@ -406,16 +590,18 @@ internal static class CustomizationEditorLeftPanel
                 SelectionKind.PartPatch,
                 ref selection,
                 focusSelection,
-                ref focusConsumed
+                ref focusConsumed,
+                query
             );
             DrawDraftItems
             (
-                "碰撞插入",
+                "世界几何 / 区域",
                 BuildColliderInsertionEntries(workspace, collision),
                 SelectionKind.ColliderInsertion,
                 ref selection,
                 focusSelection,
-                ref focusConsumed
+                ref focusConsumed,
+                query
             );
             ImGui.TreePop();
         }
@@ -432,7 +618,8 @@ internal static class CustomizationEditorLeftPanel
                 SelectionKind.MeshLink,
                 ref selection,
                 focusSelection,
-                ref focusConsumed
+                ref focusConsumed,
+                query
             );
             DrawDraftItems
             (
@@ -441,7 +628,8 @@ internal static class CustomizationEditorLeftPanel
                 SelectionKind.OffMeshConnection,
                 ref selection,
                 focusSelection,
-                ref focusConsumed
+                ref focusConsumed,
+                query
             );
             ImGui.TreePop();
         }
@@ -454,14 +642,23 @@ internal static class CustomizationEditorLeftPanel
         SelectionKind        kind,
         ref Selection        selection,
         Selection?           focusSelection,
-        ref bool             focusConsumed
+        ref bool             focusConsumed,
+        string               query
     )
     {
-        if (!ImGui.TreeNodeEx($"{title} ({items.Count})", ImGuiTreeNodeFlags.DefaultOpen))
+        var filteredCount = string.IsNullOrEmpty(query) ? items.Count : items.Count(item => MatchesSearch(query, item.Label));
+        if (filteredCount == 0)
+            return;
+
+        var countLabel = filteredCount == items.Count ? items.Count.ToString() : $"{filteredCount}/{items.Count}";
+        if (!ImGui.TreeNodeEx($"{title} ({countLabel})", ImGuiTreeNodeFlags.DefaultOpen))
             return;
 
         foreach (var item in items)
         {
+            if (!MatchesSearch(query, item.Label))
+                continue;
+
             var pushedTextStyle = false;
 
             if (!item.IsEnabled)
@@ -567,10 +764,17 @@ internal static class CustomizationEditorLeftPanel
         for (var i = 0; i < workspace.Draft.ColliderInsertions.Count; ++i)
         {
             var item = workspace.Draft.ColliderInsertions[i];
-            var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateBounds(item.Min, item.Max));
+            var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateColliderBounds(item));
+            var center = (item.Min + item.Max) * 0.5f;
+            var size   = Vector3.Abs(item.Max - item.Min);
+            var label = item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder ?
+                            $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Start:f1} -> {item.End:f1} · 半径 {item.Radius:f1}" :
+                        CustomizationEditorSpatial.UsesYRotation(item.Kind) ?
+                            $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} 中心 {center:f1} · {size.X:f1} × {size.Y:f1} × {size.Z:f1} · {item.RotationDegrees:f1}°" :
+                            $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Min:f1} -> {item.Max:f1}";
             entries.Add
             (
-                CreateDraftEntry(i, $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Min:f1} -> {item.Max:f1}", item.Note, item.Enabled, info)
+                CreateDraftEntry(i, label, item.Note, item.Enabled, info)
             );
         }
 
@@ -684,7 +888,7 @@ internal static class CustomizationEditorLeftPanel
         bool              enabled,
         DraftDistanceInfo info
     ) =>
-        new(index, FormatDraftLabel(label, note, enabled, info.IsInRange), info.Distance, enabled, info.IsInRange);
+        new(index, FormatDraftLabel(label, note), info.Distance, enabled, info.IsInRange);
 
     private static void SortDraftEntries
     (
@@ -710,9 +914,7 @@ internal static class CustomizationEditorLeftPanel
     private static string FormatDraftLabel
     (
         string fallbackLabel,
-        string note,
-        bool   enabled,
-        bool   isInRange
+        string note
     ) =>
         string.IsNullOrWhiteSpace(note) ?
             fallbackLabel :
@@ -730,6 +932,8 @@ internal static class CustomizationEditorLeftPanel
     ) =>
         item.Kind == DraftSceneInstancePatchKind.ClearInstances ?
             $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}" :
+        item.Kind == DraftSceneInstancePatchKind.Insert ?
+            $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} × {Math.Clamp(item.Count, 1, 1024)} @ {item.WorldTransform.Row3:f1}" :
             $"{item.MeshKey} #{item.InstanceIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}";
 
     private static bool TryGetNearestInstanceBounds
@@ -778,9 +982,9 @@ internal static class CustomizationEditorLeftPanel
             return CustomizationEditorSpatial.TryUnionBounds(mesh.Instances.Select(static x => x.WorldBounds), out bounds);
         }
 
-        if (patch.Kind == DraftSceneInstancePatchKind.Transform)
+        if (patch.Kind is DraftSceneInstancePatchKind.Transform or DraftSceneInstancePatchKind.Insert)
         {
-            bounds = CustomizationEditorSpatial.CalculateTransformedBounds(mesh.LocalBounds, patch.WorldTransform.ToRuntime());
+            bounds = CustomizationEditorSpatial.CreateInstancePatchBounds(mesh.LocalBounds, patch);
             return true;
         }
 
@@ -880,17 +1084,28 @@ internal static class CustomizationEditorLeftPanel
         return false;
     }
 
-    private static bool ShouldAutoOpenPreviewRoot
+    private static int GetFocusedPreviewPartIndex
     (
-        Selection? focusSelection
+        Selection? focusSelection,
+        string     meshKey
     ) =>
-        focusSelection?.Kind == SelectionKind.PreviewInstance;
+        focusSelection is
+        {
+            Kind: SelectionKind.PreviewPart or SelectionKind.PreviewVertex or SelectionKind.PreviewPrimitive,
+            Key: not null,
+            Index: >= 0
+        } && focusSelection.Key == meshKey ?
+            focusSelection.Index :
+            -1;
 
-    private static bool ShouldAutoOpenDraftRoot
+    private static bool IsFocusedPreviewSelection
     (
-        Selection? focusSelection
+        Selection? focusSelection,
+        string     meshKey
     ) =>
-        focusSelection != null && IsDraftSelectionKind(focusSelection.Kind);
+        focusSelection != null &&
+        focusSelection.Key == meshKey &&
+        IsPreviewSelectionKind(focusSelection.Kind);
 
     private static bool ShouldAutoOpenGeometrySection
     (
@@ -904,12 +1119,19 @@ internal static class CustomizationEditorLeftPanel
     ) =>
         focusSelection is { Kind: SelectionKind.MeshLink or SelectionKind.OffMeshConnection };
 
-    private static bool IsDraftSelectionKind
+    private static bool IsPreviewSelectionKind
     (
         SelectionKind kind
     ) =>
-        kind is SelectionKind.MeshRemoval or SelectionKind.InstancePatch or SelectionKind.PartPatch or SelectionKind.ColliderInsertion or SelectionKind.MeshLink
-            or SelectionKind.OffMeshConnection;
+        kind is SelectionKind.PreviewMesh or SelectionKind.PreviewInstance or SelectionKind.PreviewPart or SelectionKind.PreviewVertex
+            or SelectionKind.PreviewPrimitive;
+
+    private static bool MatchesSearch
+    (
+        string query,
+        string value
+    ) =>
+        string.IsNullOrEmpty(query) || value.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     private static string BuildInstancePatchTag
     (

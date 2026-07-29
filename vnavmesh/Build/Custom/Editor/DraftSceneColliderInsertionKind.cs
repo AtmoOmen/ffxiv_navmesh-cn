@@ -3,5 +3,12 @@ namespace vnavmesh.Build.Custom.Editor;
 public enum DraftSceneColliderInsertionKind
 {
     Aabb,
-    Cylinder
+    Cylinder,
+    OrientedCylinder,
+    OrientedBox,
+    Sphere,
+    Wall,
+    Ramp,
+    RemoveInstances,
+    SetInstanceFlags
 }

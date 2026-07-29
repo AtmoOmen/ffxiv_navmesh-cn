@@ -43,6 +43,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         public Vector3       DragStartPoint;
         public Vector3       InitialA;
         public Vector3       InitialB;
+        public float         InitialRotationDegrees;
     }
 
     public enum DraftEditMode
@@ -51,13 +52,17 @@ internal static unsafe class CustomizationEditorWorldOverlay
         ColliderInsertionMin,
         ColliderInsertionMax,
         ColliderInsertionTranslate,
+        OrientedCylinderStart,
+        OrientedCylinderEnd,
+        OrientedCylinderTranslate,
         MeshLinkStart,
         MeshLinkEnd,
         MeshLinkTranslate,
         OffMeshStart,
         OffMeshEnd,
         OffMeshTranslate,
-        InstanceTranslation
+        InstanceTranslation,
+        InstanceOffset
     }
 
     private const int VK_LBUTTON = 0x01;
@@ -144,8 +149,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (pendingPickPoint is { } pending)
         {
             dd.DrawWorldPointFilled(pending, 6, 0xFFFF00FF);
+            dd.DrawWorldText(pending, pickKind == PickKind.Sphere ? "中心" : "起点", 0xFFFF80FF);
             if (currentPickPoint is { } current)
+            {
+                dd.DrawWorldText(current, pickKind == PickKind.Sphere ? "半径" : "终点", 0xFFFFFF66);
                 DrawPendingPickPreview(pickKind, pending, current, dd);
+            }
         }
 
         for (var i = 0; i < workspace.Draft.ColliderInsertions.Count; ++i)
@@ -154,15 +163,22 @@ internal static unsafe class CustomizationEditorWorldOverlay
             if (!insertion.Enabled)
                 continue;
 
-            var bounds = CustomizationEditorSpatial.CreateBounds(insertion.Min, insertion.Max);
+            var bounds = CustomizationEditorSpatial.CreateColliderBounds(insertion);
             if (!collision.IsBoundsWithinEditorRenderDistance(bounds))
                 continue;
 
             var selected = selection is { Kind: SelectionKind.ColliderInsertion, Index: var selectedIndex and >= 0 } &&
                            selectedIndex == i;
-            var color = selected                                                     ? 0xFFFFD94A
-                        : insertion.Kind == DraftSceneColliderInsertionKind.Cylinder ? 0xFF00FF00
-                                                                                       : 0xFF00FFFF;
+            var color = selected                                                        ? 0xFFFFD94A
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Cylinder    ? 0xFF00FF00
+                        : insertion.Kind == DraftSceneColliderInsertionKind.OrientedCylinder ? 0xFF33DDBB
+                        : insertion.Kind == DraftSceneColliderInsertionKind.OrientedBox ? 0xFFFF66CC
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Sphere      ? 0xFF66CCFF
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Wall        ? 0xFFFF6688
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Ramp        ? 0xFF66FF99
+                        : insertion.Kind == DraftSceneColliderInsertionKind.RemoveInstances ? 0xFFFF4D4D
+                        : insertion.Kind == DraftSceneColliderInsertionKind.SetInstanceFlags ? 0xFFFFAA33
+                                                                                          : 0xFF00FFFF;
 
             if (insertion.Kind == DraftSceneColliderInsertionKind.Cylinder)
             {
@@ -176,6 +192,29 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         2
                 );
             }
+            else if (insertion.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
+            {
+                DrawOrientedCylinder(insertion.Start, insertion.End, insertion.Radius, dd, color, selected ? 3 : 2);
+            }
+            else if (insertion.Kind == DraftSceneColliderInsertionKind.Sphere)
+            {
+                DrawEllipsoid
+                (
+                    (insertion.Min + insertion.Max) * 0.5f,
+                    Vector3.Abs(insertion.Max - insertion.Min) * 0.5f,
+                    dd,
+                    color,
+                    selected ? 3 : 2
+                );
+            }
+            else if (insertion.Kind == DraftSceneColliderInsertionKind.Ramp)
+            {
+                DrawRamp(insertion.Min, insertion.Max, insertion.RotationDegrees, dd, color, selected ? 3 : 2);
+            }
+            else if (CustomizationEditorSpatial.UsesYRotation(insertion.Kind))
+            {
+                DrawOrientedBox(insertion.Min, insertion.Max, insertion.RotationDegrees, dd, color, selected ? 3 : 2);
+            }
             else
             {
                 dd.DrawWorldAABB
@@ -188,6 +227,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         2
                 );
             }
+
+            if (insertion.Kind == DraftSceneColliderInsertionKind.RemoveInstances)
+                DrawBoundsCross(bounds, dd, color, selected ? 3 : 2);
+
+            if (selected)
+                dd.DrawWorldText(bounds.Max, $"{CustomizationEditorWidgets.FormatEnumDisplayName(insertion.Kind)} #{i}", color);
         }
 
         for (var i = 0; i < workspace.Draft.MeshLinks.Count; ++i)
@@ -210,10 +255,17 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             dd.DrawWorldLine(link.Start, link.End, color, thickness);
 
+            if (selected)
+                dd.DrawWorldText((link.Start + link.End) * 0.5f, $"{CustomizationEditorWidgets.FormatEnumDisplayName(link.Kind)} #{i}", color);
+
             if (!link.Bidirectional)
             {
-                var dir = Vector3.Normalize(link.End - link.Start);
-                var len = Vector3.Distance(link.Start, link.End);
+                var delta = link.End - link.Start;
+                var len   = delta.Length();
+                if (len < 0.001f)
+                    continue;
+
+                var dir = delta / len;
                 var arrowSize = selected ?
                                     20f :
                                     15f;
@@ -247,6 +299,16 @@ internal static unsafe class CustomizationEditorWorldOverlay
             var thickness = selected ?
                                 6 :
                                 4;
+            var delta = link.End - link.Start;
+            var len   = delta.Length();
+
+            if (len < 0.001f)
+            {
+                dd.DrawWorldPointFilled(link.Start, selected ? 7f : 5f, color);
+                if (selected)
+                    dd.DrawWorldText(link.Start, $"离网连接 #{i}", color);
+                continue;
+            }
 
             if (link.Bidirectional)
             {
@@ -261,8 +323,6 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 dd.DrawWorldArc(link.Start, link.End, 0.15f, 0f, 0f, color, thickness);
 
                 // 采样切线，在抛物线上绘制多个流动的大箭头
-                var delta = link.End - link.Start;
-                var len   = delta.Length();
                 var h     = 0.15f * len;
                 var arrowSize = selected ?
                                     20f :
@@ -289,6 +349,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     dd.DrawWorldArrowPoint(p, q, arrowSize, color, thickness);
                 }
             }
+
+            if (selected)
+                dd.DrawWorldText((link.Start + link.End) * 0.5f, $"离网连接 #{i}", color);
         }
 
         DrawPartPatchOverlay(workspace, selection, previewBuilder, collision, dd);
@@ -332,6 +395,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
 
         var first = pendingPickPoint.Value;
+        if (Vector3.DistanceSquared(first, point) < 0.01f)
+        {
+            statusText = $"{GetPickKindTitle(pickKind)}: 终点距离起点过近";
+            return;
+        }
+
         pendingPickPoint = null;
         var completedKind = pickKind;
 
@@ -340,8 +409,29 @@ internal static unsafe class CustomizationEditorWorldOverlay
             case PickKind.Aabb:
                 onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.Aabb);
                 break;
+            case PickKind.OrientedBox:
+                onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.OrientedBox);
+                break;
             case PickKind.Cylinder:
                 onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.Cylinder);
+                break;
+            case PickKind.OrientedCylinder:
+                onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.OrientedCylinder);
+                break;
+            case PickKind.Sphere:
+                onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.Sphere);
+                break;
+            case PickKind.Wall:
+                onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.Wall);
+                break;
+            case PickKind.Ramp:
+                onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.Ramp);
+                break;
+            case PickKind.RemoveInstancesVolume:
+                onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.RemoveInstances);
+                break;
+            case PickKind.SetInstanceFlagsVolume:
+                onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.SetInstanceFlags);
                 break;
             case PickKind.LinkPoints:
                 onAddMeshLink(first, point, DraftMeshLinkKind.Points);
@@ -395,6 +485,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         if (TrySelectColliderInsertion(ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, ref statusText))
+            return;
+
+        if (TrySelectInsertedInstance
+            (ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, previewBuilder, ref statusText))
             return;
 
         if (TrySelectMeshLink(ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, ref statusText))
@@ -592,8 +686,39 @@ internal static unsafe class CustomizationEditorWorldOverlay
             if (!item.Enabled)
                 continue;
 
-            var bounds = new AABB { Min = item.Min, Max = item.Max };
-            if (!RayIntersectsAabb(rayOrigin, rayDirection, bounds, out var distance))
+            if (item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
+            {
+                if (!RayIntersectsCylinder(rayOrigin, rayDirection, item.Start, item.End, item.Radius, out var cylinderDistance) ||
+                    cylinderDistance >= bestDistance)
+                    continue;
+
+                bestDistance  = cylinderDistance;
+                bestSelection = new(SelectionKind.ColliderInsertion, i);
+                continue;
+            }
+
+            var bounds         = CustomizationEditorSpatial.CreateBounds(item.Min, item.Max);
+            var localRayOrigin = rayOrigin;
+            var localRayDirection = rayDirection;
+
+            if (item.Kind == DraftSceneColliderInsertionKind.Sphere)
+            {
+                if (!RayIntersectsEllipsoid(rayOrigin, rayDirection, bounds, out var sphereDistance) || sphereDistance >= bestDistance)
+                    continue;
+
+                bestDistance  = sphereDistance;
+                bestSelection = new(SelectionKind.ColliderInsertion, i);
+                continue;
+            }
+
+            if (CustomizationEditorSpatial.UsesYRotation(item.Kind))
+            {
+                var center        = (bounds.Min + bounds.Max) * 0.5f;
+                localRayOrigin    = center + CustomizationEditorSpatial.RotateAroundY(rayOrigin - center, -item.RotationDegrees);
+                localRayDirection = CustomizationEditorSpatial.RotateAroundY(rayDirection, -item.RotationDegrees);
+            }
+
+            if (!RayIntersectsAabb(localRayOrigin, localRayDirection, bounds, out var distance))
                 continue;
 
             if (distance >= bestDistance)
@@ -608,7 +733,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         selection                      = bestSelection;
         pendingLeftPanelFocusSelection = selection;
-        statusText                     = $"已选碰撞插入: {CustomizationEditorWidgets.FormatEnumDisplayName(workspace.Draft.ColliderInsertions[selection.Index].Kind)}";
+        statusText                     = $"已选世界修改: {CustomizationEditorWidgets.FormatEnumDisplayName(workspace.Draft.ColliderInsertions[selection.Index].Kind)}";
         return true;
     }
 
@@ -648,6 +773,53 @@ internal static unsafe class CustomizationEditorWorldOverlay
         selection = bestSelection;
         pendingLeftPanelFocusSelection = selection;
         statusText = $"已选网格连线: {CustomizationEditorWidgets.FormatEnumDisplayName(workspace.Draft.MeshLinks[selection.Index].Kind)} #{selection.Index}";
+        return true;
+    }
+
+    private static bool TrySelectInsertedInstance
+    (
+        ref Selection                    selection,
+        ref Selection?                   pendingLeftPanelFocusSelection,
+        Vector3                          rayOrigin,
+        Vector3                          rayDirection,
+        ref CustomizationEditorWorkspace workspace,
+        CustomizationPreviewBuilder      previewBuilder,
+        ref string                       statusText
+    )
+    {
+        if (previewBuilder.Extractor == null)
+            return false;
+
+        var bestIndex    = -1;
+        var bestDistance = float.MaxValue;
+        for (var i = 0; i < workspace.Draft.InstancePatches.Count; ++i)
+        {
+            var patch = workspace.Draft.InstancePatches[i];
+            if (!patch.Enabled || patch.Kind != DraftSceneInstancePatchKind.Insert ||
+                !previewBuilder.Extractor.Meshes.TryGetValue(patch.MeshKey, out var mesh))
+                continue;
+
+            var transform = patch.WorldTransform.ToRuntime();
+            var count     = Math.Clamp(patch.Count, 1, 1024);
+            for (var copyIndex = 0; copyIndex < count; ++copyIndex)
+            {
+                var copyTransform = transform;
+                copyTransform.Row3 += patch.Offset * copyIndex;
+                var bounds = CustomizationEditorSpatial.CalculateTransformedBounds(mesh.LocalBounds, copyTransform);
+                if (!RayIntersectsAabb(rayOrigin, rayDirection, bounds, out var distance) || distance >= bestDistance)
+                    continue;
+
+                bestIndex    = i;
+                bestDistance = distance;
+            }
+        }
+
+        if (bestIndex < 0)
+            return false;
+
+        selection                      = new(SelectionKind.InstancePatch, bestIndex);
+        pendingLeftPanelFocusSelection = selection;
+        statusText                     = $"已选复制实例: {workspace.Draft.InstancePatches[bestIndex].MeshKey}";
         return true;
     }
 
@@ -833,9 +1005,49 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     if (!item.Enabled)
                         return;
 
+                    if (item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
+                    {
+                        DrawSegmentHandles
+                        (
+                            item.Start,
+                            item.End,
+                            selection.Index,
+                            DraftEditMode.OrientedCylinderStart,
+                            DraftEditMode.OrientedCylinderEnd,
+                            rayOrigin,
+                            rayDirection,
+                            dd,
+                            screenPos,
+                            ref draftEditState
+                        );
+                        DrawTranslationHandle
+                        (
+                            (item.Start + item.End) * 0.5f,
+                            selection.Index,
+                            DraftEditMode.OrientedCylinderTranslate,
+                            rayOrigin,
+                            rayDirection,
+                            dd,
+                            screenPos,
+                            ref draftEditState,
+                            item.Start,
+                            item.End
+                        );
+                        break;
+                    }
+
+                    var center    = (item.Min + item.Max) * 0.5f;
+                    var minHandle = item.Min;
+                    var maxHandle = item.Max;
+                    if (CustomizationEditorSpatial.UsesYRotation(item.Kind))
+                    {
+                        minHandle = center + CustomizationEditorSpatial.RotateAroundY(item.Min - center, item.RotationDegrees);
+                        maxHandle = center + CustomizationEditorSpatial.RotateAroundY(item.Max - center, item.RotationDegrees);
+                    }
+
                     DrawHandle
                     (
-                        item.Min,
+                        minHandle,
                         8f,
                         0xFF4DDBFF,
                         rayOrigin,
@@ -847,15 +1059,16 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         {
                             Mode        = DraftEditMode.ColliderInsertionMin,
                             Index       = selection.Index,
-                            PlaneOrigin = item.Min,
+                            PlaneOrigin = minHandle,
                             InitialA    = item.Min,
-                            InitialB    = item.Max
+                            InitialB    = item.Max,
+                            InitialRotationDegrees = item.RotationDegrees
                         },
                         "拖拽最小角点"
                     );
                     DrawHandle
                     (
-                        item.Max,
+                        maxHandle,
                         8f,
                         0xFFFFB84D,
                         rayOrigin,
@@ -867,15 +1080,16 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         {
                             Mode        = DraftEditMode.ColliderInsertionMax,
                             Index       = selection.Index,
-                            PlaneOrigin = item.Max,
+                            PlaneOrigin = maxHandle,
                             InitialA    = item.Min,
-                            InitialB    = item.Max
+                            InitialB    = item.Max,
+                            InitialRotationDegrees = item.RotationDegrees
                         },
                         "拖拽最大角点"
                     );
                     DrawTranslationHandle
                     (
-                        (item.Min + item.Max) * 0.5f,
+                        center,
                         selection.Index,
                         DraftEditMode.ColliderInsertionTranslate,
                         rayOrigin,
@@ -884,7 +1098,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         screenPos,
                         ref draftEditState,
                         item.Min,
-                        item.Max
+                        item.Max,
+                        item.RotationDegrees
                     );
                 }
 
@@ -965,7 +1180,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 if (selection.Index >= 0 && selection.Index < workspace.Draft.InstancePatches.Count)
                 {
                     ref var item = ref CollectionsMarshal.AsSpan(workspace.Draft.InstancePatches)[selection.Index];
-                    if (!item.Enabled || item.Kind != DraftSceneInstancePatchKind.Transform)
+                    if (!item.Enabled || item.Kind is not (DraftSceneInstancePatchKind.Transform or DraftSceneInstancePatchKind.Insert))
                         return;
 
                     DrawHandle
@@ -987,6 +1202,31 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         },
                         "拖拽实例位置"
                     );
+
+                    if (item.Kind == DraftSceneInstancePatchKind.Insert && item.Count > 1)
+                    {
+                        var count = Math.Clamp(item.Count, 1, 1024);
+                        var offsetHandle = item.WorldTransform.Translation + (item.Offset * (count - 1));
+                        DrawHandle
+                        (
+                            offsetHandle,
+                            8f,
+                            0xFF66FF99,
+                            rayOrigin,
+                            rayDirection,
+                            dd,
+                            screenPos,
+                            ref draftEditState,
+                            new()
+                            {
+                                Mode        = DraftEditMode.InstanceOffset,
+                                Index       = selection.Index,
+                                PlaneOrigin = offsetHandle,
+                                InitialA    = item.Offset
+                            },
+                            "拖拽阵列末端"
+                        );
+                    }
                 }
 
                 break;
@@ -1058,7 +1298,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
         Vector2            screenPos,
         ref DraftEditState draftEditState,
         Vector3            start,
-        Vector3            end
+        Vector3            end,
+        float              rotationDegrees = 0f
     ) =>
         DrawHandle
         (
@@ -1076,6 +1317,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 Index       = index,
                 InitialA    = start,
                 InitialB    = end,
+                InitialRotationDegrees = rotationDegrees,
                 PlaneOrigin = center
             },
             "拖拽整体位置"
@@ -1100,6 +1342,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         dd.DrawWorldPoint(position, radius + 2f, 0xFFFFFFFF, 2);
+        dd.DrawWorldText(position, tooltip, 0xFFFFFFFF);
         if (!ImGui.IsMouseClicked(ImGuiMouseButton.Left) || !IsWorldClickAllowed())
             return;
 
@@ -1133,9 +1376,36 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         var delta = hitPoint - draftEditState.DragStartPoint;
+        statusText = $"{GetDraftEditModeTitle(draftEditState.Mode)} · 位移 {delta.X:f2}, {delta.Y:f2}, {delta.Z:f2}";
 
         switch (draftEditState.Mode)
         {
+            case DraftEditMode.OrientedCylinderStart:
+            case DraftEditMode.OrientedCylinderEnd:
+            case DraftEditMode.OrientedCylinderTranslate:
+                if (draftEditState.Index < 0 || draftEditState.Index >= workspace.Draft.ColliderInsertions.Count)
+                    return;
+
+                ref var cylinder = ref CollectionsMarshal.AsSpan(workspace.Draft.ColliderInsertions)[draftEditState.Index];
+                switch (draftEditState.Mode)
+                {
+                    case DraftEditMode.OrientedCylinderStart:
+                        cylinder.Start = draftEditState.InitialA + delta;
+                        break;
+                    case DraftEditMode.OrientedCylinderEnd:
+                        cylinder.End = draftEditState.InitialB + delta;
+                        break;
+                    default:
+                        cylinder.Start = draftEditState.InitialA + delta;
+                        cylinder.End   = draftEditState.InitialB + delta;
+                        break;
+                }
+
+                var cylinderBounds = CustomizationEditorSpatial.CreateColliderBounds(cylinder);
+                cylinder.Min = cylinderBounds.Min;
+                cylinder.Max = cylinderBounds.Max;
+                selection    = new(SelectionKind.ColliderInsertion, draftEditState.Index);
+                break;
             case DraftEditMode.ColliderInsertionMin:
             case DraftEditMode.ColliderInsertionMax:
             case DraftEditMode.ColliderInsertionTranslate:
@@ -1143,14 +1413,18 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     return;
 
                 ref var collider = ref CollectionsMarshal.AsSpan(workspace.Draft.ColliderInsertions)[draftEditState.Index];
+                var editDelta = CustomizationEditorSpatial.UsesYRotation(collider.Kind) &&
+                                draftEditState.Mode != DraftEditMode.ColliderInsertionTranslate ?
+                                    CustomizationEditorSpatial.RotateAroundY(delta, -draftEditState.InitialRotationDegrees) :
+                                    delta;
 
                 switch (draftEditState.Mode)
                 {
                     case DraftEditMode.ColliderInsertionMin:
-                        collider.Min = draftEditState.InitialA + delta;
+                        collider.Min = draftEditState.InitialA + editDelta;
                         break;
                     case DraftEditMode.ColliderInsertionMax:
-                        collider.Max = draftEditState.InitialB + delta;
+                        collider.Max = draftEditState.InitialB + editDelta;
                         break;
                     default:
                         collider.Min = draftEditState.InitialA + delta;
@@ -1216,6 +1490,15 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 ref var patch = ref CollectionsMarshal.AsSpan(workspace.Draft.InstancePatches)[draftEditState.Index];
                 patch.WorldTransform.Translation = draftEditState.InitialA + delta;
                 selection                        = new(SelectionKind.InstancePatch, draftEditState.Index);
+                break;
+            case DraftEditMode.InstanceOffset:
+                if (draftEditState.Index < 0 || draftEditState.Index >= workspace.Draft.InstancePatches.Count)
+                    return;
+
+                ref var arrayPatch = ref CollectionsMarshal.AsSpan(workspace.Draft.InstancePatches)[draftEditState.Index];
+                var divisor = Math.Clamp(arrayPatch.Count, 2, 1024) - 1;
+                arrayPatch.Offset = draftEditState.InitialA + (delta / divisor);
+                selection         = new(SelectionKind.InstancePatch, draftEditState.Index);
                 break;
         }
     }
@@ -1304,6 +1587,114 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         distance = tMin;
         return tMax >= 0f;
+    }
+
+    private static bool RayIntersectsEllipsoid
+    (
+        Vector3   origin,
+        Vector3   direction,
+        AABB      bounds,
+        out float distance
+    )
+    {
+        var center  = (bounds.Min + bounds.Max) * 0.5f;
+        var extents = Vector3.Max((bounds.Max - bounds.Min) * 0.5f, new Vector3(0.005f));
+        var localOrigin    = (origin - center) / extents;
+        var localDirection = direction / extents;
+        var a = Vector3.Dot(localDirection, localDirection);
+        var b = 2f * Vector3.Dot(localOrigin, localDirection);
+        var c = Vector3.Dot(localOrigin, localOrigin) - 1f;
+        var discriminant = (b * b) - (4f * a * c);
+        if (discriminant < 0f || a <= 0.000001f)
+        {
+            distance = 0f;
+            return false;
+        }
+
+        var root = MathF.Sqrt(discriminant);
+        var near = (-b - root) / (2f * a);
+        var far  = (-b + root) / (2f * a);
+        distance = near >= 0f ? near : far;
+        return distance >= 0f;
+    }
+
+    private static bool RayIntersectsCylinder
+    (
+        Vector3   origin,
+        Vector3   direction,
+        Vector3   start,
+        Vector3   end,
+        float     radius,
+        out float distance
+    )
+    {
+        radius = MathF.Max(MathF.Abs(radius), 0.005f);
+        var axis       = end - start;
+        var axisLength = axis.Length();
+        if (axisLength <= 0.0001f)
+        {
+            axis       = Vector3.UnitY * 0.01f;
+            axisLength = axis.Length();
+            start     -= axis * 0.5f;
+        }
+
+        var axisDirection = axis / axisLength;
+        var originFromStart = origin - start;
+        var originAlongAxis = Vector3.Dot(originFromStart, axisDirection);
+        var rayAlongAxis    = Vector3.Dot(direction, axisDirection);
+        var radialOrigin    = originFromStart - (axisDirection * originAlongAxis);
+        var radialDirection = direction       - (axisDirection * rayAlongAxis);
+        var bestDistance    = float.MaxValue;
+        var a = Vector3.Dot(radialDirection, radialDirection);
+        var b = 2f * Vector3.Dot(radialOrigin, radialDirection);
+        var c = Vector3.Dot(radialOrigin, radialOrigin) - (radius * radius);
+
+        if (a > 0.000001f)
+        {
+            var discriminant = (b * b) - (4f * a * c);
+            if (discriminant >= 0f)
+            {
+                var root = MathF.Sqrt(discriminant);
+                var near = (-b - root) / (2f * a);
+                var far  = (-b + root) / (2f * a);
+
+                if (near >= 0f)
+                {
+                    var height = originAlongAxis + (near * rayAlongAxis);
+                    if (height >= 0f && height <= axisLength)
+                        bestDistance = near;
+                }
+
+                if (far >= 0f && far < bestDistance)
+                {
+                    var height = originAlongAxis + (far * rayAlongAxis);
+                    if (height >= 0f && height <= axisLength)
+                        bestDistance = far;
+                }
+            }
+        }
+
+        if (MathF.Abs(rayAlongAxis) > 0.000001f)
+        {
+            var nearCap = -originAlongAxis / rayAlongAxis;
+            if (nearCap >= 0f)
+            {
+                var radialPoint = radialOrigin + (radialDirection * nearCap);
+                if (radialPoint.LengthSquared() <= radius * radius)
+                    bestDistance = MathF.Min(bestDistance, nearCap);
+            }
+
+            var farCap = (axisLength - originAlongAxis) / rayAlongAxis;
+            if (farCap >= 0f)
+            {
+                var radialPoint = radialOrigin + (radialDirection * farCap);
+                if (radialPoint.LengthSquared() <= radius * radius)
+                    bestDistance = MathF.Min(bestDistance, farCap);
+            }
+        }
+
+        distance = bestDistance;
+        return bestDistance < float.MaxValue;
     }
 
     private static bool IntersectsAxis
@@ -1440,6 +1831,28 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             if (patch.Kind == DraftSceneInstancePatchKind.ClearInstances) continue;
 
+            if (patch.Kind == DraftSceneInstancePatchKind.Insert)
+            {
+                if (!previewBuilder.Extractor.Meshes.TryGetValue(patch.MeshKey, out var insertedMesh))
+                    continue;
+
+                var transform = patch.WorldTransform.ToRuntime();
+                var count     = Math.Clamp(patch.Count, 1, 1024);
+                for (var copyIndex = 0; copyIndex < count; ++copyIndex)
+                {
+                    var copyTransform = transform;
+                    copyTransform.Row3 += patch.Offset * copyIndex;
+                    var bounds = CustomizationEditorSpatial.CalculateTransformedBounds(insertedMesh.LocalBounds, copyTransform);
+                    var insertedKey = (patch.MeshKey, (ulong)(copyIndex + 1), -i - 1);
+                    ref var insertedOverlay = ref CollectionsMarshal.GetValueRefOrAddDefault(OverlaysCache, insertedKey, out _);
+                    insertedOverlay                  ??= GetOrCreateOverlay(insertedMesh, copyTransform, bounds);
+                    insertedOverlay.HasInsert        =   true;
+                    insertedOverlay.DrawDetailedMesh =   count <= 32;
+                    insertedOverlay.IsSelected       |=  selection.Kind == SelectionKind.InstancePatch && selection.Index == i;
+                }
+                continue;
+            }
+
             if (!TryResolvePatchedInstance(previewBuilder.Extractor, patch, out var mesh, out var targetInstance))
                 continue;
 
@@ -1474,6 +1887,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 continue;
 
             var color = overlay.IsSelected     ? 0xFFFFD94A
+                        : overlay.HasInsert    ? 0xFF66FF99
                         : overlay.HasRemove    ? 0xFFFF4D4D
                         : overlay.HasTransform ? 0xFF00E0FF
                                                  : 0xFF33FF66;
@@ -1486,7 +1900,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             dd.DrawWorldAABB(overlay.Bounds, color, thickness);
 
             // 仅当被选中时，才在世界中绘制其精细的网格三角形面，防止未选中时的大量三角形坐标变换与 ImGui 顶点数据剧烈膨胀导致渲染掉帧
-            if (overlay.IsSelected)
+            if (overlay.IsSelected && overlay.DrawDetailedMesh)
             {
                 foreach (var part in overlay.Mesh.Parts)
                     DrawMeshPreview(part, overlay.Transform, dd, color, thickness);
@@ -1758,8 +2172,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
         public AABB                          Bounds;
         public bool                          HasTransform;
         public bool                          HasFlags;
+        public bool                          HasInsert;
         public bool                          HasRemove;
         public bool                          IsSelected;
+        public bool                          DrawDetailedMesh;
         public SceneExtractor.PrimitiveFlags FlagSetMask;
         public SceneExtractor.PrimitiveFlags FlagClearMask;
 
@@ -1775,8 +2191,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
             Bounds        = bounds;
             HasTransform  = false;
             HasFlags      = false;
+            HasInsert     = false;
             HasRemove     = false;
             IsSelected    = false;
+            DrawDetailedMesh = true;
             FlagSetMask   = SceneExtractor.PrimitiveFlags.None;
             FlagClearMask = SceneExtractor.PrimitiveFlags.None;
         }
@@ -1794,28 +2212,252 @@ internal static unsafe class CustomizationEditorWorldOverlay
         {
             case PickKind.Aabb:
             case PickKind.Cylinder:
+            case PickKind.RemoveInstancesVolume:
+            case PickKind.SetInstanceFlagsVolume:
             {
                 var min = Vector3.Min(first, current);
                 var max = Vector3.Max(first, current);
                 NormalizeBounds(ref min, ref max);
-                var color = pickKind == PickKind.Cylinder ?
-                                0xFF33FF66 :
-                                0xFF33DDFF;
+                var color = pickKind switch
+                {
+                    PickKind.Cylinder                 => 0xFF33FF66,
+                    PickKind.RemoveInstancesVolume    => 0xFFFF4D4D,
+                    PickKind.SetInstanceFlagsVolume   => 0xFFFFAA33,
+                    _                                 => 0xFF33DDFF
+                };
                 if (pickKind == PickKind.Cylinder)
                     dd.DrawWorldCylinder((min + max) * 0.5f, (max - min) * 0.5f, color, 2);
                 else
                     dd.DrawWorldAABB((min + max) * 0.5f, (max - min) * 0.5f, color, 2);
+                if (pickKind == PickKind.RemoveInstancesVolume)
+                    DrawBoundsCross(new() { Min = min, Max = max }, dd, color, 2);
+                var size = max - min;
+                dd.DrawWorldText(max, $"尺寸 {size.X:f1} × {size.Y:f1} × {size.Z:f1}", color);
+                break;
+            }
+            case PickKind.OrientedBox:
+            {
+                var center = (first + current) * 0.5f;
+                var delta  = current - first;
+                var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+                var halfExtents     = new Vector3(length * 0.5f, 1f, 0.5f);
+                var rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
+                DrawOrientedBox(center - halfExtents, center + halfExtents, rotationDegrees, dd, 0xFFFF66CC, 2);
+                dd.DrawWorldText
+                (
+                    center + CustomizationEditorSpatial.RotateAroundY(halfExtents, rotationDegrees),
+                    $"尺寸 {length:f1} × 2.0 × 1.0 · 角度 {rotationDegrees:f1}°",
+                    0xFFFF66CC
+                );
+                break;
+            }
+            case PickKind.OrientedCylinder:
+            {
+                const float RADIUS = 0.5f;
+                DrawOrientedCylinder(first, current, RADIUS, dd, 0xFF33DDBB, 2);
+                dd.DrawWorldText(current, $"长 {Vector3.Distance(first, current):f1} · 半径 {RADIUS:f1}", 0xFF33DDBB);
+                break;
+            }
+            case PickKind.Sphere:
+            {
+                var radius = MathF.Max(Vector3.Distance(first, current), 0.05f);
+                DrawEllipsoid(first, new(radius), dd, 0xFF66CCFF, 2);
+                dd.DrawWorldText(current, $"半径 {radius:f1}", 0xFF66CCFF);
+                break;
+            }
+            case PickKind.Wall:
+            {
+                var center = (first + current) * 0.5f;
+                var delta  = current - first;
+                var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+                var halfExtents     = new Vector3(length * 0.5f, 1f, 0.025f);
+                var rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
+                DrawOrientedBox(center - halfExtents, center + halfExtents, rotationDegrees, dd, 0xFFFF6688, 2);
+                dd.DrawWorldText(current, $"宽 {length:f1} · 高 2.0", 0xFFFF6688);
+                break;
+            }
+            case PickKind.Ramp:
+            {
+                var low    = first.Y <= current.Y ? first : current;
+                var high   = first.Y <= current.Y ? current : first;
+                var delta  = high - low;
+                var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+                var height = MathF.Max(high.Y - low.Y, 0.5f);
+                var center = new Vector3((low.X + high.X) * 0.5f, low.Y + (height * 0.5f), (low.Z + high.Z) * 0.5f);
+                var halfExtents     = new Vector3(length * 0.5f, height * 0.5f, 0.75f);
+                var rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
+                DrawRamp(center - halfExtents, center + halfExtents, rotationDegrees, dd, 0xFF66FF99, 2);
+                dd.DrawWorldText(high, $"长 {length:f1} · 高 {height:f1} · 宽 1.5", 0xFF66FF99);
                 break;
             }
             case PickKind.LinkPoints:
             case PickKind.LinkShortcut:
             case PickKind.LinkClientPath:
                 dd.DrawWorldLine(first, current, 0xFFAAFF00, 2);
+                if (Vector3.DistanceSquared(first, current) >= 0.0001f)
+                    dd.DrawWorldArrowPoint(current, first, 12f, 0xFFAAFF00, 2);
                 break;
             case PickKind.OffMesh:
-                dd.DrawWorldArc(first, current, 0.15f, 3f, 3f, 0xFFFF8800, 2);
+                if (Vector3.DistanceSquared(first, current) >= 0.0001f)
+                    dd.DrawWorldArc(first, current, 0.15f, 3f, 3f, 0xFFFF8800, 2);
                 break;
         }
+    }
+
+    private static void DrawOrientedBox
+    (
+        Vector3     min,
+        Vector3     max,
+        float       rotationDegrees,
+        DebugDrawer dd,
+        uint        color,
+        int         thickness
+    )
+    {
+        var center      = (min + max) * 0.5f;
+        var halfExtents = Vector3.Abs(max - min) * 0.5f;
+
+        Vector3 ToWorld
+        (
+            float x,
+            float y,
+            float z
+        ) =>
+            center + CustomizationEditorSpatial.RotateAroundY(new(x, y, z), rotationDegrees);
+
+        var aaa = ToWorld(-halfExtents.X, -halfExtents.Y, -halfExtents.Z);
+        var aab = ToWorld(-halfExtents.X, -halfExtents.Y, +halfExtents.Z);
+        var aba = ToWorld(-halfExtents.X, +halfExtents.Y, -halfExtents.Z);
+        var abb = ToWorld(-halfExtents.X, +halfExtents.Y, +halfExtents.Z);
+        var baa = ToWorld(+halfExtents.X, -halfExtents.Y, -halfExtents.Z);
+        var bab = ToWorld(+halfExtents.X, -halfExtents.Y, +halfExtents.Z);
+        var bba = ToWorld(+halfExtents.X, +halfExtents.Y, -halfExtents.Z);
+        var bbb = ToWorld(+halfExtents.X, +halfExtents.Y, +halfExtents.Z);
+
+        dd.DrawWorldLine(aaa, aab, color, thickness);
+        dd.DrawWorldLine(aab, bab, color, thickness);
+        dd.DrawWorldLine(bab, baa, color, thickness);
+        dd.DrawWorldLine(baa, aaa, color, thickness);
+        dd.DrawWorldLine(aba, abb, color, thickness);
+        dd.DrawWorldLine(abb, bbb, color, thickness);
+        dd.DrawWorldLine(bbb, bba, color, thickness);
+        dd.DrawWorldLine(bba, aba, color, thickness);
+        dd.DrawWorldLine(aaa, aba, color, thickness);
+        dd.DrawWorldLine(aab, abb, color, thickness);
+        dd.DrawWorldLine(baa, bba, color, thickness);
+        dd.DrawWorldLine(bab, bbb, color, thickness);
+    }
+
+    private static void DrawEllipsoid
+    (
+        Vector3     center,
+        Vector3     halfExtents,
+        DebugDrawer dd,
+        uint        color,
+        int         thickness
+    )
+    {
+        const int SEGMENTS = 32;
+        var prevXZ = center + new Vector3(halfExtents.X, 0, 0);
+        var prevXY = prevXZ;
+        var prevYZ = center + new Vector3(0, halfExtents.Y, 0);
+
+        for (var i = 1; i <= SEGMENTS; ++i)
+        {
+            var radians = i * (MathF.Tau / SEGMENTS);
+            var cos     = MathF.Cos(radians);
+            var sin     = MathF.Sin(radians);
+            var nextXZ  = center + new Vector3(cos * halfExtents.X, 0, sin * halfExtents.Z);
+            var nextXY  = center + new Vector3(cos * halfExtents.X, sin * halfExtents.Y, 0);
+            var nextYZ  = center + new Vector3(0, cos * halfExtents.Y, sin * halfExtents.Z);
+            dd.DrawWorldLine(prevXZ, nextXZ, color, thickness);
+            dd.DrawWorldLine(prevXY, nextXY, color, thickness);
+            dd.DrawWorldLine(prevYZ, nextYZ, color, thickness);
+            prevXZ = nextXZ;
+            prevXY = nextXY;
+            prevYZ = nextYZ;
+        }
+    }
+
+    private static void DrawOrientedCylinder
+    (
+        Vector3     start,
+        Vector3     end,
+        float       radius,
+        DebugDrawer dd,
+        uint        color,
+        int         thickness
+    )
+    {
+        const int SEGMENTS = 32;
+        var axis       = end - start;
+        var axisLength = axis.Length();
+        var direction = axisLength > 0.0001f ?
+                            axis / axisLength :
+                            Vector3.UnitY;
+        var reference = MathF.Abs(Vector3.Dot(direction, Vector3.UnitY)) < 0.999f ?
+                            Vector3.UnitY :
+                            Vector3.UnitX;
+        var radialX = Vector3.Normalize(Vector3.Cross(reference, direction)) * MathF.Max(MathF.Abs(radius), 0.005f);
+        var radialZ = Vector3.Normalize(Vector3.Cross(direction, radialX));
+        radialZ *= radialX.Length();
+        var previousStart = start + radialX;
+        var previousEnd   = end   + radialX;
+
+        for (var i = 1; i <= SEGMENTS; ++i)
+        {
+            var radians = i * (MathF.Tau / SEGMENTS);
+            var radial  = (radialX * MathF.Cos(radians)) + (radialZ * MathF.Sin(radians));
+            var nextStart = start + radial;
+            var nextEnd   = end   + radial;
+            dd.DrawWorldLine(previousStart, nextStart, color, thickness);
+            dd.DrawWorldLine(previousEnd, nextEnd, color, thickness);
+            if (i % (SEGMENTS / 4) == 0)
+                dd.DrawWorldLine(nextStart, nextEnd, color, thickness);
+            previousStart = nextStart;
+            previousEnd   = nextEnd;
+        }
+
+        dd.DrawWorldLine(start, end, color, thickness);
+    }
+
+    private static void DrawRamp
+    (
+        Vector3     min,
+        Vector3     max,
+        float       rotationDegrees,
+        DebugDrawer dd,
+        uint        color,
+        int         thickness
+    )
+    {
+        var center      = (min + max) * 0.5f;
+        var halfExtents = Vector3.Abs(max - min) * 0.5f;
+
+        Vector3 ToWorld
+        (
+            float x,
+            float y,
+            float z
+        ) =>
+            center + CustomizationEditorSpatial.RotateAroundY(new(x, y, z), rotationDegrees);
+
+        var lowFront   = ToWorld(-halfExtents.X, -halfExtents.Y, -halfExtents.Z);
+        var lowBack    = ToWorld(-halfExtents.X, -halfExtents.Y, +halfExtents.Z);
+        var baseFront  = ToWorld(+halfExtents.X, -halfExtents.Y, -halfExtents.Z);
+        var baseBack   = ToWorld(+halfExtents.X, -halfExtents.Y, +halfExtents.Z);
+        var highFront  = ToWorld(+halfExtents.X, +halfExtents.Y, -halfExtents.Z);
+        var highBack   = ToWorld(+halfExtents.X, +halfExtents.Y, +halfExtents.Z);
+
+        dd.DrawWorldLine(lowFront, lowBack, color, thickness);
+        dd.DrawWorldLine(lowFront, baseFront, color, thickness);
+        dd.DrawWorldLine(lowBack, baseBack, color, thickness);
+        dd.DrawWorldLine(baseFront, baseBack, color, thickness);
+        dd.DrawWorldLine(baseFront, highFront, color, thickness);
+        dd.DrawWorldLine(baseBack, highBack, color, thickness);
+        dd.DrawWorldLine(highFront, highBack, color, thickness);
+        dd.DrawWorldLine(lowFront, highFront, color, thickness);
+        dd.DrawWorldLine(lowBack, highBack, color, thickness);
     }
 
     private static void NormalizeBounds
@@ -1886,12 +2528,42 @@ internal static unsafe class CustomizationEditorWorldOverlay
             PickKind.SelectCollider => "选中碰撞体",
             PickKind.SelectTriangle => "选中三角形",
             PickKind.Aabb           => "AABB 障碍",
+            PickKind.OrientedBox    => "旋转箱体障碍",
             PickKind.Cylinder       => "圆柱障碍",
+            PickKind.OrientedCylinder => "定向圆柱障碍",
+            PickKind.Sphere         => "球形体积",
+            PickKind.Wall           => "墙体",
+            PickKind.Ramp           => "斜坡",
+            PickKind.RemoveInstancesVolume  => "区域移除实例",
+            PickKind.SetInstanceFlagsVolume => "区域标记实例",
             PickKind.LinkPoints     => "网格连线",
             PickKind.LinkShortcut   => "普通移动捷径",
             PickKind.LinkClientPath => "客户端路径",
             PickKind.OffMesh        => "离网连接",
             _                       => "浏览"
+        };
+
+    private static string GetDraftEditModeTitle
+    (
+        DraftEditMode mode
+    ) =>
+        mode switch
+        {
+            DraftEditMode.ColliderInsertionMin       => "调整障碍最小角",
+            DraftEditMode.ColliderInsertionMax       => "调整障碍最大角",
+            DraftEditMode.ColliderInsertionTranslate => "移动障碍",
+            DraftEditMode.OrientedCylinderStart      => "调整定向圆柱起点",
+            DraftEditMode.OrientedCylinderEnd        => "调整定向圆柱终点",
+            DraftEditMode.OrientedCylinderTranslate  => "移动定向圆柱",
+            DraftEditMode.MeshLinkStart              => "调整网格连接起点",
+            DraftEditMode.MeshLinkEnd                => "调整网格连接终点",
+            DraftEditMode.MeshLinkTranslate          => "移动网格连接",
+            DraftEditMode.OffMeshStart               => "调整离网连接起点",
+            DraftEditMode.OffMeshEnd                 => "调整离网连接终点",
+            DraftEditMode.OffMeshTranslate           => "移动离网连接",
+            DraftEditMode.InstanceTranslation        => "移动实例",
+            DraftEditMode.InstanceOffset             => "调整阵列步进",
+            _                                        => "编辑草稿"
         };
 
     [DllImport("user32.dll", ExactSpelling = true)]

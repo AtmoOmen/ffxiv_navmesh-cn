@@ -184,6 +184,63 @@ internal static class CustomizationDraftApplier
             case DraftSceneColliderInsertionKind.Cylinder:
                 scene.InsertCylinderCollider(bounds, insertion.ForceSetPrimFlags, insertion.ForceClearPrimFlags);
                 break;
+            case DraftSceneColliderInsertionKind.OrientedCylinder:
+                scene.InsertOrientedCylinderCollider
+                (
+                    insertion.Start,
+                    insertion.End,
+                    insertion.Radius,
+                    insertion.ForceSetPrimFlags,
+                    insertion.ForceClearPrimFlags
+                );
+                break;
+            case DraftSceneColliderInsertionKind.OrientedBox:
+                scene.InsertOrientedBoxCollider
+                (
+                    (max - min) * 0.5f,
+                    (min + max) * 0.5f,
+                    insertion.RotationDegrees,
+                    insertion.ForceSetPrimFlags,
+                    insertion.ForceClearPrimFlags
+                );
+                break;
+            case DraftSceneColliderInsertionKind.Sphere:
+                scene.InsertSphereCollider(bounds, insertion.ForceSetPrimFlags, insertion.ForceClearPrimFlags);
+                break;
+            case DraftSceneColliderInsertionKind.Wall:
+                var halfExtents = (max - min) * 0.5f;
+                scene.InsertWallCollider
+                (
+                    new(halfExtents.X, halfExtents.Y),
+                    (min + max) * 0.5f,
+                    insertion.RotationDegrees,
+                    insertion.DoubleSided,
+                    insertion.ForceSetPrimFlags,
+                    insertion.ForceClearPrimFlags
+                );
+                break;
+            case DraftSceneColliderInsertionKind.Ramp:
+                scene.InsertRampCollider
+                (
+                    (max - min) * 0.5f,
+                    (min + max) * 0.5f,
+                    insertion.RotationDegrees,
+                    insertion.ForceSetPrimFlags,
+                    insertion.ForceClearPrimFlags
+                );
+                break;
+            case DraftSceneColliderInsertionKind.RemoveInstances:
+                scene.RemoveMeshInstancesInBounds(bounds, insertion.MeshKeyContains);
+                break;
+            case DraftSceneColliderInsertionKind.SetInstanceFlags:
+                scene.SetMeshInstanceFlagsInBounds
+                (
+                    bounds,
+                    insertion.ForceSetPrimFlags,
+                    insertion.ForceClearPrimFlags,
+                    insertion.MeshKeyContains
+                );
+                break;
         }
     }
 
@@ -195,6 +252,21 @@ internal static class CustomizationDraftApplier
     {
         if (!patch.Enabled || string.IsNullOrWhiteSpace(patch.MeshKey) || !scene.Meshes.TryGetValue(patch.MeshKey, out var mesh))
             return;
+
+        if (patch.Kind == DraftSceneInstancePatchKind.Insert)
+        {
+            scene.InsertMeshInstances
+            (
+                patch.MeshKey,
+                patch.WorldTransform.ToRuntime(),
+                patch.Count,
+                patch.Offset,
+                patch.Material,
+                patch.ForceSetPrimFlags,
+                patch.ForceClearPrimFlags
+            );
+            return;
+        }
 
         switch (patch.Kind)
         {

@@ -5,5 +5,6 @@ public enum DraftSceneInstancePatchKind
     ClearInstances,
     RemoveInstance,
     Transform,
-    SetFlags
+    SetFlags,
+    Insert
 }

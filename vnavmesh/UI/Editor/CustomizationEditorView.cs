@@ -27,6 +27,8 @@ internal sealed class CustomizationEditorView
 )
     : IDisposable
 {
+    private const int MAX_HISTORY_ENTRIES = 128;
+
     private readonly CustomizationDraftPersistence persistence      = new(new DirectoryInfo(Path.Combine(configDirectory.FullName, "customization-editor")));
     private readonly CustomizationPreviewBuilder   previewBuilder   = new(manager, config);
     private readonly NavmeshSettings               settingsDefaults = new();
@@ -42,11 +44,14 @@ internal sealed class CustomizationEditorView
     private          bool workspaceLoaded;
     private          bool hasWorkspace;
     private          bool historySuspended;
+    private          bool inspectorEditActive;
     private          CustomizationDraft historySnapshot = new();
     private readonly Stack<CustomizationDraft> undo = new();
     private readonly Stack<CustomizationDraft> redo = new();
     private          Selection selection = new(SelectionKind.Workspace);
     private          Selection? pendingLeftPanelFocusSelection;
+    private          EditorPanelMode leftPanelMode = EditorPanelMode.Draft;
+    private          string leftPanelSearch = string.Empty;
     private          PickKind pickKind = PickKind.None;
     private          Vector3? pendingPickPoint;
     private          Vector3? currentPickPoint;
@@ -57,10 +62,9 @@ internal sealed class CustomizationEditorView
     private          string statusText = string.Empty;
     private          string exportDirText = "";
     private          CustomizationDraftExportResult? lastExport;
-    private          bool previewDirty = true;
     private          Task<(CustomizationEditorWorkspace Workspace, SceneDefinition Scene, SceneExtractor Extractor, Navmesh Navmesh)>? pendingWorkspaceCreation;
     private          CancellationTokenSource? pendingWorkspaceCreationCancel;
-    private          float leftPaneWidth = 340;
+    private          float leftPaneWidth = 360;
 
     public void Dispose()
     {
@@ -103,7 +107,7 @@ internal sealed class CustomizationEditorView
             ImGui.TableSetupColumn("right", ImGuiTableColumnFlags.WidthStretch);
 
             ImGui.TableNextColumn();
-            ImGui.BeginChild("##customization_editor_left", new Vector2(0, 0), true);
+            ImGui.BeginChild("##customization_editor_left", new Vector2(0, 0));
 
             if (workspaceLoaded && hasWorkspace)
             {
@@ -112,6 +116,8 @@ internal sealed class CustomizationEditorView
                     ref workspace,
                     ref selection,
                     ref pendingLeftPanelFocusSelection,
+                    ref leftPanelMode,
+                    ref leftPanelSearch,
                     previewBuilder,
                     collision,
                     dd,
@@ -143,10 +149,10 @@ internal sealed class CustomizationEditorView
             ImGui.EndChild();
 
             if (ImGui.TableGetColumnFlags(0).HasFlag(ImGuiTableColumnFlags.IsEnabled))
-                leftPaneWidth = ImGui.GetColumnWidth(0);
+                leftPaneWidth = Math.Clamp(ImGui.GetColumnWidth(0), 280, 560);
 
             ImGui.TableNextColumn();
-            ImGui.BeginChild("##customization_editor_right", new Vector2(0, 0), true);
+            ImGui.BeginChild("##customization_editor_right", new Vector2(0, 0));
 
             if (workspaceLoaded)
             {
@@ -164,6 +170,7 @@ internal sealed class CustomizationEditorView
                     settingsDefaults,
                     profileDefaults,
                     CommitDraftChange,
+                    () => SaveWorkspace(true),
                     CreateWorkspace,
                     DeleteCurrentWorkspace,
                     SelectWorkspace,
@@ -174,6 +181,9 @@ internal sealed class CustomizationEditorView
                     RebuildSceneExtract,
                     RebuildPreview
                 );
+
+                if (inspectorEditActive && !ImGui.IsAnyItemActive())
+                    inspectorEditActive = false;
             }
             else
             {
@@ -250,13 +260,14 @@ internal sealed class CustomizationEditorView
 
         selection                      = new(SelectionKind.Workspace);
         pendingLeftPanelFocusSelection = null;
+        leftPanelMode                  = EditorPanelMode.Draft;
+        leftPanelSearch                = string.Empty;
         pendingPickPoint               = null;
         pickKind                       = PickKind.None;
         lastPickMouseDown              = CustomizationEditorWorldOverlay.TakeKeyPress(0x01, ref lastPickMouseDown);
         lastWorldSelectMouseDown       = lastPickMouseDown;
         lastPickEscapeDown             = CustomizationEditorWorldOverlay.TakeKeyPress(0x1B, ref lastPickEscapeDown);
         draftEditState                 = default;
-        previewDirty                   = true;
         statusText                     = string.Empty;
     }
 
@@ -280,7 +291,6 @@ internal sealed class CustomizationEditorView
                 SaveWorkspace(true);
                 SelectWorkspace(created.WorkspaceId, true);
                 previewBuilder.Publish(scene, extractor, navmesh);
-                previewDirty = false;
                 statusText   = $"已新建工作区并自动激活预览: {workspace.WorkspaceName}";
             }
         }
@@ -441,11 +451,12 @@ internal sealed class CustomizationEditorView
             redo.Clear();
             selection                      = new(SelectionKind.Workspace);
             pendingLeftPanelFocusSelection = null;
+            leftPanelMode                  = EditorPanelMode.Draft;
+            leftPanelSearch                = string.Empty;
             pickKind                       = PickKind.None;
             pendingPickPoint               = null;
             currentPickPoint               = null;
             draftEditState                 = default;
-            previewDirty                   = false;
             previewBuilder.Clear();
             SaveWorkspace(true);
             statusText = "已删除当前工作区, 当前区域暂无工作区";
@@ -491,13 +502,12 @@ internal sealed class CustomizationEditorView
         redo.Clear();
         selection                      = new(SelectionKind.Workspace);
         pendingLeftPanelFocusSelection = null;
+        leftPanelMode                  = EditorPanelMode.Draft;
+        leftPanelSearch                = string.Empty;
         draftEditState                 = default;
 
         if (!avoidClear)
-        {
-            previewDirty = true;
             previewBuilder.Clear();
-        }
     }
 
     private void UpgradeLegacyWorkspace()
@@ -536,28 +546,69 @@ internal sealed class CustomizationEditorView
 
     private void DrawStatus()
     {
-        var workspaceSummary = hasWorkspace ?
-                                   $"工作区: {workspace.WorkspaceName}" :
-                                   "工作区: 无";
-        var sourceSummary = hasWorkspace ?
-                                workspace.IsApplied ?
-                                    $"生效来源: {workspace.WorkspaceName}" :
-                                    "生效来源: 默认场景" :
-                                "生效来源: 默认场景";
-        ImGui.TextUnformatted($"区域: [{territoryID}] [{territoryKey}] [{territoryName}]  |  {workspaceSummary}  |  {sourceSummary}");
+        var workspaceSummary = hasWorkspace ? workspace.WorkspaceName : "暂无工作区";
+        var sourceSummary = hasWorkspace && workspace.IsApplied ? workspace.WorkspaceName : "默认场景";
+        var previewSummary = CustomizationEditorWidgets.FormatPreviewStateDisplayName(previewBuilder.CurrentState);
+
+        if (ImGui.BeginTable("##customization_editor_status", 4, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
+        {
+            ImGui.TableSetupColumn("区域", ImGuiTableColumnFlags.WidthStretch, 2f);
+            ImGui.TableSetupColumn("工作区", ImGuiTableColumnFlags.WidthStretch, 1.4f);
+            ImGui.TableSetupColumn("生效来源", ImGuiTableColumnFlags.WidthStretch, 1.4f);
+            ImGui.TableSetupColumn("预览", ImGuiTableColumnFlags.WidthStretch, 1f);
+            ImGui.TableNextRow();
+            DrawStatusCell("区域", $"{territoryName} · {territoryID} · {territoryKey}");
+            DrawStatusCell("工作区", workspaceSummary);
+            DrawStatusCell("生效来源", sourceSummary);
+
+            ImGui.TableNextColumn();
+            ImGui.TextDisabled("预览");
+            ImGui.TextColored(GetPreviewStateColor(previewBuilder.CurrentState), previewSummary);
+            ImGui.EndTable();
+        }
 
         var statusSummary = previewBuilder.CurrentState switch
         {
             CustomizationPreviewBuilder.State.InProgress when previewBuilder.BuildProgress >= 0
-                => $"构建进度: {previewBuilder.BuildProgress * 100:f0}%",
+                => $"正在构建预览 · {previewBuilder.BuildProgress * 100:f0}%",
             CustomizationPreviewBuilder.State.Failed when previewBuilder.LastError is not null
-                => $"错误: {previewBuilder.LastError.Message}",
+                => previewBuilder.LastError.Message,
             _ => string.IsNullOrWhiteSpace(statusText) ?
-                     "状态: 就绪" :
-                     $"状态: {statusText}"
+                     "编辑器已就绪" :
+                     statusText
         };
-        ImGui.TextUnformatted($"预览: {CustomizationEditorWidgets.FormatPreviewStateDisplayName(previewBuilder.CurrentState)}  |  {statusSummary}");
+
+        if (previewBuilder.CurrentState == CustomizationPreviewBuilder.State.Failed)
+            ImGui.TextColored(GetPreviewStateColor(previewBuilder.CurrentState), statusSummary);
+        else
+            ImGui.TextDisabled(statusSummary);
+
+        if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.InProgress, BuildProgress: >= 0 })
+            ImGui.ProgressBar(previewBuilder.BuildProgress, new Vector2(-1, 3), string.Empty);
     }
+
+    private static void DrawStatusCell
+    (
+        string label,
+        string value
+    )
+    {
+        ImGui.TableNextColumn();
+        ImGui.TextDisabled(label);
+        ImGui.TextUnformatted(value);
+    }
+
+    private static Vector4 GetPreviewStateColor
+    (
+        CustomizationPreviewBuilder.State state
+    ) =>
+        state switch
+        {
+            CustomizationPreviewBuilder.State.Ready      => new(0.35f, 0.78f, 0.48f, 1f),
+            CustomizationPreviewBuilder.State.InProgress => new(0.95f, 0.72f, 0.28f, 1f),
+            CustomizationPreviewBuilder.State.Failed     => new(0.95f, 0.35f, 0.35f, 1f),
+            _                                            => ImGui.GetStyle().Colors[(int)ImGuiCol.TextDisabled]
+        };
 
     private void RebuildSceneExtract
     (
@@ -568,7 +619,6 @@ internal sealed class CustomizationEditorView
         scene.FillFromActiveLayout();
         scene.TerritoryID = territoryID;
         var customization = BuildPreviewCustomization(scene);
-        previewDirty = false;
         previewBuilder.Rebuild(scene, customization, false);
     }
 
@@ -579,9 +629,53 @@ internal sealed class CustomizationEditorView
         DraftSceneColliderInsertionKind kind
     )
     {
-        var min = Vector3.Min(a, b);
-        var max = Vector3.Max(a, b);
-        NormalizeBounds(ref min, ref max);
+        var center          = (a + b) * 0.5f;
+        var min             = Vector3.Min(a, b);
+        var max             = Vector3.Max(a, b);
+        var rotationDegrees = 0f;
+        var doubleSided     = true;
+
+        if (kind is DraftSceneColliderInsertionKind.OrientedBox or DraftSceneColliderInsertionKind.Wall)
+        {
+            var delta       = b - a;
+            var length      = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+            var halfExtents = kind == DraftSceneColliderInsertionKind.Wall ?
+                                  new Vector3(length * 0.5f, 1f, 0.025f) :
+                                  new Vector3(length * 0.5f, 1f, 0.5f);
+            min             = center - halfExtents;
+            max             = center + halfExtents;
+            rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
+        }
+        else if (kind == DraftSceneColliderInsertionKind.Sphere)
+        {
+            var radius  = MathF.Max(Vector3.Distance(a, b), 0.05f);
+            var extents = new Vector3(radius);
+            center      = a;
+            min         = center - extents;
+            max         = center + extents;
+        }
+        else if (kind == DraftSceneColliderInsertionKind.OrientedCylinder)
+        {
+            min = Vector3.Min(a, b) - new Vector3(0.5f);
+            max = Vector3.Max(a, b) + new Vector3(0.5f);
+        }
+        else if (kind == DraftSceneColliderInsertionKind.Ramp)
+        {
+            var low  = a.Y <= b.Y ? a : b;
+            var high = a.Y <= b.Y ? b : a;
+            var delta = high - low;
+            var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+            var height = MathF.Max(high.Y - low.Y, 0.5f);
+            center = new((low.X + high.X) * 0.5f, low.Y + (height * 0.5f), (low.Z + high.Z) * 0.5f);
+            var halfExtents = new Vector3(length * 0.5f, height * 0.5f, 0.75f);
+            min             = center - halfExtents;
+            max             = center + halfExtents;
+            rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
+        }
+        else
+        {
+            NormalizeBounds(ref min, ref max);
+        }
 
         ApplyDraftChange
         (() =>
@@ -593,13 +687,21 @@ internal sealed class CustomizationEditorView
                         Kind              = kind,
                         Min               = min,
                         Max               = max,
-                        ForceSetPrimFlags = SceneExtractor.PrimitiveFlags.ForceUnwalkable
+                        Start             = a,
+                        End               = b,
+                        Radius            = 0.5f,
+                        RotationDegrees   = rotationDegrees,
+                        DoubleSided       = doubleSided,
+                        ForceSetPrimFlags = kind switch
+                        {
+                            DraftSceneColliderInsertionKind.Ramp           => SceneExtractor.PrimitiveFlags.ForceWalkable,
+                            DraftSceneColliderInsertionKind.RemoveInstances => SceneExtractor.PrimitiveFlags.None,
+                            _                                               => SceneExtractor.PrimitiveFlags.ForceUnwalkable
+                        }
                     }
                 );
                 selection = new(SelectionKind.ColliderInsertion, workspace.Draft.ColliderInsertions.Count - 1);
-                statusText = kind == DraftSceneColliderInsertionKind.Cylinder ?
-                                 "已添加圆柱障碍" :
-                                 "已添加 AABB 障碍";
+                statusText = $"已添加 {CustomizationEditorWidgets.FormatEnumDisplayName(kind)} 障碍";
             }
         );
     }
@@ -672,8 +774,10 @@ internal sealed class CustomizationEditorView
     )
     {
         var inst = mesh.Instances[index];
-        var existingIndex = workspace.Draft.InstancePatches.FindIndex
-            (x => x.MeshKey == key && x.Kind == kind && (kind == DraftSceneInstancePatchKind.ClearInstances || x.InstanceIndex == index));
+        var existingIndex = kind == DraftSceneInstancePatchKind.Insert ?
+                                -1 :
+                                workspace.Draft.InstancePatches.FindIndex
+                                    (x => x.MeshKey == key && x.Kind == kind && (kind == DraftSceneInstancePatchKind.ClearInstances || x.InstanceIndex == index));
 
         if (existingIndex >= 0)
         {
@@ -685,21 +789,28 @@ internal sealed class CustomizationEditorView
         ApplyDraftChange
         (() =>
             {
+                var worldTransform = DraftMatrix4x3.FromRuntime(inst.WorldTransform);
+                if (kind == DraftSceneInstancePatchKind.Insert)
+                    worldTransform.Row3.X += 1f;
+
                 workspace.Draft.InstancePatches.Add
                 (
                     new()
                     {
                         MeshKey             = key,
-                        InstanceIndex       = index,
-                        InstanceId          = inst.Id,
+                        InstanceIndex       = kind == DraftSceneInstancePatchKind.Insert ? -1 : index,
+                        InstanceId          = kind == DraftSceneInstancePatchKind.Insert ? 0 : inst.Id,
                         Kind                = kind,
-                        WorldTransform      = DraftMatrix4x3.FromRuntime(inst.WorldTransform),
+                        WorldTransform      = worldTransform,
+                        Material            = inst.Material,
+                        Count               = 1,
+                        Offset              = Vector3.UnitX,
                         ForceSetPrimFlags   = inst.ForceSetPrimFlags,
                         ForceClearPrimFlags = inst.ForceClearPrimFlags
                     }
                 );
                 selection  = new(SelectionKind.InstancePatch, workspace.Draft.InstancePatches.Count - 1);
-                statusText = $"已加入实例补丁: {kind}";
+                statusText = $"已加入实例补丁: {CustomizationEditorWidgets.FormatEnumDisplayName(kind)}";
             }
         );
     }
@@ -805,7 +916,6 @@ internal sealed class CustomizationEditorView
         scene.TerritoryID = territoryID;
 
         var customization = BuildPreviewCustomization(scene);
-        previewDirty = false;
         statusText   = string.Empty;
         previewBuilder.Rebuild(scene, customization, true);
     }
@@ -851,11 +961,30 @@ internal sealed class CustomizationEditorView
         if (historySuspended || !hasWorkspace)
             return;
 
-        undo.Push(historySnapshot.Clone());
+        if (!inspectorEditActive)
+            PushUndoSnapshot(historySnapshot.Clone());
+
+        inspectorEditActive = ImGui.IsAnyItemActive();
         historySnapshot = workspace.Draft.Clone();
         redo.Clear();
-        previewDirty = true;
         SaveWorkspace();
+    }
+
+    private void PushUndoSnapshot
+    (
+        CustomizationDraft snapshot
+    )
+    {
+        if (undo.Count >= MAX_HISTORY_ENTRIES)
+        {
+            var retained = undo.Take(MAX_HISTORY_ENTRIES - 1).ToArray();
+            undo.Clear();
+
+            for (var i = retained.Length - 1; i >= 0; --i)
+                undo.Push(retained[i]);
+        }
+
+        undo.Push(snapshot);
     }
 
     private void ApplyDraftChange
@@ -879,7 +1008,7 @@ internal sealed class CustomizationEditorView
         selection                      = new(SelectionKind.Workspace);
         pendingLeftPanelFocusSelection = null;
         draftEditState                 = default;
-        previewDirty                   = true;
+        inspectorEditActive            = false;
         historySuspended               = false;
         SaveWorkspace();
     }
@@ -890,13 +1019,13 @@ internal sealed class CustomizationEditorView
             return;
 
         historySuspended = true;
-        undo.Push(workspace.Draft.Clone());
+        PushUndoSnapshot(workspace.Draft.Clone());
         workspace.Draft                = redo.Pop();
         historySnapshot                = workspace.Draft.Clone();
         selection                      = new(SelectionKind.Workspace);
         pendingLeftPanelFocusSelection = null;
         draftEditState                 = default;
-        previewDirty                   = true;
+        inspectorEditActive            = false;
         historySuspended               = false;
         SaveWorkspace();
     }

@@ -1,3 +1,4 @@
+using System.Numerics;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Scene;
@@ -186,22 +187,53 @@ internal static class CustomizationDraftSeedBuilder
         SceneExtractor.Mesh customMesh
     )
     {
-        if (meshKey != "<box>" && meshKey != "<cylinder>")
+        if (!IsColliderInsertionMeshKey(meshKey))
             return;
 
         var baseIds = defaultMesh.Instances.Select(static instance => instance.Id).ToHashSet();
 
         foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.Id)))
         {
+            var center      = instance.WorldTransform.Row3;
+            var halfExtents = new Vector3
+            (
+                instance.WorldTransform.Row0.Length(),
+                instance.WorldTransform.Row1.Length(),
+                instance.WorldTransform.Row2.Length()
+            );
+            if (meshKey is "<plane one-sided>" or "<plane two-sided>")
+                halfExtents.Z = 0.025f;
+
+            var hasYRotation = MathF.Abs(instance.WorldTransform.Row0.Z) > 0.0001f ||
+                               MathF.Abs(instance.WorldTransform.Row2.X) > 0.0001f;
+            var hasCylinderRotation = meshKey == "<cylinder>" &&
+                                      (MathF.Abs(instance.WorldTransform.Row1.X) > 0.0001f || MathF.Abs(instance.WorldTransform.Row1.Z) > 0.0001f);
+            var rotationDegrees = meshKey is "<box>" or "<plane one-sided>" or "<plane two-sided>" or "<ramp>" ?
+                                      MathF.Atan2(-instance.WorldTransform.Row0.Z, instance.WorldTransform.Row0.X) * (180f / MathF.PI) :
+                                      0f;
+            var kind = meshKey switch
+            {
+                "<cylinder>" when hasCylinderRotation     => DraftSceneColliderInsertionKind.OrientedCylinder,
+                "<cylinder>"                              => DraftSceneColliderInsertionKind.Cylinder,
+                "<sphere>"                                => DraftSceneColliderInsertionKind.Sphere,
+                "<plane one-sided>" or "<plane two-sided>" => DraftSceneColliderInsertionKind.Wall,
+                "<ramp>"                                  => DraftSceneColliderInsertionKind.Ramp,
+                _ when hasYRotation                        => DraftSceneColliderInsertionKind.OrientedBox,
+                _                                          => DraftSceneColliderInsertionKind.Aabb
+            };
+
             draft.ColliderInsertions.Add
             (
                 new()
                 {
-                    Kind = meshKey == "<cylinder>" ?
-                               DraftSceneColliderInsertionKind.Cylinder :
-                               DraftSceneColliderInsertionKind.Aabb,
-                    Min                 = instance.WorldBounds.Min,
-                    Max                 = instance.WorldBounds.Max,
+                    Kind                = kind,
+                    Min                 = center - halfExtents,
+                    Max                 = center + halfExtents,
+                    Start               = center - instance.WorldTransform.Row1,
+                    End                 = center + instance.WorldTransform.Row1,
+                    Radius              = (instance.WorldTransform.Row0.Length() + instance.WorldTransform.Row2.Length()) * 0.5f,
+                    RotationDegrees     = rotationDegrees,
+                    DoubleSided         = meshKey != "<plane one-sided>",
                     ForceSetPrimFlags   = instance.ForceSetPrimFlags,
                     ForceClearPrimFlags = instance.ForceClearPrimFlags
                 }
@@ -224,6 +256,25 @@ internal static class CustomizationDraftSeedBuilder
         }
 
         var customById = customMesh.Instances.ToDictionary(static instance => instance.Id);
+        if (!IsColliderInsertionMeshKey(meshKey))
+        {
+            var baseIds = defaultMesh.Instances.Select(static instance => instance.Id).ToHashSet();
+            foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.Id)))
+            {
+                draft.InstancePatches.Add
+                (
+                    new()
+                    {
+                        MeshKey             = meshKey,
+                        Kind                = DraftSceneInstancePatchKind.Insert,
+                        WorldTransform      = DraftMatrix4x3.FromRuntime(instance.WorldTransform),
+                        Material            = instance.Material,
+                        ForceSetPrimFlags   = instance.ForceSetPrimFlags,
+                        ForceClearPrimFlags = instance.ForceClearPrimFlags
+                    }
+                );
+            }
+        }
 
         for (var i = 0; i < defaultMesh.Instances.Count; ++i)
         {
@@ -276,6 +327,12 @@ internal static class CustomizationDraftSeedBuilder
             }
         }
     }
+
+    private static bool IsColliderInsertionMeshKey
+    (
+        string meshKey
+    ) =>
+        meshKey is "<box>" or "<cylinder>" or "<sphere>" or "<plane one-sided>" or "<plane two-sided>" or "<ramp>";
 
     private static void CopyPartPatches
     (

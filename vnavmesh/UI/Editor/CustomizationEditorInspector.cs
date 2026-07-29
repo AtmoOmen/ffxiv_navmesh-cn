@@ -73,6 +73,7 @@ internal static class CustomizationEditorInspector
         NavmeshSettings                   settingsDefaults,
         NavmeshBuildProfile               profileDefaults,
         CommitDelegate                    onCommit,
+        CommitDelegate                    onSaveWorkspaceSettings,
         WorkspaceCreateDelegate           onCreateWorkspace,
         WorkspaceDeleteDelegate           onDeleteWorkspace,
         WorkspaceSelectDelegate           onSelectWorkspace,
@@ -89,7 +90,17 @@ internal static class CustomizationEditorInspector
         switch (selection.Kind)
         {
             case SelectionKind.Workspace:
-                DrawWorkspaceInspector(store, hasWorkspace, ref workspace, ref exportDirText, onCommit, onCreateWorkspace, onDeleteWorkspace, onSelectWorkspace);
+                DrawWorkspaceInspector
+                (
+                    store,
+                    hasWorkspace,
+                    ref workspace,
+                    ref exportDirText,
+                    onSaveWorkspaceSettings,
+                    onCreateWorkspace,
+                    onDeleteWorkspace,
+                    onSelectWorkspace
+                );
                 break;
             case SelectionKind.BuildProfile:
                 if (!hasWorkspace)
@@ -182,7 +193,7 @@ internal static class CustomizationEditorInspector
             SelectionKind.MeshRemoval       => $"网格删除 [{selection.Index}]",
             SelectionKind.InstancePatch     => $"实例补丁 [{selection.Index}]",
             SelectionKind.PartPatch         => $"顶点 / 三角补丁 [{selection.Index}]",
-            SelectionKind.ColliderInsertion => $"碰撞插入 [{selection.Index}]",
+            SelectionKind.ColliderInsertion => $"世界修改 [{selection.Index}]",
             SelectionKind.MeshLink          => $"网格连接 [{selection.Index}]",
             SelectionKind.OffMeshConnection => $"离网连接 [{selection.Index}]",
             SelectionKind.PreviewMesh       => $"预览网格: {selection.Key}",
@@ -200,15 +211,15 @@ internal static class CustomizationEditorInspector
     ) =>
         selection.Kind switch
         {
-            SelectionKind.Workspace         => "管理草稿保存、自动重建和 C# 导出位置",
+            SelectionKind.Workspace         => "管理草稿保存、预览和 C# 导出位置",
             SelectionKind.BuildProfile      => "覆盖 Recast 构建参数, 如像素尺寸、区域合并、边缘长度等",
-            SelectionKind.BuildSettings     => "覆盖本区域的构建设置, 修改后自动更新预览",
+            SelectionKind.BuildSettings     => "覆盖本区域的构建设置",
             SelectionKind.FlyingOverride    => "指定本区域是否支持飞行导航",
             SelectionKind.Diagnostics       => "构建统计、阶段耗时与慢瓦片分析",
             SelectionKind.MeshRemoval       => "将整个模型从提取场景移除, 适合门、碎石等不应参与导航的碰撞体",
             SelectionKind.InstancePatch     => "修改或移除某模型实例, 可强制写入或清除碰撞标记",
             SelectionKind.PartPatch         => "修改模型内部顶点或三角, 适合局部几何修补",
-            SelectionKind.ColliderInsertion => "两点生成的障碍体, 用中心和尺寸调整后自动重建预览",
+            SelectionKind.ColliderInsertion => "创建几何体或按世界范围批量修改场景实例",
             SelectionKind.MeshLink          => "在已构建导航网格上追加连线或客户端路径",
             SelectionKind.OffMeshConnection => "在构建参数中追加离网连接",
             SelectionKind.PreviewMesh       => "实时预览模型, 右键可加入草稿删除清单",
@@ -225,7 +236,7 @@ internal static class CustomizationEditorInspector
         bool                              hasWorkspace,
         ref CustomizationEditorWorkspace  workspace,
         ref string                        exportDirText,
-        CommitDelegate                    onCommit,
+        CommitDelegate                    onSaveWorkspaceSettings,
         WorkspaceCreateDelegate           onCreateWorkspace,
         WorkspaceDeleteDelegate           onDeleteWorkspace,
         WorkspaceSelectDelegate           onSelectWorkspace
@@ -239,7 +250,29 @@ internal static class CustomizationEditorInspector
         using (ImRaii.Disabled(!hasWorkspace))
         {
             if (ImGui.Button("删除当前工作区"))
+                ImGui.OpenPopup("确认删除工作区##workspace_delete");
+        }
+
+        if (ImGui.BeginPopupModal("确认删除工作区##workspace_delete", ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.TextUnformatted(hasWorkspace ? $"删除工作区“{workspace.WorkspaceName}”？" : "删除当前工作区？");
+            ImGui.TextDisabled("草稿、设置和撤销历史将一起移除");
+            ImGui.Separator();
+
+            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.62f, 0.18f, 0.18f, 1f));
+            if (ImGui.Button("删除##confirm_workspace_delete", new Vector2(100, 0)))
+            {
                 onDeleteWorkspace();
+                ImGui.CloseCurrentPopup();
+            }
+
+            ImGui.PopStyleColor();
+            ImGui.SameLine();
+
+            if (ImGui.Button("取消##cancel_workspace_delete", new Vector2(100, 0)))
+                ImGui.CloseCurrentPopup();
+
+            ImGui.EndPopup();
         }
 
         if (!hasWorkspace)
@@ -277,21 +310,22 @@ internal static class CustomizationEditorInspector
         var renamed = workspace.WorkspaceName;
 
         if (ImGui.InputText("工作区名称", ref renamed) && !string.IsNullOrWhiteSpace(renamed))
-        {
             workspace.WorkspaceName = renamed.Trim();
-            onCommit();
-        }
+
+        if (ImGui.IsItemDeactivatedAfterEdit())
+            onSaveWorkspaceSettings();
 
         if (CustomizationEditorWidgets.DrawBool("当前工作区生效", ref workspace.IsApplied))
-            onCommit();
+            onSaveWorkspaceSettings();
 
-        CustomizationEditorWidgets.DrawBool("自动保存", ref workspace.Settings.AutoSave);
+        if (CustomizationEditorWidgets.DrawBool("自动保存", ref workspace.Settings.AutoSave))
+            onSaveWorkspaceSettings();
 
         if (ImGui.InputText("导出目录", ref exportDirText))
-        {
             workspace.Settings.ExportDirectory = exportDirText;
-            onCommit();
-        }
+
+        if (ImGui.IsItemDeactivatedAfterEdit())
+            onSaveWorkspaceSettings();
     }
 
     private static void DrawBuildProfileInspector
@@ -773,11 +807,32 @@ internal static class CustomizationEditorInspector
         changed |= CustomizationEditorWidgets.DrawString("网格键", ref item.MeshKey);
         changed |= CustomizationEditorWidgets.DrawString("备注",  ref item.Note);
         changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
-        changed |= CustomizationEditorWidgets.DrawInt("实例索引", ref item.InstanceIndex);
-        changed |= CustomizationEditorWidgets.DrawUInt64("实例编号", ref item.InstanceId);
-        changed |= CustomizationEditorWidgets.DrawMatrix("世界变换", ref item.WorldTransform);
-        changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
-        changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
+
+        if (item.Kind == DraftSceneInstancePatchKind.Insert)
+        {
+            changed |= CustomizationEditorWidgets.DrawMatrix("世界变换", ref item.WorldTransform);
+            if (CustomizationEditorWidgets.DrawInt("数量", ref item.Count))
+            {
+                item.Count = Math.Clamp(item.Count, 1, 1024);
+                changed    = true;
+            }
+            changed |= CustomizationEditorWidgets.DrawVector3("步进偏移", ref item.Offset);
+            changed |= CustomizationEditorWidgets.DrawUInt64("材质", ref item.Material);
+            changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
+            changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
+        }
+        else if (item.Kind != DraftSceneInstancePatchKind.ClearInstances)
+        {
+            changed |= CustomizationEditorWidgets.DrawInt("实例索引", ref item.InstanceIndex);
+            changed |= CustomizationEditorWidgets.DrawUInt64("实例编号", ref item.InstanceId);
+            if (item.Kind == DraftSceneInstancePatchKind.Transform)
+                changed |= CustomizationEditorWidgets.DrawMatrix("世界变换", ref item.WorldTransform);
+            if (item.Kind == DraftSceneInstancePatchKind.SetFlags)
+            {
+                changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
+                changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
+            }
+        }
 
         if (changed) onCommit();
     }
@@ -910,10 +965,75 @@ internal static class CustomizationEditorInspector
         changed |= enabledBefore != item.Enabled;
 
         changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
+        var kindBefore = item.Kind;
         changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
-        changed |= CustomizationEditorWidgets.DrawBoundsEditor("几何", ref item.Min, ref item.Max);
-        changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
-        changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
+        if (kindBefore != item.Kind && item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
+        {
+            var center      = (item.Min + item.Max) * 0.5f;
+            var halfExtents = Vector3.Abs(item.Max - item.Min) * 0.5f;
+            item.Start  = center - new Vector3(0f, MathF.Max(halfExtents.Y, 0.005f), 0f);
+            item.End    = center + new Vector3(0f, MathF.Max(halfExtents.Y, 0.005f), 0f);
+            item.Radius = MathF.Max(MathF.Max(halfExtents.X, halfExtents.Z), 0.005f);
+        }
+        if (item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
+        {
+            changed |= CustomizationEditorWidgets.DrawVector3("起点", ref item.Start);
+            changed |= CustomizationEditorWidgets.DrawVector3("终点", ref item.End);
+            if (CustomizationEditorWidgets.DrawFloat("半径", ref item.Radius, 0.05f, 0.005f, 10000f))
+            {
+                item.Radius = MathF.Max(MathF.Abs(item.Radius), 0.005f);
+                changed     = true;
+            }
+            var bounds = CustomizationEditorSpatial.CreateColliderBounds(item);
+            item.Min = bounds.Min;
+            item.Max = bounds.Max;
+        }
+        else
+        {
+            changed |= CustomizationEditorWidgets.DrawBoundsEditor("几何", ref item.Min, ref item.Max);
+        }
+        if (CustomizationEditorSpatial.UsesYRotation(item.Kind))
+            changed |= CustomizationEditorWidgets.DrawFloat("Y 轴旋转", ref item.RotationDegrees, 0.25f, -360f, 360f);
+        if (item.Kind == DraftSceneColliderInsertionKind.Wall)
+            changed |= CustomizationEditorWidgets.DrawBool("双面", ref item.DoubleSided);
+        if (item.Kind is DraftSceneColliderInsertionKind.RemoveInstances or DraftSceneColliderInsertionKind.SetInstanceFlags)
+            changed |= CustomizationEditorWidgets.DrawString("网格键包含", ref item.MeshKeyContains);
+
+        if (item.Kind != DraftSceneColliderInsertionKind.RemoveInstances)
+        {
+            changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
+            changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
+
+            if (ImGui.Button("不可行走"))
+            {
+                item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                changed                  = true;
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("可行走"))
+            {
+                item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.ForceWalkable;
+                item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                changed                  = true;
+            }
+
+            if (ImGui.Button("飞行穿透"))
+            {
+                item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.FlyThrough;
+                item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                changed                  = true;
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("保留材质语义"))
+            {
+                item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.None;
+                item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                changed                  = true;
+            }
+        }
 
         if (changed) onCommit();
     }
@@ -1151,6 +1271,8 @@ internal static class CustomizationEditorInspector
         if (ImGui.Button("加入实例变换补丁"))
             onAddInstancePatch(mesh, selection.Key, selection.Index, DraftSceneInstancePatchKind.Transform);
         ImGui.SameLine();
+        if (ImGui.Button("复制为新实例"))
+            onAddInstancePatch(mesh, selection.Key, selection.Index, DraftSceneInstancePatchKind.Insert);
         if (ImGui.Button("加入实例标记补丁"))
             onAddInstancePatch(mesh, selection.Key, selection.Index, DraftSceneInstancePatchKind.SetFlags);
         ImGui.SameLine();
@@ -1343,6 +1465,34 @@ internal static class CustomizationEditorInspector
     {
         CustomizationEditorWidgets.DrawBool("启用", ref enabled);
         ImGui.SameLine();
-        return ImGui.Button("删除");
+
+        if (ImGui.Button("删除"))
+            ImGui.OpenPopup("确认删除草稿项##draft_item_delete");
+
+        var confirmed = false;
+
+        if (ImGui.BeginPopupModal("确认删除草稿项##draft_item_delete", ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImGui.TextUnformatted("删除当前草稿项？");
+            ImGui.TextDisabled("可使用撤销恢复本次操作");
+            ImGui.Separator();
+
+            ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.62f, 0.18f, 0.18f, 1f));
+            if (ImGui.Button("删除##confirm_draft_item_delete", new Vector2(100, 0)))
+            {
+                confirmed = true;
+                ImGui.CloseCurrentPopup();
+            }
+
+            ImGui.PopStyleColor();
+            ImGui.SameLine();
+
+            if (ImGui.Button("取消##cancel_draft_item_delete", new Vector2(100, 0)))
+                ImGui.CloseCurrentPopup();
+
+            ImGui.EndPopup();
+        }
+
+        return confirmed;
     }
 }
