@@ -75,6 +75,7 @@ internal static class CustomizationEditorWidgets
             DraftSceneColliderInsertionKind.OrientedCylinder => "定向圆柱",
             DraftSceneColliderInsertionKind.OrientedBox   => "旋转箱体",
             DraftSceneColliderInsertionKind.Sphere        => "球体",
+            DraftSceneColliderInsertionKind.WalkableFloor => "可行走地面",
             DraftSceneColliderInsertionKind.Wall          => "墙体",
             DraftSceneColliderInsertionKind.Ramp          => "斜坡",
             DraftSceneColliderInsertionKind.RemoveInstances => "区域移除实例",

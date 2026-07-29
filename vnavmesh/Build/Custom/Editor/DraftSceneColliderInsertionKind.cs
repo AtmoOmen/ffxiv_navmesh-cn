@@ -9,6 +9,7 @@ public enum DraftSceneColliderInsertionKind
     Sphere,
     Wall,
     Ramp,
+    WalkableFloor,
     RemoveInstances,
     SetInstanceFlags
 }

@@ -182,6 +182,22 @@ internal static class CustomizationEditorToolbar
             DrawModeButton
             (
                 FontAwesomeIcon.DrawPolygon,
+                "地面",
+                PickKind.WalkableFloor,
+                "在画面点两个世界点生成可行走地面",
+                ref pickKind,
+                ref pendingPickPoint,
+                ref currentPickPoint,
+                ref lastPickMouseDown,
+                ref lastWorldSelectMouseDown,
+                ref lastPickEscapeDown,
+                ref statusText
+            );
+
+            ImGui.SameLine();
+            DrawModeButton
+            (
+                FontAwesomeIcon.DrawPolygon,
                 "墙体",
                 PickKind.Wall,
                 "沿两个世界点的水平连线生成双面墙",

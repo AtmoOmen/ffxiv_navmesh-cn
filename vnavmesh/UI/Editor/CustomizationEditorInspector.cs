@@ -975,6 +975,14 @@ internal static class CustomizationEditorInspector
             item.End    = center + new Vector3(0f, MathF.Max(halfExtents.Y, 0.005f), 0f);
             item.Radius = MathF.Max(MathF.Max(halfExtents.X, halfExtents.Z), 0.005f);
         }
+        if (kindBefore != item.Kind && item.Kind == DraftSceneColliderInsertionKind.WalkableFloor)
+        {
+            var center      = (item.Min + item.Max) * 0.5f;
+            var halfExtents = Vector3.Max(Vector3.Abs(item.Max - item.Min) * 0.5f, new Vector3(0.05f, 0.005f, 0.05f));
+            halfExtents.Y = 0.005f;
+            item.Min = center - halfExtents;
+            item.Max = center + halfExtents;
+        }
         if (item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
         {
             changed |= CustomizationEditorWidgets.DrawVector3("起点", ref item.Start);
@@ -991,6 +999,20 @@ internal static class CustomizationEditorInspector
         else
         {
             changed |= CustomizationEditorWidgets.DrawBoundsEditor("几何", ref item.Min, ref item.Max);
+            if (item.Kind == DraftSceneColliderInsertionKind.WalkableFloor)
+            {
+                var center      = (item.Min + item.Max) * 0.5f;
+                var halfExtents = Vector3.Max(Vector3.Abs(item.Max - item.Min) * 0.5f, new Vector3(0.05f, 0.005f, 0.05f));
+                halfExtents.Y = 0.005f;
+                var normalizedMin = center - halfExtents;
+                var normalizedMax = center + halfExtents;
+                if (normalizedMin != item.Min || normalizedMax != item.Max)
+                {
+                    item.Min = normalizedMin;
+                    item.Max = normalizedMax;
+                    changed  = true;
+                }
+            }
         }
         if (CustomizationEditorSpatial.UsesYRotation(item.Kind))
             changed |= CustomizationEditorWidgets.DrawFloat("Y 轴旋转", ref item.RotationDegrees, 0.25f, -360f, 360f);
@@ -1001,37 +1023,56 @@ internal static class CustomizationEditorInspector
 
         if (item.Kind != DraftSceneColliderInsertionKind.RemoveInstances)
         {
-            changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
-            changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
-
-            if (ImGui.Button("不可行走"))
+            if (item.Kind is DraftSceneColliderInsertionKind.Ramp or DraftSceneColliderInsertionKind.WalkableFloor)
             {
-                item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.ForceUnwalkable;
-                item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
-                changed                  = true;
+                var surfaceMask = SceneExtractor.PrimitiveFlags.ForceWalkable | SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                var additionalSetFlags   = item.ForceSetPrimFlags   & ~surfaceMask;
+                var additionalClearFlags = item.ForceClearPrimFlags & ~surfaceMask;
+                changed |= CustomizationEditorWidgets.DrawFlags("附加设置标记", ref additionalSetFlags);
+                changed |= CustomizationEditorWidgets.DrawFlags("附加清除标记", ref additionalClearFlags);
+                var setFlags   = additionalSetFlags   | SceneExtractor.PrimitiveFlags.ForceWalkable;
+                var clearFlags = additionalClearFlags | SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                if (item.ForceSetPrimFlags != setFlags || item.ForceClearPrimFlags != clearFlags)
+                {
+                    item.ForceSetPrimFlags   = setFlags;
+                    item.ForceClearPrimFlags = clearFlags;
+                    changed                  = true;
+                }
             }
-
-            ImGui.SameLine();
-            if (ImGui.Button("可行走"))
+            else
             {
-                item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.ForceWalkable;
-                item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
-                changed                  = true;
-            }
+                changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
+                changed |= CustomizationEditorWidgets.DrawFlags("清除标记", ref item.ForceClearPrimFlags);
 
-            if (ImGui.Button("飞行穿透"))
-            {
-                item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.FlyThrough;
-                item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
-                changed                  = true;
-            }
+                if (ImGui.Button("不可行走"))
+                {
+                    item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                    item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                    changed                  = true;
+                }
 
-            ImGui.SameLine();
-            if (ImGui.Button("保留材质语义"))
-            {
-                item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.None;
-                item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
-                changed                  = true;
+                ImGui.SameLine();
+                if (ImGui.Button("可行走"))
+                {
+                    item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.ForceWalkable;
+                    item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                    changed                  = true;
+                }
+
+                if (ImGui.Button("飞行穿透"))
+                {
+                    item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.FlyThrough;
+                    item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                    changed                  = true;
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("保留材质语义"))
+                {
+                    item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.None;
+                    item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                    changed                  = true;
+                }
             }
         }
 

@@ -10,6 +10,7 @@ internal enum PickKind
     Cylinder,
     OrientedCylinder,
     Sphere,
+    WalkableFloor,
     Wall,
     Ramp,
     RemoveInstancesVolume,

@@ -203,12 +203,14 @@ internal static class CustomizationDraftSeedBuilder
             );
             if (meshKey is "<plane one-sided>" or "<plane two-sided>")
                 halfExtents.Z = 0.025f;
+            if (meshKey == "<walkable floor>")
+                halfExtents.Y = 0.005f;
 
             var hasYRotation = MathF.Abs(instance.WorldTransform.Row0.Z) > 0.0001f ||
                                MathF.Abs(instance.WorldTransform.Row2.X) > 0.0001f;
             var hasCylinderRotation = meshKey == "<cylinder>" &&
                                       (MathF.Abs(instance.WorldTransform.Row1.X) > 0.0001f || MathF.Abs(instance.WorldTransform.Row1.Z) > 0.0001f);
-            var rotationDegrees = meshKey is "<box>" or "<plane one-sided>" or "<plane two-sided>" or "<ramp>" ?
+            var rotationDegrees = meshKey is "<box>" or "<plane one-sided>" or "<plane two-sided>" or "<ramp>" or "<walkable floor>" ?
                                       MathF.Atan2(-instance.WorldTransform.Row0.Z, instance.WorldTransform.Row0.X) * (180f / MathF.PI) :
                                       0f;
             var kind = meshKey switch
@@ -218,6 +220,7 @@ internal static class CustomizationDraftSeedBuilder
                 "<sphere>"                                => DraftSceneColliderInsertionKind.Sphere,
                 "<plane one-sided>" or "<plane two-sided>" => DraftSceneColliderInsertionKind.Wall,
                 "<ramp>"                                  => DraftSceneColliderInsertionKind.Ramp,
+                "<walkable floor>"                         => DraftSceneColliderInsertionKind.WalkableFloor,
                 _ when hasYRotation                        => DraftSceneColliderInsertionKind.OrientedBox,
                 _                                          => DraftSceneColliderInsertionKind.Aabb
             };
@@ -332,7 +335,7 @@ internal static class CustomizationDraftSeedBuilder
     (
         string meshKey
     ) =>
-        meshKey is "<box>" or "<cylinder>" or "<sphere>" or "<plane one-sided>" or "<plane two-sided>" or "<ramp>";
+        meshKey is "<box>" or "<cylinder>" or "<sphere>" or "<plane one-sided>" or "<plane two-sided>" or "<ramp>" or "<walkable floor>";
 
     private static void CopyPartPatches
     (

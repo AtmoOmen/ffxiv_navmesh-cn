@@ -260,6 +260,10 @@ public static class SceneExtractorExtension
         )
         {
             halfExtents = Vector3.Max(Vector3.Abs(halfExtents), new Vector3(0.005f));
+            forceSetFlags |= SceneExtractor.PrimitiveFlags.ForceWalkable;
+            forceSetFlags &= ~SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+            forceClearFlags |= SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+            forceClearFlags &= ~SceneExtractor.PrimitiveFlags.ForceWalkable;
             var matrix = Matrix4x4.CreateScale(halfExtents) *
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
@@ -270,6 +274,30 @@ public static class SceneExtractorExtension
                          Vector3.Abs(transform.Row2);
             var bounds = new AABB { Min = center - extent, Max = center + extent };
             scene.InsertCollider("<ramp>", transform, bounds, forceSetFlags, forceClearFlags);
+        }
+
+        public void InsertWalkableFloor
+        (
+            Vector2                       halfSize,
+            Vector3                       center,
+            float                         rotationDegrees,
+            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
+            SceneExtractor.PrimitiveFlags forceClearFlags = default
+        )
+        {
+            halfSize = Vector2.Max(Vector2.Abs(halfSize), new Vector2(0.05f));
+            forceSetFlags |= SceneExtractor.PrimitiveFlags.ForceWalkable;
+            forceSetFlags &= ~SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+            forceClearFlags |= SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+            forceClearFlags &= ~SceneExtractor.PrimitiveFlags.ForceWalkable;
+            var matrix = Matrix4x4.CreateScale(halfSize.X, 1f, halfSize.Y) *
+                         Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
+            matrix.Translation = center;
+
+            var transform = new Matrix4x3(matrix);
+            var extent = Vector3.Max(Vector3.Abs(transform.Row0) + Vector3.Abs(transform.Row2), new Vector3(0.005f));
+            var bounds = new AABB { Min = center - extent, Max = center + extent };
+            scene.InsertCollider("<walkable floor>", transform, bounds, forceSetFlags, forceClearFlags);
         }
 
         public void InsertOrientedBoxCollider

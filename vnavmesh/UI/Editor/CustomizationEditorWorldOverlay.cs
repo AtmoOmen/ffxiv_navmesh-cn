@@ -174,6 +174,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         : insertion.Kind == DraftSceneColliderInsertionKind.OrientedCylinder ? 0xFF33DDBB
                         : insertion.Kind == DraftSceneColliderInsertionKind.OrientedBox ? 0xFFFF66CC
                         : insertion.Kind == DraftSceneColliderInsertionKind.Sphere      ? 0xFF66CCFF
+                        : insertion.Kind == DraftSceneColliderInsertionKind.WalkableFloor ? 0xFF4DFF88
                         : insertion.Kind == DraftSceneColliderInsertionKind.Wall        ? 0xFFFF6688
                         : insertion.Kind == DraftSceneColliderInsertionKind.Ramp        ? 0xFF66FF99
                         : insertion.Kind == DraftSceneColliderInsertionKind.RemoveInstances ? 0xFFFF4D4D
@@ -206,6 +207,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     color,
                     selected ? 3 : 2
                 );
+            }
+            else if (insertion.Kind == DraftSceneColliderInsertionKind.WalkableFloor)
+            {
+                DrawWalkableFloor(insertion.Min, insertion.Max, insertion.RotationDegrees, dd, color, selected ? 3 : 2);
             }
             else if (insertion.Kind == DraftSceneColliderInsertionKind.Ramp)
             {
@@ -420,6 +425,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 break;
             case PickKind.Sphere:
                 onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.Sphere);
+                break;
+            case PickKind.WalkableFloor:
+                onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.WalkableFloor);
                 break;
             case PickKind.Wall:
                 onAddColliderInsertion(first, point, DraftSceneColliderInsertionKind.Wall);
@@ -1432,7 +1440,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         break;
                 }
 
-                NormalizeBounds(ref collider.Min, ref collider.Max);
+                if (collider.Kind == DraftSceneColliderInsertionKind.WalkableFloor)
+                    NormalizeFloorBounds(ref collider.Min, ref collider.Max);
+                else
+                    NormalizeBounds(ref collider.Min, ref collider.Max);
                 selection = new(SelectionKind.ColliderInsertion, draftEditState.Index);
                 break;
             case DraftEditMode.MeshLinkStart:
@@ -2265,6 +2276,19 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 dd.DrawWorldText(current, $"半径 {radius:f1}", 0xFF66CCFF);
                 break;
             }
+            case PickKind.WalkableFloor:
+            {
+                var center = (first + current) * 0.5f;
+                var halfExtents = new Vector3
+                (
+                    MathF.Max(MathF.Abs(current.X - first.X) * 0.5f, 0.05f),
+                    0.005f,
+                    MathF.Max(MathF.Abs(current.Z - first.Z) * 0.5f, 0.05f)
+                );
+                DrawWalkableFloor(center - halfExtents, center + halfExtents, 0f, dd, 0xFF4DFF88, 2);
+                dd.DrawWorldText(current, $"尺寸 {halfExtents.X * 2:f1} × {halfExtents.Z * 2:f1}", 0xFF4DFF88);
+                break;
+            }
             case PickKind.Wall:
             {
                 var center = (first + current) * 0.5f;
@@ -2379,6 +2403,38 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
+    private static void DrawWalkableFloor
+    (
+        Vector3     min,
+        Vector3     max,
+        float       rotationDegrees,
+        DebugDrawer dd,
+        uint        color,
+        int         thickness
+    )
+    {
+        var center      = (min + max) * 0.5f;
+        var halfExtents = Vector3.Abs(max - min) * 0.5f;
+
+        Vector3 ToWorld
+        (
+            float x,
+            float z
+        ) =>
+            center + CustomizationEditorSpatial.RotateAroundY(new(x, 0, z), rotationDegrees);
+
+        var aa = ToWorld(-halfExtents.X, -halfExtents.Z);
+        var ab = ToWorld(-halfExtents.X, +halfExtents.Z);
+        var ba = ToWorld(+halfExtents.X, -halfExtents.Z);
+        var bb = ToWorld(+halfExtents.X, +halfExtents.Z);
+        dd.DrawWorldLine(aa, ab, color, thickness);
+        dd.DrawWorldLine(ab, bb, color, thickness);
+        dd.DrawWorldLine(bb, ba, color, thickness);
+        dd.DrawWorldLine(ba, aa, color, thickness);
+        dd.DrawWorldLine(aa, bb, color, thickness);
+        dd.DrawWorldLine(ab, ba, color, thickness);
+    }
+
     private static void DrawOrientedCylinder
     (
         Vector3     start,
@@ -2474,6 +2530,25 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
     }
 
+    private static void NormalizeFloorBounds
+    (
+        ref Vector3 min,
+        ref Vector3 max
+    )
+    {
+        var orderedMin = Vector3.Min(min, max);
+        var orderedMax = Vector3.Max(min, max);
+        var center     = (orderedMin + orderedMax) * 0.5f;
+        var halfExtents = new Vector3
+        (
+            MathF.Max((orderedMax.X - orderedMin.X) * 0.5f, 0.05f),
+            0.005f,
+            MathF.Max((orderedMax.Z - orderedMin.Z) * 0.5f, 0.05f)
+        );
+        min = center - halfExtents;
+        max = center + halfExtents;
+    }
+
     private static bool TakeWorldPickClick
     (
         ref bool lastPickMouseDown
@@ -2532,6 +2607,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             PickKind.Cylinder       => "圆柱障碍",
             PickKind.OrientedCylinder => "定向圆柱障碍",
             PickKind.Sphere         => "球形体积",
+            PickKind.WalkableFloor  => "可行走地面",
             PickKind.Wall           => "墙体",
             PickKind.Ramp           => "斜坡",
             PickKind.RemoveInstancesVolume  => "区域移除实例",

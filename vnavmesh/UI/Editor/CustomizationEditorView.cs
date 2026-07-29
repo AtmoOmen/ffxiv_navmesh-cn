@@ -659,6 +659,18 @@ internal sealed class CustomizationEditorView
             min = Vector3.Min(a, b) - new Vector3(0.5f);
             max = Vector3.Max(a, b) + new Vector3(0.5f);
         }
+        else if (kind == DraftSceneColliderInsertionKind.WalkableFloor)
+        {
+            var halfExtents = new Vector3
+            (
+                MathF.Max(MathF.Abs(b.X - a.X) * 0.5f, 0.05f),
+                0.005f,
+                MathF.Max(MathF.Abs(b.Z - a.Z) * 0.5f, 0.05f)
+            );
+            center = (a + b) * 0.5f;
+            min    = center - halfExtents;
+            max    = center + halfExtents;
+        }
         else if (kind == DraftSceneColliderInsertionKind.Ramp)
         {
             var low  = a.Y <= b.Y ? a : b;
@@ -694,14 +706,19 @@ internal sealed class CustomizationEditorView
                         DoubleSided       = doubleSided,
                         ForceSetPrimFlags = kind switch
                         {
-                            DraftSceneColliderInsertionKind.Ramp           => SceneExtractor.PrimitiveFlags.ForceWalkable,
+                            DraftSceneColliderInsertionKind.Ramp or
+                            DraftSceneColliderInsertionKind.WalkableFloor  => SceneExtractor.PrimitiveFlags.ForceWalkable,
                             DraftSceneColliderInsertionKind.RemoveInstances => SceneExtractor.PrimitiveFlags.None,
                             _                                               => SceneExtractor.PrimitiveFlags.ForceUnwalkable
-                        }
+                        },
+                        ForceClearPrimFlags = kind is DraftSceneColliderInsertionKind.Ramp or
+                                                      DraftSceneColliderInsertionKind.WalkableFloor ?
+                                                  SceneExtractor.PrimitiveFlags.ForceUnwalkable :
+                                                  SceneExtractor.PrimitiveFlags.None
                     }
                 );
                 selection = new(SelectionKind.ColliderInsertion, workspace.Draft.ColliderInsertions.Count - 1);
-                statusText = $"已添加 {CustomizationEditorWidgets.FormatEnumDisplayName(kind)} 障碍";
+                statusText = $"已添加 {CustomizationEditorWidgets.FormatEnumDisplayName(kind)}";
             }
         );
     }

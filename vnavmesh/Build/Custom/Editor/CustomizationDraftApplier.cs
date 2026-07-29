@@ -229,6 +229,17 @@ internal static class CustomizationDraftApplier
                     insertion.ForceClearPrimFlags
                 );
                 break;
+            case DraftSceneColliderInsertionKind.WalkableFloor:
+                var floorHalfExtents = (max - min) * 0.5f;
+                scene.InsertWalkableFloor
+                (
+                    new(floorHalfExtents.X, floorHalfExtents.Z),
+                    (min + max) * 0.5f,
+                    insertion.RotationDegrees,
+                    insertion.ForceSetPrimFlags,
+                    insertion.ForceClearPrimFlags
+                );
+                break;
             case DraftSceneColliderInsertionKind.RemoveInstances:
                 scene.RemoveMeshInstancesInBounds(bounds, insertion.MeshKeyContains);
                 break;

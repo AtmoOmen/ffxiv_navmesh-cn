@@ -89,7 +89,8 @@ internal static class CustomizationEditorSpatial
     ) =>
         kind is DraftSceneColliderInsertionKind.OrientedBox or
                 DraftSceneColliderInsertionKind.Wall or
-                DraftSceneColliderInsertionKind.Ramp;
+                DraftSceneColliderInsertionKind.Ramp or
+                DraftSceneColliderInsertionKind.WalkableFloor;
 
     public static Vector3 RotateAroundY
     (

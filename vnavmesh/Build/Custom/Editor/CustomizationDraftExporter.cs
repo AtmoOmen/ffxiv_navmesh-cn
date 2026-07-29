@@ -655,6 +655,20 @@ internal static class CustomizationDraftExporter
             return;
         }
 
+        if (insertion.Kind == DraftSceneColliderInsertionKind.WalkableFloor)
+        {
+            var halfExtents = (max - min) * 0.5f;
+            Line(sb, 2, "scene.InsertWalkableFloor");
+            Line(sb, 2, "(");
+            Line(sb, 3, $"new({FormatFloat(halfExtents.X)}, {FormatFloat(halfExtents.Z)}),");
+            Line(sb, 3, $"{FormatVector((min + max) * 0.5f)},");
+            Line(sb, 3, $"{FormatFloat(insertion.RotationDegrees)},");
+            Line(sb, 3, $"{forceSetFlags},");
+            Line(sb, 3, forceClearFlags);
+            Line(sb, 2, ");");
+            return;
+        }
+
         if (insertion.Kind is DraftSceneColliderInsertionKind.RemoveInstances or DraftSceneColliderInsertionKind.SetInstanceFlags)
         {
             var volumeCall = insertion.Kind == DraftSceneColliderInsertionKind.RemoveInstances ?

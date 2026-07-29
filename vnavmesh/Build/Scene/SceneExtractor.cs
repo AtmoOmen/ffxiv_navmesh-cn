@@ -90,6 +90,7 @@ public class SceneExtractor
     private const string KEY_ANALYTIC_PLANE_SINGLE = "<plane one-sided>";
     private const string KEY_ANALYTIC_PLANE_DOUBLE = "<plane two-sided>";
     private const string KEY_ANALYTIC_RAMP         = "<ramp>";
+    private const string KEY_WALKABLE_FLOOR        = "<walkable floor>";
     private const string KEY_MESH_CYLINDER         = "<mesh cylinder>";
 
     private static List<MeshPart> MeshBox;
@@ -98,6 +99,7 @@ public class SceneExtractor
     private static List<MeshPart> MeshPlane;
     private static List<MeshPart> MeshPlaneDouble;
     private static List<MeshPart> MeshRamp;
+    private static List<MeshPart> MeshWalkableFloor;
 
     static SceneExtractor()
     {
@@ -107,6 +109,7 @@ public class SceneExtractor
         MeshPlane       = BuildPlaneMesh();
         MeshPlaneDouble = BuildPlaneMesh(true);
         MeshRamp        = BuildRampMesh();
+        MeshWalkableFloor = BuildWalkableFloorMesh();
     }
 
     public unsafe SceneExtractor
@@ -120,6 +123,7 @@ public class SceneExtractor
         Meshes[KEY_ANALYTIC_PLANE_SINGLE] = CreateBuiltinMesh(MeshPlane,       MeshType.AnalyticPlane);
         Meshes[KEY_ANALYTIC_PLANE_DOUBLE] = CreateBuiltinMesh(MeshPlaneDouble, MeshType.AnalyticPlane);
         Meshes[KEY_ANALYTIC_RAMP]         = CreateBuiltinMesh(MeshRamp,        MeshType.AnalyticShape);
+        Meshes[KEY_WALKABLE_FLOOR]        = CreateBuiltinMesh(MeshWalkableFloor, MeshType.AnalyticPlane);
         Meshes[KEY_MESH_CYLINDER]         = CreateBuiltinMesh(MeshCylinder,    MeshType.CylinderMesh);
         foreach (var path in scene.MeshPaths.Values)
             AddMesh(path, MeshType.FileMesh);
@@ -675,6 +679,18 @@ public class SceneExtractor
         mesh.Primitives.Add(new(3, 4, 5, PrimitiveFlags.None));
         mesh.Primitives.Add(new(0, 4, 2, PrimitiveFlags.None));
         mesh.Primitives.Add(new(1, 3, 5, PrimitiveFlags.None));
+        return [FinalizePart(mesh)];
+    }
+
+    private static List<MeshPart> BuildWalkableFloorMesh()
+    {
+        var mesh = new MeshPart();
+        mesh.Vertices.Add(new(-1, 0, -1));
+        mesh.Vertices.Add(new(-1, 0, +1));
+        mesh.Vertices.Add(new(+1, 0, -1));
+        mesh.Vertices.Add(new(+1, 0, +1));
+        mesh.Primitives.Add(new(1, 3, 0, PrimitiveFlags.ForceWalkable));
+        mesh.Primitives.Add(new(0, 3, 2, PrimitiveFlags.ForceWalkable));
         return [FinalizePart(mesh)];
     }
 }
