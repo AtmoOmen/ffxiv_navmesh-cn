@@ -39,12 +39,24 @@ public partial class VoxelPathfind
         refined = SimplifyPath(refined, cancel);
         refined.Reverse();
 
-        // 路径已经很短时跳过松弛迭代
-        if (refined.Count <= 3)
+        if (refined.Count <= 2)
         {
             pathLoSCache.Clear();
             clearanceCache.Clear();
             return refined;
+        }
+
+        if (refined.Count == 3)
+        {
+            ProjectInteriorWaypoints(refined, cancel, null);
+
+            if (TryRelaxWaypoint(refined[0], refined[1], refined[2], out var adjusted))
+                refined[1] = adjusted;
+
+            var singleCornerResult = SimplifyPath(refined, cancel);
+            pathLoSCache.Clear();
+            clearanceCache.Clear();
+            return singleCornerResult;
         }
 
         HashSet<int>? dirtyIndices = null;
@@ -379,6 +391,32 @@ public partial class VoxelPathfind
             return false;
         if (Vector3.DistanceSquared(candidate.p, current.p) <= FLIGHT_PUSH_MIN_DISTANCE * FLIGHT_PUSH_MIN_DISTANCE)
             return false;
+
+        var currentIncoming         = current.p   - previous.p;
+        var currentOutgoing         = next.p      - current.p;
+        var candidateIncoming       = candidate.p - previous.p;
+        var candidateOutgoing       = next.p      - candidate.p;
+        var currentIncomingLength   = currentIncoming.Length();
+        var currentOutgoingLength   = currentOutgoing.Length();
+        var candidateIncomingLength = candidateIncoming.Length();
+        var candidateOutgoingLength = candidateOutgoing.Length();
+
+        if (currentIncomingLength   <= SCORE_EPSILON ||
+            currentOutgoingLength   <= SCORE_EPSILON ||
+            candidateIncomingLength <= SCORE_EPSILON ||
+            candidateOutgoingLength <= SCORE_EPSILON)
+            return false;
+
+        var currentLocalLength   = currentIncomingLength   + currentOutgoingLength;
+        var candidateLocalLength = candidateIncomingLength + candidateOutgoingLength;
+        if (candidateLocalLength > currentLocalLength * (1f + FLIGHT_PUSH_MAX_LOCAL_LENGTH_INCREASE_RATIO))
+            return false;
+
+        var currentDirectionDot   = Vector3.Dot(currentIncoming, currentOutgoing)     / (currentIncomingLength   * currentOutgoingLength);
+        var candidateDirectionDot = Vector3.Dot(candidateIncoming, candidateOutgoing) / (candidateIncomingLength * candidateOutgoingLength);
+        if (candidateDirectionDot + SCORE_EPSILON < currentDirectionDot)
+            return false;
+
         if (!HasLineOfSight(previous, candidate.voxel, candidate.p))
             return false;
         if (!HasLineOfSight(candidate, next.voxel, next.p))

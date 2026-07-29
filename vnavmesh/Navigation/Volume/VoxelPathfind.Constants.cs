@@ -185,6 +185,7 @@ public partial class VoxelPathfind
     private const float  FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_VOXEL_SCALE               = 0.85f;
     private const float  FLIGHT_PUSH_PREFERRED_FLOOR_CLEARANCE_LEAF_SCALE                = 1.60f;
     private const float  FLIGHT_PUSH_RELIEF_SCALE                                        = 0.90f;
+    private const float  FLIGHT_PUSH_MAX_LOCAL_LENGTH_INCREASE_RATIO                      = 0.01f;
     private const int    REFINE_RELAX_ITERATION_LIMIT                                    = 6;
     private const float  FLIGHT_DESCENT_SMOOTHING_MAX_SLOPE                              = 0.90f;
     private const float  FLIGHT_DESCENT_SMOOTHING_MIN_DROP_LEAF_SCALE                    = 2.50f;
