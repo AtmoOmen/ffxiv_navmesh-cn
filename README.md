@@ -1,13 +1,12 @@
 <div align="center">
 
   <h1>vnavmesh</h1>
-  <h5><s>行遍千里!</s></h5>
   <h5>自动寻路与避障插件</h5>
   <img src="Resources/icon2.png" alt="vnavmesh Logo" width="180" />
 
 <p>
-  <a href="https://github.com/AtmoOmen/DalamudPlugins"><img alt="Latest Release" src="https://img.shields.io/github/v/release/AtmoOmen/vnavmesh?display_name=release&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&style=for-the-badge" /></a>
-  <a href="https://github.com/AtmoOmen/DalamudPlugins"><img alt="Downloads" src="https://img.shields.io/github/downloads/AtmoOmen/vnavmesh/total?label=%E7%B4%AF%E8%AE%A1%E4%B8%8B%E8%BD%BD&style=for-the-badge" /></a>
+  <a href="https://github.com/AtmoOmen/DalamudPlugins"><img alt="Latest Release" src="https://img.shields.io/github/v/release/AtmoOmen/ffxiv_navmesh-cn?display_name=release&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&style=for-the-badge" /></a>
+  <a href="https://github.com/AtmoOmen/DalamudPlugins"><img alt="Downloads" src="https://img.shields.io/github/downloads/AtmoOmen/ffxiv_navmesh-cn/total?label=%E7%B4%AF%E8%AE%A1%E4%B8%8B%E8%BD%BD&style=for-the-badge" /></a>
   <a href="https://discord.gg/dailyroutines"><img alt="Discord" src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white&style=for-the-badge" /></a>
 </p>
 
