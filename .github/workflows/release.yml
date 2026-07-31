@@ -49,7 +49,7 @@ jobs:
       - name: Create Release
         run: >
           gh release create "${{ github.ref_name }}"
-          vnavmesh/bin/Release/vnavmesh/latest.zip
+          vnavmesh/bin/x64/Release/vnavmesh/latest.zip
           --title "${{ github.ref_name }}"
           --verify-tag
         env:
