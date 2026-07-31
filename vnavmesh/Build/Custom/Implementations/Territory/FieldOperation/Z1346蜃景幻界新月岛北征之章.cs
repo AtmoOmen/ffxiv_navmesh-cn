@@ -11,10 +11,7 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.FieldOperation;
 [CustomizationTerritory(1346)]
 internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 {
-    public override int Version => 1;
-
-    public Z1346蜃景幻界新月岛北征之章() =>
-        Settings.Partitioning = RcPartition.LAYERS;
+    public override int Version => 2;
 
     public override void CustomizeScene
     (
