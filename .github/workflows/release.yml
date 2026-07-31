@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+env:
+  DALAMUD_HOME: ${{ github.workspace }}\dalamud
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Download Dalamud runtime
+        shell: pwsh
+        run: |
+          $releases = "https://api.github.com/repos/Dalamud-DailyRoutines/Dalamud/releases/latest"
+          $asset = (Invoke-RestMethod $releases).assets | Where-Object { $_.name -eq "latest.7z" }
+          Write-Host "Downloading $($asset.browser_download_url)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$env:RUNNER_TEMP\dalamud.7z"
+
+      - name: Extract Dalamud runtime
+        shell: pwsh
+        run: |
+          mkdir "$env:DALAMUD_HOME" -Force
+          & 7z x "$env:RUNNER_TEMP\dalamud.7z" -o"$env:DALAMUD_HOME" -y
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
+      - name: Create Release
+        run: >
+          gh release create "${{ github.ref_name }}"
+          vnavmesh/bin/Release/vnavmesh/latest.zip
+          --title "${{ github.ref_name }}"
+          --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}
