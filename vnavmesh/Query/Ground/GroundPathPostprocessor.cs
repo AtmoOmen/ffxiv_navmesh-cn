@@ -155,7 +155,25 @@ internal sealed class GroundPathPostprocessor
     {
         var (straightPath, straightPathCount) = QueryStraightPath(segment, corridor, straightPathOptions);
         initialSourceIndex                    = ResolveInitialSourceIndex(segment, straightPath, straightPathCount);
+        rawCorners                            = BuildGroundCornersFromStraightPath(corridor, straightPath, straightPathCount, cancel);
 
+        if (!optimize)
+            return rawCorners;
+
+        var centerline = BuildPortalCenterline(segment, corridor, cancel);
+        return centerline != null ?
+                   Optimize(centerline, initialSourceIndex, cancel) :
+                   Optimize(rawCorners, initialSourceIndex, cancel);
+    }
+
+    private List<GroundPathCorner> BuildGroundCornersFromStraightPath
+    (
+        long[]             corridor,
+        DtStraightPath[]   straightPath,
+        int                straightPathCount,
+        CancellationToken  cancel
+    )
+    {
         List<GroundPathCorner> result = new(straightPathCount);
 
         for (var i = 0; i < straightPathCount; ++i)
@@ -173,18 +191,95 @@ internal sealed class GroundPathPostprocessor
                 ResolveLinkKind(area, rawCorner.flags),
                 i
             );
-
-            if (result.Count                                                  == 0                             ||
-                Vector3.DistanceSquared(result[^1].Position, corner.Position) > DUPLICATE_WAYPOINT_DISTANCE_SQ ||
-                result[^1].Area                                               != corner.Area                   ||
-                result[^1].LinkKind                                           != corner.LinkKind               ||
-                result[^1].StraightPathFlags                                  != corner.StraightPathFlags) result.Add(corner);
+            AppendDistinct(result, corner);
         }
 
-        rawCorners = result;
-        return optimize ?
-                   Optimize(result, initialSourceIndex, cancel) :
-                   result;
+        return result;
+    }
+
+    private List<GroundPathCorner>? BuildPortalCenterline
+    (
+        PlannerPathSegment segment,
+        long[]             corridor,
+        CancellationToken  cancel
+    )
+    {
+        List<GroundPathCorner> result =
+        [
+            new
+            (
+                segment.StartPosition,
+                corridor[0],
+                DtStraightPathFlags.DT_STRAIGHTPATH_START,
+                ResolveArea(corridor, corridor[0]),
+                null,
+                0
+            )
+        ];
+
+        for (var i = 0; i < corridor.Length - 1; ++i)
+        {
+            cancel.ThrowIfCancellationRequested();
+
+            if (!MeshQuery.GetPortalPoints
+                (
+                    corridor[i],
+                    corridor[i + 1],
+                    out var left,
+                    out var right,
+                    out _,
+                    out var toType
+                ).Succeeded())
+                return null;
+
+            var polyRef = corridor[i + 1];
+            var area    = ResolveArea(corridor, polyRef);
+            var flags  = toType == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION ?
+                             DtStraightPathFlags.DT_STRAIGHTPATH_OFFMESH_CONNECTION :
+                             (byte)0;
+            var position = new Vector3
+            (
+                (left.X + right.X) * 0.5f,
+                (left.Y + right.Y) * 0.5f,
+                (left.Z + right.Z) * 0.5f
+            );
+            if (toType == DtPolyTypes.DT_POLYTYPE_GROUND)
+            {
+                if (!TryResolveStartPoly(position, polyRef, out polyRef, out position))
+                    return null;
+
+                area = ResolveArea(corridor, polyRef);
+            }
+
+            AppendDistinct
+            (
+                result,
+                new
+                (
+                    position,
+                    polyRef,
+                    flags,
+                    area,
+                    ResolveLinkKind(area, flags),
+                    i + 1
+                )
+            );
+        }
+
+        AppendDistinct
+        (
+            result,
+            new
+            (
+                segment.EndPosition,
+                0,
+                DtStraightPathFlags.DT_STRAIGHTPATH_END,
+                ResolveArea(corridor, 0),
+                null,
+                corridor.Length
+            )
+        );
+        return result;
     }
 
     private (DtStraightPath[] StraightPath, int Count) QueryStraightPath
@@ -370,29 +465,28 @@ internal sealed class GroundPathPostprocessor
         if (corners.Count <= 2)
             return corners;
 
-        var simplified = Simplify(corners, initialSourceIndex, cancel);
+        var simplified = SimplifyCenterline(corners, initialSourceIndex, cancel);
         return RoundCorners(simplified, initialSourceIndex, cancel);
     }
 
-    private List<GroundPathCorner> Simplify
+    private List<GroundPathCorner> SimplifyCenterline
     (
         IReadOnlyList<GroundPathCorner> corners,
         int                             initialSourceIndex,
         CancellationToken               cancel
     )
     {
-        List<GroundPathCorner> result  = new(corners.Count) { corners[0] };
-        var                    current = 0;
+        List<GroundPathCorner> result = new(corners.Count) { corners[0] };
+        var current = 0;
 
         while (current < corners.Count - 1)
         {
             cancel.ThrowIfCancellationRequested();
 
-            var furthest = Math.Min(corners.Count - 1, current + MAX_SHORTCUT_LOOKAHEAD);
+            var furthest = Math.Min(corners.Count - 1, current + MAX_CENTERLINE_LOOKAHEAD);
             while (furthest > current + 1 &&
                    (!CanSkipRange(corners, current, furthest, initialSourceIndex) ||
-                    !MaintainsTurnQuality(result, corners, current, furthest)     ||
-                    !CanUseShortcut(corners, current, furthest))) --furthest;
+                    !CanUseCenterlineShortcut(corners[current], corners[furthest]))) --furthest;
 
             current = furthest;
             AppendDistinct(result, corners[current]);
@@ -401,30 +495,57 @@ internal sealed class GroundPathPostprocessor
         return result;
     }
 
-    private static bool MaintainsTurnQuality
+    private bool CanUseCenterlineShortcut
     (
-        IReadOnlyList<GroundPathCorner> result,
-        IReadOnlyList<GroundPathCorner> corners,
-        int                             startIndex,
-        int                             endIndex
+        GroundPathCorner start,
+        GroundPathCorner end
+    ) =>
+        HorizontalDistance(start.Position, end.Position) <= MAX_CENTERLINE_SHORTCUT_DISTANCE &&
+        HasLineOfSight(start, end)                                                            &&
+        HasPreferredClearance(start, end);
+
+    private bool HasPreferredClearance
+    (
+        GroundPathCorner start,
+        GroundPathCorner end
     )
     {
-        if (result.Count > 1 && DirectionDot(result[^2].Position, corners[startIndex].Position, corners[endIndex].Position) < MIN_SHORTCUT_DIRECTION_DOT)
-            return false;
+        var distance = HorizontalDistance(start.Position, end.Position);
+        var sampleCount = Math.Clamp
+        (
+            (int)MathF.Ceiling(distance / CLEARANCE_SAMPLE_STEP),
+            1,
+            MAX_CLEARANCE_SAMPLES
+        );
 
-        return endIndex + 1                                                                                           >= corners.Count ||
-               DirectionDot(corners[startIndex].Position, corners[endIndex].Position, corners[endIndex + 1].Position) >= MIN_SHORTCUT_DIRECTION_DOT;
+        for (var sampleIndex = 1; sampleIndex < sampleCount; ++sampleIndex)
+        {
+            var position = Vector3.Lerp(start.Position, end.Position, sampleIndex / (float)sampleCount);
+            if (!TryResolveStartPoly(position, start.PolyRef, out var polyRef, out var projectedPosition) ||
+                !HasPreferredClearanceAtPoint(projectedPosition, polyRef))
+                return false;
+        }
+
+        return true;
     }
 
-    private bool CanUseShortcut
+    private bool HasPreferredClearanceAtPoint
     (
-        IReadOnlyList<GroundPathCorner> corners,
-        int                             startIndex,
-        int                             endIndex
+        Vector3 position,
+        long    polyRef
     )
     {
-        var distance = HorizontalDistance(corners[startIndex].Position, corners[endIndex].Position);
-        return distance <= MAX_SHORTCUT_DISTANCE && HasLineOfSight(corners[startIndex], corners[endIndex]);
+        var status = MeshQuery.FindDistanceToWall
+        (
+            polyRef,
+            position.ToRecast(),
+            PREFERRED_PATH_CLEARANCE,
+            GroundFilter,
+            out var distance,
+            out _,
+            out _
+        );
+        return status.Succeeded() && distance >= PREFERRED_PATH_CLEARANCE;
     }
 
     private List<GroundPathCorner> RoundCorners
@@ -458,7 +579,9 @@ internal sealed class GroundPathPostprocessor
 
             if (!HasLineOfSight(previous, first)  ||
                 !HasLineOfSight(first,    second) ||
-                !HasLineOfSight(second,   next))
+                !HasLineOfSight(second,   next)   ||
+                !HasPreferredClearanceAtPoint(first.Position, first.PolyRef) ||
+                !HasPreferredClearanceAtPoint(second.Position, second.PolyRef))
             {
                 AppendDistinct(result, current);
                 continue;
@@ -699,21 +822,6 @@ internal sealed class GroundPathPostprocessor
         Vector3 right
     ) => HorizontalDelta(left, right).Length();
 
-    private static float DirectionDot
-    (
-        Vector3 previous,
-        Vector3 current,
-        Vector3 next
-    )
-    {
-        var incoming    = HorizontalDelta(previous, current);
-        var outgoing    = HorizontalDelta(current,  next);
-        var denominator = MathF.Sqrt(incoming.LengthSquared() * outgoing.LengthSquared());
-        return denominator > DUPLICATE_POINT_DISTANCE_SQ ?
-                   Vector2.Dot(incoming, outgoing) / denominator :
-                   1f;
-    }
-
     private static Vector3 QuadraticBezier
     (
         Vector3 start,
@@ -734,17 +842,20 @@ internal sealed class GroundPathPostprocessor
     {
         if (result.Count                                                  == 0                          ||
             Vector3.DistanceSquared(result[^1].Position, corner.Position) > DUPLICATE_POINT_DISTANCE_SQ ||
-            IsSemanticAnchor(corner)) result.Add(corner);
+            result[^1].Area                                               != corner.Area               ||
+            result[^1].LinkKind                                           != corner.LinkKind           ||
+            result[^1].StraightPathFlags                                  != corner.StraightPathFlags) result.Add(corner);
     }
 
     private const int   MAX_STRAIGHT_PATH_POINTS       = 4097;
     private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
-    private const int   MAX_SHORTCUT_LOOKAHEAD         = 8;
+    private const int   MAX_CENTERLINE_LOOKAHEAD       = 8;
+    private const int   MAX_CLEARANCE_SAMPLES          = 64;
     private const int   MAX_RAYCAST_POLYS              = 512;
     private const int   MAX_START_POLY_CANDIDATES      = 32;
-    private const float MAX_SHORTCUT_DISTANCE          = 40f;
-    private const float MIN_SHORTCUT_DIRECTION_DOT     = 0.70f;
     private const float MAX_SHORTCUT_VERTICAL_ERROR    = 0.75f;
+    private const float MAX_CENTERLINE_SHORTCUT_DISTANCE = 40f;
+    private const float CLEARANCE_SAMPLE_STEP          = 0.50f;
     private const float POINT_QUERY_HALF_EXTENT        = 0.10f;
     private const float POINT_QUERY_HEIGHT             = 2f;
     private const float MAX_PROJECTION_DISTANCE        = 0.15f;
@@ -752,6 +863,7 @@ internal sealed class GroundPathPostprocessor
     private const float MIN_ROUNDING_SEGMENT_LENGTH    = 0.75f;
     private const float MIN_TANGENT_DISTANCE           = 0.18f;
     private const float MAX_TANGENT_SEGMENT_FRACTION   = 0.32f;
+    private const float PREFERRED_PATH_CLEARANCE       = 0.40f;
     private const float TURN_RADIUS                    = 0.70f;
     private const float ROUNDING_MAX_DIRECTION_DOT     = 0.92f;
     private const float ROUNDING_MIN_DIRECTION_DOT     = -0.70f;
