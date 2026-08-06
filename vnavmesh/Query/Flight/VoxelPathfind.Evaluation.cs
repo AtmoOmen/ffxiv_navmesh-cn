@@ -188,6 +188,9 @@ public partial class VoxelPathfind
         var     nodeSpan = NodeSpan;
         ref var parent   = ref nodeSpan[parentIndex];
 
+        if (avoidRadius > 0 && voxel != goalVoxel && FlatDistSq(position) + 1e-3f < minAvoidDistSq)
+            return false;
+
         // 预 LoS 分数下界过滤：parentGScore + 直线距离是分数下界（所有惩罚项 ≥ 0）
         // 如果下界已不优于当前最优，跳过昂贵的 LoS 检查
         if (parent.GScore + edgeCost >= bestScore)
@@ -252,6 +255,9 @@ public partial class VoxelPathfind
         Vector3 toPosition
     )
     {
+        if (SegmentViolatesAvoid(fromPosition, toPosition))
+            return false;
+
         var cacheKey = new VolumeVisibilityKey(fromVoxel, toVoxel, fromPosition, toPosition);
         var stripe   = (int)((uint)cacheKey.GetHashCode() & (VISIBILITY_CACHE_STRIPES - 1));
 

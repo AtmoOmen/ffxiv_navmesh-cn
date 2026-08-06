@@ -28,7 +28,9 @@ internal sealed class NavmeshFlightQuery
     (
         Vector3           from,
         Vector3           to,
-        CancellationToken cancel
+        CancellationToken cancel,
+        Vector3?          avoidCenter = null,
+        float             avoidRadius = 0
     )
     {
         if (query.VolumeQuery == null)
@@ -64,7 +66,7 @@ internal sealed class NavmeshFlightQuery
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
         var searchTimer             = StopWatchTimer.Create();
         var voxelPath = volumeQuery.FindPath
-            (startVoxel, endVoxel, safeStart, safeDestination, false, cancel);
+            (startVoxel, endVoxel, safeStart, safeDestination, false, cancel, avoidCenter, avoidRadius);
         var telemetry = volumeQuery.LastTelemetry;
 
         Service.Log.Debug
@@ -134,7 +136,7 @@ internal sealed class NavmeshFlightQuery
         }
 
         if (!requestedTargetLeaf.empty &&
-            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, cancel, out var hybridResult))
+            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, cancel, avoidCenter, avoidRadius, out var hybridResult))
             return hybridResult;
 
         var finalDestination    = safeDestination;
@@ -301,11 +303,13 @@ internal sealed class NavmeshFlightQuery
         Vector3           safeFlightDestination,
         List<Vector3>     rawFlightWaypoints,
         CancellationToken cancel,
+        Vector3?          avoidCenter,
+        float             avoidRadius,
         out PlannerResult result
     )
     {
         var toleranceFloor = MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
-        var groundResult   = groundQuery.PlanMeshPathDetailed(safeFlightDestination, requestedTarget, 0, cancel);
+        var groundResult   = groundQuery.PlanMeshPathDetailed(safeFlightDestination, requestedTarget, 0, cancel, avoidCenter, avoidRadius);
 
         if (!groundResult.Succeeded || groundResult.Segments.Count == 0)
         {

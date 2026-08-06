@@ -31,7 +31,9 @@ internal sealed class NavmeshGroundQuery
         Vector3           from,
         Vector3           to,
         float             range,
-        CancellationToken cancel
+        CancellationToken cancel,
+        Vector3?          avoidCenter = null,
+        float             avoidRadius = 0
     )
     {
         Interlocked.Increment(ref groundQueryCount);
@@ -53,6 +55,9 @@ internal sealed class NavmeshGroundQuery
 
         cancel.ThrowIfCancellationRequested();
 
+        var pathFilter = avoidRadius > 0 && avoidCenter is { } center && NavmeshQuery.SegmentEntersAvoid(from, to, center, avoidRadius) ?
+                             new GroundAreaCostFilter(query.NavmeshData, avoidCenter: center, avoidRadius: avoidRadius, allowedStartRef: startRef, allowedEndRef: endRef) :
+                             query.GroundAreaFilter;
         var pathStatus = FindPath
         (
             query.MeshQuery,
@@ -60,7 +65,7 @@ internal sealed class NavmeshGroundQuery
             endRef,
             projectedStart.ToRecast(),
             projectedEnd.ToRecast(),
-            query.GroundAreaFilter,
+            pathFilter,
             out var corridor
         );
         if (pathStatus.Failed() || corridor.Count == 0)
@@ -311,8 +316,12 @@ internal sealed class NavmeshGroundQuery
 
     internal sealed class GroundAreaCostFilter
     (
-        Navmesh navmeshData,
-        bool    excludeUnreachable = true
+        Navmesh  navmeshData,
+        bool     excludeUnreachable = true,
+        Vector3? avoidCenter        = null,
+        float    avoidRadius        = 0,
+        long     allowedStartRef    = 0,
+        long     allowedEndRef      = 0
     ) : IDtQueryFilter
     {
         private readonly DtQueryDefaultFilter filter = new
@@ -363,7 +372,56 @@ internal sealed class NavmeshGroundQuery
             long       refs,
             DtMeshTile tile,
             DtPoly     poly
-        ) => filter.PassFilter(refs, tile, poly);
+        )
+        {
+            if (avoidRadius > 0 &&
+                refs != allowedStartRef &&
+                refs != allowedEndRef &&
+                PolyIntersectsAvoid(tile, poly))
+                return false;
+
+            return filter.PassFilter(refs, tile, poly);
+        }
+
+        private bool PolyIntersectsAvoid
+        (
+            DtMeshTile tile,
+            DtPoly     poly
+        )
+        {
+            if (avoidCenter is not { } center)
+                return false;
+
+            if (poly.vertCount == 0)
+                return false;
+
+            var sumX = 0f;
+            var sumZ = 0f;
+
+            for (var i = 0; i < poly.vertCount; ++i)
+            {
+                var vertexIndex = poly.verts[i] * 3;
+                sumX += tile.data.verts[vertexIndex];
+                sumZ += tile.data.verts[vertexIndex + 2];
+            }
+
+            var inv = 1f / poly.vertCount;
+            var polyCenterX = sumX * inv;
+            var polyCenterZ = sumZ * inv;
+            var extentSq    = 0f;
+
+            for (var i = 0; i < poly.vertCount; ++i)
+            {
+                var vertexIndex = poly.verts[i] * 3;
+                var dx = tile.data.verts[vertexIndex]     - polyCenterX;
+                var dz = tile.data.verts[vertexIndex + 2] - polyCenterZ;
+                extentSq = MathF.Max(extentSq, (dx * dx) + (dz * dz));
+            }
+
+            var distX = polyCenterX - center.X;
+            var distZ = polyCenterZ - center.Z;
+            return MathF.Sqrt((distX * distX) + (distZ * distZ)) < avoidRadius + MathF.Sqrt(extentSq);
+        }
 
         public bool TryGetRegisteredTraversalProfile
         (

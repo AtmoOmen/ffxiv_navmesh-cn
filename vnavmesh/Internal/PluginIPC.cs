@@ -30,6 +30,11 @@ internal class PluginIPC : IDisposable
         RegisterFunc("Nav.PathfindWithTolerance", (Vector3 from, Vector3 to, bool fly, float range) => navmeshManager.QueryPath(from, to, fly, range));
         RegisterFunc
         (
+            "Nav.PathfindAvoid",
+            (Vector3 from, Vector3 to, bool fly, Vector3 avoidCenter, float avoidRadius) => navmeshManager.QueryPath(from, to, fly, avoidCenter: avoidCenter, avoidRadius: avoidRadius)
+        );
+        RegisterFunc
+        (
             "Nav.PathfindCancelable",
             (Vector3 from, Vector3 to, bool fly, CancellationToken cancel) => navmeshManager.QueryPath(from, to, fly, externalCancel: cancel)
         );

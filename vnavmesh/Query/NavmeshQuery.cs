@@ -61,6 +61,35 @@ public class NavmeshQuery
 
     internal List<long> LastPath { get; } = [];
 
+    internal static bool SegmentEntersAvoid
+    (
+        Vector3 from,
+        Vector3 to,
+        Vector3 center,
+        float   radius
+    )
+    {
+        var abx = to.X - from.X;
+        var abz = to.Z - from.Z;
+        var lenSq = (abx * abx) + (abz * abz);
+        float t;
+
+        if (lenSq < 1e-6f)
+            t = 0;
+        else
+        {
+            t = ((center.X - from.X) * abx + (center.Z - from.Z) * abz) / lenSq;
+            t = Math.Clamp(t, 0f, 1f);
+        }
+
+        var dx = from.X + (abx * t) - center.X;
+        var dz = from.Z + (abz * t) - center.Z;
+        var fromDx = from.X - center.X;
+        var fromDz = from.Z - center.Z;
+        var minAllowedSq = MathF.Min(radius * radius, (fromDx * fromDx) + (fromDz * fromDz));
+        return (dx * dx) + (dz * dz) + 1e-3f < minAllowedSq;
+    }
+
     private readonly PathPostprocessor postprocessor;
 
     private DtNavMeshQuery? meshQuery;
@@ -114,17 +143,21 @@ public class NavmeshQuery
         Vector3           from,
         Vector3           to,
         float             range,
-        CancellationToken cancel
+        CancellationToken cancel,
+        Vector3?          avoidCenter = null,
+        float             avoidRadius = 0
     ) =>
-        GroundQuery.PlanMeshPathDetailed(from, to, range, cancel);
+        GroundQuery.PlanMeshPathDetailed(from, to, range, cancel, avoidCenter, avoidRadius);
 
     internal PlannerResult PlanVolumePathDetailed
     (
         Vector3           from,
         Vector3           to,
-        CancellationToken cancel
+        CancellationToken cancel,
+        Vector3?          avoidCenter = null,
+        float             avoidRadius = 0
     ) =>
-        FlightQuery.PlanVolumePathDetailed(from, to, cancel);
+        FlightQuery.PlanVolumePathDetailed(from, to, cancel, avoidCenter, avoidRadius);
 
     internal (int X, int Z) FindMeshTile
     (

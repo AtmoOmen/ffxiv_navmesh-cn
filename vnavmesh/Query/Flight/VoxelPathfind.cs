@@ -73,6 +73,10 @@ public partial class VoxelPathfind
     private int                        completedPeakOpenListSize;
     private int                        completedSearchAttempts;
     private int                        coarseExpandedNodes;
+    private Vector3                    avoidCenter;
+    private float                      avoidRadius;
+    private float                      avoidRadiusSq;
+    private float                      minAvoidDistSq;
 
     public VoxelMap Volume { get; }
 
@@ -121,10 +125,29 @@ public partial class VoxelPathfind
         Vector3           fromPos,
         Vector3           toPos,
         bool              returnIntermediatePoints,
-        CancellationToken cancel
+        CancellationToken cancel,
+        Vector3?          avoidCenter = null,
+        float             avoidRadius = 0
     )
     {
+        this.avoidCenter   = avoidCenter ?? default;
+        this.avoidRadius   = avoidRadius > 0 && avoidCenter.HasValue ? avoidRadius : 0;
+        avoidRadiusSq      = this.avoidRadius * this.avoidRadius;
+        minAvoidDistSq     = this.avoidRadius > 0 ? MathF.Min(avoidRadiusSq, FlatDistSq(fromPos)) : 0;
+
         BeginQuery();
+
+        if (this.avoidRadius > 0)
+        {
+            if (!SegmentViolatesAvoid(fromPos, toPos))
+                return FindPathUnavoided(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
+
+            if (TryFindPathAroundAvoid(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel) is { Count: > 0 } around)
+                return around;
+
+            return FindPathAvoided(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
+        }
+
         return FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, true);
     }
 

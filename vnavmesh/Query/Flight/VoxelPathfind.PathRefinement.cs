@@ -610,6 +610,9 @@ public partial class VoxelPathfind
 
         var anchor   = path[anchorIndex];
         var probe    = path[probeIndex];
+        if (SegmentViolatesAvoid(anchor.p, probe.p))
+            return false;
+
         var cacheKey = new VolumeVisibilityKey(anchor.voxel, probe.voxel, anchor.p, probe.p);
 
         if (pathLoSCache.TryGetValue(cacheKey, out var cached))
@@ -632,6 +635,9 @@ public partial class VoxelPathfind
         Vector3                  toPosition
     )
     {
+        if (SegmentViolatesAvoid(from.p, toPosition))
+            return false;
+
         var cacheKey = new VolumeVisibilityKey(from.voxel, toVoxel, from.p, toPosition);
 
         if (pathLoSCache.TryGetValue(cacheKey, out var cached))

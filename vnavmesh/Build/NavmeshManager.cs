@@ -123,8 +123,10 @@ public sealed class NavmeshManager : IDisposable
         Vector3           to,
         bool              flying,
         float             range          = 0,
-        CancellationToken externalCancel = default
-    ) => (await QueryPathDetailed(from, to, flying, range, externalCancel)).Waypoints;
+        CancellationToken externalCancel = default,
+        Vector3?          avoidCenter    = null,
+        float             avoidRadius    = 0
+    ) => (await QueryPathDetailed(from, to, flying, range, externalCancel, avoidCenter, avoidRadius)).Waypoints;
 
     internal Task<PostprocessedPath> QueryPathDetailed
     (
@@ -132,7 +134,9 @@ public sealed class NavmeshManager : IDisposable
         Vector3           to,
         bool              flying,
         float             range          = 0,
-        CancellationToken externalCancel = default
+        CancellationToken externalCancel = default,
+        Vector3?          avoidCenter    = null,
+        float             avoidRadius    = 0
     )
     {
         if (currentCancelSource == null)
@@ -167,8 +171,8 @@ public sealed class NavmeshManager : IDisposable
                                      Log($"执行算路。起点: {from:f3} 终点: {to:f3}");
 
                                      var plannerResult = flying ?
-                                                             Query.PlanVolumePathDetailed(from, to, combined.Token) :
-                                                             Query.PlanMeshPathDetailed(from, to, range, combined.Token);
+                                                             Query.PlanVolumePathDetailed(from, to, combined.Token, avoidCenter, avoidRadius) :
+                                                             Query.PlanMeshPathDetailed(from, to, range, combined.Token, avoidCenter, avoidRadius);
                                      return Query.Postprocess(plannerResult, combined.Token);
                                  },
                                  combined.Token
