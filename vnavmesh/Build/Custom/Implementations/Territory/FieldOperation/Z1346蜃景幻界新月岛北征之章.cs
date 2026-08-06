@@ -21,7 +21,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
     {
         if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b2/collision/o6b2_t1_wal06.pcb", out var mesh0))
         {
-            // 美杜莎
+            // 美杜莎实例1
             if (ResolveInstance(mesh0, 0xBCFC0C00000000ul, 41) is { } instance0)
             {
                 instance0.WorldTransform = new()
@@ -34,6 +34,53 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
                 instance0.WorldBounds = TransformBounds(instance0.WorldTransform, mesh0.LocalBounds);
             }
         }
+        
+        // 美杜莎墙体1
+        scene.InsertWallCollider
+        (
+            new(6.3792725f, 9.099998f),
+            new(-681.273f, 51.42f, -239.732f),
+            96.54343f,
+            true,
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
+        
+        if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b2/collision/o6b2_t1_roc04.pcb", out var mesh1))
+        {
+            // 阿尔戈尔石头1
+            if (ResolveInstance(mesh1, 0xBA960100000000ul, 0) is { } instance0)
+            {
+                instance0.WorldTransform = new()
+                {
+                    Row0 = new(1f, 0f, 0f),
+                    Row1 = new(0f, 1.9f, 0f),
+                    Row2 = new(0f, 0f, 1f),
+                    Row3 = new(597.207f, 56.358f, 294.8287f)
+                };
+                instance0.WorldBounds = TransformBounds(instance0.WorldTransform, mesh1.LocalBounds);
+            }
+        }
+        
+        // 阿尔戈尔圆柱1
+        scene.InsertCylinderCollider
+        (
+            new AABB
+            {
+                Min = new(664.433f, 60.08f, 226.588f),
+                Max = new(672.54297f, 67.938f, 235.12599f)
+            },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
+        // 阿尔戈尔圆柱2
+        scene.InsertCylinderCollider
+        (
+            new AABB
+            {
+                Min = new(700.1213f, 61.23967f, 121.25908f),
+                Max = new(706.0323f, 67.510666f, 125.984085f)
+            },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
 
         // 浮游遗迹步道2
         scene.InsertWallCollider
