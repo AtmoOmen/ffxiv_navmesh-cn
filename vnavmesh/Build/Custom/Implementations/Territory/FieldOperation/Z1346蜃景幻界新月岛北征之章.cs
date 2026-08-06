@@ -81,6 +81,16 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             },
             SceneExtractor.PrimitiveFlags.ForceUnwalkable
         );
+        // 阿尔戈尔圆柱3
+        scene.InsertCylinderCollider
+        (
+            new AABB
+            {
+                Min = new(719.839f, 67.759995f, 125.06752f),
+                Max = new(725.599f, 75.05699f, 132.23653f)
+            },
+            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+        );
 
         // 浮游遗迹步道2
         scene.InsertWallCollider
