@@ -6,21 +6,6 @@ namespace vnavmesh.Query.Flight;
 
 public partial class VoxelPathfind
 {
-    private readonly record struct L1Neighbour
-    (
-        ulong Voxel,
-        int   Dir,
-        int   Dx,
-        int   Dy,
-        int   Dz,
-        int   L0X,
-        int   L0Y,
-        int   L0Z,
-        int   L1X,
-        int   L1Y,
-        int   L1Z
-    );
-
     private int EnumerateL1Neighbours
     (
         ulong             voxel,

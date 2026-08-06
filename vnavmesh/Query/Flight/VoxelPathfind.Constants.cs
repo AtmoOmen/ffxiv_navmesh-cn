@@ -8,60 +8,6 @@ namespace vnavmesh.Query.Flight;
 
 public partial class VoxelPathfind
 {
-    private readonly record struct GuidedSearchCorridor
-    (
-        Vector3 Start,
-        Vector2 HorizontalDirection,
-        float   HorizontalLength,
-        float   VerticalDelta,
-        float   HorizontalRadius,
-        float   UpwardAllowance,
-        float   DownwardAllowance,
-        float   EndpointSlack
-    );
-
-    private readonly record struct LongRangeLateralBias
-    (
-        bool    Enabled,
-        Vector3 Start,
-        Vector2 Forward,
-        Vector2 Right,
-        float   HorizontalDistance,
-        bool    PreferDescending,
-        float   HeightPriority,
-        float   DirectionalPenaltyScale
-    );
-
-    private readonly record struct L1TraversalState
-    (
-        ulong Voxel,
-        byte  EntryFace
-    );
-
-    private readonly record struct L1BestEffortNode
-    (
-        float            GScore,
-        L1TraversalState Parent,
-        int              Depth
-    );
-
-    private readonly record struct L1PathNode
-    (
-        float GScore,
-        ulong Parent
-    );
-
-    private readonly record struct L1BestEffortSearchResult
-    (
-        HashSet<ulong>       PathSet,
-        IReadOnlyList<ulong> OrderedPath,
-        bool                 ReachedGoal,
-        bool                 MixedGoal,
-        int                  ExpandedNodes,
-        float                BestDistance,
-        int                  StepBudget
-    );
-
     private const float  SCORE_EPSILON                                                   = 0.00001f;
     private const int    DEFAULT_MAX_SEARCH_STEPS                                        = 1_0000_0000;
     private const int    RAYCAST_SEARCH_STEP_BUDGET                                      = 400000;
@@ -192,9 +138,83 @@ public partial class VoxelPathfind
     private const float  FLIGHT_DESCENT_SMOOTHING_MIN_DROP_MIN                           = 1.00f;
     private const float  FLIGHT_DESCENT_SMOOTHING_NEAR_VERTICAL_LEAF_SCALE               = 2.00f;
     private const float  FLIGHT_DESCENT_SMOOTHING_NEAR_VERTICAL_MIN                      = 1.20f;
+    private const float  FLIGHT_DESCENT_PRESERVE_MIN_DROP                                = 1.00f;
+    private const float  FLIGHT_DESCENT_PRESERVE_NEAR_VERTICAL_HORIZONTAL                = 1.20f;
+    private const float  FLIGHT_DESCENT_PRESERVE_MAX_SLOPE                               = 0.90f;
+    private const float  DUPLICATE_WAYPOINT_DISTANCE_SQ                                  = 0.000001f;
+    private const float  COLLINEAR_WAYPOINT_TOLERANCE                                    = 0.01f;
     private const int    PATH_LOS_CACHE_MAX_SIZE                                         = 200_000;
     private const int    CLEARANCE_CACHE_MAX_SIZE                                        = 100_000;
 
+    private readonly record struct GuidedSearchCorridor
+    (
+        Vector3 Start,
+        Vector2 HorizontalDirection,
+        float   HorizontalLength,
+        float   VerticalDelta,
+        float   HorizontalRadius,
+        float   UpwardAllowance,
+        float   DownwardAllowance,
+        float   EndpointSlack
+    );
+
+    private readonly record struct LongRangeLateralBias
+    (
+        bool    Enabled,
+        Vector3 Start,
+        Vector2 Forward,
+        Vector2 Right,
+        float   HorizontalDistance,
+        bool    PreferDescending,
+        float   HeightPriority,
+        float   DirectionalPenaltyScale
+    );
+
+    private readonly record struct L1TraversalState
+    (
+        ulong Voxel,
+        byte  EntryFace
+    );
+
+    private readonly record struct L1BestEffortNode
+    (
+        float            GScore,
+        L1TraversalState Parent,
+        int              Depth
+    );
+
+    private readonly record struct L1PathNode
+    (
+        float GScore,
+        ulong Parent
+    );
+
+    private readonly record struct L1BestEffortSearchResult
+    (
+        HashSet<ulong>       PathSet,
+        IReadOnlyList<ulong> OrderedPath,
+        bool                 ReachedGoal,
+        bool                 MixedGoal,
+        int                  ExpandedNodes,
+        float                BestDistance,
+        int                  StepBudget
+    );
+
+    private readonly record struct L1Neighbour
+    (
+        ulong Voxel,
+        int   Dir,
+        int   Dx,
+        int   Dy,
+        int   Dz,
+        int   L0X,
+        int   L0Y,
+        int   L0Z,
+        int   L1X,
+        int   L1Y,
+        int   L1Z
+    );
+    
     private struct VoxelNodeLookup
     {
         private ulong[] keys;

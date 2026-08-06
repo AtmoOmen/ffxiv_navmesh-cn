@@ -30,7 +30,7 @@ public partial class VoxelPathfind
     private readonly Dictionary<VolumeVisibilityKey, bool>   pathLoSCache             = new(1024);
     private readonly Dictionary<(ulong, int), float>         clearanceCache           = new(1024);
     private readonly object                                  cacheLock                = new();
-    private          VolumeNeighbourEvaluation?[]            parallelEvaluationBuffer = Array.Empty<VolumeNeighbourEvaluation?>();
+    private          VolumeNeighbourEvaluation?[]            parallelEvaluationBuffer = [];
     private readonly ParallelOptions                         parallelOptions          = new() { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) };
     private          bool[]?                                 l1FloodFillVisited;
     private          Queue<ushort>?                          l1BfsQueue;

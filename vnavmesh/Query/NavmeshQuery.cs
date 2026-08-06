@@ -5,6 +5,7 @@ using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Internal;
+using vnavmesh.Query.Enums;
 using vnavmesh.Query.Flight;
 using vnavmesh.Query.Ground;
 using vnavmesh.Query.Models;
@@ -15,15 +16,6 @@ using static DtDetour;
 
 public class NavmeshQuery
 {
-    internal readonly record struct SurfaceAwareVolumeVoxelResolution
-    (
-        ulong   Voxel,
-        Vector3 SearchPoint,
-        Vector3 SafePoint,
-        float?  MinCandidateY,
-        bool    UsedSurfaceAnchor
-    );
-
     internal Navmesh NavmeshData { get; }
 
     internal PluginConfig ConfigData { get; }
@@ -90,7 +82,7 @@ public class NavmeshQuery
         return (dx * dx) + (dz * dz) + 1e-3f < minAllowedSq;
     }
 
-    private readonly PathPostprocessor postprocessor;
+    private readonly GroundPathPostprocessor groundPostprocessor;
 
     private DtNavMeshQuery? meshQuery;
     private VoxelPathfind?  volumeQuery;
@@ -105,7 +97,7 @@ public class NavmeshQuery
         NavmeshData      = navmesh;
         ConfigData       = config;
         GroundAreaFilter = new(navmesh);
-        postprocessor    = new(() => MeshQuery, () => GroundAreaFilter);
+        groundPostprocessor = new(() => MeshQuery, () => GroundAreaFilter);
         GroundQuery      = new(this);
         FlightQuery      = new(this, GroundQuery);
     }
@@ -124,16 +116,74 @@ public class NavmeshQuery
     (
         PlannerResult     result,
         CancellationToken cancel
-    ) =>
-        postprocessor.Process(result, cancel);
+    )
+    {
+        cancel.ThrowIfCancellationRequested();
+
+        List<PostprocessedPathSegment> segments = new(result.Segments.Count);
+
+        foreach (var segment in result.Segments)
+            segments.Add(ProcessSegment(segment, cancel));
+
+        return BuildPostprocessedPath(result, segments);
+    }
 
     internal PostprocessedPath PostprocessStraightPath
     (
         PlannerResult     result,
         CancellationToken cancel,
         int               straightPathOptions = 0
+    )
+    {
+        cancel.ThrowIfCancellationRequested();
+
+        List<PostprocessedPathSegment> segments = new(result.Segments.Count);
+
+        foreach (var segment in result.Segments)
+            segments.Add(ProcessStraightPathSegment(segment, straightPathOptions, cancel));
+
+        return BuildPostprocessedPath(result, segments);
+    }
+
+    private PostprocessedPathSegment ProcessSegment
+    (
+        PlannerPathSegment segment,
+        CancellationToken  cancel
     ) =>
-        postprocessor.ProcessStraightPath(result, cancel, straightPathOptions);
+        segment.GeometryKind switch
+        {
+            PlannerSegmentGeometryKind.MeshCorridor   => groundPostprocessor.ProcessSegment(segment, cancel),
+            PlannerSegmentGeometryKind.DiscretePoints => VoxelPathfind.ProcessSegment(segment, cancel),
+            _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
+        };
+
+    private PostprocessedPathSegment ProcessStraightPathSegment
+    (
+        PlannerPathSegment segment,
+        int                straightPathOptions,
+        CancellationToken  cancel
+    ) =>
+        segment.GeometryKind switch
+        {
+            PlannerSegmentGeometryKind.MeshCorridor   => groundPostprocessor.ProcessStraightPathSegment(segment, straightPathOptions, cancel),
+            PlannerSegmentGeometryKind.DiscretePoints => VoxelPathfind.ProcessStraightPathSegment(segment, cancel),
+            _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
+        };
+
+    private static PostprocessedPath BuildPostprocessedPath
+    (
+        PlannerResult                           result,
+        IReadOnlyList<PostprocessedPathSegment> segments
+    ) =>
+        new()
+        {
+            Status               = result.Status,
+            RequestedMode        = result.RequestedMode,
+            RequestedDestination = result.RequestedDestination,
+            FinalDestination     = result.FinalDestination,
+            DestinationTolerance = result.DestinationTolerance,
+            Segments             = segments
+        };
 
     internal NavmeshGroundQuery.GroundPathDiagnosticsSnapshot GetGroundDiagnostics() =>
         GroundQuery.GetGroundDiagnostics();
@@ -545,4 +595,13 @@ public class NavmeshQuery
 
         return result;
     }
+    
+    internal readonly record struct SurfaceAwareVolumeVoxelResolution
+    (
+        ulong   Voxel,
+        Vector3 SearchPoint,
+        Vector3 SafePoint,
+        float?  MinCandidateY,
+        bool    UsedSurfaceAnchor
+    );
 }

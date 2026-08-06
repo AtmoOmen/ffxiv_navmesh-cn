@@ -330,7 +330,7 @@ public partial class VoxelPathfind
             t = 0;
         else
         {
-            t = ((avoidCenter.X - a.X) * abx + (avoidCenter.Z - a.Z) * abz) / lenSq;
+            t = (((avoidCenter.X - a.X) * abx) + ((avoidCenter.Z - a.Z) * abz)) / lenSq;
             t = Math.Clamp(t, 0f, 1f);
         }
 

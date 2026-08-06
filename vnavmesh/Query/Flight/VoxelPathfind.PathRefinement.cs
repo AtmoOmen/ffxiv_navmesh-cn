@@ -1,7 +1,9 @@
 using System.Numerics;
 using vnavmesh.Common.Build.Flight;
+using vnavmesh.Movement.Planning;
 using vnavmesh.Query.Flight.Models;
 using vnavmesh.Query.Flight.Utils;
+using vnavmesh.Query.Models;
 
 namespace vnavmesh.Query.Flight;
 
@@ -693,4 +695,165 @@ public partial class VoxelPathfind
         result.Reverse();
         return result;
     }
+
+    internal static PostprocessedPathSegment ProcessSegment
+    (
+        PlannerPathSegment segment,
+        CancellationToken  cancel
+    )
+    {
+        cancel.ThrowIfCancellationRequested();
+        return BuildSegment(segment, BuildDiscreteWaypoints(segment));
+    }
+
+    internal static PostprocessedPathSegment ProcessStraightPathSegment
+    (
+        PlannerPathSegment segment,
+        CancellationToken  cancel
+    )
+    {
+        cancel.ThrowIfCancellationRequested();
+        return BuildSegment(segment, BuildRawDiscreteWaypoints(segment));
+    }
+
+    private static PostprocessedPathSegment BuildSegment
+    (
+        PlannerPathSegment     segment,
+        IReadOnlyList<Vector3> waypoints
+    ) =>
+        new()
+        {
+            MovementMode         = segment.MovementMode,
+            SegmentKind          = segment.SegmentKind,
+            AllowVerticalControl = segment.AllowVerticalControl,
+            StartPosition        = segment.StartPosition,
+            CompletionTolerance  = 0,
+            Waypoints            = waypoints
+        };
+
+    private static List<Vector3> BuildDiscreteWaypoints
+    (
+        PlannerPathSegment segment
+    )
+    {
+        if (segment.MovementMode != MovementMode.Flight)
+            return DeduplicateWaypoints(segment.Points);
+
+        List<Vector3> deduplicated = [];
+
+        foreach (var point in segment.Points)
+        {
+            if (deduplicated.Count == 0 || Vector3.DistanceSquared(deduplicated[^1], point) > DUPLICATE_WAYPOINT_DISTANCE_SQ)
+                deduplicated.Add(point);
+        }
+
+        return SimplifyFlightWaypoints(deduplicated);
+    }
+
+    private static List<Vector3> BuildRawDiscreteWaypoints
+    (
+        PlannerPathSegment segment
+    ) => [.. segment.Points];
+
+    private static List<Vector3> SimplifyFlightWaypoints
+    (
+        List<Vector3> points
+    )
+    {
+        if (points.Count <= 2)
+            return [.. points];
+
+        List<Vector3> simplified = [points[0]];
+
+        for (var i = 1; i < points.Count - 1; ++i)
+        {
+            var previous = simplified[^1];
+            var current  = points[i];
+            var next     = points[i + 1];
+            if (!IsRedundantFlightWaypoint(previous, current, next))
+                simplified.Add(current);
+        }
+
+        simplified.Add(points[^1]);
+        return simplified;
+    }
+
+    private static bool IsRedundantFlightWaypoint
+    (
+        Vector3 previous,
+        Vector3 current,
+        Vector3 next
+    )
+    {
+        if (Vector3.DistanceSquared(previous, current) <= DUPLICATE_WAYPOINT_DISTANCE_SQ ||
+            Vector3.DistanceSquared(current,  next)    <= DUPLICATE_WAYPOINT_DISTANCE_SQ ||
+            Vector3.DistanceSquared(previous, next)    <= DUPLICATE_WAYPOINT_DISTANCE_SQ)
+            return true;
+        if (NeedsFlightVerticalPreservation(previous, next))
+            return false;
+
+        return DistanceToLineSegment(current, previous, next) <= COLLINEAR_WAYPOINT_TOLERANCE;
+    }
+
+    private static bool NeedsFlightVerticalPreservation
+    (
+        Vector3 previous,
+        Vector3 next
+    )
+    {
+        var verticalDelta = MathF.Abs(next.Y - previous.Y);
+        if (verticalDelta <= FLIGHT_DESCENT_PRESERVE_MIN_DROP)
+            return false;
+
+        var horizontalDistance = HorizontalDistanceXZ(previous, next);
+        if (horizontalDistance <= FLIGHT_DESCENT_PRESERVE_NEAR_VERTICAL_HORIZONTAL)
+            return true;
+
+        return verticalDelta / horizontalDistance >= FLIGHT_DESCENT_PRESERVE_MAX_SLOPE;
+    }
+
+    private static float DistanceToLineSegment
+    (
+        Vector3 value,
+        Vector3 start,
+        Vector3 end
+    )
+    {
+        var segment       = end - start;
+        var lengthSquared = segment.LengthSquared();
+        if (lengthSquared <= DUPLICATE_WAYPOINT_DISTANCE_SQ)
+            return Vector3.Distance(value, start);
+
+        var progress  = Math.Clamp(Vector3.Dot(value - start, segment) / lengthSquared, 0f, 1f);
+        var projected = start + (progress * segment);
+        return Vector3.Distance(value, projected);
+    }
+
+    private static float HorizontalDistanceXZ
+    (
+        Vector3 left,
+        Vector3 right
+    )
+    {
+        var dx = left.X             - right.X;
+        var dz = left.Z             - right.Z;
+        return MathF.Sqrt((dx * dx) + (dz * dz));
+    }
+
+    private static List<Vector3> DeduplicateWaypoints
+    (
+        IEnumerable<Vector3> points
+    )
+    {
+        List<Vector3> result = [];
+
+        foreach (var point in points)
+        {
+            if (result.Count == 0 || Vector3.DistanceSquared(result[^1], point) > DUPLICATE_WAYPOINT_DISTANCE_SQ)
+                result.Add(point);
+        }
+
+        return result;
+    }
+
 }
