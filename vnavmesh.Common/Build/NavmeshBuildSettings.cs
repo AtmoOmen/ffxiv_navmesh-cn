@@ -34,12 +34,12 @@ public sealed class NavmeshBuildSettings
     public float                               DetailSampleDist           = 6f;
     public float                               DetailMaxSampleError       = 1f;
     public bool                                FastBuild                  = false;
-    public bool                                GenerateEdgeClimbLinks = true;
+    public bool                                GenerateEdgeClimbLinks;
     public bool                                GenerateEdgeJumpLinks;
     public float                               GroundTolerance     = 0.3f;
     public float                               ClimbDownDistance   = 0.4f;
     public float                               ClimbDownMaxHeight  = 3.2f;
-    public float                               ClimbDownMinHeight  = 0.6f;
+    public float                               ClimbDownMinHeight  = 1.5f;
     public float                               EdgeJumpEndDistance = 2f;
     public float                               EdgeJumpHeight      = 1.8f;
     public float                               EdgeJumpMaxDrop     = 500f;
