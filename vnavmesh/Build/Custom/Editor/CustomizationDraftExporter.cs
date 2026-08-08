@@ -216,11 +216,15 @@ internal static class CustomizationDraftExporter
         if (context.NeedsRcPartition)
             Line(sb, 0, "using DotRecast.Recast;");
         if (context.NeedsAabb || context.NeedsMatrix)
-            Line(sb, 0, "using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;");
+            Line(sb, 0, "using vnavmesh.Common.Models;");
         if (context.NeedsNavmeshRuntime)
             Line(sb, 0, "using vnavmesh.Common.Build.Ground;");
         if (context.NeedsNavmeshBuild)
             Line(sb, 0, "using vnavmesh.Common.Build;");
+        if (context.HasScene)
+            Line(sb, 0, "using vnavmesh.Common.Build.Enums;");
+        if (context.NeedsInstanceHelpers || context.NeedsLocalBoundsHelpers)
+            Line(sb, 0, "using vnavmesh.Common.Build.Models;");
         Line(sb, 0, "using vnavmesh.Build.Custom.Abstractions;");
         if (context.HasSettings || context.NeedsSceneExtensions)
             Line(sb, 0, "using vnavmesh.Build.Custom.Extensions;");
@@ -755,14 +759,14 @@ internal static class CustomizationDraftExporter
     {
         if (context.NeedsInstanceHelpers)
         {
-            Line(sb, 1, "private static SceneExtractor.MeshInstance? ResolveInstance(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)");
+            Line(sb, 1, "private static MeshInstance? ResolveInstance(Mesh mesh, ulong instanceId, int instanceIndex)");
             Line(sb, 1, "{");
             Line(sb, 2, "var index = ResolveInstanceIndex(mesh, instanceId, instanceIndex);");
             Line(sb, 2, "return index >= 0 ? mesh.Instances[index] : null;");
             Line(sb, 1, "}");
             Line(sb);
 
-            Line(sb, 1, "private static int ResolveInstanceIndex(SceneExtractor.Mesh mesh, ulong instanceId, int instanceIndex)");
+            Line(sb, 1, "private static int ResolveInstanceIndex(Mesh mesh, ulong instanceId, int instanceIndex)");
             Line(sb, 1, "{");
             Line(sb, 2, "if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))");
             Line(sb, 3, "return instanceIndex;");
@@ -783,7 +787,7 @@ internal static class CustomizationDraftExporter
 
         if (context.NeedsLocalBoundsHelpers)
         {
-            Line(sb, 1, "private static void RecalculateMeshBounds(SceneExtractor.Mesh mesh)");
+            Line(sb, 1, "private static void RecalculateMeshBounds(Mesh mesh)");
             Line(sb, 1, "{");
             Line(sb, 2, "mesh.LocalBounds = CalculateLocalBounds(mesh.Parts);");
             Line(sb, 2, "foreach (var instance in mesh.Instances)");
@@ -791,7 +795,7 @@ internal static class CustomizationDraftExporter
             Line(sb, 1, "}");
             Line(sb);
 
-            Line(sb, 1, "private static AABB CalculateLocalBounds(List<SceneExtractor.MeshPart> parts)");
+            Line(sb, 1, "private static AABB CalculateLocalBounds(List<MeshPart> parts)");
             Line(sb, 1, "{");
             Line(sb, 2, "var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };");
             Line(sb, 2, "foreach (var part in parts)");
@@ -969,7 +973,7 @@ internal static class CustomizationDraftExporter
     (
         PrimitiveFlags value
     ) =>
-        FormatFlags(value, "SceneExtractor.PrimitiveFlags");
+        FormatFlags(value, "PrimitiveFlags");
 
     private static string FormatNavmeshPolyFlags
     (
