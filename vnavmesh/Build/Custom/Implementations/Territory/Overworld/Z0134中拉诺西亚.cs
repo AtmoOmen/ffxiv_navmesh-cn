@@ -1,6 +1,8 @@
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 
@@ -30,7 +32,7 @@ public class Z0134中拉诺西亚 : NavmeshCustomization
                         var v2   = part.Vertices[prim.V2];
                         var v3   = part.Vertices[prim.V3];
                         if (v1.Y < 2 && v2.Y < 2 && v3.Y < 2)
-                            part.Primitives[i] = prim with { Flags = prim.Flags | SceneExtractor.PrimitiveFlags.ForceUnwalkable };
+                            part.Primitives[i] = prim with { Flags = prim.Flags | PrimitiveFlags.ForceUnwalkable };
                     }
                 }
             }

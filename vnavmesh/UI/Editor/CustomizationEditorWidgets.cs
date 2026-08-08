@@ -5,6 +5,8 @@ using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility.Raii;
 using vnavmesh.Build.Custom.Editor;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
 
 namespace vnavmesh.UI.Editor;
@@ -83,12 +85,12 @@ internal static class CustomizationEditorWidgets
             DraftMeshLinkKind.Points                      => "两点直连",
             DraftMeshLinkKind.Shortcut                    => "捷径",
             DraftMeshLinkKind.ClientPath                  => "客户端路径",
-            SceneExtractor.PrimitiveFlags.None            => "无",
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable => "强制不可行走",
-            SceneExtractor.PrimitiveFlags.FlyThrough      => "可穿飞",
-            SceneExtractor.PrimitiveFlags.Unlandable      => "不可降落",
-            SceneExtractor.PrimitiveFlags.ForceWalkable   => "强制可行走",
-            SceneExtractor.PrimitiveFlags.Fishable        => "可钓鱼",
+            PrimitiveFlags.None            => "无",
+            PrimitiveFlags.ForceUnwalkable => "强制不可行走",
+            PrimitiveFlags.FlyThrough      => "可穿飞",
+            PrimitiveFlags.Unlandable      => "不可降落",
+            PrimitiveFlags.ForceWalkable   => "强制可行走",
+            PrimitiveFlags.Fishable        => "可钓鱼",
             NavmeshArea.Null                              => "空",
             NavmeshArea.Ground                            => "地面",
             NavmeshArea.GeneratedClimbDown                => "自动跳落",

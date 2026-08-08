@@ -1,5 +1,5 @@
 using System.Numerics;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using vnavmesh.Common.Models;
 
 namespace vnavmesh.Build.Custom.Editor;
 
@@ -24,29 +24,7 @@ public struct DraftMatrix4x3
     ) =>
         new(matrix.Row0, matrix.Row1, matrix.Row2, matrix.Row3);
 
-    public Matrix4x3 ToRuntime() =>
-        new
-        (
-            new
-            (
-                Row0.X,
-                Row0.Y,
-                Row0.Z,
-                0,
-                Row1.X,
-                Row1.Y,
-                Row1.Z,
-                0,
-                Row2.X,
-                Row2.Y,
-                Row2.Z,
-                0,
-                Row3.X,
-                Row3.Y,
-                Row3.Z,
-                1
-            )
-        );
+    public Matrix4x3 ToRuntime() => new(Row0, Row1, Row2, Row3);
 
     public Vector3 Translation
     {

@@ -6,6 +6,7 @@ using vnavmesh.Common.Extensions;
 using vnavmesh.Movement.Drivers;
 using vnavmesh.Movement.Planning;
 using vnavmesh.Query.Enums;
+using vnavmesh.Query.Ground.Models;
 using vnavmesh.Query.Models;
 
 namespace vnavmesh.Query.Ground;

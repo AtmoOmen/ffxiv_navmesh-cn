@@ -1,11 +1,14 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Editor;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Editor.Types;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.UI.Editor;
 
@@ -18,7 +21,7 @@ internal static class CustomizationEditorLeftPanel
 
     public delegate void AddInstancePatchDelegate
     (
-        SceneExtractor.Mesh         mesh,
+        Mesh         mesh,
         string                      key,
         int                         index,
         DraftSceneInstancePatchKind kind
@@ -26,7 +29,7 @@ internal static class CustomizationEditorLeftPanel
 
     public delegate void AddPartPatchDelegate
     (
-        SceneExtractor.Mesh     mesh,
+        Mesh     mesh,
         string                  key,
         int                     partIndex,
         DraftScenePartPatchKind kind,
@@ -168,7 +171,7 @@ internal static class CustomizationEditorLeftPanel
             }
 
             if (ImGui.IsItemHovered() && TryGetVisibleMeshBounds(mesh, visibleInstanceIndices, out var visibleMeshBounds))
-                dd.DrawWorldAABB(visibleMeshBounds, 0xFF00FFFF);
+                dd.DrawWorldAABB(visibleMeshBounds.ToGame(), 0xFF00FFFF);
 
             if (!meshOpen)
                 continue;
@@ -288,8 +291,8 @@ internal static class CustomizationEditorLeftPanel
                 foreach (var instanceIndex in visibleInstanceIndices)
                 {
                     var instance      = mesh.Instances[instanceIndex];
-                    var patchTag      = BuildInstancePatchTag(workspace, key, instanceIndex, instance.Id);
-                    var instanceLabel = $"[{instanceIndex}] {instance.Id:X} {instance.WorldBounds.Min:f1}-{instance.WorldBounds.Max:f1}{patchTag}";
+                    var patchTag      = BuildInstancePatchTag(workspace, key, instanceIndex, instance.ID);
+                    var instanceLabel = $"[{instanceIndex}] {instance.ID:X} {instance.WorldBounds.Min:f1}-{instance.WorldBounds.Max:f1}{patchTag}";
                     var instanceSelected = selection is { Kind: SelectionKind.PreviewInstance, Key: var instanceKey, Index: var selectedIndex } &&
                                            instanceKey   == key                                                                                 &&
                                            selectedIndex == instanceIndex;
@@ -313,7 +316,7 @@ internal static class CustomizationEditorLeftPanel
                     }
 
                     if (ImGui.IsItemHovered())
-                        dd.DrawWorldAABB(instance.WorldBounds, 0xFFFFAA00);
+                        dd.DrawWorldAABB(instance.WorldBounds.ToGame(), 0xFFFFAA00);
 
                     if (focusedPreviewInstance && instanceIndex == focusedInstanceIndex && !focusConsumed)
                     {
@@ -331,7 +334,7 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawMeshPreview
     (
-        SceneExtractor.MeshPart part,
+        MeshPart part,
         Matrix4x3               transform,
         DebugDrawer             dd,
         uint                    color = 0xFF00FFAA
@@ -351,8 +354,8 @@ internal static class CustomizationEditorLeftPanel
 
     private static unsafe void DrawPreviewVertices
     (
-        SceneExtractor.Mesh          mesh,
-        SceneExtractor.MeshPart      part,
+        Mesh          mesh,
+        MeshPart      part,
         string                       key,
         int                          partIndex,
         int                          instanceIndex,
@@ -423,8 +426,8 @@ internal static class CustomizationEditorLeftPanel
 
     private static unsafe void DrawPreviewPrimitives
     (
-        SceneExtractor.Mesh          mesh,
-        SceneExtractor.MeshPart      part,
+        Mesh          mesh,
+        MeshPart      part,
         string                       key,
         int                          partIndex,
         int                          instanceIndex,
@@ -499,7 +502,7 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawPreviewVertex
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         int                 instanceIndex,
         Vector3             vertex,
         DebugDrawer         dd
@@ -516,10 +519,10 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawPreviewPrimitive
     (
-        SceneExtractor.Mesh      mesh,
-        SceneExtractor.MeshPart  part,
+        Mesh      mesh,
+        MeshPart  part,
         int                      instanceIndex,
-        SceneExtractor.Primitive primitive,
+        Primitive primitive,
         DebugDrawer              dd
     )
     {
@@ -877,7 +880,7 @@ internal static class CustomizationEditorLeftPanel
         AABB               bounds
     ) =>
         collision.HasRenderDistanceReferencePosition ?
-            new(collision.GetHorizontalDistanceToBounds(bounds), collision.IsBoundsWithinEditorRenderDistance(bounds)) :
+            new(collision.GetHorizontalDistanceToBounds(bounds.ToGame()), collision.IsBoundsWithinEditorRenderDistance(bounds.ToGame())) :
             DraftDistanceInfo.Unknown;
 
     private static DraftListEntry CreateDraftEntry
@@ -938,7 +941,7 @@ internal static class CustomizationEditorLeftPanel
 
     private static bool TryGetNearestInstanceBounds
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         DebugGameCollision  collision,
         out AABB            bounds
     )
@@ -953,12 +956,12 @@ internal static class CustomizationEditorLeftPanel
         if (!collision.HasRenderDistanceReferencePosition)
             return true;
 
-        var bestDistance = collision.GetHorizontalDistanceToBounds(bounds);
+        var bestDistance = collision.GetHorizontalDistanceToBounds(bounds.ToGame());
 
         for (var i = 1; i < mesh.Instances.Count; ++i)
         {
             var candidate = mesh.Instances[i].WorldBounds;
-            var distance  = collision.GetHorizontalDistanceToBounds(candidate);
+            var distance  = collision.GetHorizontalDistanceToBounds(candidate.ToGame());
             if (distance >= bestDistance)
                 continue;
 
@@ -971,7 +974,7 @@ internal static class CustomizationEditorLeftPanel
 
     private static bool TryGetInstancePatchBounds
     (
-        SceneExtractor.Mesh     mesh,
+        Mesh     mesh,
         DraftSceneInstancePatch patch,
         out AABB                bounds
     )
@@ -1000,14 +1003,14 @@ internal static class CustomizationEditorLeftPanel
 
     private static bool TryResolveInstance
     (
-        SceneExtractor.Mesh             mesh,
+        Mesh             mesh,
         DraftSceneInstancePatch         patch,
-        out SceneExtractor.MeshInstance instance
+        out MeshInstance instance
     )
     {
         if (patch.InstanceId != 0)
         {
-            instance = mesh.Instances.FirstOrDefault(x => x.Id == patch.InstanceId)!;
+            instance = mesh.Instances.FirstOrDefault(x => x.ID == patch.InstanceId)!;
             if (instance != null)
                 return true;
         }
@@ -1024,7 +1027,7 @@ internal static class CustomizationEditorLeftPanel
 
     private static List<int> GetVisiblePreviewInstanceIndices
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         DebugGameCollision  collision,
         bool                forceFocused,
         int                 focusedInstanceIndex
@@ -1034,7 +1037,7 @@ internal static class CustomizationEditorLeftPanel
 
         for (var i = 0; i < mesh.Instances.Count; ++i)
         {
-            var visible = collision.IsBoundsWithinEditorRenderDistance(mesh.Instances[i].WorldBounds);
+            var visible = collision.IsBoundsWithinEditorRenderDistance(mesh.Instances[i].WorldBounds.ToGame());
             if (visible || (forceFocused && i == focusedInstanceIndex))
                 visibleIndices.Add(i);
         }
@@ -1044,7 +1047,7 @@ internal static class CustomizationEditorLeftPanel
 
     private static bool TryGetVisibleMeshBounds
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         List<int>           visibleInstanceIndices,
         out AABB            bounds
     )

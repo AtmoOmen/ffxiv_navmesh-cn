@@ -5,8 +5,10 @@ using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using DotRecast.Detour.Extras.Jumplink;
 using DotRecast.Recast;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Models;
 using vnavmesh.Common.Utils;
@@ -156,7 +158,7 @@ public class NavmeshBuilder
         "Recast: 细节网格"
     ];
 
-    public NavmeshBuildSettings   Settings;
+    public NavmeshSettings        Settings;
     public SceneExtractor         Scene;
     public Vector3                BoundsMin;
     public Vector3                BoundsMax;
@@ -171,7 +173,7 @@ public class NavmeshBuilder
     public static string ComputeBuildSignature
     (
         SceneExtractor       scene,
-        NavmeshBuildSettings settings
+        NavmeshSettings      settings
     )
     {
         var groundTiles = ResolveGroundTileCount(scene, settings);
@@ -206,7 +208,7 @@ public class NavmeshBuilder
     public NavmeshBuilder
     (
         SceneExtractor       scene,
-        NavmeshBuildSettings settings
+        NavmeshSettings      settings
     )
     {
         Settings       = settings;
@@ -301,7 +303,7 @@ public class NavmeshBuilder
     private static int ResolveGroundTileCount
     (
         SceneExtractor       scene,
-        NavmeshBuildSettings settings
+        NavmeshSettings      settings
     )
     {
         var min   = new Vector3(float.MaxValue);
@@ -742,7 +744,7 @@ public class NavmeshBuilder
             _walkableNormalThreshold,
             _walkableClimbVoxels,
             _walkableHeightVoxels,
-            Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.Interiors),
+            Settings.Filtering.HasFlag(NavmeshFilter.Interiors),
             vox,
             telemetry,
             scratch.Rasterizer,
@@ -774,13 +776,13 @@ public class NavmeshBuilder
             finishTerrainProgress();
         }
 
-        if (Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.LowHangingObstacles))
+        if (Settings.Filtering.HasFlag(NavmeshFilter.LowHangingObstacles))
             RcFilters.FilterLowHangingWalkableObstacles(telemetry, _walkableClimbVoxels, shf);
 
-        if (Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.LedgeSpans))
+        if (Settings.Filtering.HasFlag(NavmeshFilter.LedgeSpans))
             RcFilters.FilterLedgeSpans(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
 
-        if (Settings.Filtering.HasFlag(NavmeshBuildSettings.Filter.WalkableLowHeightSpans))
+        if (Settings.Filtering.HasFlag(NavmeshFilter.WalkableLowHeightSpans))
             RcFilters.FilterWalkableLowHeightSpans(telemetry, _walkableHeightVoxels, shf);
 
         var chf                 = RcCompacts.BuildCompactHeightfield(telemetry, _walkableHeightVoxels, _walkableClimbVoxels, shf);
@@ -1098,7 +1100,7 @@ public class NavmeshBuilder
                         continue;
 
                     GetTileRange(worldBounds, out var minX, out var maxX, out var minZ, out var maxZ);
-                    var                      terrainLike     = (mesh.MeshType & (BuildScene.MeshType.Terrain | BuildScene.MeshType.AnalyticPlane)) != 0;
+                    var                      terrainLike     = (mesh.MeshType & (MeshType.Terrain | MeshType.AnalyticPlane)) != 0;
                     var                      coverage        = (maxX - minX + 1) * (maxZ - minZ + 1);
                     var                      spanWeight      = EstimateSpanWeight(primitiveCount, vertexCount, terrainLike, coverage);
                     PreparedTerrainGeometry? preparedTerrain = null;
@@ -1246,8 +1248,8 @@ public class NavmeshBuilder
 
     private PreparedTerrainGeometry PrepareTerrainGeometry
     (
-        BuildScene.MeshPart     part,
-        BuildScene.MeshInstance instance,
+        MeshPart     part,
+        MeshInstance instance,
         int                     minTileX,
         int                     maxTileX,
         int                     minTileZ,
@@ -1298,12 +1300,12 @@ public class NavmeshBuilder
             }
 
             var flags           = (primitive.Flags & ~instance.ForceClearPrimFlags) | instance.ForceSetPrimFlags;
-            var realSolid       = !flags.HasFlag(BuildScene.PrimitiveFlags.FlyThrough);
-            var forceWalkable   = flags.HasFlag(BuildScene.PrimitiveFlags.ForceWalkable);
+            var realSolid       = !flags.HasFlag(PrimitiveFlags.FlyThrough);
+            var forceWalkable   = flags.HasFlag(PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < walkableNormalThresholdSq * lenSq;
-            var unwalkable = flags.HasFlag(BuildScene.PrimitiveFlags.ForceUnwalkable) ||
+            var unwalkable = flags.HasFlag(PrimitiveFlags.ForceUnwalkable) ||
                              (!forceWalkable &&
-                              (unwalkableSlope || (includeVolume && flags.HasFlag(BuildScene.PrimitiveFlags.Unlandable))));
+                              (unwalkableSlope || (includeVolume && flags.HasFlag(PrimitiveFlags.Unlandable))));
             var projected = crossY != 0 && (!includeVolume || crossY * crossY >= projectionNormalThresholdSq * lenSq);
             var planeGradX = projected ?
                                  -crossX / crossY :

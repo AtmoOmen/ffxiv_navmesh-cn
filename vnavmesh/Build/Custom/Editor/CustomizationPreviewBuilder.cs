@@ -388,20 +388,19 @@ internal class CustomizationPreviewBuilder
             };
         }
 
-        var settings      = customization.GetBuildSettings(scene);
-        var flyable       = customization.IsFlyingSupported(scene);
-        var buildScene    = extractor.ToBuildScene();
-        var buildSettings = settings.ToBuildSettings(flyable, customization.Version);
-        buildSettings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(customization));
-        var buildSignature = NavmeshBuilder.ComputeBuildSignature(buildScene, buildSettings);
+        var settings = customization.GetBuildSettings(scene);
+        settings.Flyable              = customization.IsFlyingSupported(scene);
+        settings.CustomizationVersion = customization.Version;
+        settings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(customization));
+        var buildSignature = NavmeshBuilder.ComputeBuildSignature(extractor, settings);
         var cacheKey       = $"editor-preview-{scene.TerritoryID}-{requestGeneration:X8}-{Guid.NewGuid():N}";
 
         cancel.ThrowIfCancellationRequested();
         var navmesh = await manager.BuildExternalNavmesh
                       (
                           cacheKey,
-                          buildScene,
-                          buildSettings,
+                          extractor,
+                          settings,
                           customization.Version,
                           buildSignature,
                           cancel,
@@ -417,7 +416,7 @@ internal class CustomizationPreviewBuilder
         Volatile.Write(ref buildProgress, -1f);
         manager.ExternalBuildProgress = -1f;
 
-        navmesh.RegisterBuildTimeOffMeshConnections(buildSettings.OffMeshConnections);
+        navmesh.RegisterBuildTimeOffMeshConnections(settings.OffMeshConnections);
         customization.CustomizeMesh(navmesh, [.. scene.FestivalLayers]);
         var query = new NavmeshQuery(navmesh, config);
 

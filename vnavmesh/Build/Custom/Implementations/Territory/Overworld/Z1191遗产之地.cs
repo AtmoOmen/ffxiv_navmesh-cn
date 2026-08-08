@@ -1,8 +1,11 @@
 ﻿using System.Numerics;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Models;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 
@@ -97,9 +100,9 @@ internal class Z1191遗产之地 : NavmeshCustomization
         }
     }
 
-    private static SceneExtractor.MeshInstance? ResolveInstance
+    private static MeshInstance? ResolveInstance
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
@@ -112,18 +115,18 @@ internal class Z1191遗产之地 : NavmeshCustomization
 
     private static int ResolveInstanceIndex
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
     {
-        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))
+        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].ID == instanceId))
             return instanceIndex;
 
         if (instanceId != 0)
         {
             for (var i = 0; i < mesh.Instances.Count; ++i)
-                if (mesh.Instances[i].Id == instanceId)
+                if (mesh.Instances[i].ID == instanceId)
                     return i;
         }
 

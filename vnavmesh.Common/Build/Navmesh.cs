@@ -9,6 +9,7 @@ using DotRecast.Detour;
 using DotRecast.Detour.Io;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Utils;
 
 namespace vnavmesh.Common.Build;
@@ -1054,7 +1055,7 @@ public record class Navmesh
 
     public void RegisterBuildTimeOffMeshConnections
     (
-        IReadOnlyList<NavmeshBuildOffMeshConnection> connections
+        IReadOnlyList<OffMeshConnection> connections
     )
     {
         if (connections.Count == 0)
@@ -1129,7 +1130,7 @@ public record class Navmesh
 
     private bool TryFindMatchingOffMeshPolyRef
     (
-        NavmeshBuildOffMeshConnection connection,
+        OffMeshConnection connection,
         out long                      polyRef
     )
     {

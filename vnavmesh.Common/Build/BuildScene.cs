@@ -1,81 +1,12 @@
-using System.Numerics;
-using System.Runtime.InteropServices;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Models;
 
 namespace vnavmesh.Common.Build;
 
-public sealed class BuildScene
+public class BuildScene
 {
     public Dictionary<string, Mesh> Meshes { get; } = [];
-
-    public enum MeshType
-    {
-        None          = 0,
-        Terrain       = 1 << 0,
-        FileMesh      = 1 << 1,
-        CylinderMesh  = 1 << 2,
-        AnalyticShape = 1 << 3,
-        AnalyticPlane = 1 << 4,
-        All           = (1 << 5) - 1
-    }
-
-    [Flags]
-    public enum PrimitiveFlags
-    {
-        None            = 0,
-        ForceUnwalkable = 1 << 0,
-        FlyThrough      = 1 << 1,
-        Unlandable      = 1 << 2,
-        ForceWalkable   = 1 << 3,
-        Fishable        = 1 << 4
-    }
-
-    public sealed class Mesh
-    {
-        public List<MeshPart>     Parts     = [];
-        public List<MeshInstance> Instances = [];
-        public MeshType           MeshType;
-        public AABB               LocalBounds;
-
-        public Span<MeshPart> PartSpan => CollectionsMarshal.AsSpan(Parts);
-    }
-
-    public sealed class MeshPart
-    {
-        public List<Vector3>   Vertices   = [];
-        public List<Primitive> Primitives = [];
-        public AABB            LocalBounds;
-
-        public Span<Vector3>   VertexSpan    => CollectionsMarshal.AsSpan(Vertices);
-        public Span<Primitive> PrimitiveSpan => CollectionsMarshal.AsSpan(Primitives);
-    }
-
-    public sealed class MeshInstance
-    (
-        ulong          id,
-        Matrix4x3      worldTransform,
-        AABB           worldBounds,
-        ulong          material,
-        PrimitiveFlags forceSetPrimFlags,
-        PrimitiveFlags forceClearPrimFlags
-    )
-    {
-        public ulong          Id                  = id;
-        public ulong          Material            = material;
-        public Matrix4x3      WorldTransform      = worldTransform;
-        public AABB           WorldBounds         = worldBounds;
-        public PrimitiveFlags ForceSetPrimFlags   = forceSetPrimFlags;
-        public PrimitiveFlags ForceClearPrimFlags = forceClearPrimFlags;
-    }
-
-    public readonly record struct Primitive
-    (
-        int            V1,
-        int            V2,
-        int            V3,
-        PrimitiveFlags Flags,
-        ulong          Material = 0
-    );
 
     public static BuildScene Read
     (
@@ -215,7 +146,7 @@ public sealed class BuildScene
         MeshInstance instance
     )
     {
-        writer.Write(instance.Id);
+        writer.Write(instance.ID);
         instance.WorldTransform.Write(writer);
         instance.WorldBounds.Write(writer);
         writer.Write(instance.Material);

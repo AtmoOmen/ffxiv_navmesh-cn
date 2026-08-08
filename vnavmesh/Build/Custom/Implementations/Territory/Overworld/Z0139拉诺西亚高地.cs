@@ -1,11 +1,15 @@
 ﻿using System.Numerics;
 using DotRecast.Detour;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 
@@ -137,7 +141,7 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
                 Min = new(401.63702f, 0.65079784f, 82.471825f),
                 Max = new(402.63702f, 7.2507973f, 83.471825f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -146,7 +150,7 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
                 Min = new(403.7864f, 1.1228976f, 77.04017f),
                 Max = new(404.7864f, 6.922898f, 78.04017f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -155,7 +159,7 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
                 Min = new(638.71655f, -3.6505f, 158.40239f),
                 Max = new(647.1455f, -0.3935001f, 168.17238f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -164,7 +168,7 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
                 Min = new(615.9527f, -3.6504998f, 156.4376f),
                 Max = new(622.0457f, -0.5095f, 161.0796f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
     }
 
@@ -252,9 +256,9 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
         );
     }
 
-    private static SceneExtractor.MeshInstance? ResolveInstance
+    private static MeshInstance? ResolveInstance
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
@@ -267,18 +271,18 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
 
     private static int ResolveInstanceIndex
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
     {
-        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))
+        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].ID == instanceId))
             return instanceIndex;
 
         if (instanceId != 0)
         {
             for (var i = 0; i < mesh.Instances.Count; ++i)
-                if (mesh.Instances[i].Id == instanceId)
+                if (mesh.Instances[i].ID == instanceId)
                     return i;
         }
 

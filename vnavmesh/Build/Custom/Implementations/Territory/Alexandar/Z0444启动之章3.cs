@@ -1,11 +1,13 @@
 using DotRecast.Detour;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Alexandar;
 
@@ -38,7 +40,7 @@ internal class Z0444启动之章3 : NavmeshCustomization
                 Min = new(-17.823376f, -0.12699986f, 5.392f),
                 Max = new(19.035625f, 3.019f, 24.518f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -47,7 +49,7 @@ internal class Z0444启动之章3 : NavmeshCustomization
                 Min = new(5.84f, -1.561f, 0.6084976f),
                 Max = new(26.05f, 3.361f, 38.433502f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -56,7 +58,7 @@ internal class Z0444启动之章3 : NavmeshCustomization
                 Min = new(-3.0751038f, 19.204956f, -33.202503f),
                 Max = new(12.815897f, 23.276955f, -19.051498f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
     }
 

@@ -1,8 +1,11 @@
 using System.Numerics;
 using DotRecast.Detour;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Models;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Editor;
 
@@ -368,14 +371,14 @@ internal static class CustomizationDraftApplier
 
     private static int ResolveInstanceIndex
     (
-        SceneExtractor.Mesh     mesh,
+        Mesh     mesh,
         DraftSceneInstancePatch patch
     )
     {
         if (patch.InstanceId != 0)
         {
             for (var i = 0; i < mesh.Instances.Count; ++i)
-                if (mesh.Instances[i].Id == patch.InstanceId)
+                if (mesh.Instances[i].ID == patch.InstanceId)
                     return i;
         }
 
@@ -387,7 +390,7 @@ internal static class CustomizationDraftApplier
 
     private static void RecalculateMeshBounds
     (
-        SceneExtractor.Mesh mesh
+        Mesh mesh
     )
     {
         mesh.LocalBounds = CalculateLocalBounds(mesh.Parts);
@@ -425,7 +428,7 @@ internal static class CustomizationDraftApplier
 
     private static AABB CalculateLocalBounds
     (
-        List<SceneExtractor.MeshPart> parts
+        List<MeshPart> parts
     )
     {
         var bounds = new AABB

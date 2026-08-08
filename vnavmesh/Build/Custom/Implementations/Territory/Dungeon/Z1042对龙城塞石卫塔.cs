@@ -1,6 +1,8 @@
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Dungeon;
 
@@ -18,7 +20,7 @@ internal class Z1042对龙城塞石卫塔 : NavmeshCustomization
         if (scene.Meshes.TryGetValue("bg/ffxiv/roc_r1/dun/r1d1/collision/r1d1_b1_sas03.pcb", out var mesh))
         {
             foreach (var instance in mesh.Instances)
-                instance.ForceSetPrimFlags |= SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                instance.ForceSetPrimFlags |= PrimitiveFlags.ForceUnwalkable;
         }
     }
 }

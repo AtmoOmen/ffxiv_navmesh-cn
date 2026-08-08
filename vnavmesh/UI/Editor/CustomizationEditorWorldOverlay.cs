@@ -2,13 +2,17 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Editor;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Editor.Types;
+using AABB = vnavmesh.Common.Models.AABB;
 using Collider = FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Collider;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.UI.Editor;
 
@@ -164,7 +168,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 continue;
 
             var bounds = CustomizationEditorSpatial.CreateColliderBounds(insertion);
-            if (!collision.IsBoundsWithinEditorRenderDistance(bounds))
+            if (!collision.IsBoundsWithinEditorRenderDistance(bounds.ToGame()))
                 continue;
 
             var selected = selection is { Kind: SelectionKind.ColliderInsertion, Index: var selectedIndex and >= 0 } &&
@@ -540,7 +544,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         {
             foreach (var instance in mesh.Instances)
             {
-                if (!collision.IsBoundsWithinEditorRenderDistance(instance.WorldBounds))
+                if (!collision.IsBoundsWithinEditorRenderDistance(instance.WorldBounds.ToGame()))
                     continue;
 
                 for (var partIndex = 0; partIndex < mesh.Parts.Count; ++partIndex)
@@ -659,7 +663,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             foreach (var instance in mesh.Instances)
             {
-                if (instance.Id != layoutObjectId)
+                if (instance.ID != layoutObjectId)
                 {
                     ++instanceIndex;
                     continue;
@@ -1750,7 +1754,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         var instance = mesh.Instances[selection.Index];
-        dd.DrawWorldAABB(instance.WorldBounds, 0xFFFFD94A, 3);
+        dd.DrawWorldAABB(instance.WorldBounds.ToGame(), 0xFFFFD94A, 3);
 
         if (mesh.Parts.Count > 0)
         {
@@ -1894,7 +1898,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         foreach (var overlay in OverlaysCache.Values)
         {
-            if (!collision.IsBoundsWithinEditorRenderDistance(overlay.Bounds))
+            if (!collision.IsBoundsWithinEditorRenderDistance(overlay.Bounds.ToGame()))
                 continue;
 
             var color = overlay.IsSelected     ? 0xFFFFD94A
@@ -1908,7 +1912,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             if (overlay.HasRemove) overlay.Bounds = CustomizationEditorSpatial.CalculateTransformedBounds(overlay.Mesh.LocalBounds, overlay.Transform);
 
-            dd.DrawWorldAABB(overlay.Bounds, color, thickness);
+            dd.DrawWorldAABB(overlay.Bounds.ToGame(), color, thickness);
 
             // 仅当被选中时，才在世界中绘制其精细的网格三角形面，防止未选中时的大量三角形坐标变换与 ImGui 顶点数据剧烈膨胀导致渲染掉帧
             if (overlay.IsSelected && overlay.DrawDetailedMesh)
@@ -1960,7 +1964,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             foreach (var instance in mesh.Instances)
             {
-                if (!collision.IsBoundsWithinEditorRenderDistance(instance.WorldBounds))
+                if (!collision.IsBoundsWithinEditorRenderDistance(instance.WorldBounds.ToGame()))
                     continue;
 
                 switch (patch.Kind)
@@ -2044,8 +2048,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
     private static void DrawFlagOverlay
     (
         AABB                          bounds,
-        SceneExtractor.PrimitiveFlags setFlags,
-        SceneExtractor.PrimitiveFlags clearFlags,
+        PrimitiveFlags setFlags,
+        PrimitiveFlags clearFlags,
         DebugDrawer                   dd,
         bool                          isSelected
     )
@@ -2072,18 +2076,18 @@ internal static unsafe class CustomizationEditorWorldOverlay
     private static string FormatFlagOperation
     (
         string                        prefix,
-        SceneExtractor.PrimitiveFlags flags
+        PrimitiveFlags flags
     )
     {
-        if (flags == SceneExtractor.PrimitiveFlags.None)
+        if (flags == PrimitiveFlags.None)
             return string.Empty;
 
         List<string> names = [];
-        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.ForceUnwalkable, "ForceUnwalkable", names);
-        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.FlyThrough,      "FlyThrough",      names);
-        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.Unlandable,      "Unlandable",      names);
-        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.ForceWalkable,   "ForceWalkable",   names);
-        AppendFlagName(flags, SceneExtractor.PrimitiveFlags.Fishable,        "Fishable",        names);
+        AppendFlagName(flags, PrimitiveFlags.ForceUnwalkable, "ForceUnwalkable", names);
+        AppendFlagName(flags, PrimitiveFlags.FlyThrough,      "FlyThrough",      names);
+        AppendFlagName(flags, PrimitiveFlags.Unlandable,      "Unlandable",      names);
+        AppendFlagName(flags, PrimitiveFlags.ForceWalkable,   "ForceWalkable",   names);
+        AppendFlagName(flags, PrimitiveFlags.Fishable,        "Fishable",        names);
         return names.Count == 0 ?
                    string.Empty :
                    $"{prefix}: {string.Join(", ", names)}";
@@ -2091,8 +2095,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static void AppendFlagName
     (
-        SceneExtractor.PrimitiveFlags flags,
-        SceneExtractor.PrimitiveFlags target,
+        PrimitiveFlags flags,
+        PrimitiveFlags target,
         string                        name,
         List<string>                  names
     )
@@ -2105,8 +2109,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
     (
         SceneExtractor                  extractor,
         DraftSceneInstancePatch         patch,
-        out SceneExtractor.Mesh         mesh,
-        out SceneExtractor.MeshInstance instance
+        out Mesh         mesh,
+        out MeshInstance instance
     )
     {
         mesh     = null!;
@@ -2117,7 +2121,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         if (patch.InstanceId != 0)
         {
-            instance = mesh.Instances.FirstOrDefault(x => x.Id == patch.InstanceId)!;
+            instance = mesh.Instances.FirstOrDefault(x => x.ID == patch.InstanceId)!;
             if (instance != null)
                 return true;
         }
@@ -2131,7 +2135,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static void DrawMeshPreview
     (
-        SceneExtractor.MeshPart part,
+        MeshPart part,
         Matrix4x3               transform,
         DebugDrawer             dd,
         uint                    color     = 0xFF00FFAA,
@@ -2157,7 +2161,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static InstanceOverlayInfo GetOrCreateOverlay
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         Matrix4x3           transform,
         AABB                bounds
     )
@@ -2178,7 +2182,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private sealed class InstanceOverlayInfo
     {
-        public SceneExtractor.Mesh           Mesh = null!;
+        public Mesh           Mesh = null!;
         public Matrix4x3                     Transform;
         public AABB                          Bounds;
         public bool                          HasTransform;
@@ -2187,12 +2191,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
         public bool                          HasRemove;
         public bool                          IsSelected;
         public bool                          DrawDetailedMesh;
-        public SceneExtractor.PrimitiveFlags FlagSetMask;
-        public SceneExtractor.PrimitiveFlags FlagClearMask;
+        public PrimitiveFlags FlagSetMask;
+        public PrimitiveFlags FlagClearMask;
 
         public void Reset
         (
-            SceneExtractor.Mesh mesh,
+            Mesh mesh,
             Matrix4x3           transform,
             AABB                bounds
         )
@@ -2206,8 +2210,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
             HasRemove     = false;
             IsSelected    = false;
             DrawDetailedMesh = true;
-            FlagSetMask   = SceneExtractor.PrimitiveFlags.None;
-            FlagClearMask = SceneExtractor.PrimitiveFlags.None;
+            FlagSetMask   = PrimitiveFlags.None;
+            FlagClearMask = PrimitiveFlags.None;
         }
     }
 

@@ -1,5 +1,7 @@
 using System.Numerics;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Editor;
 
@@ -15,6 +17,6 @@ public sealed class DraftSceneInstancePatch
     public ulong                         Material;
     public int                           Count = 1;
     public Vector3                       Offset;
-    public SceneExtractor.PrimitiveFlags ForceSetPrimFlags;
-    public SceneExtractor.PrimitiveFlags ForceClearPrimFlags;
+    public PrimitiveFlags ForceSetPrimFlags;
+    public PrimitiveFlags ForceClearPrimFlags;
 }

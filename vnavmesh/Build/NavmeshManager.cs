@@ -18,6 +18,7 @@ using vnavmesh.Build.Ground;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Utils;
 using vnavmesh.Internal;
@@ -534,7 +535,7 @@ public sealed class NavmeshManager : IDisposable
         FileInfo               cache,
         string                 cacheKey,
         NavmeshCustomization   customization,
-        NavmeshBuildSettings   buildSettings,
+        NavmeshSettings        buildSettings,
         string                 buildSignature,
         List<uint>             layers,
         StopWatchTimer         totalTimer,
@@ -601,14 +602,14 @@ public sealed class NavmeshManager : IDisposable
                 cancel.ThrowIfCancellationRequested();
 
                 var settings  = customization.GetBuildSettings(scene);
-                var flyable   = customization.IsFlyingSupported(scene);
+                settings.Flyable              = customization.IsFlyingSupported(scene);
+                settings.CustomizationVersion = customization.Version;
+                settings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(customization));
+
                 var extractor = new SceneExtractor(scene);
                 customization.CustomizeScene(extractor);
 
-                var buildScene    = extractor.ToBuildScene();
-                var buildSettings = settings.ToBuildSettings(flyable, customization.Version);
-                buildSettings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(customization));
-                return new BuildSnapshot(buildScene, buildSettings, NavmeshBuilder.ComputeBuildSignature(buildScene, buildSettings));
+                return new BuildSnapshot(extractor, settings, NavmeshBuilder.ComputeBuildSignature(extractor, settings));
             },
             cancel
         );
@@ -617,7 +618,7 @@ public sealed class NavmeshManager : IDisposable
     (
         string               cacheKey,
         BuildScene           scene,
-        NavmeshBuildSettings settings,
+        NavmeshSettings      settings,
         CancellationToken    cancel,
         bool                 updateLoadProgress,
         Action<double>?      onProgress = null
@@ -730,7 +731,7 @@ public sealed class NavmeshManager : IDisposable
     (
         string               cacheKey,
         BuildScene           scene,
-        NavmeshBuildSettings settings,
+        NavmeshSettings      settings,
         int                  customizationVersion,
         string               buildSignature,
         CancellationToken    cancel,
@@ -1547,9 +1548,9 @@ public sealed class NavmeshManager : IDisposable
 
     private sealed record BuildSnapshot
     (
-        BuildScene           Scene,
-        NavmeshBuildSettings Settings,
-        string               BuildSignature
+        BuildScene      Scene,
+        NavmeshSettings Settings,
+        string          BuildSignature
     );
 
     #region 常量

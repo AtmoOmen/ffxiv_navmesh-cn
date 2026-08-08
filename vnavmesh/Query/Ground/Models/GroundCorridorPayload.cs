@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace vnavmesh.Query.Ground;
+namespace vnavmesh.Query.Ground.Models;
 
 internal sealed class GroundCorridorPayload
 {

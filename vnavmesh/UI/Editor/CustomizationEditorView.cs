@@ -10,6 +10,8 @@ using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Editor;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Internal;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
@@ -356,18 +358,20 @@ internal sealed class CustomizationEditorView
         var draft             = await Task.Run(() => CustomizationDraftSeedBuilder.CreateFromCustomization(scene, baseCustomization, territoryName, config), cancel);
         cancel.ThrowIfCancellationRequested();
 
-        var settings = baseCustomization.GetBuildSettings(scene).ToBuildSettings(baseCustomization.IsFlyingSupported(scene), baseCustomization.Version);
+        var settings = baseCustomization.GetBuildSettings(scene);
+        settings.Flyable              = baseCustomization.IsFlyingSupported(scene);
+        settings.CustomizationVersion = baseCustomization.Version;
         settings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(baseCustomization));
 
         SceneExtractor? extractor = null;
         var customizedScene = await Task.Run
                               (
                                   () =>
-                                  {
-                                      extractor = new SceneExtractor(scene);
-                                      baseCustomization.CustomizeScene(extractor);
-                                      return extractor.ToBuildScene();
-                                  },
+                                      {
+                                          extractor = new SceneExtractor(scene);
+                                          baseCustomization.CustomizeScene(extractor);
+                                          return extractor;
+                                      },
                                   cancel
                               );
         cancel.ThrowIfCancellationRequested();
@@ -720,14 +724,14 @@ internal sealed class CustomizationEditorView
                         ForceSetPrimFlags = kind switch
                         {
                             DraftSceneColliderInsertionKind.Ramp or
-                            DraftSceneColliderInsertionKind.WalkableFloor  => SceneExtractor.PrimitiveFlags.ForceWalkable,
-                            DraftSceneColliderInsertionKind.RemoveInstances => SceneExtractor.PrimitiveFlags.None,
-                            _                                               => SceneExtractor.PrimitiveFlags.ForceUnwalkable
+                            DraftSceneColliderInsertionKind.WalkableFloor  => PrimitiveFlags.ForceWalkable,
+                            DraftSceneColliderInsertionKind.RemoveInstances => PrimitiveFlags.None,
+                            _                                               => PrimitiveFlags.ForceUnwalkable
                         },
                         ForceClearPrimFlags = kind is DraftSceneColliderInsertionKind.Ramp or
                                                       DraftSceneColliderInsertionKind.WalkableFloor ?
-                                                  SceneExtractor.PrimitiveFlags.ForceUnwalkable :
-                                                  SceneExtractor.PrimitiveFlags.None
+                                                  PrimitiveFlags.ForceUnwalkable :
+                                                  PrimitiveFlags.None
                     }
                 );
                 selection = new(SelectionKind.ColliderInsertion, workspace.Draft.ColliderInsertions.Count - 1);
@@ -797,7 +801,7 @@ internal sealed class CustomizationEditorView
 
     private void AddInstancePatchFromPreview
     (
-        SceneExtractor.Mesh         mesh,
+        Mesh         mesh,
         string                      key,
         int                         index,
         DraftSceneInstancePatchKind kind
@@ -829,7 +833,7 @@ internal sealed class CustomizationEditorView
                     {
                         MeshKey             = key,
                         InstanceIndex       = kind == DraftSceneInstancePatchKind.Insert ? -1 : index,
-                        InstanceId          = kind == DraftSceneInstancePatchKind.Insert ? 0 : inst.Id,
+                        InstanceId          = kind == DraftSceneInstancePatchKind.Insert ? 0 : inst.ID,
                         Kind                = kind,
                         WorldTransform      = worldTransform,
                         Material            = inst.Material,
@@ -847,7 +851,7 @@ internal sealed class CustomizationEditorView
 
     private void AddPartPatchFromPreview
     (
-        SceneExtractor.Mesh     mesh,
+        Mesh     mesh,
         string                  key,
         int                     partIndex,
         DraftScenePartPatchKind kind,
@@ -909,7 +913,7 @@ internal sealed class CustomizationEditorView
                                  2,
                         Flags = part.Primitives.Count > 0 ?
                                     part.Primitives[primitiveIndex].Flags :
-                                    SceneExtractor.PrimitiveFlags.None,
+                                    PrimitiveFlags.None,
                         Material = part.Primitives.Count > 0 ?
                                        part.Primitives[primitiveIndex].Material :
                                        0

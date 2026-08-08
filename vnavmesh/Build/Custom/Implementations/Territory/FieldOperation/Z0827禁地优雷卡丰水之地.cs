@@ -1,6 +1,8 @@
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.FieldOperation;
 
@@ -30,7 +32,7 @@ internal class Z0827禁地优雷卡丰水之地 : NavmeshCustomization
                         var v3   = part.Vertices[prim.V3];
                         // lowest walkable point in hydatos proper is about Y=494, southernmost walkable point is around Z=-40; BA is underground and much further south
                         if (v1.Y < 480 && v2.Y < 480 && v3.Y < 480 && v1.Z < 0 && v2.Z < 0 && v3.Z < 0)
-                            part.Primitives[i] = prim with { Flags = prim.Flags | SceneExtractor.PrimitiveFlags.ForceUnwalkable };
+                            part.Primitives[i] = prim with { Flags = prim.Flags | PrimitiveFlags.ForceUnwalkable };
                     }
                 }
             }

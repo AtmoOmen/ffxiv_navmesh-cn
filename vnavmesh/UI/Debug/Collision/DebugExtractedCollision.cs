@@ -4,6 +4,9 @@ using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using vnavmesh.Build;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Utils;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
@@ -88,7 +91,7 @@ public class DebugExtractedCollision : IDisposable
                     if (n.SelectedOrHovered)
                     {
                         var info = _extractor.ExtractBgPartInfo(_scene, p.key, p.transform, p.crc, p.analytic);
-                        _dd.DrawWorldAABB(info.bounds, 0xff0000ff);
+                        _dd.DrawWorldAABB(info.bounds.ToGame(), 0xff0000ff);
                         if (coll != null)
                             _coll.VisualizeCollider(coll, default, default, false);
                     }
@@ -123,7 +126,7 @@ public class DebugExtractedCollision : IDisposable
                     if (n.SelectedOrHovered)
                     {
                         var info = _extractor.ExtractColliderInfo(_scene, c.key, c.transform, c.crc, c.type);
-                        _dd.DrawWorldAABB(info.bounds, 0xff0000ff);
+                        _dd.DrawWorldAABB(info.bounds.ToGame(), 0xff0000ff);
                         if (coll != null)
                             _coll.VisualizeCollider(coll, default, default, false);
                     }
@@ -288,7 +291,7 @@ public class DebugExtractedCollision : IDisposable
                     npm += part.Primitives.Count;
                 }
 
-                foreach (var inst in mesh.Instances) builder.AddInstance(new(inst.WorldTransform, color));
+                foreach (var inst in mesh.Instances) builder.AddInstance(new(inst.WorldTransform.ToGame(), color));
                 builder.AddMesh(nv, np, npm, ni, mesh.Instances.Count);
                 nv += nvm;
                 np += npm;
@@ -312,7 +315,7 @@ public class DebugExtractedCollision : IDisposable
 
     private void VisualizeMeshPart
     (
-        SceneExtractor.Mesh mesh,
+        vnavmesh.Common.Build.Models.Mesh mesh,
         int                 meshIndex,
         int                 partIndex
     )
@@ -347,7 +350,7 @@ public class DebugExtractedCollision : IDisposable
 
     private void VisualizeVertex
     (
-        SceneExtractor.Mesh mesh,
+        vnavmesh.Common.Build.Models.Mesh mesh,
         Vector3             v
     )
     {
@@ -357,7 +360,7 @@ public class DebugExtractedCollision : IDisposable
 
     private void VisualizeTriangle
     (
-        SceneExtractor.Mesh mesh,
+        vnavmesh.Common.Build.Models.Mesh mesh,
         Vector3             v1,
         Vector3             v2,
         Vector3             v3
@@ -391,11 +394,11 @@ public class DebugExtractedCollision : IDisposable
 
     private Vector4 MeshColor
     (
-        SceneExtractor.Mesh mesh
+        vnavmesh.Common.Build.Models.Mesh mesh
     ) =>
-        mesh.MeshType.HasFlag(SceneExtractor.MeshType.Terrain)  ? new(0, 1, 0, 0.55f) :
-        mesh.MeshType.HasFlag(SceneExtractor.MeshType.FileMesh) ? new(1, 1, 0, 0.55f) :
-                                                                  new(1, 0, 0, 0.55f);
+        mesh.MeshType.HasFlag(MeshType.Terrain)  ? new(0, 1, 0, 0.55f) :
+        mesh.MeshType.HasFlag(MeshType.FileMesh) ? new(1, 1, 0, 0.55f) :
+                                                   new(1, 0, 0, 0.55f);
 
     private void ExportMesh()
     {
@@ -403,7 +406,7 @@ public class DebugExtractedCollision : IDisposable
         var outFile = new FileInfo($"{_configDirectory}/export/{key}.obj");
 
         var verts = new List<Vector3>();
-        var polys = new List<SceneExtractor.Primitive>();
+        var polys = new List<Primitive>();
 
         foreach (var mesh in _extractor.Meshes.Values)
         {
@@ -417,7 +420,7 @@ public class DebugExtractedCollision : IDisposable
                     var voff = verts.Count;
 
                     verts.AddRange(part.Vertices.Select(transform.TransformCoordinate));
-                    polys.AddRange(part.Primitives.Select(p => new SceneExtractor.Primitive(p.V1 + voff, p.V2 + voff, p.V3 + voff, p.Flags)));
+                    polys.AddRange(part.Primitives.Select(p => new Primitive(p.V1 + voff, p.V2 + voff, p.V3 + voff, p.Flags)));
                 }
             }
         }

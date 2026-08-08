@@ -1,6 +1,8 @@
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.FieldOperation;
 
@@ -29,7 +31,7 @@ internal class Z0795禁地优雷卡涌火之地 : NavmeshCustomization
                         var v3   = part.Vertices[prim.V3];
                         // lowest walkable point in pyros is (probably) the SW edge of the skoll prep area, which is at about Y=578
                         if (v1.Y < 100 && v2.Y < 100 && v3.Y < 100)
-                            part.Primitives[i] = prim with { Flags = prim.Flags | SceneExtractor.PrimitiveFlags.ForceUnwalkable };
+                            part.Primitives[i] = prim with { Flags = prim.Flags | PrimitiveFlags.ForceUnwalkable };
                     }
                 }
             }

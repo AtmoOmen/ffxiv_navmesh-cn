@@ -57,7 +57,7 @@ internal class Z1237憧憬湾 : NavmeshCustomization
         if (scene.Meshes.TryGetValue("bg/ffxiv/cos_c1/hou/common/collision/c1w0_00_bx00d.pcb", out var mesh2))
         {
             foreach (var inst in mesh2.Instances)
-                inst.WorldTransform.M22 *= 2;
+                inst.WorldTransform.Row1.Y *= 2;
         }
     }
 

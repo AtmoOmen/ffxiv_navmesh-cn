@@ -5,12 +5,13 @@ using DotRecast.Detour;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
 
 namespace vnavmesh.Build.Custom;
 
 internal static class OffMeshConnectionMetadataRegistry
 {
-    private static readonly ConditionalWeakTable<DtNavMeshCreateParams, List<NavmeshBuildOffMeshConnection>> Entries = new();
+    private static readonly ConditionalWeakTable<DtNavMeshCreateParams, List<OffMeshConnection>> Entries = new();
 
     public static void Record
     (
@@ -41,7 +42,7 @@ internal static class OffMeshConnectionMetadataRegistry
             )
         );
 
-    public static IReadOnlyList<NavmeshBuildOffMeshConnection> Read
+    public static IReadOnlyList<OffMeshConnection> Read
     (
         DtNavMeshCreateParams config
     ) =>
@@ -49,7 +50,7 @@ internal static class OffMeshConnectionMetadataRegistry
             entries :
             [];
 
-    public static List<NavmeshBuildOffMeshConnection> Collect
+    public static List<OffMeshConnection> Collect
     (
         NavmeshCustomization customization
     )

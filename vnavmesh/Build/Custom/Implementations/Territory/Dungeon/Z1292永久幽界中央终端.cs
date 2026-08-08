@@ -5,6 +5,7 @@ using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Dungeon;
 
@@ -83,18 +84,18 @@ internal class Z1292永久幽界中央终端 : NavmeshCustomization
 
     private static int ResolveInstanceIndex
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
     {
-        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))
+        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].ID == instanceId))
             return instanceIndex;
 
         if (instanceId != 0)
         {
             for (var i = 0; i < mesh.Instances.Count; ++i)
-                if (mesh.Instances[i].Id == instanceId)
+                if (mesh.Instances[i].ID == instanceId)
                     return i;
         }
 

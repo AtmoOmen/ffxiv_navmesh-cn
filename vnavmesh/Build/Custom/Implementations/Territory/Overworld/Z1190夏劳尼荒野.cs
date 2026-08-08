@@ -1,6 +1,8 @@
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 
@@ -28,7 +30,7 @@ public class Z1190夏劳尼荒野 : NavmeshCustomization
                         var prim = part.Primitives[i];
                         // big skyfishing surface on W side of map extends pretty far inland, mark it as unwalkable so we don't get bogus tiles underground
                         if (prim.Material == 0x8000)
-                            part.Primitives[i] = prim with { Flags = prim.Flags | SceneExtractor.PrimitiveFlags.ForceUnwalkable };
+                            part.Primitives[i] = prim with { Flags = prim.Flags | PrimitiveFlags.ForceUnwalkable };
                     }
                 }
             }

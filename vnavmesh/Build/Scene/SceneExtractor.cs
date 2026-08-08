@@ -1,89 +1,20 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Extensions;
+using AABB = vnavmesh.Common.Models.AABB;
 using ColliderType = FFXIVClientStructs.FFXIV.Client.LayoutEngine.Layer.ColliderType;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
+using Mesh = vnavmesh.Common.Build.Models.Mesh;
 
 namespace vnavmesh.Build.Scene;
 
 // extract geometry from scene definition; does not interact with game state, so safe to run in background
-public class SceneExtractor
+public class SceneExtractor : BuildScene
 {
-    [Flags]
-    public enum MeshType
-    {
-        None          = 0,
-        Terrain       = 1 << 0,
-        FileMesh      = 1 << 1,
-        CylinderMesh  = 1 << 2,
-        AnalyticShape = 1 << 3,
-        AnalyticPlane = 1 << 4,
-
-        All = (1 << 5) - 1
-    }
-
-    [Flags]
-    public enum PrimitiveFlags
-    {
-        None            = 0,
-        ForceUnwalkable = 1 << 0, // this primitive can't be walked on, even if normal is fine
-        FlyThrough      = 1 << 1, // this primitive should not be present in voxel map
-        Unlandable      = 1 << 2, // this primitive can't be landed on (fly->walk transition)
-        ForceWalkable   = 1 << 3, // this primitive can be walked on, even though it isn't landable
-        Fishable        = 1 << 4  // player can fish if they have line of sight on this primitive
-    }
-
-    public record struct Primitive
-    (
-        int            V1,
-        int            V2,
-        int            V3,
-        PrimitiveFlags Flags,
-        ulong          Material = 0
-    );
-
-    public class MeshPart
-    {
-        public List<Vector3>   Vertices   = [];
-        public List<Primitive> Primitives = [];
-        public AABB            LocalBounds;
-
-        internal Span<Vector3>   VertexSpan    => CollectionsMarshal.AsSpan(Vertices);
-        internal Span<Primitive> PrimitiveSpan => CollectionsMarshal.AsSpan(Primitives);
-    }
-
-    public class MeshInstance
-    (
-        ulong          id,
-        Matrix4x3      worldTransform,
-        AABB           worldBounds,
-        ulong          material,
-        PrimitiveFlags forceSetPrimFlags,
-        PrimitiveFlags forceClearPrimFlags
-    )
-    {
-        public ulong          Id                  = id;
-        public ulong          Material            = material;
-        public Matrix4x3      WorldTransform      = worldTransform;
-        public AABB           WorldBounds         = worldBounds;
-        public PrimitiveFlags ForceSetPrimFlags   = forceSetPrimFlags;
-        public PrimitiveFlags ForceClearPrimFlags = forceClearPrimFlags;
-    }
-
-    public class Mesh
-    {
-        public List<MeshPart>     Parts     = [];
-        public List<MeshInstance> Instances = [];
-        public MeshType           MeshType;
-        public AABB               LocalBounds;
-
-        internal Span<MeshPart> PartSpan => CollectionsMarshal.AsSpan(Parts);
-    }
-
-    public Dictionary<string, Mesh> Meshes { get; private set; } = [];
-
     private const string KEY_ANALYTIC_BOX          = "<box>";
     private const string KEY_ANALYTIC_SPHERE       = "<sphere>";
     private const string KEY_ANALYTIC_CYLINDER     = "<cylinder>";
@@ -140,8 +71,10 @@ public class SceneExtractor
 
                     foreach (ref var entry in new Span<ColliderStreamed.FileEntry>(header + 1, header->NumMeshes))
                     {
-                        var mesh = AddMesh($"{terr}/tr{entry.MeshId:d4}.pcb", MeshType.Terrain);
-                        AddInstance(mesh, 0, ref Matrix4x3.Identity, ref entry.Bounds, 0);
+                        var bounds   = new AABB(entry.Bounds.Min, entry.Bounds.Max);
+                        var identity = Matrix4x3.Identity;
+                        var mesh     = AddMesh($"{terr}/tr{entry.MeshId:d4}.pcb", MeshType.Terrain);
+                        AddInstance(mesh, 0, ref identity, ref bounds, 0);
                     }
                 }
             }
@@ -169,7 +102,7 @@ public class SceneExtractor
         // add fake colliders on overworld zone transitions to prevent fly pathfind from trying to go OOB there
         foreach (var ex in scene.ExitRanges)
         {
-            var transform = new Matrix4x3(ex.transform.Compose());
+            var transform = ToCommon(ex.transform.Compose());
             var bounds    = CalculateBoxBounds(ref transform);
             AddInstance(Meshes[KEY_ANALYTIC_BOX], ex.key, ref transform, ref bounds, 0x202411);
         }
@@ -199,7 +132,7 @@ public class SceneExtractor
                 var mtxBounds = Matrix4x4.CreateScale(scaleVector);
                 mtxBounds.Translation = (shape.bbMin + shape.bbMax) * 0.5f;
                 var fullTransform      = mtxBounds * shape.transform.Compose() * instanceTransform.Compose();
-                var resultingTransform = new Matrix4x3(fullTransform);
+                var resultingTransform = ToCommon(fullTransform);
                 var (path, bounds) = (FileLayerGroupAnalyticCollider.Type)shape.transform.Type switch
                 {
                     FileLayerGroupAnalyticCollider.Type.Box    => (KEY_ANALYTIC_BOX, CalculateBoxBounds(ref resultingTransform)),
@@ -218,7 +151,7 @@ public class SceneExtractor
 
         {
             var path      = scene.MeshPaths[crc];
-            var transform = new Matrix4x3(instanceTransform.Compose());
+            var transform = ToCommon(instanceTransform.Compose());
             var bounds    = CalculateMeshBounds(Meshes[path], ref transform);
             return (path, transform, bounds);
         }
@@ -233,7 +166,7 @@ public class SceneExtractor
         ColliderType    type
     )
     {
-        var transform = new Matrix4x3(instanceTransform.Compose());
+        var transform = ToCommon(instanceTransform.Compose());
         var (path, bounds) = type switch
         {
             ColliderType.Box           => (KEY_ANALYTIC_BOX, CalculateBoxBounds(ref transform)),
@@ -326,6 +259,18 @@ public class SceneExtractor
 
         return res;
     }
+
+    private static Matrix4x3 ToCommon
+    (
+        Matrix4x4 matrix
+    ) =>
+        new
+        (
+            new(matrix.M11, matrix.M12, matrix.M13),
+            new(matrix.M21, matrix.M22, matrix.M23),
+            new(matrix.M31, matrix.M32, matrix.M33),
+            new(matrix.M41, matrix.M42, matrix.M43)
+        );
 
     private static AABB CalculateBoxBounds
     (

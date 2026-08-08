@@ -4,6 +4,7 @@ using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 
@@ -27,7 +28,7 @@ internal class Z0155库尔札斯中央高地 : NavmeshCustomization
         if (scene.Meshes.TryGetValue("bg/ffxiv/roc_r1/fld/r1f1/collision/r1f1_b7_astr1.pcb", out var tower))
         {
             foreach (var inst in tower.Instances)
-                inst.ForceSetPrimFlags |= SceneExtractor.PrimitiveFlags.ForceWalkable;
+                inst.ForceSetPrimFlags |= PrimitiveFlags.ForceWalkable;
         }
     }
 

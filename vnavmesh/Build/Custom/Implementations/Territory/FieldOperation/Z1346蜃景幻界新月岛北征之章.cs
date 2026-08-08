@@ -1,11 +1,14 @@
 using System.Numerics;
 using DotRecast.Recast;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.FieldOperation;
 
@@ -42,7 +45,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             new(-681.273f, 51.42f, -239.732f),
             96.54343f,
             true,
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         
         if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b2/collision/o6b2_t1_roc04.pcb", out var mesh1))
@@ -69,7 +72,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
                 Min = new(664.433f, 60.08f, 226.588f),
                 Max = new(672.54297f, 67.938f, 235.12599f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         // 阿尔戈尔圆柱2
         scene.InsertCylinderCollider
@@ -79,7 +82,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
                 Min = new(700.1213f, 61.23967f, 121.25908f),
                 Max = new(706.0323f, 67.510666f, 125.984085f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         // 阿尔戈尔圆柱3
         scene.InsertCylinderCollider
@@ -89,7 +92,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
                 Min = new(719.839f, 67.759995f, 125.06752f),
                 Max = new(725.599f, 75.05699f, 132.23653f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
 
         // 浮游遗迹步道2
@@ -99,7 +102,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             new(-489.15344f, 67.34456f, 629.6458f),
             -39.926067f,
             true,
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         // 浮游遗迹步道1
         scene.InsertWallCollider
@@ -108,7 +111,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             new(-474.34308f, 66.93305f, 616.31244f),
             -40.068233f,
             true,
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         // 城塞入口1
         scene.InsertWallCollider
@@ -117,7 +120,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             new(690.59766f, 131f, 622.6991f),
             -133.06546f,
             true,
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         // 城塞入口2
         scene.InsertWallCollider
@@ -126,7 +129,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             new(695.38f, 131f, 627.4536f),
             -133.82306f,
             true,
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         // 城塞入口3
         scene.InsertWallCollider
@@ -135,7 +138,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             new(622.4197f, 131f, 690.64075f),
             45.567398f,
             true,
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         // 城塞入口4
         scene.InsertWallCollider
@@ -144,16 +147,16 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             new(627.3617f, 131f, 695.5911f),
             45.76367f,
             true,
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
 
 
         // 湖边的墙
-        var blockers = new SceneExtractor.MeshPart();
+        var blockers = new MeshPart();
 
         foreach (var (path, mesh) in scene.Meshes)
         {
-            if (mesh.MeshType != SceneExtractor.MeshType.Terrain ||
+            if (mesh.MeshType != MeshType.Terrain ||
                 !path.StartsWith("bg/ex5/03_ocn_o6/btl/o6b2/collision/tr", StringComparison.Ordinal))
                 continue;
 
@@ -164,9 +167,9 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
         if (blockers.Primitives.Count != 0)
         {
             blockers.LocalBounds = CalculateLocalBounds(blockers.Vertices);
-            var blockerMesh = new SceneExtractor.Mesh
+            var blockerMesh = new Mesh
             {
-                MeshType    = SceneExtractor.MeshType.FileMesh,
+                MeshType    = MeshType.FileMesh,
                 LocalBounds = blockers.LocalBounds,
                 Parts       = [blockers]
             };
@@ -178,8 +181,8 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
                     Matrix4x3.Identity,
                     blockerMesh.LocalBounds,
                     0,
-                    SceneExtractor.PrimitiveFlags.ForceUnwalkable,
-                    SceneExtractor.PrimitiveFlags.None
+                    PrimitiveFlags.ForceUnwalkable,
+                    PrimitiveFlags.None
                 )
             );
             scene.Meshes["<z1346 invisible wall blockers>"] = blockerMesh;
@@ -222,9 +225,9 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
         Vector3 value
     ) => new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
 
-    private static SceneExtractor.MeshInstance? ResolveInstance
+    private static MeshInstance? ResolveInstance
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
@@ -237,18 +240,18 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 
     private static int ResolveInstanceIndex
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
     {
-        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))
+        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].ID == instanceId))
             return instanceIndex;
 
         if (instanceId != 0)
         {
             for (var i = 0; i < mesh.Instances.Count; ++i)
-                if (mesh.Instances[i].Id == instanceId)
+                if (mesh.Instances[i].ID == instanceId)
                     return i;
         }
 
@@ -257,8 +260,8 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 
     private static void AddWallBlockers
     (
-        SceneExtractor.MeshPart source,
-        SceneExtractor.MeshPart target,
+        MeshPart source,
+        MeshPart target,
         float                   halfWidth,
         float                   heightOffset
     )
@@ -315,7 +318,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             target.Vertices.Add(new(end.X   + side.X, height, end.Y   + side.Y));
             target.Vertices.Add(new(end.X   - side.X, height, end.Y   - side.Y));
 
-            var flags = primitive.Flags | SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+            var flags = primitive.Flags | PrimitiveFlags.ForceUnwalkable;
             target.Primitives.Add(new(first, first + 2, first + 1, flags, primitive.Material));
             target.Primitives.Add(new(first        + 1, first + 2, first + 3, flags, primitive.Material));
         }

@@ -21,7 +21,7 @@ internal class Z0132格里达尼亚新街 : NavmeshCustomization
         {
             foreach (var inst in mesh.Instances)
                 // setting the planter as unwalkable has no effect and i don't feel like figuring out why so just double the height instead
-                inst.WorldTransform.M22 *= 2;
+                inst.WorldTransform.Row1.Y *= 2;
         }
     }
 

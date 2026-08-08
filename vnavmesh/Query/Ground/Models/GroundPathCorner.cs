@@ -1,7 +1,7 @@
 using System.Numerics;
 using vnavmesh.Common.Build.Ground;
 
-namespace vnavmesh.Query.Ground;
+namespace vnavmesh.Query.Ground.Models;
 
 internal readonly record struct GroundPathCorner
 (

@@ -1,11 +1,14 @@
 ﻿using System.Numerics;
 using System.Runtime.InteropServices;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.CosmicExploration;
 
@@ -67,7 +70,7 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
                 Min = new(13.586f, 181.09999f, -0.30716705f),
                 Max = new(18.786001f, 189.7f, 4.3928328f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertCylinderCollider
         (
@@ -76,7 +79,7 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
                 Min = new(81.235f, 157.9646f, -117.259f),
                 Max = new(104.634995f, 173.16461f, -93.959f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -85,26 +88,26 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
                 Min = new(543.34247f, 240.5433f, 464.7541f),
                 Max = new(568.1495f, 248.57132f, 475.38806f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
 
         scene.InsertCylinderCollider
         (
             new Vector3(1, 10, 1),
             new(-572.3f, 200, -480),
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertCylinderCollider
         (
             new Vector3(3, 10, 3),
             new(-556.5f, 200, -498.4f),
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertCylinderCollider
         (
             new Vector3(3, 10, 3),
             new(-559, 200, -448.5f),
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
     }
 
@@ -156,9 +159,9 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
         LinkClientPath(mesh, new(-384.81085f, 170.25f, -140.02068f),   new(-51.380566f, 187.81459f, 227.71413f));
     }
 
-    private static SceneExtractor.MeshInstance? ResolveInstance
+    private static MeshInstance? ResolveInstance
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
@@ -171,18 +174,18 @@ internal class Z1319奥克塞西亚行星 : NavmeshCustomization
 
     private static int ResolveInstanceIndex
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
     {
-        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))
+        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].ID == instanceId))
             return instanceIndex;
 
         if (instanceId != 0)
         {
             for (var i = 0; i < mesh.Instances.Count; ++i)
-                if (mesh.Instances[i].Id == instanceId)
+                if (mesh.Instances[i].ID == instanceId)
                     return i;
         }
 

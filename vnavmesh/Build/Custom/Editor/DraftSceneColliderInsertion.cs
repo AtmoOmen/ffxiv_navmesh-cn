@@ -1,5 +1,7 @@
 using System.Numerics;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Editor;
 
@@ -16,6 +18,6 @@ public sealed class DraftSceneColliderInsertion
     public float                           RotationDegrees;
     public bool                            DoubleSided = true;
     public string                          MeshKeyContains = "";
-    public SceneExtractor.PrimitiveFlags   ForceSetPrimFlags;
-    public SceneExtractor.PrimitiveFlags   ForceClearPrimFlags;
+    public PrimitiveFlags   ForceSetPrimFlags;
+    public PrimitiveFlags   ForceClearPrimFlags;
 }

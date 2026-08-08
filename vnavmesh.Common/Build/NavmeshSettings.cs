@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text;
 using DotRecast.Recast;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
 
-namespace vnavmesh.Build;
+namespace vnavmesh.Common.Build;
 
 public class NavmeshSettings
 {
@@ -42,17 +42,21 @@ public class NavmeshSettings
     // first level count follows ground tiles; this array only controls further volume subdivision
     public int[] VolumeTiles = [8, 8];
 
+    public int  BuildMaxCores = 0;
+    public bool Flyable;
+    public int  CustomizationVersion;
+
+    public List<OffMeshConnection> OffMeshConnections = [];
+
     public NavmeshSettings Clone()
     {
         var clone = (NavmeshSettings)MemberwiseClone();
-        clone.VolumeTiles = (int[])VolumeTiles.Clone();
+        clone.VolumeTiles        = (int[])VolumeTiles.Clone();
+        clone.OffMeshConnections = [.. OffMeshConnections];
         return clone;
     }
 
-    public string BuildSignature
-    (
-        bool flyable
-    )
+    public string BuildSignature()
     {
         var sb = new StringBuilder(256);
         AppendFloat(nameof(CellSize),         CellSize);
@@ -81,7 +85,7 @@ public class NavmeshSettings
         AppendFloat(nameof(EdgeJumpHeight),      EdgeJumpHeight);
         AppendFloat(nameof(EdgeJumpMaxDrop),     EdgeJumpMaxDrop);
         AppendFloat(nameof(EdgeJumpMinDrop),     EdgeJumpMinDrop);
-        AppendBool("Flyable", flyable);
+        AppendBool(nameof(Flyable), Flyable);
         AppendFloat(nameof(GroundTileSize), GroundTileSize);
         AppendInt(nameof(GroundTileCountMax), GroundTileCountMax);
         AppendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
@@ -120,49 +124,4 @@ public class NavmeshSettings
         ) =>
             sb.Append(key).Append('=').Append(value).Append(';');
     }
-}
-
-public static class NavmeshSettingsExtension
-{
-    public static NavmeshBuildSettings ToBuildSettings
-    (
-        this NavmeshSettings settings,
-        bool                 flyable,
-        int                  customizationVersion
-    ) =>
-        new()
-        {
-            CellSize                   = settings.CellSize,
-            CellHeight                 = settings.CellHeight,
-            AgentHeight                = settings.AgentHeight,
-            AgentRadius                = settings.AgentRadius,
-            AgentMaxClimb              = settings.AgentMaxClimb,
-            AgentMaxSlopeDeg           = settings.AgentMaxSlopeDeg,
-            Filtering                  = (NavmeshBuildSettings.Filter)settings.Filtering,
-            RegionMinSize              = settings.RegionMinSize,
-            RegionMergeSize            = settings.RegionMergeSize,
-            Partitioning               = settings.Partitioning,
-            PolyMaxEdgeLen             = settings.PolyMaxEdgeLen,
-            PolyMaxSimplificationError = settings.PolyMaxSimplificationError,
-            PolyMaxVerts               = settings.PolyMaxVerts,
-            DetailSampleDist           = settings.DetailSampleDist,
-            DetailMaxSampleError       = settings.DetailMaxSampleError,
-            FastBuild                  = settings.FastBuild,
-            GenerateEdgeClimbLinks     = settings.GenerateEdgeClimbLinks,
-            GenerateEdgeJumpLinks      = settings.GenerateEdgeJumpLinks,
-            GroundTolerance            = settings.GroundTolerance,
-            ClimbDownDistance          = settings.ClimbDownDistance,
-            ClimbDownMaxHeight         = settings.ClimbDownMaxHeight,
-            ClimbDownMinHeight         = settings.ClimbDownMinHeight,
-            EdgeJumpEndDistance        = settings.EdgeJumpEndDistance,
-            EdgeJumpHeight             = settings.EdgeJumpHeight,
-            EdgeJumpMaxDrop            = settings.EdgeJumpMaxDrop,
-            EdgeJumpMinDrop            = settings.EdgeJumpMinDrop,
-            GroundTileSize             = settings.GroundTileSize,
-            GroundTileCountMax         = settings.GroundTileCountMax,
-            VolumeTiles                = (int[])settings.VolumeTiles.Clone(),
-            BuildMaxCores              = 0,
-            Flyable                    = flyable,
-            CustomizationVersion       = customizationVersion
-        };
 }

@@ -2,6 +2,8 @@ using System.Runtime.InteropServices;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory;
 
@@ -35,10 +37,10 @@ internal class Z1055无名岛 : NavmeshCustomization
                     var v3 = p.Vertices[prim.V3];
 
                     if (AlmostEqual(v1.Y, 0) && AlmostEqual(v2.Y, 0) && AlmostEqual(v3.Y, 0))
-                        prim.Flags |= SceneExtractor.PrimitiveFlags.FlyThrough;
+                        prim.Flags |= PrimitiveFlags.FlyThrough;
 
                     if (AlmostEqual(v1.Y, -20) && AlmostEqual(v2.Y, -20) && AlmostEqual(v3.Y, -20))
-                        prim.Flags |= SceneExtractor.PrimitiveFlags.FlyThrough;
+                        prim.Flags |= PrimitiveFlags.FlyThrough;
                 }
             }
         }

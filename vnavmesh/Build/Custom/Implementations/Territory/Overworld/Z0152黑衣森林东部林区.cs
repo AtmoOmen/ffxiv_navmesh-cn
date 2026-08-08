@@ -3,6 +3,8 @@ using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 
@@ -18,5 +20,5 @@ internal class Z0152黑衣森林东部林区 : NavmeshCustomization
     (
         SceneExtractor scene
     ) =>
-        scene.InsertCylinderCollider(new Vector3(2, 2, 2), new(-40, -8, 225), SceneExtractor.PrimitiveFlags.Unlandable);
+        scene.InsertCylinderCollider(new Vector3(2, 2, 2), new(-40, -8, 225), PrimitiveFlags.Unlandable);
 }

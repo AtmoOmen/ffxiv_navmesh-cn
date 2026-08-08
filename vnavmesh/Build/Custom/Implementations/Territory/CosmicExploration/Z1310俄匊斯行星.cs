@@ -1,10 +1,13 @@
 using System.Numerics;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.CosmicExploration;
 
@@ -76,7 +79,7 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
                 Min = new(-131.259f, -195.082f, -840.71716f),
                 Max = new(-128.37198f, -188.6f, -831.78186f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -85,7 +88,7 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
                 Min = new(-152.32198f, -193.773f, -933.42145f),
                 Max = new(-142.62202f, -190.537f, -923.9085f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
     }
 
@@ -164,7 +167,7 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
 
     private static void RecalculateMeshBounds
     (
-        SceneExtractor.Mesh mesh
+        Mesh mesh
     )
     {
         mesh.LocalBounds = CalculateLocalBounds(mesh.Parts);
@@ -174,7 +177,7 @@ internal class Z1310俄匊斯行星 : NavmeshCustomization
 
     private static AABB CalculateLocalBounds
     (
-        List<SceneExtractor.MeshPart> parts
+        List<MeshPart> parts
     )
     {
         var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };

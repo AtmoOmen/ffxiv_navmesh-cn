@@ -3,7 +3,9 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using DotRecast.Core;
 using DotRecast.Recast;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Flight;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Models;
 using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 using SceneExtractor = vnavmesh.Common.Build.BuildScene;
@@ -103,9 +105,9 @@ internal sealed class PreparedTerrainGeometry
 
 internal sealed class RasterJob
 {
-    public required BuildScene.MeshType      MeshType        { get; init; }
-    public required BuildScene.MeshPart      Part            { get; init; }
-    public required BuildScene.MeshInstance  Instance        { get; init; }
+    public required MeshType      MeshType        { get; init; }
+    public required MeshPart      Part            { get; init; }
+    public required MeshInstance  Instance        { get; init; }
     public required AABB                     WorldBounds     { get; init; }
     public required int                      MinTileX        { get; init; }
     public required int                      MaxTileX        { get; init; }
@@ -123,9 +125,9 @@ public class NavmeshRasterizer
 {
     public readonly record struct PartInstance
     (
-        BuildScene.MeshType     MeshType,
-        BuildScene.MeshPart     Part,
-        BuildScene.MeshInstance Instance
+        MeshType     MeshType,
+        MeshPart     Part,
+        MeshInstance Instance
     );
 
     public sealed class ScratchBuffers
@@ -569,8 +571,8 @@ public class NavmeshRasterizer
 
     internal static PreparedTerrainGeometry PrepareTerrainGeometry
     (
-        BuildScene.MeshPart     part,
-        BuildScene.MeshInstance instance
+        MeshPart     part,
+        MeshInstance instance
     )
     {
         var worldVertexTriples = GC.AllocateUninitializedArray<float>(part.Vertices.Count * 3);
@@ -581,14 +583,14 @@ public class NavmeshRasterizer
     public void Rasterize
     (
         SceneExtractor      geom,
-        BuildScene.MeshType types,
+        MeshType types,
         bool                perMeshInteriors,
         bool                solidBelowNonManifold
     )
     {
         foreach (var (name, mesh) in geom.Meshes)
         {
-            if ((mesh.MeshType & types) == BuildScene.MeshType.None)
+            if ((mesh.MeshType & types) == MeshType.None)
                 continue;
 
             foreach (var instance in mesh.Instances)
@@ -630,15 +632,15 @@ public class NavmeshRasterizer
 
     public void Rasterize
     (
-        ReadOnlySpan<(BuildScene.Mesh mesh, BuildScene.MeshInstance instance)> instances,
-        BuildScene.MeshType                                                    types,
+        ReadOnlySpan<(Mesh mesh, MeshInstance instance)> instances,
+        MeshType                                                    types,
         bool                                                                   perMeshInteriors,
         bool                                                                   solidBelowNonManifold
     )
     {
         foreach (var (mesh, instance) in instances)
         {
-            if ((mesh.MeshType & types) == BuildScene.MeshType.None)
+            if ((mesh.MeshType & types) == MeshType.None)
                 continue;
 
             if (RasterizeMesh(mesh, instance, out var minY) && perMeshInteriors)
@@ -677,15 +679,15 @@ public class NavmeshRasterizer
 
     public void Rasterize
     (
-        IEnumerable<(BuildScene.Mesh mesh, BuildScene.MeshInstance instance)> instances,
-        BuildScene.MeshType                                                   types,
+        IEnumerable<(Mesh mesh, MeshInstance instance)> instances,
+        MeshType                                                   types,
         bool                                                                  perMeshInteriors,
         bool                                                                  solidBelowNonManifold
     )
     {
         foreach (var (mesh, instance) in instances)
         {
-            if ((mesh.MeshType & types) == BuildScene.MeshType.None)
+            if ((mesh.MeshType & types) == MeshType.None)
                 continue;
 
             if (RasterizeMesh(mesh, instance, out var minY) && perMeshInteriors)
@@ -725,14 +727,14 @@ public class NavmeshRasterizer
     public void Rasterize
     (
         ReadOnlySpan<PartInstance> parts,
-        BuildScene.MeshType        types,
+        MeshType        types,
         bool                       perMeshInteriors,
         bool                       solidBelowNonManifold
     )
     {
         foreach (var partInstance in parts)
         {
-            if ((partInstance.MeshType & types) == BuildScene.MeshType.None)
+            if ((partInstance.MeshType & types) == MeshType.None)
                 continue;
 
             if (RasterizePart(partInstance.MeshType, partInstance.Part, partInstance.Instance, out var minY) && perMeshInteriors)
@@ -836,8 +838,8 @@ public class NavmeshRasterizer
     // if it returns true, the mesh borders were rasterized, so intersection set could be modified
     public bool RasterizeMesh
     (
-        BuildScene.Mesh         mesh,
-        BuildScene.MeshInstance instance,
+        Mesh         mesh,
+        MeshInstance instance,
         out int                 minimalY
     )
     {
@@ -885,9 +887,9 @@ public class NavmeshRasterizer
 
     public bool RasterizePart
     (
-        BuildScene.MeshType     meshType,
-        BuildScene.MeshPart     part,
-        BuildScene.MeshInstance instance,
+        MeshType     meshType,
+        MeshPart     part,
+        MeshInstance instance,
         out int                 minimalY
     )
     {
@@ -902,7 +904,7 @@ public class NavmeshRasterizer
         var outFlags = vertexCount <= 256 ?
                            stackOutFlags[..vertexCount] :
                            _scratch.OutFlags(vertexCount);
-        var terrainLike = (meshType & (BuildScene.MeshType.Terrain | BuildScene.MeshType.AnalyticPlane)) != 0;
+        var terrainLike = (meshType & (MeshType.Terrain | MeshType.AnalyticPlane)) != 0;
 
         if (terrainLike)
         {
@@ -926,9 +928,9 @@ public class NavmeshRasterizer
 
     private void RasterizeTerrainLikePart
     (
-        ReadOnlySpan<BuildScene.Primitive> primitives,
+        ReadOnlySpan<Primitive> primitives,
         ReadOnlySpan<int>                  primitiveIndices,
-        BuildScene.MeshInstance            instance,
+        MeshInstance            instance,
         ReadOnlySpan<float>                worldVertices,
         Span<OutFlags>                     outFlags,
         ref int                            minimalY
@@ -982,10 +984,10 @@ public class NavmeshRasterizer
                 continue;
 
             var flags           = (p.Flags & ~instance.ForceClearPrimFlags) | instance.ForceSetPrimFlags;
-            var realSolid       = !flags.HasFlag(BuildScene.PrimitiveFlags.FlyThrough);
-            var forceWalkable   = flags.HasFlag(BuildScene.PrimitiveFlags.ForceWalkable);
+            var realSolid       = !flags.HasFlag(PrimitiveFlags.FlyThrough);
+            var forceWalkable   = flags.HasFlag(PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
-            var unwalkable = flags.HasFlag(BuildScene.PrimitiveFlags.ForceUnwalkable) ||
+            var unwalkable = flags.HasFlag(PrimitiveFlags.ForceUnwalkable) ||
                              (!forceWalkable && unwalkableSlope);
             var areaId = unwalkable ?
                              0 :
@@ -1089,7 +1091,7 @@ public class NavmeshRasterizer
 
     private void RasterizePreparedTerrainLikePart
     (
-        ReadOnlySpan<BuildScene.Primitive>                  primitives,
+        ReadOnlySpan<Primitive>                  primitives,
         ReadOnlySpan<int>                                   primitiveIndices,
         ReadOnlySpan<float>                                 worldVertices,
         ReadOnlySpan<PreparedTerrainGeometry.PrimitiveInfo> primitiveInfos,
@@ -1242,7 +1244,7 @@ public class NavmeshRasterizer
 
     private void RasterizePreparedTerrainPrimitiveFallback
     (
-        BuildScene.Primitive                  primitive,
+        Primitive                  primitive,
         ReadOnlySpan<float>                   worldVertices,
         PreparedTerrainGeometry.PrimitiveInfo info,
         ref int                               minimalY
@@ -1350,8 +1352,8 @@ public class NavmeshRasterizer
 
     private void RasterizeGeneralPart
     (
-        ReadOnlySpan<BuildScene.Primitive> primitives,
-        BuildScene.MeshInstance            instance,
+        ReadOnlySpan<Primitive> primitives,
+        MeshInstance            instance,
         Span<Vector3>                      worldVertices,
         Span<OutFlags>                     outFlags,
         ref int                            minimalY
@@ -1386,10 +1388,10 @@ public class NavmeshRasterizer
             var normalUp = crossY > 0;
 
             var flags           = (p.Flags & ~instance.ForceClearPrimFlags) | instance.ForceSetPrimFlags;
-            var realSolid       = !flags.HasFlag(BuildScene.PrimitiveFlags.FlyThrough);
-            var forceWalkable   = flags.HasFlag(BuildScene.PrimitiveFlags.ForceWalkable);
+            var realSolid       = !flags.HasFlag(PrimitiveFlags.FlyThrough);
+            var forceWalkable   = flags.HasFlag(PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
-            var unwalkable = flags.HasFlag(BuildScene.PrimitiveFlags.ForceUnwalkable) ||
+            var unwalkable = flags.HasFlag(PrimitiveFlags.ForceUnwalkable) ||
                              (!forceWalkable && unwalkableSlope);
             var areaId = unwalkable ?
                              0 :
@@ -2029,14 +2031,14 @@ public class NavmeshRasterizer
     public void RasterizeOld
     (
         SceneExtractor      geom,
-        BuildScene.MeshType types
+        MeshType types
     )
     {
         var vertices = new float[3 * 256];
 
         foreach (var (name, mesh) in geom.Meshes)
         {
-            if ((mesh.MeshType & types) == BuildScene.MeshType.None)
+            if ((mesh.MeshType & types) == MeshType.None)
                 continue;
 
             foreach (var inst in mesh.Instances)
@@ -2064,10 +2066,10 @@ public class NavmeshRasterizer
                     foreach (var p in part.Primitives)
                     {
                         var flags = (p.Flags & ~inst.ForceClearPrimFlags) | inst.ForceSetPrimFlags;
-                        if (_voxelizer != null && flags.HasFlag(BuildScene.PrimitiveFlags.FlyThrough))
+                        if (_voxelizer != null && flags.HasFlag(PrimitiveFlags.FlyThrough))
                             continue; // TODO: rasterize to normal heightfield, can't do it right now, since we're using same heightfield for both mesh and volume
 
-                        var unwalkable = flags.HasFlag(BuildScene.PrimitiveFlags.ForceUnwalkable);
+                        var unwalkable = flags.HasFlag(PrimitiveFlags.ForceUnwalkable);
 
                         if (!unwalkable)
                         {
@@ -2130,7 +2132,7 @@ public class NavmeshRasterizer
 
     private void TransformVertices
     (
-        BuildScene.MeshInstance instance,
+        MeshInstance instance,
         ReadOnlySpan<Vector3>   localVertices,
         Span<Vector3>           outWorld,
         Span<OutFlags>          outFlags
@@ -2171,7 +2173,7 @@ public class NavmeshRasterizer
 
     private void TransformVerticesPacked
     (
-        BuildScene.MeshInstance instance,
+        MeshInstance instance,
         ReadOnlySpan<Vector3>   localVertices,
         Span<float>             outWorld,
         Span<OutFlags>          outFlags
@@ -2215,7 +2217,7 @@ public class NavmeshRasterizer
 
     private static void TransformVerticesPacked
     (
-        BuildScene.MeshInstance instance,
+        MeshInstance instance,
         ReadOnlySpan<Vector3>   localVertices,
         Span<float>             outWorld
     )

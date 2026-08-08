@@ -5,6 +5,9 @@ using vnavmesh.Build;
 using vnavmesh.Build.Custom;
 using vnavmesh.Build.Custom.Editor;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.UI.Editor.Types;
 
 namespace vnavmesh.UI.Editor;
@@ -29,7 +32,7 @@ internal static class CustomizationEditorInspector
 
     public delegate void AddInstancePatchDelegate
     (
-        SceneExtractor.Mesh         mesh,
+        Mesh         mesh,
         string                      key,
         int                         index,
         DraftSceneInstancePatchKind kind
@@ -37,7 +40,7 @@ internal static class CustomizationEditorInspector
 
     public delegate void AddPartPatchDelegate
     (
-        SceneExtractor.Mesh     mesh,
+        Mesh     mesh,
         string                  key,
         int                     partIndex,
         DraftScenePartPatchKind kind,
@@ -880,7 +883,7 @@ internal static class CustomizationEditorInspector
 
                 if (ImGui.Button("不可行走"))
                 {
-                    item.Flags = SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                    item.Flags = PrimitiveFlags.ForceUnwalkable;
                     changed    = true;
                 }
 
@@ -888,7 +891,7 @@ internal static class CustomizationEditorInspector
 
                 if (ImGui.Button("可行走"))
                 {
-                    item.Flags = SceneExtractor.PrimitiveFlags.ForceWalkable;
+                    item.Flags = PrimitiveFlags.ForceWalkable;
                     changed    = true;
                 }
 
@@ -896,7 +899,7 @@ internal static class CustomizationEditorInspector
 
                 if (ImGui.Button("飞行穿透"))
                 {
-                    item.Flags = SceneExtractor.PrimitiveFlags.FlyThrough;
+                    item.Flags = PrimitiveFlags.FlyThrough;
                     changed    = true;
                 }
 
@@ -904,7 +907,7 @@ internal static class CustomizationEditorInspector
 
                 if (ImGui.Button("不可降落"))
                 {
-                    item.Flags = SceneExtractor.PrimitiveFlags.Unlandable;
+                    item.Flags = PrimitiveFlags.Unlandable;
                     changed    = true;
                 }
 
@@ -912,7 +915,7 @@ internal static class CustomizationEditorInspector
 
                 if (ImGui.Button("清除"))
                 {
-                    item.Flags = SceneExtractor.PrimitiveFlags.None;
+                    item.Flags = PrimitiveFlags.None;
                     changed    = true;
                 }
 
@@ -1025,13 +1028,13 @@ internal static class CustomizationEditorInspector
         {
             if (item.Kind is DraftSceneColliderInsertionKind.Ramp or DraftSceneColliderInsertionKind.WalkableFloor)
             {
-                var surfaceMask = SceneExtractor.PrimitiveFlags.ForceWalkable | SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                var surfaceMask = PrimitiveFlags.ForceWalkable | PrimitiveFlags.ForceUnwalkable;
                 var additionalSetFlags   = item.ForceSetPrimFlags   & ~surfaceMask;
                 var additionalClearFlags = item.ForceClearPrimFlags & ~surfaceMask;
                 changed |= CustomizationEditorWidgets.DrawFlags("附加设置标记", ref additionalSetFlags);
                 changed |= CustomizationEditorWidgets.DrawFlags("附加清除标记", ref additionalClearFlags);
-                var setFlags   = additionalSetFlags   | SceneExtractor.PrimitiveFlags.ForceWalkable;
-                var clearFlags = additionalClearFlags | SceneExtractor.PrimitiveFlags.ForceUnwalkable;
+                var setFlags   = additionalSetFlags   | PrimitiveFlags.ForceWalkable;
+                var clearFlags = additionalClearFlags | PrimitiveFlags.ForceUnwalkable;
                 if (item.ForceSetPrimFlags != setFlags || item.ForceClearPrimFlags != clearFlags)
                 {
                     item.ForceSetPrimFlags   = setFlags;
@@ -1046,31 +1049,31 @@ internal static class CustomizationEditorInspector
 
                 if (ImGui.Button("不可行走"))
                 {
-                    item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.ForceUnwalkable;
-                    item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                    item.ForceSetPrimFlags   = PrimitiveFlags.ForceUnwalkable;
+                    item.ForceClearPrimFlags = PrimitiveFlags.None;
                     changed                  = true;
                 }
 
                 ImGui.SameLine();
                 if (ImGui.Button("可行走"))
                 {
-                    item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.ForceWalkable;
-                    item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                    item.ForceSetPrimFlags   = PrimitiveFlags.ForceWalkable;
+                    item.ForceClearPrimFlags = PrimitiveFlags.None;
                     changed                  = true;
                 }
 
                 if (ImGui.Button("飞行穿透"))
                 {
-                    item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.FlyThrough;
-                    item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                    item.ForceSetPrimFlags   = PrimitiveFlags.FlyThrough;
+                    item.ForceClearPrimFlags = PrimitiveFlags.None;
                     changed                  = true;
                 }
 
                 ImGui.SameLine();
                 if (ImGui.Button("保留材质语义"))
                 {
-                    item.ForceSetPrimFlags   = SceneExtractor.PrimitiveFlags.None;
-                    item.ForceClearPrimFlags = SceneExtractor.PrimitiveFlags.None;
+                    item.ForceSetPrimFlags   = PrimitiveFlags.None;
+                    item.ForceClearPrimFlags = PrimitiveFlags.None;
                     changed                  = true;
                 }
             }
@@ -1262,7 +1265,7 @@ internal static class CustomizationEditorInspector
         var selIndex = selection.Index;
         var instance = mesh.Instances[selIndex];
         ImGui.TextUnformatted($"网格: {selection.Key}");
-        ImGui.TextUnformatted($"实例: {instance.Id:X}");
+        ImGui.TextUnformatted($"实例: {instance.ID:X}");
         ImGui.TextUnformatted($"边界: {instance.WorldBounds.Min:f3} - {instance.WorldBounds.Max:f3}");
 
         var transformPatch = workspace.Draft.InstancePatches.FirstOrDefault
@@ -1275,7 +1278,7 @@ internal static class CustomizationEditorInspector
             {
                 MeshKey       = selection.Key,
                 InstanceIndex = selection.Index,
-                InstanceId    = instance.Id,
+                InstanceId    = instance.ID,
                 Kind          = DraftSceneInstancePatchKind.Transform
             };
             transformPatch.WorldTransform = transform;
@@ -1290,7 +1293,7 @@ internal static class CustomizationEditorInspector
                          {
                              MeshKey       = selection.Key,
                              InstanceIndex = selection.Index,
-                             InstanceId    = instance.Id,
+                             InstanceId    = instance.ID,
                              Kind          = DraftSceneInstancePatchKind.SetFlags
                          };
 
@@ -1368,11 +1371,11 @@ internal static class CustomizationEditorInspector
     private static void DrawPreviewVertexInfo
     (
         CustomizationEditorWorkspace workspace,
-        SceneExtractor.MeshPart      part,
+        MeshPart      part,
         string                       meshKey,
         int                          partIndex,
         int                          vertexIndex,
-        SceneExtractor.Mesh          mesh,
+        Mesh          mesh,
         AddPartPatchDelegate         onAddPartPatch
     )
     {
@@ -1405,11 +1408,11 @@ internal static class CustomizationEditorInspector
     private static void DrawPreviewPrimitiveInfo
     (
         CustomizationEditorWorkspace workspace,
-        SceneExtractor.MeshPart      part,
+        MeshPart      part,
         string                       meshKey,
         int                          partIndex,
         int                          primitiveIndex,
-        SceneExtractor.Mesh          mesh,
+        Mesh          mesh,
         AddPartPatchDelegate         onAddPartPatch
     )
     {

@@ -1,6 +1,9 @@
 using System.Numerics;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Extensions;
 
@@ -16,14 +19,14 @@ public static class SceneExtractorExtension
             string                        meshKey,
             Vector3                       scale,
             Vector3                       worldTransform,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             var transform = Matrix4x3.Identity;
-            transform.M11  = scale.X;
-            transform.M22  = scale.Y;
-            transform.M33  = scale.Z;
+            transform.Row0 = new(scale.X, 0, 0);
+            transform.Row1 = new(0, scale.Y, 0);
+            transform.Row2 = new(0, 0, scale.Z);
             transform.Row3 = worldTransform;
             var aabb = new AABB { Min = transform.Row3 - scale, Max = transform.Row3 + scale };
             scene.InsertCollider(meshKey, transform, aabb, forceSetFlags, forceClearFlags);
@@ -34,8 +37,8 @@ public static class SceneExtractorExtension
             string                        meshKey,
             Matrix4x3                     transform,
             AABB                          bounds,
-            SceneExtractor.PrimitiveFlags forceSetFlags,
-            SceneExtractor.PrimitiveFlags forceClearFlags
+            PrimitiveFlags forceSetFlags,
+            PrimitiveFlags forceClearFlags
         )
         {
             var existingMesh = scene.Meshes[meshKey];
@@ -48,8 +51,8 @@ public static class SceneExtractorExtension
             string                        meshKey,
             Matrix4x3                     transform,
             ulong                         material        = 0,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             if (!scene.Meshes.TryGetValue(meshKey, out var mesh))
@@ -76,8 +79,8 @@ public static class SceneExtractorExtension
             int                           count,
             Vector3                       offset,
             ulong                         material        = 0,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             count = Math.Clamp(count, 1, 1024);
@@ -107,8 +110,8 @@ public static class SceneExtractorExtension
         public void SetMeshInstanceFlagsInBounds
         (
             AABB                          bounds,
-            SceneExtractor.PrimitiveFlags forceSetFlags,
-            SceneExtractor.PrimitiveFlags forceClearFlags,
+            PrimitiveFlags forceSetFlags,
+            PrimitiveFlags forceClearFlags,
             string                        meshKeyContains = ""
         )
         {
@@ -137,20 +140,32 @@ public static class SceneExtractorExtension
             a.Min.Y <= b.Max.Y && a.Max.Y >= b.Min.Y &&
             a.Min.Z <= b.Max.Z && a.Max.Z >= b.Min.Z;
 
+        private static Matrix4x3 ToCommon
+        (
+            Matrix4x4 matrix
+        ) =>
+            new
+            (
+                new(matrix.M11, matrix.M12, matrix.M13),
+                new(matrix.M21, matrix.M22, matrix.M23),
+                new(matrix.M31, matrix.M32, matrix.M33),
+                new(matrix.M41, matrix.M42, matrix.M43)
+            );
+
         public void InsertAABoxCollider
         (
             Vector3                       scale,
             Vector3                       worldTransform,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         ) =>
             scene.InsertAxisAlignedCollider("<box>", scale, worldTransform, forceSetFlags, forceClearFlags);
 
         public void InsertAABoxCollider
         (
             AABB                          bounds,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             var scale     = (bounds.Max - bounds.Min) * 0.5f;
@@ -162,16 +177,16 @@ public static class SceneExtractorExtension
         (
             Vector3                       scale,
             Vector3                       worldTransform,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         ) =>
             scene.InsertAxisAlignedCollider("<cylinder>", scale, worldTransform, forceSetFlags, forceClearFlags);
 
         public void InsertCylinderCollider
         (
             AABB                          bounds,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             var scale     = (bounds.Max - bounds.Min) * 0.5f;
@@ -184,8 +199,8 @@ public static class SceneExtractorExtension
             Vector3                       start,
             Vector3                       end,
             float                         radius,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             var axis       = end - start;
@@ -216,16 +231,16 @@ public static class SceneExtractorExtension
         (
             Vector3                       scale,
             Vector3                       center,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         ) =>
             scene.InsertAxisAlignedCollider("<sphere>", Vector3.Max(Vector3.Abs(scale), new Vector3(0.005f)), center, forceSetFlags, forceClearFlags);
 
         public void InsertSphereCollider
         (
             AABB                          bounds,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         ) =>
             scene.InsertSphereCollider((bounds.Max - bounds.Min) * 0.5f, (bounds.Min + bounds.Max) * 0.5f, forceSetFlags, forceClearFlags);
 
@@ -235,8 +250,8 @@ public static class SceneExtractorExtension
             Vector3                       center,
             float                         rotationDegrees,
             bool                          doubleSided,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             halfSize = Vector2.Max(Vector2.Abs(halfSize), new Vector2(0.005f));
@@ -244,7 +259,7 @@ public static class SceneExtractorExtension
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
 
-            var transform = new Matrix4x3(matrix);
+            var transform = ToCommon(matrix);
             var extent    = Vector3.Max(Vector3.Abs(transform.Row0) + Vector3.Abs(transform.Row1), new Vector3(0.005f));
             var bounds    = new AABB { Min = center - extent, Max = center + extent };
             scene.InsertCollider(doubleSided ? "<plane two-sided>" : "<plane one-sided>", transform, bounds, forceSetFlags, forceClearFlags);
@@ -255,20 +270,20 @@ public static class SceneExtractorExtension
             Vector3                       halfExtents,
             Vector3                       center,
             float                         rotationDegrees,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             halfExtents = Vector3.Max(Vector3.Abs(halfExtents), new Vector3(0.005f));
-            forceSetFlags |= SceneExtractor.PrimitiveFlags.ForceWalkable;
-            forceSetFlags &= ~SceneExtractor.PrimitiveFlags.ForceUnwalkable;
-            forceClearFlags |= SceneExtractor.PrimitiveFlags.ForceUnwalkable;
-            forceClearFlags &= ~SceneExtractor.PrimitiveFlags.ForceWalkable;
+            forceSetFlags |= PrimitiveFlags.ForceWalkable;
+            forceSetFlags &= ~PrimitiveFlags.ForceUnwalkable;
+            forceClearFlags |= PrimitiveFlags.ForceUnwalkable;
+            forceClearFlags &= ~PrimitiveFlags.ForceWalkable;
             var matrix = Matrix4x4.CreateScale(halfExtents) *
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
 
-            var transform = new Matrix4x3(matrix);
+            var transform = ToCommon(matrix);
             var extent = Vector3.Abs(transform.Row0) +
                          Vector3.Abs(transform.Row1) +
                          Vector3.Abs(transform.Row2);
@@ -281,20 +296,20 @@ public static class SceneExtractorExtension
             Vector2                       halfSize,
             Vector3                       center,
             float                         rotationDegrees,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             halfSize = Vector2.Max(Vector2.Abs(halfSize), new Vector2(0.05f));
-            forceSetFlags |= SceneExtractor.PrimitiveFlags.ForceWalkable;
-            forceSetFlags &= ~SceneExtractor.PrimitiveFlags.ForceUnwalkable;
-            forceClearFlags |= SceneExtractor.PrimitiveFlags.ForceUnwalkable;
-            forceClearFlags &= ~SceneExtractor.PrimitiveFlags.ForceWalkable;
+            forceSetFlags |= PrimitiveFlags.ForceWalkable;
+            forceSetFlags &= ~PrimitiveFlags.ForceUnwalkable;
+            forceClearFlags |= PrimitiveFlags.ForceUnwalkable;
+            forceClearFlags &= ~PrimitiveFlags.ForceWalkable;
             var matrix = Matrix4x4.CreateScale(halfSize.X, 1f, halfSize.Y) *
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
 
-            var transform = new Matrix4x3(matrix);
+            var transform = ToCommon(matrix);
             var extent = Vector3.Max(Vector3.Abs(transform.Row0) + Vector3.Abs(transform.Row2), new Vector3(0.005f));
             var bounds = new AABB { Min = center - extent, Max = center + extent };
             scene.InsertCollider("<walkable floor>", transform, bounds, forceSetFlags, forceClearFlags);
@@ -305,8 +320,8 @@ public static class SceneExtractorExtension
             Vector3                       halfExtents,
             Vector3                       center,
             float                         rotationDegrees,
-            SceneExtractor.PrimitiveFlags forceSetFlags   = default,
-            SceneExtractor.PrimitiveFlags forceClearFlags = default
+            PrimitiveFlags forceSetFlags   = default,
+            PrimitiveFlags forceClearFlags = default
         )
         {
             halfExtents = Vector3.Max(Vector3.Abs(halfExtents), new Vector3(0.005f));
@@ -314,7 +329,7 @@ public static class SceneExtractorExtension
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
 
-            var transform = new Matrix4x3(matrix);
+            var transform = ToCommon(matrix);
             var extent = Vector3.Abs(transform.Row0) +
                          Vector3.Abs(transform.Row1) +
                          Vector3.Abs(transform.Row2);

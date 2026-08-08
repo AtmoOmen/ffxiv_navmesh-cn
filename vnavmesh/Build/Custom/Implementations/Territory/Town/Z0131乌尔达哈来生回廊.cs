@@ -1,10 +1,13 @@
 using DotRecast.Detour;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Town;
 
@@ -25,7 +28,7 @@ internal class Z0131乌尔达哈来生回廊 : NavmeshCustomization
                 Min = new(-61.9686f, 38f, -12.888067f),
                 Max = new(-57.172184f, 40.754723f, -10.959627f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -34,7 +37,7 @@ internal class Z0131乌尔达哈来生回廊 : NavmeshCustomization
                 Min = new(2.8162823f, 12.217501f, 66.46936f),
                 Max = new(10.950735f, 16.4005f, 69.52377f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
     }
 

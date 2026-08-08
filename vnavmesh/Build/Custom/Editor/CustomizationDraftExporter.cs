@@ -3,6 +3,8 @@ using System.Numerics;
 using System.Text;
 using DotRecast.Recast;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
 
 namespace vnavmesh.Build.Custom.Editor;
@@ -217,6 +219,8 @@ internal static class CustomizationDraftExporter
             Line(sb, 0, "using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;");
         if (context.NeedsNavmeshRuntime)
             Line(sb, 0, "using vnavmesh.Common.Build.Ground;");
+        if (context.NeedsNavmeshBuild)
+            Line(sb, 0, "using vnavmesh.Common.Build;");
         Line(sb, 0, "using vnavmesh.Build.Custom.Abstractions;");
         if (context.HasSettings || context.NeedsSceneExtensions)
             Line(sb, 0, "using vnavmesh.Build.Custom.Extensions;");
@@ -404,8 +408,8 @@ internal static class CustomizationDraftExporter
             DraftSceneInstancePatchKind.Transform      => patch.InstanceId != 0 || patch.InstanceIndex >= 0,
             DraftSceneInstancePatchKind.Insert         => true,
             DraftSceneInstancePatchKind.SetFlags => (patch.InstanceId != 0 || patch.InstanceIndex >= 0) &&
-                                                    (patch.ForceSetPrimFlags   != SceneExtractor.PrimitiveFlags.None ||
-                                                     patch.ForceClearPrimFlags != SceneExtractor.PrimitiveFlags.None),
+                                                    (patch.ForceSetPrimFlags   != PrimitiveFlags.None ||
+                                                     patch.ForceClearPrimFlags != PrimitiveFlags.None),
             _ => false
         };
 
@@ -706,7 +710,7 @@ internal static class CustomizationDraftExporter
         Line(sb, 4, $"Min = {FormatVector(min)},");
         Line(sb, 4, $"Max = {FormatVector(max)}");
 
-        if (insertion is { ForceSetPrimFlags: SceneExtractor.PrimitiveFlags.None, ForceClearPrimFlags: SceneExtractor.PrimitiveFlags.None })
+        if (insertion is { ForceSetPrimFlags: PrimitiveFlags.None, ForceClearPrimFlags: PrimitiveFlags.None })
             Line(sb, 3, "}");
         else
         {
@@ -715,11 +719,11 @@ internal static class CustomizationDraftExporter
             (
                 sb,
                 3,
-                insertion.ForceClearPrimFlags == SceneExtractor.PrimitiveFlags.None ?
+                insertion.ForceClearPrimFlags == PrimitiveFlags.None ?
                     forceSetFlags :
                     $"{forceSetFlags},"
             );
-            if (insertion.ForceClearPrimFlags != SceneExtractor.PrimitiveFlags.None)
+            if (insertion.ForceClearPrimFlags != PrimitiveFlags.None)
                 Line(sb, 3, forceClearFlags);
         }
 
@@ -963,7 +967,7 @@ internal static class CustomizationDraftExporter
 
     private static string FormatPrimitiveFlags
     (
-        SceneExtractor.PrimitiveFlags value
+        PrimitiveFlags value
     ) =>
         FormatFlags(value, "SceneExtractor.PrimitiveFlags");
 

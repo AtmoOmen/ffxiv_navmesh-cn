@@ -1,12 +1,15 @@
 using System.Numerics;
 using DotRecast.Detour;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.FieldOperation;
 
@@ -69,7 +72,7 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
                 Min = new(-300.31873f, -2.6500006f, -572.4582f),
                 Max = new(-271.1427f, 5.6499996f, -549.54425f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -78,7 +81,7 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
                 Min = new(-466.953f, -2.95f, -577.3929f),
                 Max = new(-422.05298f, 2.95f, -575.09283f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
     }
 
@@ -272,9 +275,9 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
         LinkPoints(mesh, new(-465.40982f, 2.999997f, -589.96594f), new(-492.25882f, 3.4977572f, -596.485f));
     }
 
-    private static SceneExtractor.MeshInstance? ResolveInstance
+    private static MeshInstance? ResolveInstance
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
@@ -287,18 +290,18 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
 
     private static int ResolveInstanceIndex
     (
-        SceneExtractor.Mesh mesh,
+        Mesh mesh,
         ulong               instanceId,
         int                 instanceIndex
     )
     {
-        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].Id == instanceId))
+        if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].ID == instanceId))
             return instanceIndex;
 
         if (instanceId != 0)
         {
             for (var i = 0; i < mesh.Instances.Count; ++i)
-                if (mesh.Instances[i].Id == instanceId)
+                if (mesh.Instances[i].ID == instanceId)
                     return i;
         }
 
@@ -307,7 +310,7 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
 
     private static void RecalculateMeshBounds
     (
-        SceneExtractor.Mesh mesh
+        Mesh mesh
     )
     {
         mesh.LocalBounds = CalculateLocalBounds(mesh.Parts);
@@ -317,7 +320,7 @@ internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
 
     private static AABB CalculateLocalBounds
     (
-        List<SceneExtractor.MeshPart> parts
+        List<MeshPart> parts
     )
     {
         var bounds = new AABB { Min = new(float.MaxValue), Max = new(float.MinValue) };

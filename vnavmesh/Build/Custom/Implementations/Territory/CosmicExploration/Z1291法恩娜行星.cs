@@ -60,7 +60,7 @@ internal class Z1291法恩娜行星 : NavmeshCustomization
         if (scene.Meshes.TryGetValue("bg/ffxiv/cos_c1/hou/c1w2/collision/c1w2_t0_roc32.pcb", out var rock2))
         {
             foreach (var inst in rock2.Instances)
-                inst.WorldTransform.M22 *= 2;
+                inst.WorldTransform.Row1.Y *= 2;
         }
     }
 

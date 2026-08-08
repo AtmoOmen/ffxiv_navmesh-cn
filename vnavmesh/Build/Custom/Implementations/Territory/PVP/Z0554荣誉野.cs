@@ -1,10 +1,13 @@
 ﻿using DotRecast.Detour;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.PVP;
 
@@ -25,7 +28,7 @@ internal class Z0554荣誉野 : NavmeshCustomization
                 Min = new(-31.531458f, 21.469496f, 227.44655f),
                 Max = new(-19.364525f, 29.898293f, 240.27592f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -34,7 +37,7 @@ internal class Z0554荣誉野 : NavmeshCustomization
                 Min = new(-210.39667f, 29.937592f, -144.9254f),
                 Max = new(-210.06776f, 32.190163f, -135.74413f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
         scene.InsertAABoxCollider
         (
@@ -43,7 +46,7 @@ internal class Z0554荣誉野 : NavmeshCustomization
                 Min = new(-210.32625f, 21.991016f, -144.83792f),
                 Max = new(-201.74841f, 31.188917f, -135.01823f)
             },
-            SceneExtractor.PrimitiveFlags.ForceUnwalkable
+            PrimitiveFlags.ForceUnwalkable
         );
     }
 

@@ -4,6 +4,7 @@ using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using vnavmesh.Common.Build;
+using vnavmesh.Common.Build.Models;
 
 var pipeName     = ReadOption(args, "--pipe");
 var manifestPath = ReadOption(args, "--manifest");
@@ -33,7 +34,6 @@ try
     var manifestJson = await File.ReadAllTextAsync(manifestPath, Encoding.UTF8);
     var manifest = JsonSerializer.Deserialize<NavmeshBuildManifest>(manifestJson, manifestJsonOptions) ??
                    throw new InvalidOperationException("构建清单为空");
-    manifest.Settings.BuildMaxCores = 0;
 
     BuildScene scene;
     await using (var sceneStream = new FileStream(manifest.ScenePath, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 22, FileOptions.SequentialScan))

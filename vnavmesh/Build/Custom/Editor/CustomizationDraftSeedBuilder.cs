@@ -1,10 +1,12 @@
 using System.Numerics;
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Models;
 using vnavmesh.Internal;
+using AABB = vnavmesh.Common.Models.AABB;
+using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Editor;
 
@@ -183,16 +185,16 @@ internal static class CustomizationDraftSeedBuilder
     (
         CustomizationDraft  draft,
         string              meshKey,
-        SceneExtractor.Mesh defaultMesh,
-        SceneExtractor.Mesh customMesh
+        Mesh defaultMesh,
+        Mesh customMesh
     )
     {
         if (!IsColliderInsertionMeshKey(meshKey))
             return;
 
-        var baseIds = defaultMesh.Instances.Select(static instance => instance.Id).ToHashSet();
+        var baseIds = defaultMesh.Instances.Select(static instance => instance.ID).ToHashSet();
 
-        foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.Id)))
+        foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.ID)))
         {
             var center      = instance.WorldTransform.Row3;
             var halfExtents = new Vector3
@@ -248,8 +250,8 @@ internal static class CustomizationDraftSeedBuilder
     (
         CustomizationDraft  draft,
         string              meshKey,
-        SceneExtractor.Mesh defaultMesh,
-        SceneExtractor.Mesh customMesh
+        Mesh defaultMesh,
+        Mesh customMesh
     )
     {
         if (customMesh.Instances.Count == 0 && defaultMesh.Instances.Count > 0)
@@ -258,11 +260,11 @@ internal static class CustomizationDraftSeedBuilder
             return;
         }
 
-        var customById = customMesh.Instances.ToDictionary(static instance => instance.Id);
+        var customById = customMesh.Instances.ToDictionary(static instance => instance.ID);
         if (!IsColliderInsertionMeshKey(meshKey))
         {
-            var baseIds = defaultMesh.Instances.Select(static instance => instance.Id).ToHashSet();
-            foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.Id)))
+            var baseIds = defaultMesh.Instances.Select(static instance => instance.ID).ToHashSet();
+            foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.ID)))
             {
                 draft.InstancePatches.Add
                 (
@@ -283,7 +285,7 @@ internal static class CustomizationDraftSeedBuilder
         {
             var instance = defaultMesh.Instances[i];
 
-            if (!customById.TryGetValue(instance.Id, out var customInstance))
+            if (!customById.TryGetValue(instance.ID, out var customInstance))
             {
                 draft.InstancePatches.Add
                 (
@@ -291,7 +293,7 @@ internal static class CustomizationDraftSeedBuilder
                     {
                         MeshKey       = meshKey,
                         Kind          = DraftSceneInstancePatchKind.RemoveInstance,
-                        InstanceId    = instance.Id,
+                        InstanceId    = instance.ID,
                         InstanceIndex = i
                     }
                 );
@@ -306,7 +308,7 @@ internal static class CustomizationDraftSeedBuilder
                     {
                         MeshKey        = meshKey,
                         Kind           = DraftSceneInstancePatchKind.Transform,
-                        InstanceId     = instance.Id,
+                        InstanceId     = instance.ID,
                         InstanceIndex  = i,
                         WorldTransform = DraftMatrix4x3.FromRuntime(customInstance.WorldTransform)
                     }
@@ -321,7 +323,7 @@ internal static class CustomizationDraftSeedBuilder
                     {
                         MeshKey             = meshKey,
                         Kind                = DraftSceneInstancePatchKind.SetFlags,
-                        InstanceId          = instance.Id,
+                        InstanceId          = instance.ID,
                         InstanceIndex       = i,
                         ForceSetPrimFlags   = customInstance.ForceSetPrimFlags,
                         ForceClearPrimFlags = customInstance.ForceClearPrimFlags
@@ -341,8 +343,8 @@ internal static class CustomizationDraftSeedBuilder
     (
         CustomizationDraft  draft,
         string              meshKey,
-        SceneExtractor.Mesh defaultMesh,
-        SceneExtractor.Mesh customMesh
+        Mesh defaultMesh,
+        Mesh customMesh
     )
     {
         var partCount = Math.Min(defaultMesh.Parts.Count, customMesh.Parts.Count);
