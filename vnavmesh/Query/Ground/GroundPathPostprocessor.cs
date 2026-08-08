@@ -849,22 +849,22 @@ internal sealed class GroundPathPostprocessor
 
     private const int   MAX_STRAIGHT_PATH_POINTS       = 4097;
     private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
-    private const int   MAX_CENTERLINE_LOOKAHEAD       = 8;
+    private const int   MAX_CENTERLINE_LOOKAHEAD       = 64;
     private const int   MAX_CLEARANCE_SAMPLES          = 64;
     private const int   MAX_RAYCAST_POLYS              = 512;
     private const int   MAX_START_POLY_CANDIDATES      = 32;
     private const float MAX_SHORTCUT_VERTICAL_ERROR    = 0.75f;
-    private const float MAX_CENTERLINE_SHORTCUT_DISTANCE = 40f;
+    private const float MAX_CENTERLINE_SHORTCUT_DISTANCE = 500f;
     private const float CLEARANCE_SAMPLE_STEP          = 0.50f;
     private const float POINT_QUERY_HALF_EXTENT        = 0.10f;
     private const float POINT_QUERY_HEIGHT             = 2f;
     private const float MAX_PROJECTION_DISTANCE        = 0.15f;
     private const float RAYCAST_START_INSET            = 0.02f;
     private const float MIN_ROUNDING_SEGMENT_LENGTH    = 0.75f;
-    private const float MIN_TANGENT_DISTANCE           = 0.18f;
+    private const float MIN_TANGENT_DISTANCE           = 0.50f;
     private const float MAX_TANGENT_SEGMENT_FRACTION   = 0.32f;
     private const float PREFERRED_PATH_CLEARANCE       = 0.40f;
-    private const float TURN_RADIUS                    = 0.70f;
+    private const float TURN_RADIUS                    = 5.00f;
     private const float ROUNDING_MAX_DIRECTION_DOT     = 0.92f;
     private const float ROUNDING_MIN_DIRECTION_DOT     = -0.70f;
     private const float DUPLICATE_POINT_DISTANCE_SQ    = 0.000001f;
