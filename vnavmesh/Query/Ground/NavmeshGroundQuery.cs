@@ -18,7 +18,6 @@ internal sealed class NavmeshGroundQuery
     NavmeshQuery query
 )
 {
-    private const int MAX_PATH_POLYS           = 4096;
     private const int MAX_STRAIGHT_PATH_POINTS = 256;
 
     private long groundQueryCount;
@@ -257,14 +256,21 @@ internal sealed class NavmeshGroundQuery
         out List<long> corridor
     )
     {
-        var buffer = new long[MAX_PATH_POLYS];
         corridor = [];
-        var option = filter is GroundAreaCostFilter groundFilter && groundFilter.RequiresZeroHeuristic ?
-                         DtFindPathOption.ZeroScale :
-                         DtFindPathOption.NoOption;
-        var status = query.FindPath(startRef, endRef, startPos, endPos, filter, buffer, out var count, buffer.Length, option);
-        corridor = [.. buffer.AsSpan(0, count).ToArray()];
-        return status;
+        var scale = filter is GroundAreaCostFilter groundFilter && groundFilter.RequiresZeroHeuristic ?
+                        0f :
+                        DtDefaultQueryHeuristic.H_SCALE;
+        return BidirectionalGroundPathSearch.FindPath
+        (
+            query,
+            startRef,
+            endRef,
+            startPos,
+            endPos,
+            filter,
+            scale,
+            corridor
+        );
     }
 
     private static PlannerResult BuildGroundPlannerResult
