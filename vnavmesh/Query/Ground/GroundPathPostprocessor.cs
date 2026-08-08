@@ -243,13 +243,8 @@ internal sealed class GroundPathPostprocessor
                 (left.Y + right.Y) * 0.5f,
                 (left.Z + right.Z) * 0.5f
             );
-            if (toType == DtPolyTypes.DT_POLYTYPE_GROUND)
-            {
-                if (!TryResolveStartPoly(position, polyRef, out polyRef, out position))
-                    return null;
-
+            if (toType == DtPolyTypes.DT_POLYTYPE_GROUND && TryResolveStartPoly(position, polyRef, out polyRef, out position))
                 area = ResolveArea(corridor, polyRef);
-            }
 
             AppendDistinct
             (
@@ -466,7 +461,153 @@ internal sealed class GroundPathPostprocessor
             return corners;
 
         var simplified = SimplifyCenterline(corners, initialSourceIndex, cancel);
-        return RoundCorners(simplified, initialSourceIndex, cancel);
+        var prepared   = RelaxAwayFromWalls(simplified, initialSourceIndex, cancel);
+        return RoundCorners(prepared, initialSourceIndex, cancel);
+    }
+
+    private IReadOnlyList<GroundPathCorner> RelaxAwayFromWalls
+    (
+        IReadOnlyList<GroundPathCorner> corners,
+        int                             initialSourceIndex,
+        CancellationToken               cancel
+    )
+    {
+        List<GroundPathCorner> result = [.. corners];
+
+        for (var iteration = 0; iteration < CLEARANCE_RELAX_ITERATIONS; ++iteration)
+        {
+            var changed = false;
+
+            for (var i = 1; i < result.Count - 1; ++i)
+            {
+                cancel.ThrowIfCancellationRequested();
+
+                if (IsProtected(result, i, initialSourceIndex) ||
+                    IsSemanticAnchor(result[i])                 ||
+                    IsSemanticAnchor(result[i - 1])             ||
+                    IsSemanticAnchor(result[i + 1]))
+                    continue;
+
+                if (!TryRelaxCorner(result, i, out var relaxed))
+                    continue;
+
+                result[i] = relaxed;
+                changed   = true;
+            }
+
+            if (!changed)
+                break;
+        }
+
+        return result;
+    }
+
+    private bool TryRelaxCorner
+    (
+        List<GroundPathCorner> corners,
+        int                    index,
+        out GroundPathCorner   relaxed
+    )
+    {
+        relaxed = corners[index];
+        var corner = corners[index];
+        var prev   = corners[index - 1];
+        var next   = corners[index + 1];
+
+        var push = Vector3.Zero;
+
+        if (TryGetWallClearance(corner, out var ownDist, out var ownNormal) && ownDist < PREFERRED_PATH_CLEARANCE)
+            push += new Vector3(ownNormal.X, 0, ownNormal.Z) * MathF.Min(PREFERRED_PATH_CLEARANCE - ownDist, MAX_RELAX_PUSH);
+
+        push += ComputeSegmentPush(corner, prev);
+        push += ComputeSegmentPush(corner, next);
+
+        if (push.LengthSquared() < 1e-6f)
+            return false;
+
+        if (push.Length() > MAX_RELAX_PUSH)
+            push *= MAX_RELAX_PUSH / push.Length();
+
+        var candidate = corner.Position + push;
+        if (!TryResolveStartPoly(candidate, corner.PolyRef, out var polyRef, out var projected))
+            return false;
+        if (HorizontalDistance(candidate, projected) > MAX_RELAX_PROJECTION)
+            return false;
+
+        var candidateCorner = corner with
+        {
+            Position = projected,
+            PolyRef = polyRef
+        };
+        if (!HasLineOfSight(prev, candidateCorner) || !HasLineOfSight(candidateCorner, next))
+            return false;
+        if (!TryGetWallClearance(candidateCorner, out var newDist, out _) || newDist <= ownDist + 0.05f)
+            return false;
+
+        relaxed = candidateCorner;
+        return true;
+    }
+
+    private Vector3 ComputeSegmentPush
+    (
+        GroundPathCorner corner,
+        GroundPathCorner other
+    )
+    {
+        var push     = Vector3.Zero;
+        var distance = HorizontalDistance(corner.Position, other.Position);
+        if (distance < 1e-4f)
+            return push;
+
+        for (var sampleIndex = 1; sampleIndex <= RELAX_SEGMENT_SAMPLES; ++sampleIndex)
+        {
+            var t = sampleIndex / (float)(RELAX_SEGMENT_SAMPLES + 1);
+            var position = Vector3.Lerp(corner.Position, other.Position, t);
+            if (!TryResolveStartPoly(position, corner.PolyRef, out var polyRef, out var projected))
+                continue;
+            if (!TryGetWallClearance(projected, polyRef, out var dist, out var normal))
+                continue;
+            if (dist >= PREFERRED_PATH_CLEARANCE)
+                continue;
+
+            var amount = MathF.Min(PREFERRED_PATH_CLEARANCE - dist, MAX_RELAX_PUSH) * 0.5f;
+            push += new Vector3(normal.X, 0, normal.Z) * amount;
+        }
+
+        return push;
+    }
+
+    private bool TryGetWallClearance
+    (
+        GroundPathCorner corner,
+        out float        distance,
+        out Vector3      normal
+    ) =>
+        TryGetWallClearance(corner.Position, corner.PolyRef, out distance, out normal);
+
+    private bool TryGetWallClearance
+    (
+        Vector3   position,
+        long      polyRef,
+        out float distance,
+        out Vector3 normal
+    )
+    {
+        distance = 0;
+        normal   = default;
+
+        var status = MeshQuery.FindDistanceToWall
+        (
+            polyRef,
+            position.ToRecast(),
+            PREFERRED_PATH_CLEARANCE + 2f,
+            GroundFilter,
+            out distance,
+            out _,
+            out var hitNormal
+        );
+        normal = new(hitNormal.X, hitNormal.Y, hitNormal.Z);
+        return status.Succeeded();
     }
 
     private List<GroundPathCorner> SimplifyCenterline
@@ -580,8 +721,7 @@ internal sealed class GroundPathPostprocessor
             if (!HasLineOfSight(previous, first)  ||
                 !HasLineOfSight(first,    second) ||
                 !HasLineOfSight(second,   next)   ||
-                !HasPreferredClearanceAtPoint(first.Position, first.PolyRef) ||
-                !HasPreferredClearanceAtPoint(second.Position, second.PolyRef))
+                !HasArcPreferredClearance(previous, first, second, next))
             {
                 AppendDistinct(result, current);
                 continue;
@@ -593,6 +733,42 @@ internal sealed class GroundPathPostprocessor
 
         AppendDistinct(result, corners[^1]);
         return result;
+    }
+
+    private bool HasArcPreferredClearance
+    (
+        GroundPathCorner previous,
+        GroundPathCorner first,
+        GroundPathCorner second,
+        GroundPathCorner next
+    ) =>
+        HasSegmentPreferredClearance(previous, first) &&
+        HasSegmentPreferredClearance(first,    second) &&
+        HasSegmentPreferredClearance(second,   next);
+
+    private bool HasSegmentPreferredClearance
+    (
+        GroundPathCorner start,
+        GroundPathCorner end
+    )
+    {
+        var distance    = HorizontalDistance(start.Position, end.Position);
+        var sampleCount = Math.Clamp
+        (
+            (int)MathF.Ceiling(distance / CLEARANCE_SAMPLE_STEP),
+            1,
+            MAX_ARC_CLEARANCE_SAMPLES
+        );
+
+        for (var sampleIndex = 1; sampleIndex < sampleCount; ++sampleIndex)
+        {
+            var position = Vector3.Lerp(start.Position, end.Position, sampleIndex / (float)sampleCount);
+            if (!TryResolveStartPoly(position, start.PolyRef, out var polyRef, out var projectedPosition) ||
+                !HasPreferredClearanceAtPoint(projectedPosition, polyRef))
+                return false;
+        }
+
+        return true;
     }
 
     private bool TryBuildRoundedCorner
@@ -850,7 +1026,7 @@ internal sealed class GroundPathPostprocessor
     private const int   MAX_STRAIGHT_PATH_POINTS       = 4097;
     private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
     private const int   MAX_CENTERLINE_LOOKAHEAD       = 64;
-    private const int   MAX_CLEARANCE_SAMPLES          = 64;
+    private const int   MAX_CLEARANCE_SAMPLES          = 256;
     private const int   MAX_RAYCAST_POLYS              = 512;
     private const int   MAX_START_POLY_CANDIDATES      = 32;
     private const float MAX_SHORTCUT_VERTICAL_ERROR    = 0.75f;
@@ -863,7 +1039,12 @@ internal sealed class GroundPathPostprocessor
     private const float MIN_ROUNDING_SEGMENT_LENGTH    = 0.75f;
     private const float MIN_TANGENT_DISTANCE           = 0.50f;
     private const float MAX_TANGENT_SEGMENT_FRACTION   = 0.32f;
-    private const float PREFERRED_PATH_CLEARANCE       = 0.40f;
+    private const float PREFERRED_PATH_CLEARANCE       = 0.70f;
+    private const int   MAX_ARC_CLEARANCE_SAMPLES      = 32;
+    private const int   CLEARANCE_RELAX_ITERATIONS     = 4;
+    private const float MAX_RELAX_PUSH                 = 0.50f;
+    private const float MAX_RELAX_PROJECTION           = 0.50f;
+    private const int   RELAX_SEGMENT_SAMPLES          = 3;
     private const float TURN_RADIUS                    = 5.00f;
     private const float ROUNDING_MAX_DIRECTION_DOT     = 0.92f;
     private const float ROUNDING_MIN_DIRECTION_DOT     = -0.70f;
