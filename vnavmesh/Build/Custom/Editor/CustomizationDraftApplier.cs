@@ -59,8 +59,8 @@ internal static class CustomizationDraftApplier
             profile.PolyMaxSimplificationErrorOverride = polyMaxSimplificationError;
         if (overrides.AgentRadiusOverride is { } agentRadius)
             profile.AgentRadiusOverride = agentRadius;
-        if (overrides.VolumeTilesOverride is { } volumeTiles)
-            profile.VolumeTilesOverride = (int[])volumeTiles.Clone();
+        if (overrides.VolumeCellSizeOverride is { } volumeCellSize)
+            profile.VolumeCellSizeOverride = volumeCellSize;
         if (overrides.VolumeVerticalPaddingOverride is { } volumeVerticalPadding)
             profile.VolumeVerticalPaddingOverride = volumeVerticalPadding;
         if (overrides.VolumeWallThickenNormalYThresholdOverride is { } volumeWallThickenNormalYThreshold)
@@ -147,8 +147,8 @@ internal static class CustomizationDraftApplier
             settings.GroundTileSize = groundTileSize;
         if (overrides.GroundTileCountMax is { } groundTileCountMax)
             settings.GroundTileCountMax = groundTileCountMax;
-        if (overrides.VolumeTiles is { } volumeTiles)
-            settings.VolumeTiles = (int[])volumeTiles.Clone();
+        if (overrides.VolumeCellSize is { } volumeCellSize)
+            settings.VolumeCellSize = volumeCellSize;
     }
 
     public static void ApplySettings

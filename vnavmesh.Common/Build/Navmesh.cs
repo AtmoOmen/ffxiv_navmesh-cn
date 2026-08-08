@@ -18,7 +18,7 @@ namespace vnavmesh.Common.Build;
 public record class Navmesh
 {
     public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 38;         // 更新后触发一次全量重构建
+    public static readonly uint Version = 39;         // 更新后触发一次全量重构建
 
     public int       CustomizationVersion { get; init; }
     public string    BuildSignature       { get; init; }
@@ -534,9 +534,13 @@ public record class Navmesh
         if (numLevels <= 0)
             throw new Exception("体积缓存层级无效");
 
-        var tilesPerLevel = new int[numLevels];
+        var tilesPerLevel = new (int X, int Y, int Z)[numLevels];
         foreach (ref var l in tilesPerLevel.AsSpan())
-            l = reader.ReadInt32();
+        {
+            l.X = reader.ReadInt32();
+            l.Y = reader.ReadInt32();
+            l.Z = reader.ReadInt32();
+        }
 
         var (min, max) = DeserializeBounds(reader);
         return new(min, max, tilesPerLevel);
@@ -554,7 +558,12 @@ public record class Navmesh
 
         writer.Write(volume.Levels.Length);
         foreach (ref var l in volume.Levels.AsSpan())
+        {
             writer.Write(l.NumCellsX);
+            writer.Write(l.NumCellsY);
+            writer.Write(l.NumCellsZ);
+        }
+
         SerializeBounds(writer, volume.RootTile.BoundsMin, volume.RootTile.BoundsMax);
     }
 

@@ -179,9 +179,9 @@ public class NavmeshSettings
     public bool Flyable;
 
     /// <summary>
-    /// 飞行体积在已有地面瓦片基础上的进一步细分倍数。第一层数量跟随地面瓦片，数组每个元素再乘一次细分；数值越大越精细，但内存和时间显著增加。
+    /// 飞行体积的目标叶子体素尺寸，单位为世界单位。构建时按场景范围推导 2 的幂细分，实际体素不会大于该值；数值越大越省内存，但障碍细节越粗。
     /// </summary>
-    public int[] VolumeTiles = [8, 8];
+    public float VolumeCellSize = 4f;
 
     /// <summary>
     /// 飞行体积在场景垂直范围上下各扩展的高度，用于在最高障碍上方保留空体素。默认 0 表示与场景包围盒一致。
@@ -223,7 +223,6 @@ public class NavmeshSettings
     public NavmeshSettings Clone()
     {
         var clone = (NavmeshSettings)MemberwiseClone();
-        clone.VolumeTiles        = (int[])VolumeTiles.Clone();
         clone.OffMeshConnections = [.. OffMeshConnections];
         return clone;
     }
@@ -260,7 +259,7 @@ public class NavmeshSettings
         AppendBool(nameof(Flyable), Flyable);
         AppendFloat(nameof(GroundTileSize), GroundTileSize);
         AppendInt(nameof(GroundTileCountMax), GroundTileCountMax);
-        AppendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
+        AppendFloat(nameof(VolumeCellSize), VolumeCellSize);
         AppendFloat(nameof(VolumeVerticalPadding),                    VolumeVerticalPadding);
         AppendFloat(nameof(VolumeWallThickenNormalYThreshold),        VolumeWallThickenNormalYThreshold);
         AppendInt(nameof(VolumeWallThickenHorizontalRadius),          VolumeWallThickenHorizontalRadius);
@@ -296,11 +295,5 @@ public class NavmeshSettings
                     '0'
             ).Append(';');
 
-        void AppendText
-        (
-            string key,
-            string value
-        ) =>
-            sb.Append(key).Append('=').Append(value).Append(';');
     }
 }

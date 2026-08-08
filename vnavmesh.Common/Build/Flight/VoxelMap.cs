@@ -128,9 +128,9 @@ public class VoxelMap
 
     public VoxelMap
     (
-        Vector3 boundsMin,
-        Vector3 boundsMax,
-        int[]   tilesPerLevel
+        Vector3                        boundsMin,
+        Vector3                        boundsMax,
+        (int X, int Y, int Z)[]        tilesPerLevel
     )
     {
         Levels = new VolumeLevel[tilesPerLevel.Length];
@@ -138,7 +138,7 @@ public class VoxelMap
 
         for (var i = 0; i < Levels.Length; ++i)
         {
-            Levels[i]   = new(levelExtent, tilesPerLevel[i]);
+            Levels[i]   = new(levelExtent, tilesPerLevel[i].X, tilesPerLevel[i].Y, tilesPerLevel[i].Z);
             levelExtent = Levels[i].CellSize;
         }
 

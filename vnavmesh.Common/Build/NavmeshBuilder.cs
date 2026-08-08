@@ -238,9 +238,6 @@ public class NavmeshBuilder
 
         var navmesh = new DtNavMesh();
         navmesh.Init(navmeshParams, Settings.PolyMaxVerts);
-        var volumeTiles = new int[Settings.VolumeTiles.Length + 1];
-        volumeTiles[0] = NumTilesX;
-        Array.Copy(Settings.VolumeTiles, 0, volumeTiles, 1, Settings.VolumeTiles.Length);
         var volumeMin = BoundsMin;
         var volumeMax = BoundsMax;
 
@@ -250,8 +247,21 @@ public class NavmeshBuilder
             volumeMax.Y += Settings.VolumeVerticalPadding;
         }
 
+        var volumeCellSize = MathF.Max(Settings.VolumeCellSize, 0.01f);
+        var perTileX       = NextPow2Ceil(navmeshParams.tileWidth  / volumeCellSize);
+        var perTileZ       = NextPow2Ceil(navmeshParams.tileHeight / volumeCellSize);
+        var totalY         = NextPow2Ceil((volumeMax.Y - volumeMin.Y) / volumeCellSize);
+        var (l1x, l2x)     = SplitPerTile(perTileX);
+        var (l1z, l2z)     = SplitPerTile(perTileZ);
+        var (l0y, l1y, l2y) = SplitTotal(totalY);
+        var volumeLevels = new (int X, int Y, int Z)[]
+        {
+            (NumTilesX, l0y, NumTilesZ),
+            (l1x, l1y, l1z),
+            (l2x, l2y, l2z)
+        };
         var volume = Flyable ?
-                         new VoxelMap(volumeMin, volumeMax, volumeTiles) :
+                         new VoxelMap(volumeMin, volumeMax, volumeLevels) :
                          null;
         Navmesh = new(settings.CustomizationVersion, BuildSignature, false, navmesh, volume);
 
@@ -266,16 +276,9 @@ public class NavmeshBuilder
 
         if (volume != null)
         {
-            _voxelizerNumX = 1;
-            _voxelizerNumY = NumTilesX;
-            _voxelizerNumZ = 1;
-
-            foreach (var n in Settings.VolumeTiles)
-            {
-                _voxelizerNumX *= n;
-                _voxelizerNumY *= n;
-                _voxelizerNumZ *= n;
-            }
+            _voxelizerNumX = perTileX;
+            _voxelizerNumY = totalY;
+            _voxelizerNumZ = perTileZ;
         }
 
         var bucketTimer    = StopWatchTimer.Create();
@@ -289,6 +292,41 @@ public class NavmeshBuilder
         _preparedTerrainBytes     = bucketedInputs.PreparedTerrainBytes;
         TotalEstimatedTileWeight  = bucketedInputs.TotalEstimatedTileWeight;
         NavmeshBuildLog.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
+
+        static int NextPow2Ceil
+        (
+            float value
+        )
+        {
+            var count = Math.Max(1u, (uint)MathF.Ceiling(value));
+            return (int)BitOperations.RoundUpToPowerOf2(count);
+        }
+
+        static (int l1, int l2) SplitPerTile
+        (
+            int total
+        )
+        {
+            var l1 = total >= 4 ?
+                         4 :
+                         total;
+            return (l1, total / l1);
+        }
+
+        static (int l0, int l1, int l2) SplitTotal
+        (
+            int total
+        )
+        {
+            var l0 = total >= 8 ?
+                         8 :
+                         total;
+            var rest = total / l0;
+            var l1 = rest >= 8 ?
+                         8 :
+                         rest;
+            return (l0, l1, rest / l1);
+        }
     }
 
     public void Build

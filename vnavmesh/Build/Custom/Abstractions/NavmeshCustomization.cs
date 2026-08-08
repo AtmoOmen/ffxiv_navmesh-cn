@@ -193,8 +193,8 @@ public class NavmeshCustomization
             settings.GroundTileSize = Settings.GroundTileSize;
         if (Settings.GroundTileCountMax != DefaultSettings.GroundTileCountMax)
             settings.GroundTileCountMax = Settings.GroundTileCountMax;
-        if (!Settings.VolumeTiles.SequenceEqual(DefaultSettings.VolumeTiles))
-            settings.VolumeTiles = (int[])Settings.VolumeTiles.Clone();
+        if (Settings.VolumeCellSize != DefaultSettings.VolumeCellSize)
+            settings.VolumeCellSize = Settings.VolumeCellSize;
         if (Settings.VolumeVerticalPadding != DefaultSettings.VolumeVerticalPadding)
             settings.VolumeVerticalPadding = Settings.VolumeVerticalPadding;
         if (Settings.VolumeWallThickenNormalYThreshold != DefaultSettings.VolumeWallThickenNormalYThreshold)

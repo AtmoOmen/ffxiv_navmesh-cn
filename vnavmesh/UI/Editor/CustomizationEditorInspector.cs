@@ -450,12 +450,12 @@ internal static class CustomizationEditorInspector
 
         if (ImGui.TreeNodeEx("体积", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= CustomizationEditorWidgets.DrawNullableIntArray
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
             (
-                "体积瓦片",
-                ref workspace.Draft.BuildProfile.VolumeTilesOverride,
-                settingsDefaults.VolumeTiles,
-                "体积细分每轴数量 [L2 瓦片数, L3 体素数]"
+                "体积体素尺寸",
+                ref workspace.Draft.BuildProfile.VolumeCellSizeOverride,
+                settingsDefaults.VolumeCellSize,
+                "飞行体积目标叶子体素尺寸, 单位与世界坐标一致"
             );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
             (
@@ -764,12 +764,12 @@ internal static class CustomizationEditorInspector
                 settingsDefaults.GroundTileCountMax,
                 "自动推导地面区块数量时的单轴上限"
             );
-            changed |= CustomizationEditorWidgets.DrawNullableIntArray
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
             (
-                "体积细分",
-                ref workspace.Draft.BuildSettings.VolumeTiles,
-                settingsDefaults.VolumeTiles,
-                "体积细分每轴数量 [L2 瓦片数, L3 体素数]"
+                "体积体素尺寸",
+                ref workspace.Draft.BuildSettings.VolumeCellSize,
+                settingsDefaults.VolumeCellSize,
+                "飞行体积目标叶子体素尺寸, 单位与世界坐标一致"
             );
             ImGui.TreePop();
         }
