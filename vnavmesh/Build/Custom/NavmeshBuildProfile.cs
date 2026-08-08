@@ -14,6 +14,13 @@ public sealed class NavmeshBuildProfile
     public float?       PolyMaxSimplificationErrorOverride;
     public float?       AgentRadiusOverride;
     public int[]?       VolumeTilesOverride;
+    public float?       VolumeVerticalPaddingOverride;
+    public float?       VolumeWallThickenNormalYThresholdOverride;
+    public int?         VolumeWallThickenHorizontalRadiusOverride;
+    public float?       VolumeThinWallStripNormalYThresholdOverride;
+    public float?       VolumeThinWallStripMaxProjectedThicknessOverride;
+    public float?       VolumeThinWallStripBaseRadiusOverride;
+    public float?       VolumeThinWallStripExtraPaddingOverride;
     public float?       DetailSampleDistOverride;
     public bool?        GenerateEdgeClimbLinksOverride;
     public bool?        GenerateEdgeJumpLinksOverride;
@@ -41,6 +48,20 @@ public sealed class NavmeshBuildProfile
             settings.AgentRadius = agentRadius;
         if (VolumeTilesOverride is { } volumeTiles)
             settings.VolumeTiles = (int[])volumeTiles.Clone();
+        if (VolumeVerticalPaddingOverride is { } volumeVerticalPadding)
+            settings.VolumeVerticalPadding = volumeVerticalPadding;
+        if (VolumeWallThickenNormalYThresholdOverride is { } volumeWallThickenNormalYThreshold)
+            settings.VolumeWallThickenNormalYThreshold = volumeWallThickenNormalYThreshold;
+        if (VolumeWallThickenHorizontalRadiusOverride is { } volumeWallThickenHorizontalRadius)
+            settings.VolumeWallThickenHorizontalRadius = volumeWallThickenHorizontalRadius;
+        if (VolumeThinWallStripNormalYThresholdOverride is { } volumeThinWallStripNormalYThreshold)
+            settings.VolumeThinWallStripNormalYThreshold = volumeThinWallStripNormalYThreshold;
+        if (VolumeThinWallStripMaxProjectedThicknessOverride is { } volumeThinWallStripMaxProjectedThickness)
+            settings.VolumeThinWallStripMaxProjectedThickness = volumeThinWallStripMaxProjectedThickness;
+        if (VolumeThinWallStripBaseRadiusOverride is { } volumeThinWallStripBaseRadius)
+            settings.VolumeThinWallStripBaseRadius = volumeThinWallStripBaseRadius;
+        if (VolumeThinWallStripExtraPaddingOverride is { } volumeThinWallStripExtraPadding)
+            settings.VolumeThinWallStripExtraPadding = volumeThinWallStripExtraPadding;
         if (DetailSampleDistOverride is { } detailSampleDist)
             settings.DetailSampleDist = detailSampleDist;
         if (GenerateEdgeClimbLinksOverride is { } generateEdgeClimbLinks)

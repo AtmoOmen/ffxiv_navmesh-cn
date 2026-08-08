@@ -195,6 +195,20 @@ public class NavmeshCustomization
             settings.GroundTileCountMax = Settings.GroundTileCountMax;
         if (!Settings.VolumeTiles.SequenceEqual(DefaultSettings.VolumeTiles))
             settings.VolumeTiles = (int[])Settings.VolumeTiles.Clone();
+        if (Settings.VolumeVerticalPadding != DefaultSettings.VolumeVerticalPadding)
+            settings.VolumeVerticalPadding = Settings.VolumeVerticalPadding;
+        if (Settings.VolumeWallThickenNormalYThreshold != DefaultSettings.VolumeWallThickenNormalYThreshold)
+            settings.VolumeWallThickenNormalYThreshold = Settings.VolumeWallThickenNormalYThreshold;
+        if (Settings.VolumeWallThickenHorizontalRadius != DefaultSettings.VolumeWallThickenHorizontalRadius)
+            settings.VolumeWallThickenHorizontalRadius = Settings.VolumeWallThickenHorizontalRadius;
+        if (Settings.VolumeThinWallStripNormalYThreshold != DefaultSettings.VolumeThinWallStripNormalYThreshold)
+            settings.VolumeThinWallStripNormalYThreshold = Settings.VolumeThinWallStripNormalYThreshold;
+        if (Settings.VolumeThinWallStripMaxProjectedThickness != DefaultSettings.VolumeThinWallStripMaxProjectedThickness)
+            settings.VolumeThinWallStripMaxProjectedThickness = Settings.VolumeThinWallStripMaxProjectedThickness;
+        if (Settings.VolumeThinWallStripBaseRadius != DefaultSettings.VolumeThinWallStripBaseRadius)
+            settings.VolumeThinWallStripBaseRadius = Settings.VolumeThinWallStripBaseRadius;
+        if (Settings.VolumeThinWallStripExtraPadding != DefaultSettings.VolumeThinWallStripExtraPadding)
+            settings.VolumeThinWallStripExtraPadding = Settings.VolumeThinWallStripExtraPadding;
     }
 
     private static void LinkPoints

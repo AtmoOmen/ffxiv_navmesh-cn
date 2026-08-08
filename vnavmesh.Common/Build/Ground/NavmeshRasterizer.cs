@@ -515,13 +515,12 @@ public class NavmeshRasterizer
     private readonly int _tileX;
     private readonly int _tileZ;
     private readonly ScratchBuffers _scratch;
-    private const    float VolumeWallThickenNormalYThreshold = 0.15f;
-    private const    int VolumeWallThickenHorizontalRadius = 1;
-    private const    float VolumePreparedProjectionNormalYThreshold = 0.35f;
-    private const    float VolumeThinWallStripNormalYThreshold = 0.30f;
-    private const    float VolumeThinWallStripMaxProjectedThickness = 0.55f;
-    private const    float VolumeThinWallStripBaseRadius = 0.75f;
-    private const    float VolumeThinWallStripExtraPadding = 0.20f;
+    private readonly float volumeWallThickenNormalYThreshold;
+    private readonly int volumeWallThickenHorizontalRadius;
+    private readonly float volumeThinWallStripNormalYThreshold;
+    private readonly float volumeThinWallStripMaxProjectedThickness;
+    private readonly float volumeThinWallStripBaseRadius;
+    private readonly float volumeThinWallStripExtraPadding;
 
     public NavmeshRasterizer
     (
@@ -531,6 +530,7 @@ public class NavmeshRasterizer
         int             minGap,
         bool            fillInteriors,
         Voxelizer?      voxelizer,
+        NavmeshSettings settings,
         RcContext       telemetry,
         ScratchBuffers? scratch = null,
         int             tileX   = -1,
@@ -553,6 +553,12 @@ public class NavmeshRasterizer
         _walkableNormalThreshold = walkableNormalThreshold;
         _tileX                   = tileX;
         _tileZ                   = tileZ;
+        volumeWallThickenNormalYThreshold        = settings.VolumeWallThickenNormalYThreshold;
+        volumeWallThickenHorizontalRadius        = settings.VolumeWallThickenHorizontalRadius;
+        volumeThinWallStripNormalYThreshold      = settings.VolumeThinWallStripNormalYThreshold;
+        volumeThinWallStripMaxProjectedThickness = settings.VolumeThinWallStripMaxProjectedThickness;
+        volumeThinWallStripBaseRadius            = settings.VolumeThinWallStripBaseRadius;
+        volumeThinWallStripExtraPadding          = settings.VolumeThinWallStripExtraPadding;
 
         if (voxelizer != null)
         {
@@ -1768,7 +1774,7 @@ public class NavmeshRasterizer
             return;
 
         var absNormalY = MathF.Abs(normalY) / normalLength;
-        if (absNormalY > VolumeWallThickenNormalYThreshold)
+        if (absNormalY > volumeWallThickenNormalYThreshold)
             return;
 
         var horizontalLength = MathF.Sqrt(horizontalLengthSq);
@@ -1784,7 +1790,7 @@ public class NavmeshRasterizer
         if (stepX == 0 && stepZ == 0)
             return;
 
-        for (var radius = 1; radius <= VolumeWallThickenHorizontalRadius; ++radius)
+        for (var radius = 1; radius <= volumeWallThickenHorizontalRadius; ++radius)
         {
             AddVolumeSpanDirect(volumeX + (stepX * radius), volumeZ + (stepZ * radius), volumeY0, volumeY1);
             AddVolumeSpanDirect(volumeX - (stepX * radius), volumeZ - (stepZ * radius), volumeY0, volumeY1);
@@ -1821,7 +1827,7 @@ public class NavmeshRasterizer
             return;
 
         var absNormalY = MathF.Abs(normalY) / normalLength;
-        if (absNormalY > VolumeThinWallStripNormalYThreshold)
+        if (absNormalY > volumeThinWallStripNormalYThreshold)
             return;
 
         var minY = Math.Min(v1.Y, Math.Min(v2.Y, v3.Y));
@@ -1859,10 +1865,10 @@ public class NavmeshRasterizer
             return;
 
         var projectedThickness = MathF.Sqrt(DistanceToSegmentSquared(other, segA, segB));
-        if (projectedThickness > VolumeThinWallStripMaxProjectedThickness)
+        if (projectedThickness > volumeThinWallStripMaxProjectedThickness)
             return;
 
-        var radius   = MathF.Max(VolumeThinWallStripBaseRadius, projectedThickness + VolumeThinWallStripExtraPadding);
+        var radius   = MathF.Max(volumeThinWallStripBaseRadius, projectedThickness + volumeThinWallStripExtraPadding);
         var minX     = Math.Max(0, (int)MathF.Floor(Math.Min(segA.X, segB.X)                      - radius));
         var maxX     = Math.Min(_voxelizer.SizeX - 1, (int)MathF.Ceiling(Math.Max(segA.X, segB.X) + radius));
         var minZ     = Math.Max(0, (int)MathF.Floor(Math.Min(segA.Y, segB.Y)                      - radius));

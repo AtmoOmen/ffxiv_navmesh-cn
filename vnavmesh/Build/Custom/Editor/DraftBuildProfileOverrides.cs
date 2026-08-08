@@ -13,6 +13,13 @@ public sealed class DraftBuildProfileOverrides
     public float?       PolyMaxSimplificationErrorOverride;
     public float?       AgentRadiusOverride;
     public int[]?       VolumeTilesOverride;
+    public float?       VolumeVerticalPaddingOverride;
+    public float?       VolumeWallThickenNormalYThresholdOverride;
+    public int?         VolumeWallThickenHorizontalRadiusOverride;
+    public float?       VolumeThinWallStripNormalYThresholdOverride;
+    public float?       VolumeThinWallStripMaxProjectedThicknessOverride;
+    public float?       VolumeThinWallStripBaseRadiusOverride;
+    public float?       VolumeThinWallStripExtraPaddingOverride;
     public float?       DetailSampleDistOverride;
     public bool?        GenerateEdgeClimbLinksOverride;
     public bool?        GenerateEdgeJumpLinksOverride;

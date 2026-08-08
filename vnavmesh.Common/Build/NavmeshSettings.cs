@@ -8,6 +8,8 @@ namespace vnavmesh.Common.Build;
 
 public class NavmeshSettings
 {
+    #region 导航网格构建参数
+
     /// <summary>
     /// 水平方向体素尺寸，单位与场景一致。数值越小，地形细节越精确，但构建时间和内存占用越高；遇到窄缝或边缘缺失时可调小。
     /// </summary>
@@ -94,12 +96,12 @@ public class NavmeshSettings
     /// <summary>
     /// 是否自动生成向下攀爬链接。开启后会在可跳下但不能正常走下的位置生成高到低单向连接。
     /// </summary>
-    public bool GenerateEdgeClimbLinks;
+    public bool GenerateEdgeClimbLinks = true;
 
     /// <summary>
     /// 是否自动生成向下跳跃链接。开启后生成高到低单向跳跃连接，用于跨越断崖或跳下平台。
     /// </summary>
-    public bool GenerateEdgeJumpLinks;
+    public bool GenerateEdgeJumpLinks = true;
 
     /// <summary>
     /// 边缘链接检测时的地面容差，参与轨迹碰撞判断。数值越大越容易接受贴近地面的轨迹，但可能穿过障碍。
@@ -114,12 +116,12 @@ public class NavmeshSettings
     /// <summary>
     /// 向下攀爬允许的最小落差值，低于该值不生成链接，避免把普通台阶当成跳落。
     /// </summary>
-    public float ClimbDownMinHeight = 1.5f;
+    public float ClimbDownMinHeight = 0.6f;
 
     /// <summary>
     /// 向下攀爬允许的最大落差值，高于该值的落差不会生成链接。
     /// </summary>
-    public float ClimbDownMaxHeight = 3.2f;
+    public float ClimbDownMaxHeight = 5f;
 
     /// <summary>
     /// 边缘跳跃终点相对起点的水平搜索距离，决定跳跃能覆盖多远。
@@ -153,17 +155,6 @@ public class NavmeshSettings
     public int GroundTileCountMax = 32;
 
     /// <summary>
-    /// 是否构建飞行体积。开启后额外生成多层体素体积用于飞行寻路，通常由地形定制自动设置；不需要飞行的区域保持关闭可节省构建时间。
-    /// </summary>
-    public bool Flyable;
-
-    /// <summary>
-    /// 飞行体积在已有地面瓦片基础上的进一步细分倍数。第一层数量跟随地面瓦片，数组每个元素再乘一次细分；数值越大越精细，但内存和时间显著增加。
-    /// </summary>
-    public int[] VolumeTiles = [8, 8];
-
-
-    /// <summary>
     /// 构建使用的最大线程数。0 表示使用全部可用核心，负数表示从可用核心数中扣除，大于 0 时强制限制为指定值。
     /// </summary>
     public int BuildMaxCores = 0;
@@ -177,6 +168,57 @@ public class NavmeshSettings
     /// 手工离网连接列表，定义桥梁、跳台等普通多边形无法表达的连接，每条记录起点、终点、半径与是否双向；由定制系统填充，也可以直接追加。
     /// </summary>
     public List<OffMeshConnection> OffMeshConnections = [];
+
+    #endregion
+
+    #region 飞行体积构建参数
+
+    /// <summary>
+    /// 是否构建飞行体积。开启后额外生成多层体素体积用于飞行寻路，通常由地形定制自动设置；不需要飞行的区域保持关闭可节省构建时间。
+    /// </summary>
+    public bool Flyable;
+
+    /// <summary>
+    /// 飞行体积在已有地面瓦片基础上的进一步细分倍数。第一层数量跟随地面瓦片，数组每个元素再乘一次细分；数值越大越精细，但内存和时间显著增加。
+    /// </summary>
+    public int[] VolumeTiles = [8, 8];
+
+    /// <summary>
+    /// 飞行体积在场景垂直范围上下各扩展的高度，用于在最高障碍上方保留空体素。默认 0 表示与场景包围盒一致。
+    /// </summary>
+    public float VolumeVerticalPadding = 0f;
+
+    /// <summary>
+    /// 体积墙体加厚的法线判定阈值，法线越接近水平的面越容易被加厚。数值越大，参与加厚的墙面越多。
+    /// </summary>
+    public float VolumeWallThickenNormalYThreshold = 0.15f;
+
+    /// <summary>
+    /// 体积墙体加厚的水平半径，单位为体积体素。数值越大，墙体在水平方向占用越厚。
+    /// </summary>
+    public int VolumeWallThickenHorizontalRadius = 1;
+
+    /// <summary>
+    /// 体积细墙剥离的法线判定阈值，法线接近水平的细长墙面会被展开为实体。数值越大，越多的斜薄面会被处理。
+    /// </summary>
+    public float VolumeThinWallStripNormalYThreshold = 0.30f;
+
+    /// <summary>
+    /// 体积细墙允许的最大投影厚度，超过该厚度的面按普通体素处理。数值越大，越厚的薄墙也会被展开。
+    /// </summary>
+    public float VolumeThinWallStripMaxProjectedThickness = 0.55f;
+
+    /// <summary>
+    /// 体积细墙展开的基础半径下限，单位为体积体素。数值越大，细墙周围的最小占用范围越宽。
+    /// </summary>
+    public float VolumeThinWallStripBaseRadius = 0.75f;
+
+    /// <summary>
+    /// 体积细墙展开时在投影厚度之外附加的额外半径。数值越大，细墙边缘越厚。
+    /// </summary>
+    public float VolumeThinWallStripExtraPadding = 0.20f;
+
+    #endregion
 
     public NavmeshSettings Clone()
     {
@@ -219,6 +261,13 @@ public class NavmeshSettings
         AppendFloat(nameof(GroundTileSize), GroundTileSize);
         AppendInt(nameof(GroundTileCountMax), GroundTileCountMax);
         AppendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
+        AppendFloat(nameof(VolumeVerticalPadding),                    VolumeVerticalPadding);
+        AppendFloat(nameof(VolumeWallThickenNormalYThreshold),        VolumeWallThickenNormalYThreshold);
+        AppendInt(nameof(VolumeWallThickenHorizontalRadius),          VolumeWallThickenHorizontalRadius);
+        AppendFloat(nameof(VolumeThinWallStripNormalYThreshold),      VolumeThinWallStripNormalYThreshold);
+        AppendFloat(nameof(VolumeThinWallStripMaxProjectedThickness), VolumeThinWallStripMaxProjectedThickness);
+        AppendFloat(nameof(VolumeThinWallStripBaseRadius),            VolumeThinWallStripBaseRadius);
+        AppendFloat(nameof(VolumeThinWallStripExtraPadding),          VolumeThinWallStripExtraPadding);
         return sb.ToString();
 
         void AppendFloat

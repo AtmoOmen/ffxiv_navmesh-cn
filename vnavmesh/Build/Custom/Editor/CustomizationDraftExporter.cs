@@ -162,6 +162,13 @@ internal static class CustomizationDraftExporter
             profile.PolyMaxSimplificationErrorOverride.HasValue ||
             profile.AgentRadiusOverride.HasValue                ||
             profile.VolumeTilesOverride != null                 ||
+            profile.VolumeVerticalPaddingOverride.HasValue      ||
+            profile.VolumeWallThickenNormalYThresholdOverride.HasValue ||
+            profile.VolumeWallThickenHorizontalRadiusOverride.HasValue ||
+            profile.VolumeThinWallStripNormalYThresholdOverride.HasValue ||
+            profile.VolumeThinWallStripMaxProjectedThicknessOverride.HasValue ||
+            profile.VolumeThinWallStripBaseRadiusOverride.HasValue ||
+            profile.VolumeThinWallStripExtraPaddingOverride.HasValue ||
             profile.DetailSampleDistOverride.HasValue           ||
             profile.GenerateEdgeClimbLinksOverride.HasValue     ||
             profile.GenerateEdgeJumpLinksOverride.HasValue;
@@ -248,6 +255,13 @@ internal static class CustomizationDraftExporter
         AppendAssignment(body, 2, "profile.PolyMaxSimplificationErrorOverride", profile.PolyMaxSimplificationErrorOverride, FormatFloat);
         AppendAssignment(body, 2, "profile.AgentRadiusOverride",                profile.AgentRadiusOverride,                FormatFloat);
         AppendAssignment(body, 2, "profile.VolumeTilesOverride",                profile.VolumeTilesOverride,                FormatIntArray);
+        AppendAssignment(body, 2, "profile.VolumeVerticalPaddingOverride",                    profile.VolumeVerticalPaddingOverride,                    FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeWallThickenNormalYThresholdOverride",        profile.VolumeWallThickenNormalYThresholdOverride,        FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeWallThickenHorizontalRadiusOverride",        profile.VolumeWallThickenHorizontalRadiusOverride,        FormatInt);
+        AppendAssignment(body, 2, "profile.VolumeThinWallStripNormalYThresholdOverride",      profile.VolumeThinWallStripNormalYThresholdOverride,      FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeThinWallStripMaxProjectedThicknessOverride", profile.VolumeThinWallStripMaxProjectedThicknessOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeThinWallStripBaseRadiusOverride",            profile.VolumeThinWallStripBaseRadiusOverride,            FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeThinWallStripExtraPaddingOverride",          profile.VolumeThinWallStripExtraPaddingOverride,          FormatFloat);
         AppendAssignment(body, 2, "profile.DetailSampleDistOverride",           profile.DetailSampleDistOverride,           FormatFloat);
         AppendAssignment(body, 2, "profile.GenerateEdgeClimbLinksOverride",     profile.GenerateEdgeClimbLinksOverride,     FormatBool);
         AppendAssignment(body, 2, "profile.GenerateEdgeJumpLinksOverride",      profile.GenerateEdgeJumpLinksOverride,      FormatBool);

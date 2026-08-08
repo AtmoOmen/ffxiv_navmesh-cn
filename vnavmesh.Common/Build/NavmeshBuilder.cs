@@ -241,8 +241,17 @@ public class NavmeshBuilder
         var volumeTiles = new int[Settings.VolumeTiles.Length + 1];
         volumeTiles[0] = NumTilesX;
         Array.Copy(Settings.VolumeTiles, 0, volumeTiles, 1, Settings.VolumeTiles.Length);
+        var volumeMin = BoundsMin;
+        var volumeMax = BoundsMax;
+
+        if (Flyable && Settings.VolumeVerticalPadding > 0)
+        {
+            volumeMin.Y -= Settings.VolumeVerticalPadding;
+            volumeMax.Y += Settings.VolumeVerticalPadding;
+        }
+
         var volume = Flyable ?
-                         new VoxelMap(BoundsMin, BoundsMax, volumeTiles) :
+                         new VoxelMap(volumeMin, volumeMax, volumeTiles) :
                          null;
         Navmesh = new(settings.CustomizationVersion, BuildSignature, false, navmesh, volume);
 
@@ -746,6 +755,7 @@ public class NavmeshBuilder
             _walkableHeightVoxels,
             Settings.Filtering.HasFlag(NavmeshFilter.Interiors),
             vox,
+            Settings,
             telemetry,
             scratch.Rasterizer,
             x,

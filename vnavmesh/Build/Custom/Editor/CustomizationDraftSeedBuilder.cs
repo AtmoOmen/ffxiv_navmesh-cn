@@ -102,6 +102,20 @@ internal static class CustomizationDraftSeedBuilder
             target.AgentRadiusOverride = agentRadius;
         if (profile.VolumeTilesOverride is { } volumeTiles)
             target.VolumeTilesOverride = (int[])volumeTiles.Clone();
+        if (profile.VolumeVerticalPaddingOverride is { } volumeVerticalPadding)
+            target.VolumeVerticalPaddingOverride = volumeVerticalPadding;
+        if (profile.VolumeWallThickenNormalYThresholdOverride is { } volumeWallThickenNormalYThreshold)
+            target.VolumeWallThickenNormalYThresholdOverride = volumeWallThickenNormalYThreshold;
+        if (profile.VolumeWallThickenHorizontalRadiusOverride is { } volumeWallThickenHorizontalRadius)
+            target.VolumeWallThickenHorizontalRadiusOverride = volumeWallThickenHorizontalRadius;
+        if (profile.VolumeThinWallStripNormalYThresholdOverride is { } volumeThinWallStripNormalYThreshold)
+            target.VolumeThinWallStripNormalYThresholdOverride = volumeThinWallStripNormalYThreshold;
+        if (profile.VolumeThinWallStripMaxProjectedThicknessOverride is { } volumeThinWallStripMaxProjectedThickness)
+            target.VolumeThinWallStripMaxProjectedThicknessOverride = volumeThinWallStripMaxProjectedThickness;
+        if (profile.VolumeThinWallStripBaseRadiusOverride is { } volumeThinWallStripBaseRadius)
+            target.VolumeThinWallStripBaseRadiusOverride = volumeThinWallStripBaseRadius;
+        if (profile.VolumeThinWallStripExtraPaddingOverride is { } volumeThinWallStripExtraPadding)
+            target.VolumeThinWallStripExtraPaddingOverride = volumeThinWallStripExtraPadding;
         if (profile.DetailSampleDistOverride is { } detailSampleDist)
             target.DetailSampleDistOverride = detailSampleDist;
         if (profile.GenerateEdgeClimbLinksOverride is { } generateEdgeClimbLinks)

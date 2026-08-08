@@ -457,6 +457,55 @@ internal static class CustomizationEditorInspector
                 settingsDefaults.VolumeTiles,
                 "体积细分每轴数量 [L2 瓦片数, L3 体素数]"
             );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "垂直扩展",
+                ref workspace.Draft.BuildProfile.VolumeVerticalPaddingOverride,
+                settingsDefaults.VolumeVerticalPadding,
+                "飞行体积在场景垂直范围上下各扩展的高度"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "墙体加厚法线阈值",
+                ref workspace.Draft.BuildProfile.VolumeWallThickenNormalYThresholdOverride,
+                settingsDefaults.VolumeWallThickenNormalYThreshold,
+                "法线越接近水平的面越容易被加厚"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableInt
+            (
+                "墙体加厚半径",
+                ref workspace.Draft.BuildProfile.VolumeWallThickenHorizontalRadiusOverride,
+                settingsDefaults.VolumeWallThickenHorizontalRadius,
+                "墙体在水平方向占用的体积体素数"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "细墙法线阈值",
+                ref workspace.Draft.BuildProfile.VolumeThinWallStripNormalYThresholdOverride,
+                settingsDefaults.VolumeThinWallStripNormalYThreshold,
+                "法线接近水平的细长墙面会被展开为实体"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "细墙最大投影厚度",
+                ref workspace.Draft.BuildProfile.VolumeThinWallStripMaxProjectedThicknessOverride,
+                settingsDefaults.VolumeThinWallStripMaxProjectedThickness,
+                "超过该厚度的面按普通体素处理"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "细墙基础半径",
+                ref workspace.Draft.BuildProfile.VolumeThinWallStripBaseRadiusOverride,
+                settingsDefaults.VolumeThinWallStripBaseRadius,
+                "细墙周围最小占用范围的体素半径"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "细墙额外填充",
+                ref workspace.Draft.BuildProfile.VolumeThinWallStripExtraPaddingOverride,
+                settingsDefaults.VolumeThinWallStripExtraPadding,
+                "细墙投影厚度之外的额外半径"
+            );
             ImGui.TreePop();
         }
 
