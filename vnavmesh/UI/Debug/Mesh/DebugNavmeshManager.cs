@@ -272,14 +272,14 @@ internal class DebugNavmeshManager : IDisposable
         tree.LeafNode($"{tag}地板投影 All：{FormatVector(floorAll)}");
         tree.LeafNode($"{tag}地板投影 Reachable：{FormatVector(floorReachable)}");
         var voxel = manager.Query.FindNearestVolumeVoxel(position);
-        if (tree.LeafNode($"{tag}体素：{voxel:X}###{tag}voxel").SelectedOrHovered && voxel != VoxelMap.INVALID_VOXEL)
+        if (tree.LeafNode($"{tag}体素：{voxel:X}###{tag}voxel").SelectedOrHovered && voxel != SparseVoxelOctree.INVALID_VOXEL)
             debugVoxelMap?.VisualizeVoxel(voxel);
         var voxelSurface = manager.Query.FindNearestVolumeVoxelSurfaceAware(position);
         if (tree.LeafNode
             (
                 $"{tag}体素 Flight：{voxelSurface.Voxel:X}，地表锚定={(voxelSurface.UsedSurfaceAnchor ? "是" : "否")}，搜索点={voxelSurface.SearchPoint:f3}，安全点={voxelSurface.SafePoint:f3}###{tag}voxelFlight"
             ).SelectedOrHovered &&
-            voxelSurface.Voxel != VoxelMap.INVALID_VOXEL)
+            voxelSurface.Voxel != SparseVoxelOctree.INVALID_VOXEL)
             debugVoxelMap?.VisualizeVoxel(voxelSurface.Voxel);
     }
 

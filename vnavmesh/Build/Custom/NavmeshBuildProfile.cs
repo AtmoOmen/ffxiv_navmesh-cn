@@ -12,7 +12,9 @@ public sealed class NavmeshBuildProfile
     public float?       PolyMaxEdgeLenOverride;
     public float?       PolyMaxSimplificationErrorOverride;
     public float?       AgentRadiusOverride;
-    public int[]?       VolumeTilesOverride;
+    public float?       VolumeLeafSizeOverride;
+    public int?         VolumeMaxDepthOverride;
+    public int[]?       VolumeLayerDepthsOverride;
     public float?       DetailSampleDistOverride;
     public bool?        GenerateEdgeClimbLinksOverride;
     public bool?        GenerateEdgeJumpLinksOverride;
@@ -38,8 +40,12 @@ public sealed class NavmeshBuildProfile
             settings.PolyMaxSimplificationError = polyMaxSimplificationError;
         if (AgentRadiusOverride is { } agentRadius)
             settings.AgentRadius = agentRadius;
-        if (VolumeTilesOverride is { } volumeTiles)
-            settings.VolumeTiles = (int[])volumeTiles.Clone();
+        if (VolumeLeafSizeOverride is { } volumeLeafSize)
+            settings.VolumeLeafSize = volumeLeafSize;
+        if (VolumeMaxDepthOverride is { } volumeMaxDepth)
+            settings.VolumeMaxDepth = volumeMaxDepth;
+        if (VolumeLayerDepthsOverride is { } volumeLayerDepths)
+            settings.VolumeLayerDepths = (int[])volumeLayerDepths.Clone();
         if (DetailSampleDistOverride is { } detailSampleDist)
             settings.DetailSampleDist = detailSampleDist;
         if (GenerateEdgeClimbLinksOverride is { } generateEdgeClimbLinks)

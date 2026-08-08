@@ -33,5 +33,7 @@ public sealed class DraftBuildSettingsOverrides
     public float?         EdgeJumpMinDrop;
     public float?         GroundTileSize;
     public int?           GroundTileCountMax;
-    public int[]?         VolumeTiles;
+    public float?         VolumeLeafSize;
+    public int?           VolumeMaxDepth;
+    public int[]?         VolumeLayerDepths;
 }

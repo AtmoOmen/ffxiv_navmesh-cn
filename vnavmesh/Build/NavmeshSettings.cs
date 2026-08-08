@@ -39,13 +39,14 @@ public class NavmeshSettings
     public float GroundTileSize     = 64f;
     public int   GroundTileCountMax = 32;
 
-    // first level count follows ground tiles; this array only controls further volume subdivision
-    public int[] VolumeTiles = [8, 8];
+    public float VolumeLeafSize    = 4f;
+    public int   VolumeMaxDepth    = 9;
+    public int[] VolumeLayerDepths = [5, 7, 9];
 
     public NavmeshSettings Clone()
     {
         var clone = (NavmeshSettings)MemberwiseClone();
-        clone.VolumeTiles = (int[])VolumeTiles.Clone();
+        clone.VolumeLayerDepths = (int[])VolumeLayerDepths.Clone();
         return clone;
     }
 
@@ -84,7 +85,9 @@ public class NavmeshSettings
         AppendBool("Flyable", flyable);
         AppendFloat(nameof(GroundTileSize), GroundTileSize);
         AppendInt(nameof(GroundTileCountMax), GroundTileCountMax);
-        AppendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
+        AppendFloat(nameof(VolumeLeafSize),    VolumeLeafSize);
+        AppendInt(nameof(VolumeMaxDepth),      VolumeMaxDepth);
+        AppendText(nameof(VolumeLayerDepths), string.Join(',', VolumeLayerDepths));
         return sb.ToString();
 
         void AppendFloat
@@ -160,7 +163,9 @@ public static class NavmeshSettingsExtension
             EdgeJumpMinDrop            = settings.EdgeJumpMinDrop,
             GroundTileSize             = settings.GroundTileSize,
             GroundTileCountMax         = settings.GroundTileCountMax,
-            VolumeTiles                = (int[])settings.VolumeTiles.Clone(),
+            VolumeLeafSize             = settings.VolumeLeafSize,
+            VolumeMaxDepth             = settings.VolumeMaxDepth,
+            VolumeLayerDepths          = (int[])settings.VolumeLayerDepths.Clone(),
             BuildMaxCores              = 0,
             Flyable                    = flyable,
             CustomizationVersion       = customizationVersion

@@ -49,7 +49,7 @@ internal sealed class NavmeshFlightQuery
         var locateDuration = locateTimer.Value();
         Service.Log.Debug($"[算路] 飞行体素 {startVoxel:X} -> {endVoxel:X}");
 
-        if (startVoxel == VoxelMap.INVALID_VOXEL || endVoxel == VoxelMap.INVALID_VOXEL)
+        if (startVoxel == SparseVoxelOctree.INVALID_VOXEL || endVoxel == SparseVoxelOctree.INVALID_VOXEL)
         {
             Service.Log.Error($"飞行算路失败：起点 = {from:f3}，终点 = {to:f3}，体素 = {startVoxel:X} -> {endVoxel:X}，原因 = 无法定位空体素");
             return CreateFlightFailure(to);
@@ -66,7 +66,7 @@ internal sealed class NavmeshFlightQuery
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
         var searchTimer             = StopWatchTimer.Create();
         var voxelPath = volumeQuery.FindPath
-            (startVoxel, endVoxel, safeStart, safeDestination, false, cancel, avoidCenter, avoidRadius);
+            (startVoxel, endVoxel, safeStart, safeDestination, false, cancel);
         var telemetry = volumeQuery.LastTelemetry;
 
         Service.Log.Debug
@@ -199,7 +199,7 @@ internal sealed class NavmeshFlightQuery
         if (query.VolumeQuery == null)
             return null;
 
-        var landingLeafSize = query.VolumeQuery.Volume.Levels[^1].CellSize;
+        var landingLeafSize = query.VolumeQuery.Volume.LeafCellSize;
         var landingSearchExtent = new Vector3
         (
             MathF.Max(landingLeafSize.X, landingLeafSize.Z),
@@ -262,7 +262,7 @@ internal sealed class NavmeshFlightQuery
 
         var approachLocate = query.FindNearestVolumeVoxelSurfaceAware(candidate, transitionTolerance, MathF.Max(toleranceFloor, verticalDrop));
         var approachVoxel  = approachLocate.Voxel;
-        if (approachVoxel == VoxelMap.INVALID_VOXEL)
+        if (approachVoxel == SparseVoxelOctree.INVALID_VOXEL)
             return candidate;
 
         return approachLocate.SafePoint;
@@ -279,14 +279,14 @@ internal sealed class NavmeshFlightQuery
 
         var volume       = query.VolumeQuery.Volume;
         var approachLeaf = volume.FindLeafVoxel(approachPoint);
-        if (!approachLeaf.empty || approachLeaf.voxel == VoxelMap.INVALID_VOXEL)
+        if (!approachLeaf.empty || approachLeaf.voxel == SparseVoxelOctree.INVALID_VOXEL)
             return;
 
         while (flightWaypoints.Count >= 2)
         {
             var previousPoint = flightWaypoints[^2];
             var previousLeaf  = volume.FindLeafVoxel(previousPoint);
-            if (!previousLeaf.empty || previousLeaf.voxel == VoxelMap.INVALID_VOXEL)
+            if (!previousLeaf.empty || previousLeaf.voxel == SparseVoxelOctree.INVALID_VOXEL)
                 break;
 
             if (!VoxelSearch.LineOfSight(volume, previousLeaf.voxel, approachLeaf.voxel, previousPoint, approachPoint))
@@ -397,12 +397,10 @@ internal sealed class NavmeshFlightQuery
 
     private static float ComputeNearGoalThreshold
     (
-        VoxelMap volume
+        SparseVoxelOctree volume
     )
     {
-        var l1CellSize  = volume.Levels[1].CellSize;
-        var maxL1Extent = MathF.Max(l1CellSize.X, MathF.Max(l1CellSize.Y, l1CellSize.Z));
-        return maxL1Extent * 2f;
+        return volume.LayerCellSizes[1] * 2f;
     }
 
     private static float HorizontalDistanceXZ

@@ -98,8 +98,12 @@ internal static class CustomizationDraftSeedBuilder
             target.PolyMaxSimplificationErrorOverride = polyMaxSimplificationError;
         if (profile.AgentRadiusOverride is { } agentRadius)
             target.AgentRadiusOverride = agentRadius;
-        if (profile.VolumeTilesOverride is { } volumeTiles)
-            target.VolumeTilesOverride = (int[])volumeTiles.Clone();
+        if (profile.VolumeLeafSizeOverride is { } volumeLeafSize)
+            target.VolumeLeafSizeOverride = volumeLeafSize;
+        if (profile.VolumeMaxDepthOverride is { } volumeMaxDepth)
+            target.VolumeMaxDepthOverride = volumeMaxDepth;
+        if (profile.VolumeLayerDepthsOverride is { } volumeLayerDepths)
+            target.VolumeLayerDepthsOverride = (int[])volumeLayerDepths.Clone();
         if (profile.DetailSampleDistOverride is { } detailSampleDist)
             target.DetailSampleDistOverride = detailSampleDist;
         if (profile.GenerateEdgeClimbLinksOverride is { } generateEdgeClimbLinks)
@@ -150,8 +154,10 @@ internal static class CustomizationDraftSeedBuilder
         CopyIfChanged(current.GroundTileSize,      defaults.GroundTileSize,      v => target.GroundTileSize      = v);
         if (current.GroundTileCountMax != defaults.GroundTileCountMax)
             target.GroundTileCountMax = current.GroundTileCountMax;
-        if (!current.VolumeTiles.SequenceEqual(defaults.VolumeTiles))
-            target.VolumeTiles = (int[])current.VolumeTiles.Clone();
+        CopyIfChanged(current.VolumeLeafSize, defaults.VolumeLeafSize, v => target.VolumeLeafSize = v);
+        CopyIfChanged(current.VolumeMaxDepth, defaults.VolumeMaxDepth, v => target.VolumeMaxDepth = v);
+        if (!current.VolumeLayerDepths.SequenceEqual(defaults.VolumeLayerDepths))
+            target.VolumeLayerDepths = (int[])current.VolumeLayerDepths.Clone();
     }
 
     private static void CopySceneDiffs

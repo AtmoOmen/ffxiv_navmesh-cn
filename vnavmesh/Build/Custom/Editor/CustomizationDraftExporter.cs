@@ -159,7 +159,9 @@ internal static class CustomizationDraftExporter
             profile.PolyMaxEdgeLenOverride.HasValue             ||
             profile.PolyMaxSimplificationErrorOverride.HasValue ||
             profile.AgentRadiusOverride.HasValue                ||
-            profile.VolumeTilesOverride != null                 ||
+            profile.VolumeLeafSizeOverride.HasValue             ||
+            profile.VolumeMaxDepthOverride.HasValue             ||
+            profile.VolumeLayerDepthsOverride != null           ||
             profile.DetailSampleDistOverride.HasValue           ||
             profile.GenerateEdgeClimbLinksOverride.HasValue     ||
             profile.GenerateEdgeJumpLinksOverride.HasValue;
@@ -196,7 +198,9 @@ internal static class CustomizationDraftExporter
             settings.EdgeJumpMinDrop.HasValue            ||
             settings.GroundTileSize.HasValue             ||
             settings.GroundTileCountMax.HasValue         ||
-            settings.VolumeTiles != null;
+            settings.VolumeLeafSize.HasValue             ||
+            settings.VolumeMaxDepth.HasValue             ||
+            settings.VolumeLayerDepths != null;
     }
 
     private static void AppendUsings
@@ -239,7 +243,9 @@ internal static class CustomizationDraftExporter
         AppendAssignment(body, 2, "profile.PolyMaxEdgeLenOverride",             profile.PolyMaxEdgeLenOverride,             FormatFloat);
         AppendAssignment(body, 2, "profile.PolyMaxSimplificationErrorOverride", profile.PolyMaxSimplificationErrorOverride, FormatFloat);
         AppendAssignment(body, 2, "profile.AgentRadiusOverride",                profile.AgentRadiusOverride,                FormatFloat);
-        AppendAssignment(body, 2, "profile.VolumeTilesOverride",                profile.VolumeTilesOverride,                FormatIntArray);
+        AppendAssignment(body, 2, "profile.VolumeLeafSizeOverride",             profile.VolumeLeafSizeOverride,             FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeMaxDepthOverride",             profile.VolumeMaxDepthOverride,             FormatInt);
+        AppendAssignment(body, 2, "profile.VolumeLayerDepthsOverride",          profile.VolumeLayerDepthsOverride,          FormatIntArray);
         AppendAssignment(body, 2, "profile.DetailSampleDistOverride",           profile.DetailSampleDistOverride,           FormatFloat);
         AppendAssignment(body, 2, "profile.GenerateEdgeClimbLinksOverride",     profile.GenerateEdgeClimbLinksOverride,     FormatBool);
         AppendAssignment(body, 2, "profile.GenerateEdgeJumpLinksOverride",      profile.GenerateEdgeJumpLinksOverride,      FormatBool);
@@ -289,7 +295,9 @@ internal static class CustomizationDraftExporter
         AppendAssignment(body, 2, "settings.EdgeJumpMinDrop",            settings.EdgeJumpMinDrop,            FormatFloat);
         AppendAssignment(body, 2, "settings.GroundTileSize",             settings.GroundTileSize,             FormatFloat);
         AppendAssignment(body, 2, "settings.GroundTileCountMax",         settings.GroundTileCountMax,         FormatInt);
-        AppendAssignment(body, 2, "settings.VolumeTiles",                settings.VolumeTiles,                FormatIntArray);
+        AppendAssignment(body, 2, "settings.VolumeLeafSize",             settings.VolumeLeafSize,             FormatFloat);
+        AppendAssignment(body, 2, "settings.VolumeMaxDepth",             settings.VolumeMaxDepth,             FormatInt);
+        AppendAssignment(body, 2, "settings.VolumeLayerDepths",          settings.VolumeLayerDepths,          FormatIntArray);
 
         if (body.Length == 0)
             return;

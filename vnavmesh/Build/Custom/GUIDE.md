@@ -547,7 +547,9 @@ vnavmesh → **Export Obj** 可以将碰撞几何体导出为 Wavefront .obj 格
 | `GenerateEdgeJumpLinks` | false | 自动生成跳跃链接 |
 | `GroundTileSize` | 64 | 地面区块目标尺寸（世界单位） |
 | `GroundTileCountMax` | 32 | 地面区块每轴数量上限 |
-| `VolumeTiles` | [8, 8] | 体积细分方格数（L2 瓷砖数, L3 体素数） |
+| `VolumeLeafSize` | 4 | 体积八叉树叶尺寸（米） |
+| `VolumeMaxDepth` | 9 | 体积八叉树最大深度 |
+| `VolumeLayerDepths` | [5, 7, 9] | 体积分层深度（宏观/中层/微观，对应 64m/16m/4m） |
 
 ---
 

@@ -46,8 +46,10 @@ public sealed class NavmeshBuildSettings
     public float                               EdgeJumpMinDrop     = 1.5f;
     public float                               GroundTileSize      = 64f;
     public int                                 GroundTileCountMax  = 32;
-    public int[]                               VolumeTiles         = [8, 8];
-    public int                                 BuildMaxCores       = 1;
+    public float                               VolumeLeafSize     = 4f;
+    public int                                 VolumeMaxDepth     = 9;
+    public int[]                               VolumeLayerDepths  = [5, 7, 9];
+    public int                                 BuildMaxCores      = 1;
     public bool                                Flyable;
     public int                                 CustomizationVersion;
     public List<NavmeshBuildOffMeshConnection> OffMeshConnections = [];
@@ -84,7 +86,9 @@ public sealed class NavmeshBuildSettings
         appendBool(nameof(Flyable), Flyable);
         appendFloat(nameof(GroundTileSize), GroundTileSize);
         appendInt(nameof(GroundTileCountMax), GroundTileCountMax);
-        appendText(nameof(VolumeTiles), string.Join(',', VolumeTiles));
+        appendFloat(nameof(VolumeLeafSize),    VolumeLeafSize);
+        appendInt(nameof(VolumeMaxDepth),      VolumeMaxDepth);
+        appendText(nameof(VolumeLayerDepths), string.Join(',', VolumeLayerDepths));
         return sb.ToString();
 
         void appendFloat

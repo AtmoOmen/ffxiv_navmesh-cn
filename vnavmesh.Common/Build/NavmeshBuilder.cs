@@ -135,7 +135,7 @@ public class NavmeshBuilder
         public required int                          GeneratedClimbLinks { get; init; }
         public required int                          GeneratedJumpLinks  { get; init; }
         public          DtMeshData?                  MeshData;
-        public          VolumeRootColumnBuildResult? VolumeColumn;
+        public          VolumeTileBuildResult?         VolumeColumn;
         public          RcBuilderResult?             DebugResult;
     }
 
@@ -234,13 +234,12 @@ public class NavmeshBuilder
         _invTileWidthWorld  = 1.0f / _tileWidthWorld;
         _invTileHeightWorld = 1.0f / _tileHeightWorld;
 
+        ValidateVolumeSettings(Settings);
+
         var navmesh = new DtNavMesh();
         navmesh.Init(navmeshParams, Settings.PolyMaxVerts);
-        var volumeTiles = new int[Settings.VolumeTiles.Length + 1];
-        volumeTiles[0] = NumTilesX;
-        Array.Copy(Settings.VolumeTiles, 0, volumeTiles, 1, Settings.VolumeTiles.Length);
         var volume = Flyable ?
-                         new VoxelMap(BoundsMin, BoundsMax, volumeTiles) :
+                         new SparseVoxelOctree(BoundsMin, BoundsMax, Settings.VolumeLeafSize, Settings.VolumeMaxDepth, Settings.VolumeLayerDepths) :
                          null;
         Navmesh = new(settings.CustomizationVersion, BuildSignature, false, navmesh, volume);
 
@@ -255,16 +254,9 @@ public class NavmeshBuilder
 
         if (volume != null)
         {
-            _voxelizerNumX = 1;
-            _voxelizerNumY = NumTilesX;
-            _voxelizerNumZ = 1;
-
-            foreach (var n in Settings.VolumeTiles)
-            {
-                _voxelizerNumX *= n;
-                _voxelizerNumY *= n;
-                _voxelizerNumZ *= n;
-            }
+            _voxelizerNumX = (int)(_tileWidthWorld / Settings.VolumeLeafSize);
+            _voxelizerNumY = (int)((BoundsMax.Y - BoundsMin.Y) / Settings.VolumeLeafSize);
+            _voxelizerNumZ = _voxelizerNumX;
         }
 
         var bucketTimer    = StopWatchTimer.Create();
@@ -329,6 +321,37 @@ public class NavmeshBuilder
             pow2 <<= 1;
 
         return Math.Clamp(pow2, 1, settings.GroundTileCountMax);
+    }
+
+    private static void ValidateVolumeSettings
+    (
+        NavmeshBuildSettings settings
+    )
+    {
+        if (!settings.Flyable)
+            return;
+
+        var worldExtent = WorldBoundsMax - WorldBoundsMin;
+
+        if (settings.VolumeLeafSize <= 0 || worldExtent % settings.VolumeLeafSize != 0)
+            throw new ArgumentException($"无效的体积叶尺寸: {settings.VolumeLeafSize}");
+
+        var cells = (int)(worldExtent / settings.VolumeLeafSize);
+
+        if (!BitOperations.IsPow2((uint)cells) || BitOperations.Log2((uint)cells) != settings.VolumeMaxDepth)
+            throw new ArgumentException($"体积叶尺寸 {settings.VolumeLeafSize} 与最大深度 {settings.VolumeMaxDepth} 不匹配");
+
+        var layerDepths = settings.VolumeLayerDepths;
+        if (layerDepths is not { Length: > 0 })
+            throw new ArgumentException("体积分层深度不能为空");
+
+        for (var i = 0; i < layerDepths.Length; ++i)
+        {
+            if (layerDepths[i] < 1 || layerDepths[i] > settings.VolumeMaxDepth)
+                throw new ArgumentException($"体积分层深度越界: {layerDepths[i]}");
+            if (i > 0 && layerDepths[i] <= layerDepths[i - 1])
+                throw new ArgumentException($"体积分层深度必须严格递增: {string.Join(',', layerDepths)}");
+        }
     }
 
     private static void AccumulateRecastTelemetry
@@ -579,26 +602,7 @@ public class NavmeshBuilder
                 Navmesh.Mesh.AddTile(built.MeshData, 0, 0, out _);
 
             if (Navmesh.Volume != null && built.VolumeColumn != null)
-            {
-                var parent      = Navmesh.Volume;
-                var shift       = parent.RootTile.SubdivisionCount;
-                var cellYCount  = parent.Levels[0].NumCellsY;
-                var parentIndex = parent.Levels[0].VoxelToIndex(tileIndex % NumTilesX, 0, tileIndex / NumTilesX);
-
-                for (var y = 0; y < cellYCount; ++y)
-                {
-                    var contents = built.VolumeColumn.Contents[y];
-                    if ((contents & VoxelMap.VOXEL_OCCUPIED_BIT) == 0)
-                        continue;
-
-                    if ((contents & VoxelMap.VOXEL_ID_MASK) != VoxelMap.VOXEL_ID_MASK)
-                        contents += (ushort)shift;
-
-                    parent.RootTile.Contents[parentIndex + y] = contents;
-                }
-
-                parent.RootTile.AddSubdivisions(built.VolumeColumn.Subdivision);
-            }
+                Navmesh.Volume.AttachTileSubtree(built.VolumeColumn, tileIndex % NumTilesX, tileIndex / NumTilesX);
 
             if (collectIntermediates && built.DebugResult != null)
                 debugResults.Add(built.DebugResult);
@@ -989,12 +993,12 @@ public class NavmeshBuilder
             ReportProgress(linkBudget);
         }
 
-        VolumeRootColumnBuildResult? volumeColumn = null;
+        VolumeTileBuildResult? volumeColumn = null;
 
         if (Navmesh.Volume != null && vox != null)
         {
             phaseStart                                            =  Stopwatch.GetTimestamp();
-            volumeColumn                                          =  Navmesh.Volume.BuildRootColumn(vox, x, z);
+            volumeColumn                                          =  Navmesh.Volume.BuildTileSubtrees(vox, x, z, NumTilesX);
             scratch.PhaseTicks[(int)BuildPhase.BuildVolumeColumn] += ElapsedTimeSpanTicks(phaseStart);
             ReportProgress(volumeBudget);
         }

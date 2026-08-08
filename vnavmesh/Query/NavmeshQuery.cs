@@ -44,7 +44,7 @@ public class NavmeshQuery
         }
     }
 
-    internal VoxelPathfind? VolumeQuery =>
+    internal VoxelPathfinder? VolumeQuery =>
         released ?
             null :
             volumeQuery ??= NavmeshData.Volume != null ?
@@ -85,7 +85,7 @@ public class NavmeshQuery
     private readonly GroundPathPostprocessor groundPostprocessor;
 
     private DtNavMeshQuery? meshQuery;
-    private VoxelPathfind?  volumeQuery;
+    private VoxelPathfinder? volumeQuery;
     private bool            released;
 
     public NavmeshQuery
@@ -153,7 +153,7 @@ public class NavmeshQuery
         segment.GeometryKind switch
         {
             PlannerSegmentGeometryKind.MeshCorridor   => groundPostprocessor.ProcessSegment(segment, cancel),
-            PlannerSegmentGeometryKind.DiscretePoints => VoxelPathfind.ProcessSegment(segment, cancel),
+            PlannerSegmentGeometryKind.DiscretePoints => VoxelPathfinder.ProcessSegment(segment, cancel),
             _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
         };
 
@@ -166,7 +166,7 @@ public class NavmeshQuery
         segment.GeometryKind switch
         {
             PlannerSegmentGeometryKind.MeshCorridor   => groundPostprocessor.ProcessStraightPathSegment(segment, straightPathOptions, cancel),
-            PlannerSegmentGeometryKind.DiscretePoints => VoxelPathfind.ProcessStraightPathSegment(segment, cancel),
+            PlannerSegmentGeometryKind.DiscretePoints => VoxelPathfinder.ProcessStraightPathSegment(segment, cancel),
             _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
         };
 
@@ -411,10 +411,10 @@ public class NavmeshQuery
     )
     {
         if (VolumeQuery == null)
-            return new(VoxelMap.INVALID_VOXEL, point, point, null, false);
+            return new(SparseVoxelOctree.INVALID_VOXEL, point, point, null, false);
 
         var    volume            = VolumeQuery.Volume;
-        var    leafCellSize      = volume.Levels[^1].CellSize;
+        var    leafCellSize      = volume.LeafCellSize;
         var    surfaceSnapHeight = MathF.Max(leafCellSize.Y * 2f, 0.75f);
         var    probeLift         = MathF.Max(surfaceSnapHeight,   MathF.Min(halfExtentY, leafCellSize.Y * 4f));
         var    floorProbe        = point + (Vector3.UnitY * probeLift);
@@ -432,7 +432,7 @@ public class NavmeshQuery
             var requestedLeaf = volume.FindLeafVoxel(point);
 
             if (!requestedLeaf.empty                          ||
-                requestedLeaf.voxel == VoxelMap.INVALID_VOXEL ||
+                requestedLeaf.voxel == SparseVoxelOctree.INVALID_VOXEL ||
                 IsVoxelLikelyBelowSurface(requestedLeaf.voxel, minCandidateY.Value))
             {
                 var searchLift = MathF.Max(MathF.Max(leafCellSize.Y * 0.85f, 0.45f), minCandidateY.Value - floorPoint.Y);
@@ -442,7 +442,7 @@ public class NavmeshQuery
         }
 
         var voxel = FindNearestVolumeVoxel(searchPoint, halfExtentXZ, halfExtentY, true, minCandidateY);
-        var safePoint = voxel != VoxelMap.INVALID_VOXEL ?
+        var safePoint = voxel != SparseVoxelOctree.INVALID_VOXEL ?
                             VoxelSearch.FindClosestVoxelPoint(volume, voxel, searchPoint) :
                             searchPoint;
         return new(voxel, searchPoint, safePoint, minCandidateY, usedSurfaceAnchor);
@@ -458,16 +458,16 @@ public class NavmeshQuery
     )
     {
         if (VolumeQuery == null)
-            return VoxelMap.INVALID_VOXEL;
+            return SparseVoxelOctree.INVALID_VOXEL;
 
         var volume       = VolumeQuery.Volume;
         var halfExtent   = new Vector3(halfExtentXZ, halfExtentY, halfExtentXZ);
         var searchCenter = p;
         var voxel        = VoxelSearch.FindNearestEmptyVoxel(volume, p, halfExtent, preferNonBelow, minCandidateY);
-        if (voxel != VoxelMap.INVALID_VOXEL)
+        if (voxel != SparseVoxelOctree.INVALID_VOXEL)
             return voxel;
 
-        var leafCellSize = volume.Levels[^1].CellSize;
+        var leafCellSize = volume.LeafCellSize;
         var clampPadding = new Vector3
         (
             MathF.Max
@@ -476,8 +476,8 @@ public class NavmeshQuery
                 MathF.Max(ConfigData.PathTolerance, float.Epsilon)
             )
         );
-        var boundsMin = volume.RootTile.BoundsMin + clampPadding;
-        var boundsMax = volume.RootTile.BoundsMax - clampPadding;
+        var boundsMin = volume.BoundsMin + clampPadding;
+        var boundsMax = volume.BoundsMax - clampPadding;
         var clamped   = Vector3.Clamp(p, boundsMin, boundsMax);
         var usedClamp = Vector3.DistanceSquared(clamped, p) > 0.000001f;
 
@@ -486,7 +486,7 @@ public class NavmeshQuery
             searchCenter = clamped;
             voxel        = VoxelSearch.FindNearestEmptyVoxel(volume, clamped, halfExtent, preferNonBelow, minCandidateY);
 
-            if (voxel != VoxelMap.INVALID_VOXEL)
+            if (voxel != SparseVoxelOctree.INVALID_VOXEL)
             {
                 Service.Log.Debug($"[算路] 体素定位改用边界贴靠点：原始位置 = {p:f3}，贴靠后 = {clamped:f3}，搜索范围 = {halfExtent:f3}");
                 return voxel;
@@ -495,8 +495,8 @@ public class NavmeshQuery
 
         var searchLimit = MathF.Max
         (
-            volume.RootTile.BoundsMax.X - volume.RootTile.BoundsMin.X,
-            MathF.Max(volume.RootTile.BoundsMax.Y - volume.RootTile.BoundsMin.Y, volume.RootTile.BoundsMax.Z - volume.RootTile.BoundsMin.Z)
+            volume.BoundsMax.X - volume.BoundsMin.X,
+            MathF.Max(volume.BoundsMax.Y - volume.BoundsMin.Y, volume.BoundsMax.Z - volume.BoundsMin.Z)
         );
         var expandedHalfExtent = halfExtent;
         var expansionStep = new Vector3
@@ -512,7 +512,7 @@ public class NavmeshQuery
             expandedHalfExtent += expansionStep;
             voxel              =  VoxelSearch.FindNearestEmptyVoxel(volume, searchCenter, expandedHalfExtent, preferNonBelow, minCandidateY);
 
-            if (voxel == VoxelMap.INVALID_VOXEL)
+            if (voxel == SparseVoxelOctree.INVALID_VOXEL)
             {
                 previousSearchRadius = expandedHalfExtent.Length();
                 continue;
@@ -525,7 +525,7 @@ public class NavmeshQuery
             return voxel;
         }
 
-        return VoxelMap.INVALID_VOXEL;
+        return SparseVoxelOctree.INVALID_VOXEL;
     }
 
     private bool IsVoxelLikelyBelowSurface
@@ -534,11 +534,11 @@ public class NavmeshQuery
         float minCandidateY
     )
     {
-        if (VolumeQuery == null || voxel == VoxelMap.INVALID_VOXEL)
+        if (VolumeQuery == null || voxel == SparseVoxelOctree.INVALID_VOXEL)
             return true;
 
         var bounds     = VolumeQuery.Volume.VoxelBounds(voxel, 0);
-        var leafCellY  = VolumeQuery.Volume.Levels[^1].CellSize.Y;
+        var leafCellY  = VolumeQuery.Volume.LeafCellSize.Y;
         var floorSlack = MathF.Max(leafCellY * 0.5f, 0.25f);
         return bounds.min.Y + floorSlack < minCandidateY;
     }

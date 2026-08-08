@@ -136,7 +136,7 @@ internal class CustomizationPreviewBuilder
         }
     }
 
-    public VoxelMap? Volume
+    public SparseVoxelOctree? Volume
     {
         get
         {
@@ -147,7 +147,7 @@ internal class CustomizationPreviewBuilder
         }
     }
 
-    public VoxelPathfind? VolumeQuery
+    public VoxelPathfinder? VolumeQuery
     {
         get
         {

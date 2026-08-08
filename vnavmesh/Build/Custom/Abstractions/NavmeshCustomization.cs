@@ -193,8 +193,12 @@ public class NavmeshCustomization
             settings.GroundTileSize = Settings.GroundTileSize;
         if (Settings.GroundTileCountMax != DefaultSettings.GroundTileCountMax)
             settings.GroundTileCountMax = Settings.GroundTileCountMax;
-        if (!Settings.VolumeTiles.SequenceEqual(DefaultSettings.VolumeTiles))
-            settings.VolumeTiles = (int[])Settings.VolumeTiles.Clone();
+        if (Settings.VolumeLeafSize != DefaultSettings.VolumeLeafSize)
+            settings.VolumeLeafSize = Settings.VolumeLeafSize;
+        if (Settings.VolumeMaxDepth != DefaultSettings.VolumeMaxDepth)
+            settings.VolumeMaxDepth = Settings.VolumeMaxDepth;
+        if (!Settings.VolumeLayerDepths.SequenceEqual(DefaultSettings.VolumeLayerDepths))
+            settings.VolumeLayerDepths = (int[])Settings.VolumeLayerDepths.Clone();
     }
 
     private static void LinkPoints

@@ -8,6 +8,7 @@ public struct VolumePathfindNode
     public float   HScore;
     public ulong   Voxel;
     public int     ParentIndex;
+    public int     DiscoveredByIndex;
     public int     OpenHeapIndex;
     public int     Revision;
     public bool    Closed;

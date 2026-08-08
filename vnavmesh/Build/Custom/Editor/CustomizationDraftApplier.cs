@@ -56,8 +56,12 @@ internal static class CustomizationDraftApplier
             profile.PolyMaxSimplificationErrorOverride = polyMaxSimplificationError;
         if (overrides.AgentRadiusOverride is { } agentRadius)
             profile.AgentRadiusOverride = agentRadius;
-        if (overrides.VolumeTilesOverride is { } volumeTiles)
-            profile.VolumeTilesOverride = (int[])volumeTiles.Clone();
+        if (overrides.VolumeLeafSizeOverride is { } volumeLeafSize)
+            profile.VolumeLeafSizeOverride = volumeLeafSize;
+        if (overrides.VolumeMaxDepthOverride is { } volumeMaxDepth)
+            profile.VolumeMaxDepthOverride = volumeMaxDepth;
+        if (overrides.VolumeLayerDepthsOverride is { } volumeLayerDepths)
+            profile.VolumeLayerDepthsOverride = (int[])volumeLayerDepths.Clone();
         if (overrides.DetailSampleDistOverride is { } detailSampleDist)
             profile.DetailSampleDistOverride = detailSampleDist;
         if (overrides.GenerateEdgeClimbLinksOverride is { } generateEdgeClimbLinks)
@@ -130,8 +134,12 @@ internal static class CustomizationDraftApplier
             settings.GroundTileSize = groundTileSize;
         if (overrides.GroundTileCountMax is { } groundTileCountMax)
             settings.GroundTileCountMax = groundTileCountMax;
-        if (overrides.VolumeTiles is { } volumeTiles)
-            settings.VolumeTiles = (int[])volumeTiles.Clone();
+        if (overrides.VolumeLeafSize is { } volumeLeafSize)
+            settings.VolumeLeafSize = volumeLeafSize;
+        if (overrides.VolumeMaxDepth is { } volumeMaxDepth)
+            settings.VolumeMaxDepth = volumeMaxDepth;
+        if (overrides.VolumeLayerDepths is { } volumeLayerDepths)
+            settings.VolumeLayerDepths = (int[])volumeLayerDepths.Clone();
     }
 
     public static void ApplySettings

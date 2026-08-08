@@ -447,12 +447,26 @@ internal static class CustomizationEditorInspector
 
         if (ImGui.TreeNodeEx("体积", ImGuiTreeNodeFlags.DefaultOpen))
         {
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "体积叶尺寸",
+                ref workspace.Draft.BuildProfile.VolumeLeafSizeOverride,
+                settingsDefaults.VolumeLeafSize,
+                "体积八叉树叶尺寸（米）"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableInt
+            (
+                "体积最大深度",
+                ref workspace.Draft.BuildProfile.VolumeMaxDepthOverride,
+                settingsDefaults.VolumeMaxDepth,
+                "体积八叉树最大深度"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableIntArray
             (
-                "体积瓦片",
-                ref workspace.Draft.BuildProfile.VolumeTilesOverride,
-                settingsDefaults.VolumeTiles,
-                "体积细分每轴数量 [L2 瓦片数, L3 体素数]"
+                "体积分层深度",
+                ref workspace.Draft.BuildProfile.VolumeLayerDepthsOverride,
+                settingsDefaults.VolumeLayerDepths,
+                "分层深度 [宏观, 中层, 微观]，对应 64m/16m/4m"
             );
             ImGui.TreePop();
         }
@@ -712,12 +726,26 @@ internal static class CustomizationEditorInspector
                 settingsDefaults.GroundTileCountMax,
                 "自动推导地面区块数量时的单轴上限"
             );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "体积叶尺寸",
+                ref workspace.Draft.BuildSettings.VolumeLeafSize,
+                settingsDefaults.VolumeLeafSize,
+                "体积八叉树叶尺寸（米）"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableInt
+            (
+                "体积最大深度",
+                ref workspace.Draft.BuildSettings.VolumeMaxDepth,
+                settingsDefaults.VolumeMaxDepth,
+                "体积八叉树最大深度"
+            );
             changed |= CustomizationEditorWidgets.DrawNullableIntArray
             (
-                "体积细分",
-                ref workspace.Draft.BuildSettings.VolumeTiles,
-                settingsDefaults.VolumeTiles,
-                "体积细分每轴数量 [L2 瓦片数, L3 体素数]"
+                "体积分层深度",
+                ref workspace.Draft.BuildSettings.VolumeLayerDepths,
+                settingsDefaults.VolumeLayerDepths,
+                "分层深度 [宏观, 中层, 微观]，对应 64m/16m/4m"
             );
             ImGui.TreePop();
         }

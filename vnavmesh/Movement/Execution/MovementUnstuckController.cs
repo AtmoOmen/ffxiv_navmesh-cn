@@ -224,7 +224,7 @@ internal sealed class MovementUnstuckController
         var angle          = Random.Shared.NextSingle() * MathF.Tau;
         var sample         = origin + new Vector3(MathF.Cos(angle) * radius, verticalOffset, MathF.Sin(angle) * radius);
         var voxel          = query.FindNearestVolumeVoxel(sample, 4f, 4f);
-        if (voxel == VoxelMap.INVALID_VOXEL)
+        if (voxel == SparseVoxelOctree.INVALID_VOXEL)
             return null;
 
         var target = VoxelSearch.FindClosestVoxelPoint(volume, voxel, sample);

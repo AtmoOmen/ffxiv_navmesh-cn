@@ -17,12 +17,12 @@ namespace vnavmesh.Common.Build;
 public record class Navmesh
 {
     public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 38;         // 更新后触发一次全量重构建
+    public static readonly uint Version = 40;         // 更新后触发一次全量重构建
 
     public int       CustomizationVersion { get; init; }
     public string    BuildSignature       { get; init; }
     public bool      CustomizationApplied { get; init; }
-    public VoxelMap? Volume               { get; init; }
+    public SparseVoxelOctree? Volume      { get; init; }
 
     private          DtNavMesh?         _mesh;
     private          byte[]?            _deferredMeshPayload;
@@ -47,7 +47,7 @@ public record class Navmesh
         string    buildSignature,
         bool      customizationApplied,
         DtNavMesh mesh,
-        VoxelMap? volume
+        SparseVoxelOctree? volume
     )
     {
         CustomizationVersion = customizationVersion;
@@ -521,7 +521,7 @@ public record class Navmesh
     ) =>
         new DtMeshSetWriter().Write(writer, mesh, RcByteOrder.LITTLE_ENDIAN, false);
 
-    private static VoxelMap? DeserializeVolumeHeader
+    private static SparseVoxelOctree? DeserializeVolumeHeader
     (
         BinaryReader reader
     )
@@ -529,38 +529,43 @@ public record class Navmesh
         if (!reader.ReadBoolean())
             return null;
 
-        var numLevels = reader.ReadInt32();
-        if (numLevels <= 0)
-            throw new Exception("体积缓存层级无效");
+        var leafSize = reader.ReadSingle();
+        var maxDepth = reader.ReadInt32();
+        var layerCount = reader.ReadInt32();
 
-        var tilesPerLevel = new int[numLevels];
-        foreach (ref var l in tilesPerLevel.AsSpan())
-            l = reader.ReadInt32();
+        if (layerCount <= 0 || layerCount > maxDepth)
+            throw new Exception("体积分层深度数量无效");
+
+        var layerDepths = new int[layerCount];
+        foreach (ref var d in layerDepths.AsSpan())
+            d = reader.ReadInt32();
 
         var (min, max) = DeserializeBounds(reader);
-        return new(min, max, tilesPerLevel);
+        return new(min, max, leafSize, maxDepth, layerDepths);
     }
 
     private static void SerializeVolumeHeader
     (
         BinaryWriter writer,
-        VoxelMap?    volume
+        SparseVoxelOctree? volume
     )
     {
         writer.Write(volume != null);
         if (volume == null)
             return;
 
-        writer.Write(volume.Levels.Length);
-        foreach (ref var l in volume.Levels.AsSpan())
-            writer.Write(l.NumCellsX);
-        SerializeBounds(writer, volume.RootTile.BoundsMin, volume.RootTile.BoundsMax);
+        writer.Write(volume.LeafSize);
+        writer.Write(volume.MaxDepth);
+        writer.Write(volume.LayerDepths.Length);
+        foreach (var d in volume.LayerDepths)
+            writer.Write(d);
+        SerializeBounds(writer, volume.BoundsMin, volume.BoundsMax);
     }
 
     private static void SerializeVolumeTree
     (
         BinaryWriter writer,
-        VoxelMap?    volume
+        SparseVoxelOctree? volume
     )
     {
         if (volume == null)
@@ -568,12 +573,12 @@ public record class Navmesh
 
         volume.EnsureMaterialized();
         volume.CompactRetainedState();
-        SerializeVolumeTile(writer, volume.RootTile);
+        volume.WriteTree(writer);
     }
 
     internal static void MaterializeDeferredVolumeTree
     (
-        VoxelMap volume,
+        SparseVoxelOctree volume,
         byte[]   payload,
         int      offset,
         int      length
@@ -581,12 +586,12 @@ public record class Navmesh
     {
         using var stream = new MemoryStream(payload, offset, length, false);
         using var reader = new BinaryReader(stream);
-        DeserializeVolumeTile(reader, volume.RootTile);
+        volume.ReadTree(reader);
     }
 
     internal static void MaterializeDeferredCompressedVolumeTree
     (
-        VoxelMap volume,
+        SparseVoxelOctree volume,
         byte[]   payload,
         long     expectedBytes
     )
@@ -594,14 +599,14 @@ public record class Navmesh
         var       decodedPayload = DecompressFastLz(payload, expectedBytes);
         using var stream         = new MemoryStream(decodedPayload, false);
         using var reader         = new BinaryReader(stream);
-        DeserializeVolumeTile(reader, volume.RootTile);
+        volume.ReadTree(reader);
     }
 
     private static CacheSegmentTelemetry DecodeDeferredVolumeTreeSegment
     (
         CacheSegmentDescriptor descriptor,
         Stream                 source,
-        VoxelMap?              volume
+        SparseVoxelOctree?     volume
     )
     {
         var timer   = StopWatchTimer.Create();
@@ -620,120 +625,6 @@ public record class Navmesh
         return new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value());
     }
 
-    private static void DeserializeVolumeTile
-    (
-        BinaryReader reader,
-        VolumeTile   tile
-    )
-    {
-        var encoding = (VolumeTileEncoding)reader.ReadByte();
-
-        switch (encoding)
-        {
-            case VolumeTileEncoding.Empty:
-                tile.SetUniformEmpty();
-                return;
-            case VolumeTileEncoding.SolidLeaf:
-                tile.SetUniformSolidLeaf();
-                return;
-            case VolumeTileEncoding.Mixed:
-                break;
-            default:
-                throw new Exception($"未知的体积编码类型: {encoding}");
-        }
-
-        tile.ClearSubdivision();
-        var packedBytes  = PackedStateBytes(tile.CellCount);
-        var packedStates = GC.AllocateUninitializedArray<byte>(packedBytes);
-        reader.BaseStream.ReadExactly(packedStates);
-
-        var subtreeCount = 0;
-
-        for (var i = 0; i < packedStates.Length; ++i)
-        {
-            var packedState = packedStates[i];
-            if (s_invalidPackedState[packedState])
-                throw new Exception($"未知的体积单元状态字节: 0x{packedState:X2}");
-
-            subtreeCount += s_subtreeCountByPackedState[packedState];
-        }
-
-        tile.SetPackedStates(packedStates);
-        tile.EnsureSubdivisionCapacity(subtreeCount);
-
-        if (subtreeCount == 0)
-            return;
-
-        var baseIndex = 0;
-
-        for (var i = 0; i < packedStates.Length; ++i, baseIndex += 4)
-        {
-            var subtreeMask = s_subtreeMaskByPackedState[packedStates[i]];
-
-            while (subtreeMask != 0)
-            {
-                var localOffset = BitOperations.TrailingZeroCount((uint)subtreeMask);
-                subtreeMask = (byte)(subtreeMask & (subtreeMask - 1));
-                DeserializeVolumeSubtile(reader, tile, baseIndex + localOffset);
-            }
-        }
-    }
-
-    private static void DeserializeVolumeSubtile
-    (
-        BinaryReader reader,
-        VolumeTile   parent,
-        int          flatIndex
-    )
-    {
-        var localId = parent.SubdivisionCount;
-        if (localId >= VoxelMap.VOXEL_ID_MASK)
-            throw new Exception("体积子树数量超出上限");
-
-        var subBounds = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel((ushort)flatIndex));
-        var child     = new VolumeTile(parent.Owner, subBounds.min, subBounds.max, parent.Level + 1, false);
-        parent.AddSubdivision(child);
-        DeserializeVolumeTile(reader, child);
-    }
-
-    private static void SerializeVolumeTile
-    (
-        BinaryWriter writer,
-        VolumeTile   tile
-    )
-    {
-        tile.CompactRetainedState();
-
-        switch (tile.StorageKind)
-        {
-            case VolumeTileStorageKind.AllEmpty:
-                writer.Write((byte)VolumeTileEncoding.Empty);
-                return;
-            case VolumeTileStorageKind.SolidLeaf:
-                writer.Write((byte)VolumeTileEncoding.SolidLeaf);
-                return;
-            case VolumeTileStorageKind.PackedMixed:
-                writer.Write((byte)VolumeTileEncoding.Mixed);
-                writer.BaseStream.Write(tile.PackedStates);
-                break;
-            case VolumeTileStorageKind.Dense:
-                throw new InvalidOperationException("体积瓦片序列化前未完成压缩");
-            default:
-                throw new InvalidOperationException($"未知的体积瓦片存储类型: {tile.StorageKind}");
-        }
-
-        for (var i = 0; i < tile.CellCount; ++i)
-        {
-            if (!tile.IsSubdividedCell(i))
-                continue;
-
-            var localId = tile.GetSubdivisionIndex(i);
-            if (localId >= tile.SubdivisionCount)
-                throw new Exception($"体积子树索引越界: {localId} / {tile.SubdivisionCount}");
-            SerializeVolumeTile(writer, tile.GetSubdivision(localId));
-        }
-    }
-
 
     public enum CacheSegmentKind
     {
@@ -746,20 +637,6 @@ public record class Navmesh
     {
         None   = 0,
         FastLz = 1
-    }
-
-    private enum VolumeTileEncoding : byte
-    {
-        Empty     = 0,
-        SolidLeaf = 1,
-        Mixed     = 2
-    }
-
-    private enum VolumeCellState : byte
-    {
-        Empty     = 0,
-        SolidLeaf = 1,
-        Subtree   = 2
     }
 
     public readonly record struct CacheSegmentTelemetry
@@ -1179,51 +1056,4 @@ public record class Navmesh
         return dx <= 0.05f && dy <= 0.05f && dz <= 0.05f;
     }
 
-    private static readonly byte[] s_subtreeMaskByPackedState  = BuildSubtreeMaskByPackedState();
-    private static readonly byte[] s_subtreeCountByPackedState = BuildSubtreeCountByPackedState();
-    private static readonly bool[] s_invalidPackedState        = BuildInvalidPackedState();
-
-    private static int PackedStateBytes
-    (
-        int numCells
-    ) => (numCells + 3) >> 2;
-
-    private static byte[] BuildSubtreeMaskByPackedState()
-    {
-        var table = GC.AllocateUninitializedArray<byte>(byte.MaxValue + 1);
-
-        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
-        {
-            byte mask = 0;
-            for (var offset = 0; offset < 4; ++offset)
-                if ((VolumeCellState)((packedState >> (offset * 2)) & 0x3) == VolumeCellState.Subtree)
-                    mask |= (byte)(1 << offset);
-            table[packedState] = mask;
-        }
-
-        return table;
-    }
-
-    private static byte[] BuildSubtreeCountByPackedState()
-    {
-        var table = GC.AllocateUninitializedArray<byte>(byte.MaxValue + 1);
-        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
-            table[packedState] = (byte)BitOperations.PopCount(s_subtreeMaskByPackedState[packedState]);
-        return table;
-    }
-
-    private static bool[] BuildInvalidPackedState()
-    {
-        var table = GC.AllocateUninitializedArray<bool>(byte.MaxValue + 1);
-
-        for (var packedState = 0; packedState <= byte.MaxValue; ++packedState)
-        for (var offset = 0; offset < 4; ++offset)
-            if ((VolumeCellState)((packedState >> (offset * 2)) & 0x3) == (VolumeCellState)3)
-            {
-                table[packedState] = true;
-                break;
-            }
-
-        return table;
-    }
 }
