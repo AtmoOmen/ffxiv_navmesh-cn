@@ -22,8 +22,11 @@ public static class PluginFont
 
     public static void Init() =>
         Task.Run(async () => UIFont = await CreateFontHandleAsync(18f));
-    
-    private static async Task<IFontHandle> CreateFontHandleAsync(float size)
+
+    private static async Task<IFontHandle> CreateFontHandleAsync
+    (
+        float size
+    )
     {
         var handle = FontAtlas.NewDelegateFontHandle
         (e =>
@@ -61,7 +64,11 @@ public static class PluginFont
         return handle;
     }
 
-    private static unsafe ushort[] BuildRange(ushort[]? extraRanges, params ushort*[] nativeRanges)
+    private static unsafe ushort[] BuildRange
+    (
+        ushort[]?        extraRanges,
+        params ushort*[] nativeRanges
+    )
     {
         var builder = new ImFontGlyphRangesBuilderPtr(ImGuiNative.ImFontGlyphRangesBuilder());
 

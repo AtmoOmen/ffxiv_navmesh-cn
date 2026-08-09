@@ -296,7 +296,7 @@ internal sealed class CustomizationEditorView
                 SaveWorkspace(true);
                 SelectWorkspace(created.WorkspaceId, true);
                 previewBuilder.Publish(scene, extractor, navmesh);
-                statusText   = $"已新建工作区并自动激活预览: {workspace.WorkspaceName}";
+                statusText = $"已新建工作区并自动激活预览: {workspace.WorkspaceName}";
             }
         }
         finally
@@ -367,11 +367,11 @@ internal sealed class CustomizationEditorView
         var customizedScene = await Task.Run
                               (
                                   () =>
-                                      {
-                                          extractor = new SceneExtractor(scene);
-                                          baseCustomization.CustomizeScene(extractor);
-                                          return extractor;
-                                      },
+                                  {
+                                      extractor = new SceneExtractor(scene);
+                                      baseCustomization.CustomizeScene(extractor);
+                                      return extractor;
+                                  },
                                   cancel
                               );
         cancel.ThrowIfCancellationRequested();
@@ -553,8 +553,12 @@ internal sealed class CustomizationEditorView
 
     private void DrawStatus()
     {
-        var workspaceSummary = hasWorkspace ? workspace.WorkspaceName : "暂无工作区";
-        var sourceSummary = hasWorkspace && workspace.IsApplied ? workspace.WorkspaceName : "默认场景";
+        var workspaceSummary = hasWorkspace ?
+                                   workspace.WorkspaceName :
+                                   "暂无工作区";
+        var sourceSummary = hasWorkspace && workspace.IsApplied ?
+                                workspace.WorkspaceName :
+                                "默认场景";
         var previewSummary = CustomizationEditorWidgets.FormatPreviewStateDisplayName(previewBuilder.CurrentState);
         var statusSummary = previewBuilder.CurrentState switch
         {
@@ -569,16 +573,16 @@ internal sealed class CustomizationEditorView
 
         if (ImGui.BeginTable("##customization_editor_status", 5, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.BordersInnerV))
         {
-            ImGui.TableSetupColumn("区域",   ImGuiTableColumnFlags.WidthStretch, 2.4f);
+            ImGui.TableSetupColumn("区域",  ImGuiTableColumnFlags.WidthStretch, 2.4f);
             ImGui.TableSetupColumn("工作区", ImGuiTableColumnFlags.WidthStretch, 1.2f);
-            ImGui.TableSetupColumn("来源",   ImGuiTableColumnFlags.WidthStretch, 1.2f);
-            ImGui.TableSetupColumn("预览",   ImGuiTableColumnFlags.WidthStretch, 0.9f);
-            ImGui.TableSetupColumn("状态",   ImGuiTableColumnFlags.WidthStretch, 1.8f);
+            ImGui.TableSetupColumn("来源",  ImGuiTableColumnFlags.WidthStretch, 1.2f);
+            ImGui.TableSetupColumn("预览",  ImGuiTableColumnFlags.WidthStretch, 0.9f);
+            ImGui.TableSetupColumn("状态",  ImGuiTableColumnFlags.WidthStretch, 1.8f);
             ImGui.TableNextRow();
-            DrawStatusCell("区域", $"{territoryName} · {territoryID} · {territoryKey}");
+            DrawStatusCell("区域",  $"{territoryName} · {territoryID} · {territoryKey}");
             DrawStatusCell("工作区", workspaceSummary);
-            DrawStatusCell("来源", sourceSummary);
-            DrawStatusCell("预览", previewSummary, GetPreviewStateColor(previewBuilder.CurrentState));
+            DrawStatusCell("来源",  sourceSummary);
+            DrawStatusCell("预览",  previewSummary, GetPreviewStateColor(previewBuilder.CurrentState));
             DrawStatusCell
             (
                 "状态",
@@ -596,8 +600,8 @@ internal sealed class CustomizationEditorView
 
     private static void DrawStatusCell
     (
-        string label,
-        string value,
+        string   label,
+        string   value,
         Vector4? color = null
     )
     {
@@ -654,8 +658,8 @@ internal sealed class CustomizationEditorView
 
         if (kind is DraftSceneColliderInsertionKind.OrientedBox or DraftSceneColliderInsertionKind.Wall)
         {
-            var delta       = b - a;
-            var length      = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+            var delta  = b - a;
+            var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
             var halfExtents = kind == DraftSceneColliderInsertionKind.Wall ?
                                   new Vector3(length * 0.5f, 1f, 0.025f) :
                                   new Vector3(length * 0.5f, 1f, 0.5f);
@@ -667,9 +671,9 @@ internal sealed class CustomizationEditorView
         {
             var radius  = MathF.Max(Vector3.Distance(a, b), 0.05f);
             var extents = new Vector3(radius);
-            center      = a;
-            min         = center - extents;
-            max         = center + extents;
+            center = a;
+            min    = center - extents;
+            max    = center + extents;
         }
         else if (kind == DraftSceneColliderInsertionKind.OrientedCylinder)
         {
@@ -690,21 +694,23 @@ internal sealed class CustomizationEditorView
         }
         else if (kind == DraftSceneColliderInsertionKind.Ramp)
         {
-            var low  = a.Y <= b.Y ? a : b;
-            var high = a.Y <= b.Y ? b : a;
-            var delta = high - low;
+            var low = a.Y <= b.Y ?
+                          a :
+                          b;
+            var high = a.Y <= b.Y ?
+                           b :
+                           a;
+            var delta  = high - low;
             var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
-            var height = MathF.Max(high.Y - low.Y, 0.5f);
-            center = new((low.X + high.X) * 0.5f, low.Y + (height * 0.5f), (low.Z + high.Z) * 0.5f);
-            var halfExtents = new Vector3(length * 0.5f, height * 0.5f, 0.75f);
+            var height = MathF.Max(high.Y - low.Y,                                        0.5f);
+            center = new((low.X           + high.X) * 0.5f, low.Y + (height * 0.5f), (low.Z + high.Z) * 0.5f);
+            var halfExtents = new Vector3(length                            * 0.5f, height * 0.5f, 0.75f);
             min             = center - halfExtents;
             max             = center + halfExtents;
             rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
         }
         else
-        {
             NormalizeBounds(ref min, ref max);
-        }
 
         ApplyDraftChange
         (() =>
@@ -713,28 +719,28 @@ internal sealed class CustomizationEditorView
                 (
                     new()
                     {
-                        Kind              = kind,
-                        Min               = min,
-                        Max               = max,
-                        Start             = a,
-                        End               = b,
-                        Radius            = 0.5f,
-                        RotationDegrees   = rotationDegrees,
-                        DoubleSided       = doubleSided,
+                        Kind            = kind,
+                        Min             = min,
+                        Max             = max,
+                        Start           = a,
+                        End             = b,
+                        Radius          = 0.5f,
+                        RotationDegrees = rotationDegrees,
+                        DoubleSided     = doubleSided,
                         ForceSetPrimFlags = kind switch
                         {
                             DraftSceneColliderInsertionKind.Ramp or
-                            DraftSceneColliderInsertionKind.WalkableFloor  => PrimitiveFlags.ForceWalkable,
+                                DraftSceneColliderInsertionKind.WalkableFloor => PrimitiveFlags.ForceWalkable,
                             DraftSceneColliderInsertionKind.RemoveInstances => PrimitiveFlags.None,
                             _                                               => PrimitiveFlags.ForceUnwalkable
                         },
                         ForceClearPrimFlags = kind is DraftSceneColliderInsertionKind.Ramp or
-                                                      DraftSceneColliderInsertionKind.WalkableFloor ?
+                                                  DraftSceneColliderInsertionKind.WalkableFloor ?
                                                   PrimitiveFlags.ForceUnwalkable :
                                                   PrimitiveFlags.None
                     }
                 );
-                selection = new(SelectionKind.ColliderInsertion, workspace.Draft.ColliderInsertions.Count - 1);
+                selection  = new(SelectionKind.ColliderInsertion, workspace.Draft.ColliderInsertions.Count - 1);
                 statusText = $"已添加 {CustomizationEditorWidgets.FormatEnumDisplayName(kind)}";
             }
         );
@@ -801,7 +807,7 @@ internal sealed class CustomizationEditorView
 
     private void AddInstancePatchFromPreview
     (
-        Mesh         mesh,
+        Mesh                        mesh,
         string                      key,
         int                         index,
         DraftSceneInstancePatchKind kind
@@ -831,9 +837,13 @@ internal sealed class CustomizationEditorView
                 (
                     new()
                     {
-                        MeshKey             = key,
-                        InstanceIndex       = kind == DraftSceneInstancePatchKind.Insert ? -1 : index,
-                        InstanceId          = kind == DraftSceneInstancePatchKind.Insert ? 0 : inst.ID,
+                        MeshKey = key,
+                        InstanceIndex = kind == DraftSceneInstancePatchKind.Insert ?
+                                            -1 :
+                                            index,
+                        InstanceId = kind == DraftSceneInstancePatchKind.Insert ?
+                                         0 :
+                                         inst.ID,
                         Kind                = kind,
                         WorldTransform      = worldTransform,
                         Material            = inst.Material,
@@ -851,7 +861,7 @@ internal sealed class CustomizationEditorView
 
     private void AddPartPatchFromPreview
     (
-        Mesh     mesh,
+        Mesh                    mesh,
         string                  key,
         int                     partIndex,
         DraftScenePartPatchKind kind,
@@ -950,7 +960,7 @@ internal sealed class CustomizationEditorView
         scene.TerritoryID = territoryID;
 
         var customization = BuildPreviewCustomization(scene);
-        statusText   = string.Empty;
+        statusText = string.Empty;
         previewBuilder.Rebuild(scene, customization, true);
     }
 
@@ -999,7 +1009,7 @@ internal sealed class CustomizationEditorView
             PushUndoSnapshot(historySnapshot.Clone());
 
         inspectorEditActive = ImGui.IsAnyItemActive();
-        historySnapshot = workspace.Draft.Clone();
+        historySnapshot     = workspace.Draft.Clone();
         redo.Clear();
         SaveWorkspace();
     }

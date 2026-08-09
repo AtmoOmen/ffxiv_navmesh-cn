@@ -3,7 +3,6 @@ using System.Runtime.CompilerServices;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Build.Custom.Abstractions;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Models;
 

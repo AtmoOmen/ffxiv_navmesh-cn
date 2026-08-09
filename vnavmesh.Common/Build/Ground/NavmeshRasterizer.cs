@@ -105,9 +105,9 @@ internal sealed class PreparedTerrainGeometry
 
 internal sealed class RasterJob
 {
-    public required MeshType      MeshType        { get; init; }
-    public required MeshPart      Part            { get; init; }
-    public required MeshInstance  Instance        { get; init; }
+    public required MeshType                 MeshType        { get; init; }
+    public required MeshPart                 Part            { get; init; }
+    public required MeshInstance             Instance        { get; init; }
     public required AABB                     WorldBounds     { get; init; }
     public required int                      MinTileX        { get; init; }
     public required int                      MaxTileX        { get; init; }
@@ -545,14 +545,14 @@ public class NavmeshRasterizer
         _terrainSpans = tileX >= 0 && tileZ >= 0 ?
                             _scratch.AcquireTerrainSpanBuffer(heightfield.width * heightfield.height) :
                             null;
-        _invCellXZ               = 1.0f / _heightfield.cs;
-        _invCellY                = 1.0f / _heightfield.ch;
-        _maxY                    = (int)((_heightfield.bmax.Y - _heightfield.bmin.Y) * _invCellY);
-        _minSpanGap              = minGap;
-        _walkableClimbThreshold  = walkableMaxClimb;
-        _walkableNormalThreshold = walkableNormalThreshold;
-        _tileX                   = tileX;
-        _tileZ                   = tileZ;
+        _invCellXZ                               = 1.0f / _heightfield.cs;
+        _invCellY                                = 1.0f / _heightfield.ch;
+        _maxY                                    = (int)((_heightfield.bmax.Y - _heightfield.bmin.Y) * _invCellY);
+        _minSpanGap                              = minGap;
+        _walkableClimbThreshold                  = walkableMaxClimb;
+        _walkableNormalThreshold                 = walkableNormalThreshold;
+        _tileX                                   = tileX;
+        _tileZ                                   = tileZ;
         volumeWallThickenNormalYThreshold        = settings.VolumeWallThickenNormalYThreshold;
         volumeWallThickenHorizontalRadius        = settings.VolumeWallThickenHorizontalRadius;
         volumeThinWallStripNormalYThreshold      = settings.VolumeThinWallStripNormalYThreshold;
@@ -588,10 +588,10 @@ public class NavmeshRasterizer
 
     public void Rasterize
     (
-        SceneExtractor      geom,
-        MeshType types,
-        bool                perMeshInteriors,
-        bool                solidBelowNonManifold
+        SceneExtractor geom,
+        MeshType       types,
+        bool           perMeshInteriors,
+        bool           solidBelowNonManifold
     )
     {
         foreach (var (name, mesh) in geom.Meshes)
@@ -639,9 +639,9 @@ public class NavmeshRasterizer
     public void Rasterize
     (
         ReadOnlySpan<(Mesh mesh, MeshInstance instance)> instances,
-        MeshType                                                    types,
-        bool                                                                   perMeshInteriors,
-        bool                                                                   solidBelowNonManifold
+        MeshType                                         types,
+        bool                                             perMeshInteriors,
+        bool                                             solidBelowNonManifold
     )
     {
         foreach (var (mesh, instance) in instances)
@@ -686,9 +686,9 @@ public class NavmeshRasterizer
     public void Rasterize
     (
         IEnumerable<(Mesh mesh, MeshInstance instance)> instances,
-        MeshType                                                   types,
-        bool                                                                  perMeshInteriors,
-        bool                                                                  solidBelowNonManifold
+        MeshType                                        types,
+        bool                                            perMeshInteriors,
+        bool                                            solidBelowNonManifold
     )
     {
         foreach (var (mesh, instance) in instances)
@@ -733,7 +733,7 @@ public class NavmeshRasterizer
     public void Rasterize
     (
         ReadOnlySpan<PartInstance> parts,
-        MeshType        types,
+        MeshType                   types,
         bool                       perMeshInteriors,
         bool                       solidBelowNonManifold
     )
@@ -846,7 +846,7 @@ public class NavmeshRasterizer
     (
         Mesh         mesh,
         MeshInstance instance,
-        out int                 minimalY
+        out int      minimalY
     )
     {
         minimalY = _maxY;
@@ -896,7 +896,7 @@ public class NavmeshRasterizer
         MeshType     meshType,
         MeshPart     part,
         MeshInstance instance,
-        out int                 minimalY
+        out int      minimalY
     )
     {
         minimalY = _maxY;
@@ -935,11 +935,11 @@ public class NavmeshRasterizer
     private void RasterizeTerrainLikePart
     (
         ReadOnlySpan<Primitive> primitives,
-        ReadOnlySpan<int>                  primitiveIndices,
+        ReadOnlySpan<int>       primitiveIndices,
         MeshInstance            instance,
-        ReadOnlySpan<float>                worldVertices,
-        Span<OutFlags>                     outFlags,
-        ref int                            minimalY
+        ReadOnlySpan<float>     worldVertices,
+        Span<OutFlags>          outFlags,
+        ref int                 minimalY
     )
     {
         Span<float> clipBuffer   = stackalloc float[7 * 3 * 4];
@@ -1097,7 +1097,7 @@ public class NavmeshRasterizer
 
     private void RasterizePreparedTerrainLikePart
     (
-        ReadOnlySpan<Primitive>                  primitives,
+        ReadOnlySpan<Primitive>                             primitives,
         ReadOnlySpan<int>                                   primitiveIndices,
         ReadOnlySpan<float>                                 worldVertices,
         ReadOnlySpan<PreparedTerrainGeometry.PrimitiveInfo> primitiveInfos,
@@ -1250,7 +1250,7 @@ public class NavmeshRasterizer
 
     private void RasterizePreparedTerrainPrimitiveFallback
     (
-        Primitive                  primitive,
+        Primitive                             primitive,
         ReadOnlySpan<float>                   worldVertices,
         PreparedTerrainGeometry.PrimitiveInfo info,
         ref int                               minimalY
@@ -1360,9 +1360,9 @@ public class NavmeshRasterizer
     (
         ReadOnlySpan<Primitive> primitives,
         MeshInstance            instance,
-        Span<Vector3>                      worldVertices,
-        Span<OutFlags>                     outFlags,
-        ref int                            minimalY
+        Span<Vector3>           worldVertices,
+        Span<OutFlags>          outFlags,
+        ref int                 minimalY
     )
     {
         Span<Vector3> clipRemainingZ = stackalloc Vector3[7];
@@ -2038,8 +2038,8 @@ public class NavmeshRasterizer
     // TODO: remove after i'm confident in my replacement code
     public void RasterizeOld
     (
-        SceneExtractor      geom,
-        MeshType types
+        SceneExtractor geom,
+        MeshType       types
     )
     {
         var vertices = new float[3 * 256];
@@ -2140,10 +2140,10 @@ public class NavmeshRasterizer
 
     private void TransformVertices
     (
-        MeshInstance instance,
-        ReadOnlySpan<Vector3>   localVertices,
-        Span<Vector3>           outWorld,
-        Span<OutFlags>          outFlags
+        MeshInstance          instance,
+        ReadOnlySpan<Vector3> localVertices,
+        Span<Vector3>         outWorld,
+        Span<OutFlags>        outFlags
     )
     {
         var wt    = instance.WorldTransform;
@@ -2181,10 +2181,10 @@ public class NavmeshRasterizer
 
     private void TransformVerticesPacked
     (
-        MeshInstance instance,
-        ReadOnlySpan<Vector3>   localVertices,
-        Span<float>             outWorld,
-        Span<OutFlags>          outFlags
+        MeshInstance          instance,
+        ReadOnlySpan<Vector3> localVertices,
+        Span<float>           outWorld,
+        Span<OutFlags>        outFlags
     )
     {
         var wt    = instance.WorldTransform;
@@ -2225,9 +2225,9 @@ public class NavmeshRasterizer
 
     private static void TransformVerticesPacked
     (
-        MeshInstance instance,
-        ReadOnlySpan<Vector3>   localVertices,
-        Span<float>             outWorld
+        MeshInstance          instance,
+        ReadOnlySpan<Vector3> localVertices,
+        Span<float>           outWorld
     )
     {
         var     wt     = instance.WorldTransform;

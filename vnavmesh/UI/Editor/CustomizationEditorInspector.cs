@@ -1,10 +1,8 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
-using vnavmesh.Build;
 using vnavmesh.Build.Custom;
 using vnavmesh.Build.Custom.Editor;
-using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Models;
@@ -32,7 +30,7 @@ internal static class CustomizationEditorInspector
 
     public delegate void AddInstancePatchDelegate
     (
-        Mesh         mesh,
+        Mesh                        mesh,
         string                      key,
         int                         index,
         DraftSceneInstancePatchKind kind
@@ -40,7 +38,7 @@ internal static class CustomizationEditorInspector
 
     public delegate void AddPartPatchDelegate
     (
-        Mesh     mesh,
+        Mesh                    mesh,
         string                  key,
         int                     partIndex,
         DraftScenePartPatchKind kind,
@@ -258,11 +256,17 @@ internal static class CustomizationEditorInspector
 
         if (ImGui.BeginPopupModal("确认删除工作区##workspace_delete", ImGuiWindowFlags.AlwaysAutoResize))
         {
-            ImGui.TextUnformatted(hasWorkspace ? $"删除工作区“{workspace.WorkspaceName}”？" : "删除当前工作区？");
+            ImGui.TextUnformatted
+            (
+                hasWorkspace ?
+                    $"删除工作区“{workspace.WorkspaceName}”？" :
+                    "删除当前工作区？"
+            );
             ImGui.TextDisabled("草稿、设置和撤销历史将一起移除");
             ImGui.Separator();
 
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.62f, 0.18f, 0.18f, 1f));
+
             if (ImGui.Button("删除##confirm_workspace_delete", new Vector2(100, 0)))
             {
                 onDeleteWorkspace();
@@ -863,11 +867,13 @@ internal static class CustomizationEditorInspector
         if (item.Kind == DraftSceneInstancePatchKind.Insert)
         {
             changed |= CustomizationEditorWidgets.DrawMatrix("世界变换", ref item.WorldTransform);
+
             if (CustomizationEditorWidgets.DrawInt("数量", ref item.Count))
             {
                 item.Count = Math.Clamp(item.Count, 1, 1024);
                 changed    = true;
             }
+
             changed |= CustomizationEditorWidgets.DrawVector3("步进偏移", ref item.Offset);
             changed |= CustomizationEditorWidgets.DrawUInt64("材质", ref item.Material);
             changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
@@ -879,6 +885,7 @@ internal static class CustomizationEditorInspector
             changed |= CustomizationEditorWidgets.DrawUInt64("实例编号", ref item.InstanceId);
             if (item.Kind == DraftSceneInstancePatchKind.Transform)
                 changed |= CustomizationEditorWidgets.DrawMatrix("世界变换", ref item.WorldTransform);
+
             if (item.Kind == DraftSceneInstancePatchKind.SetFlags)
             {
                 changed |= CustomizationEditorWidgets.DrawFlags("设置标记", ref item.ForceSetPrimFlags);
@@ -1019,31 +1026,36 @@ internal static class CustomizationEditorInspector
         changed |= CustomizationEditorWidgets.DrawString("备注", ref item.Note);
         var kindBefore = item.Kind;
         changed |= CustomizationEditorWidgets.DrawEnumCombo("类型", ref item.Kind);
+
         if (kindBefore != item.Kind && item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
         {
-            var center      = (item.Min + item.Max) * 0.5f;
+            var center      = (item.Min + item.Max)            * 0.5f;
             var halfExtents = Vector3.Abs(item.Max - item.Min) * 0.5f;
             item.Start  = center - new Vector3(0f, MathF.Max(halfExtents.Y, 0.005f), 0f);
             item.End    = center + new Vector3(0f, MathF.Max(halfExtents.Y, 0.005f), 0f);
             item.Radius = MathF.Max(MathF.Max(halfExtents.X, halfExtents.Z), 0.005f);
         }
+
         if (kindBefore != item.Kind && item.Kind == DraftSceneColliderInsertionKind.WalkableFloor)
         {
             var center      = (item.Min + item.Max) * 0.5f;
             var halfExtents = Vector3.Max(Vector3.Abs(item.Max - item.Min) * 0.5f, new Vector3(0.05f, 0.005f, 0.05f));
             halfExtents.Y = 0.005f;
-            item.Min = center - halfExtents;
-            item.Max = center + halfExtents;
+            item.Min      = center - halfExtents;
+            item.Max      = center + halfExtents;
         }
+
         if (item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
         {
             changed |= CustomizationEditorWidgets.DrawVector3("起点", ref item.Start);
             changed |= CustomizationEditorWidgets.DrawVector3("终点", ref item.End);
-            if (CustomizationEditorWidgets.DrawFloat("半径", ref item.Radius, 0.05f, 0.005f, 10000f))
+
+            if (CustomizationEditorWidgets.DrawFloat("半径", ref item.Radius, 0.05f, 0.005f))
             {
                 item.Radius = MathF.Max(MathF.Abs(item.Radius), 0.005f);
                 changed     = true;
             }
+
             var bounds = CustomizationEditorSpatial.CreateColliderBounds(item);
             item.Min = bounds.Min;
             item.Max = bounds.Max;
@@ -1051,6 +1063,7 @@ internal static class CustomizationEditorInspector
         else
         {
             changed |= CustomizationEditorWidgets.DrawBoundsEditor("几何", ref item.Min, ref item.Max);
+
             if (item.Kind == DraftSceneColliderInsertionKind.WalkableFloor)
             {
                 var center      = (item.Min + item.Max) * 0.5f;
@@ -1058,6 +1071,7 @@ internal static class CustomizationEditorInspector
                 halfExtents.Y = 0.005f;
                 var normalizedMin = center - halfExtents;
                 var normalizedMax = center + halfExtents;
+
                 if (normalizedMin != item.Min || normalizedMax != item.Max)
                 {
                     item.Min = normalizedMin;
@@ -1066,6 +1080,7 @@ internal static class CustomizationEditorInspector
                 }
             }
         }
+
         if (CustomizationEditorSpatial.UsesYRotation(item.Kind))
             changed |= CustomizationEditorWidgets.DrawFloat("Y 轴旋转", ref item.RotationDegrees, 0.25f, -360f, 360f);
         if (item.Kind == DraftSceneColliderInsertionKind.Wall)
@@ -1077,13 +1092,14 @@ internal static class CustomizationEditorInspector
         {
             if (item.Kind is DraftSceneColliderInsertionKind.Ramp or DraftSceneColliderInsertionKind.WalkableFloor)
             {
-                var surfaceMask = PrimitiveFlags.ForceWalkable | PrimitiveFlags.ForceUnwalkable;
+                var surfaceMask          = PrimitiveFlags.ForceWalkable | PrimitiveFlags.ForceUnwalkable;
                 var additionalSetFlags   = item.ForceSetPrimFlags   & ~surfaceMask;
                 var additionalClearFlags = item.ForceClearPrimFlags & ~surfaceMask;
                 changed |= CustomizationEditorWidgets.DrawFlags("附加设置标记", ref additionalSetFlags);
                 changed |= CustomizationEditorWidgets.DrawFlags("附加清除标记", ref additionalClearFlags);
                 var setFlags   = additionalSetFlags   | PrimitiveFlags.ForceWalkable;
                 var clearFlags = additionalClearFlags | PrimitiveFlags.ForceUnwalkable;
+
                 if (item.ForceSetPrimFlags != setFlags || item.ForceClearPrimFlags != clearFlags)
                 {
                     item.ForceSetPrimFlags   = setFlags;
@@ -1104,6 +1120,7 @@ internal static class CustomizationEditorInspector
                 }
 
                 ImGui.SameLine();
+
                 if (ImGui.Button("可行走"))
                 {
                     item.ForceSetPrimFlags   = PrimitiveFlags.ForceWalkable;
@@ -1119,6 +1136,7 @@ internal static class CustomizationEditorInspector
                 }
 
                 ImGui.SameLine();
+
                 if (ImGui.Button("保留材质语义"))
                 {
                     item.ForceSetPrimFlags   = PrimitiveFlags.None;
@@ -1419,11 +1437,11 @@ internal static class CustomizationEditorInspector
     private static void DrawPreviewVertexInfo
     (
         CustomizationEditorWorkspace workspace,
-        MeshPart      part,
+        MeshPart                     part,
         string                       meshKey,
         int                          partIndex,
         int                          vertexIndex,
-        Mesh          mesh,
+        Mesh                         mesh,
         AddPartPatchDelegate         onAddPartPatch
     )
     {
@@ -1456,11 +1474,11 @@ internal static class CustomizationEditorInspector
     private static void DrawPreviewPrimitiveInfo
     (
         CustomizationEditorWorkspace workspace,
-        MeshPart      part,
+        MeshPart                     part,
         string                       meshKey,
         int                          partIndex,
         int                          primitiveIndex,
-        Mesh          mesh,
+        Mesh                         mesh,
         AddPartPatchDelegate         onAddPartPatch
     )
     {
@@ -1570,6 +1588,7 @@ internal static class CustomizationEditorInspector
             ImGui.Separator();
 
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.62f, 0.18f, 0.18f, 1f));
+
             if (ImGui.Button("删除##confirm_draft_item_delete", new Vector2(100, 0)))
             {
                 confirmed = true;

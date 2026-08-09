@@ -1,6 +1,5 @@
 using System.Numerics;
 using vnavmesh.Build.Scene;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
 using AABB = vnavmesh.Common.Models.AABB;
 using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
@@ -16,9 +15,9 @@ public static class SceneExtractorExtension
     {
         private void InsertAxisAlignedCollider
         (
-            string                        meshKey,
-            Vector3                       scale,
-            Vector3                       worldTransform,
+            string         meshKey,
+            Vector3        scale,
+            Vector3        worldTransform,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
@@ -34,9 +33,9 @@ public static class SceneExtractorExtension
 
         private void InsertCollider
         (
-            string                        meshKey,
-            Matrix4x3                     transform,
-            AABB                          bounds,
+            string         meshKey,
+            Matrix4x3      transform,
+            AABB           bounds,
             PrimitiveFlags forceSetFlags,
             PrimitiveFlags forceClearFlags
         )
@@ -48,9 +47,9 @@ public static class SceneExtractorExtension
 
         public void InsertMeshInstance
         (
-            string                        meshKey,
-            Matrix4x3                     transform,
-            ulong                         material        = 0,
+            string         meshKey,
+            Matrix4x3      transform,
+            ulong          material        = 0,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
@@ -74,16 +73,17 @@ public static class SceneExtractorExtension
 
         public void InsertMeshInstances
         (
-            string                        meshKey,
-            Matrix4x3                     transform,
-            int                           count,
-            Vector3                       offset,
-            ulong                         material        = 0,
+            string         meshKey,
+            Matrix4x3      transform,
+            int            count,
+            Vector3        offset,
+            ulong          material        = 0,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
         {
             count = Math.Clamp(count, 1, 1024);
+
             for (var i = 0; i < count; ++i)
             {
                 var instanceTransform = transform;
@@ -103,16 +103,16 @@ public static class SceneExtractorExtension
                 if (!string.IsNullOrWhiteSpace(meshKeyContains) && !key.Contains(meshKeyContains, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                mesh.Instances.RemoveAll(instance => BoundsIntersect(instance.WorldBounds, bounds));
+                mesh.Instances.RemoveAll(instance => SceneExtractor.BoundsIntersect(instance.WorldBounds, bounds));
             }
         }
 
         public void SetMeshInstanceFlagsInBounds
         (
-            AABB                          bounds,
+            AABB           bounds,
             PrimitiveFlags forceSetFlags,
             PrimitiveFlags forceClearFlags,
-            string                        meshKeyContains = ""
+            string         meshKeyContains = ""
         )
         {
             foreach (var (key, mesh) in scene.Meshes)
@@ -122,7 +122,7 @@ public static class SceneExtractorExtension
 
                 foreach (var instance in mesh.Instances)
                 {
-                    if (!BoundsIntersect(instance.WorldBounds, bounds))
+                    if (!SceneExtractor.BoundsIntersect(instance.WorldBounds, bounds))
                         continue;
 
                     instance.ForceSetPrimFlags   = forceSetFlags;
@@ -136,9 +136,12 @@ public static class SceneExtractorExtension
             AABB a,
             AABB b
         ) =>
-            a.Min.X <= b.Max.X && a.Max.X >= b.Min.X &&
-            a.Min.Y <= b.Max.Y && a.Max.Y >= b.Min.Y &&
-            a.Min.Z <= b.Max.Z && a.Max.Z >= b.Min.Z;
+            a.Min.X <= b.Max.X &&
+            a.Max.X >= b.Min.X &&
+            a.Min.Y <= b.Max.Y &&
+            a.Max.Y >= b.Min.Y &&
+            a.Min.Z <= b.Max.Z &&
+            a.Max.Z >= b.Min.Z;
 
         private static Matrix4x3 ToCommon
         (
@@ -154,8 +157,8 @@ public static class SceneExtractorExtension
 
         public void InsertAABoxCollider
         (
-            Vector3                       scale,
-            Vector3                       worldTransform,
+            Vector3        scale,
+            Vector3        worldTransform,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         ) =>
@@ -163,7 +166,7 @@ public static class SceneExtractorExtension
 
         public void InsertAABoxCollider
         (
-            AABB                          bounds,
+            AABB           bounds,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
@@ -175,8 +178,8 @@ public static class SceneExtractorExtension
 
         public void InsertCylinderCollider
         (
-            Vector3                       scale,
-            Vector3                       worldTransform,
+            Vector3        scale,
+            Vector3        worldTransform,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         ) =>
@@ -184,7 +187,7 @@ public static class SceneExtractorExtension
 
         public void InsertCylinderCollider
         (
-            AABB                          bounds,
+            AABB           bounds,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
@@ -196,9 +199,9 @@ public static class SceneExtractorExtension
 
         public void InsertOrientedCylinderCollider
         (
-            Vector3                       start,
-            Vector3                       end,
-            float                         radius,
+            Vector3        start,
+            Vector3        end,
+            float          radius,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
@@ -211,14 +214,14 @@ public static class SceneExtractorExtension
             var reference = MathF.Abs(Vector3.Dot(axisDirection, Vector3.UnitY)) < 0.999f ?
                                 Vector3.UnitY :
                                 Vector3.UnitX;
-            var radialX = Vector3.Normalize(Vector3.Cross(reference, axisDirection));
+            var radialX = Vector3.Normalize(Vector3.Cross(reference,     axisDirection));
             var radialZ = Vector3.Normalize(Vector3.Cross(axisDirection, radialX));
             radius = MathF.Max(MathF.Abs(radius), 0.005f);
 
             var transform = Matrix4x3.Identity;
-            transform.Row0 = radialX * radius;
+            transform.Row0 = radialX       * radius;
             transform.Row1 = axisDirection * MathF.Max(axisLength * 0.5f, 0.005f);
-            transform.Row2 = radialZ * radius;
+            transform.Row2 = radialZ       * radius;
             transform.Row3 = (start + end) * 0.5f;
             var extent = Vector3.Abs(transform.Row0) +
                          Vector3.Abs(transform.Row1) +
@@ -229,8 +232,8 @@ public static class SceneExtractorExtension
 
         public void InsertSphereCollider
         (
-            Vector3                       scale,
-            Vector3                       center,
+            Vector3        scale,
+            Vector3        center,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         ) =>
@@ -238,7 +241,7 @@ public static class SceneExtractorExtension
 
         public void InsertSphereCollider
         (
-            AABB                          bounds,
+            AABB           bounds,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         ) =>
@@ -246,10 +249,10 @@ public static class SceneExtractorExtension
 
         public void InsertWallCollider
         (
-            Vector2                       halfSize,
-            Vector3                       center,
-            float                         rotationDegrees,
-            bool                          doubleSided,
+            Vector2        halfSize,
+            Vector3        center,
+            float          rotationDegrees,
+            bool           doubleSided,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
@@ -259,31 +262,40 @@ public static class SceneExtractorExtension
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
 
-            var transform = ToCommon(matrix);
+            var transform = SceneExtractor.ToCommon(matrix);
             var extent    = Vector3.Max(Vector3.Abs(transform.Row0) + Vector3.Abs(transform.Row1), new Vector3(0.005f));
-            var bounds    = new AABB { Min = center - extent, Max = center + extent };
-            scene.InsertCollider(doubleSided ? "<plane two-sided>" : "<plane one-sided>", transform, bounds, forceSetFlags, forceClearFlags);
+            var bounds    = new AABB { Min = center                 - extent, Max = center + extent };
+            scene.InsertCollider
+            (
+                doubleSided ?
+                    "<plane two-sided>" :
+                    "<plane one-sided>",
+                transform,
+                bounds,
+                forceSetFlags,
+                forceClearFlags
+            );
         }
 
         public void InsertRampCollider
         (
-            Vector3                       halfExtents,
-            Vector3                       center,
-            float                         rotationDegrees,
+            Vector3        halfExtents,
+            Vector3        center,
+            float          rotationDegrees,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
         {
-            halfExtents = Vector3.Max(Vector3.Abs(halfExtents), new Vector3(0.005f));
-            forceSetFlags |= PrimitiveFlags.ForceWalkable;
-            forceSetFlags &= ~PrimitiveFlags.ForceUnwalkable;
+            halfExtents     =  Vector3.Max(Vector3.Abs(halfExtents), new Vector3(0.005f));
+            forceSetFlags   |= PrimitiveFlags.ForceWalkable;
+            forceSetFlags   &= ~PrimitiveFlags.ForceUnwalkable;
             forceClearFlags |= PrimitiveFlags.ForceUnwalkable;
             forceClearFlags &= ~PrimitiveFlags.ForceWalkable;
             var matrix = Matrix4x4.CreateScale(halfExtents) *
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
 
-            var transform = ToCommon(matrix);
+            var transform = SceneExtractor.ToCommon(matrix);
             var extent = Vector3.Abs(transform.Row0) +
                          Vector3.Abs(transform.Row1) +
                          Vector3.Abs(transform.Row2);
@@ -293,33 +305,33 @@ public static class SceneExtractorExtension
 
         public void InsertWalkableFloor
         (
-            Vector2                       halfSize,
-            Vector3                       center,
-            float                         rotationDegrees,
+            Vector2        halfSize,
+            Vector3        center,
+            float          rotationDegrees,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
         {
-            halfSize = Vector2.Max(Vector2.Abs(halfSize), new Vector2(0.05f));
-            forceSetFlags |= PrimitiveFlags.ForceWalkable;
-            forceSetFlags &= ~PrimitiveFlags.ForceUnwalkable;
+            halfSize        =  Vector2.Max(Vector2.Abs(halfSize), new Vector2(0.05f));
+            forceSetFlags   |= PrimitiveFlags.ForceWalkable;
+            forceSetFlags   &= ~PrimitiveFlags.ForceUnwalkable;
             forceClearFlags |= PrimitiveFlags.ForceUnwalkable;
             forceClearFlags &= ~PrimitiveFlags.ForceWalkable;
             var matrix = Matrix4x4.CreateScale(halfSize.X, 1f, halfSize.Y) *
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
 
-            var transform = ToCommon(matrix);
-            var extent = Vector3.Max(Vector3.Abs(transform.Row0) + Vector3.Abs(transform.Row2), new Vector3(0.005f));
-            var bounds = new AABB { Min = center - extent, Max = center + extent };
+            var transform = SceneExtractor.ToCommon(matrix);
+            var extent    = Vector3.Max(Vector3.Abs(transform.Row0) + Vector3.Abs(transform.Row2), new Vector3(0.005f));
+            var bounds    = new AABB { Min = center                 - extent, Max = center + extent };
             scene.InsertCollider("<walkable floor>", transform, bounds, forceSetFlags, forceClearFlags);
         }
 
         public void InsertOrientedBoxCollider
         (
-            Vector3                       halfExtents,
-            Vector3                       center,
-            float                         rotationDegrees,
+            Vector3        halfExtents,
+            Vector3        center,
+            float          rotationDegrees,
             PrimitiveFlags forceSetFlags   = default,
             PrimitiveFlags forceClearFlags = default
         )
@@ -329,7 +341,7 @@ public static class SceneExtractorExtension
                          Matrix4x4.CreateRotationY(rotationDegrees * (MathF.PI / 180f));
             matrix.Translation = center;
 
-            var transform = ToCommon(matrix);
+            var transform = SceneExtractor.ToCommon(matrix);
             var extent = Vector3.Abs(transform.Row0) +
                          Vector3.Abs(transform.Row1) +
                          Vector3.Abs(transform.Row2);

@@ -34,12 +34,12 @@ public class SceneExtractor : BuildScene
 
     static SceneExtractor()
     {
-        MeshBox         = BuildBoxMesh();
-        MeshSphere      = BuildSphereMesh(16);
-        MeshCylinder    = BuildCylinderMesh(16);
-        MeshPlane       = BuildPlaneMesh();
-        MeshPlaneDouble = BuildPlaneMesh(true);
-        MeshRamp        = BuildRampMesh();
+        MeshBox           = BuildBoxMesh();
+        MeshSphere        = BuildSphereMesh(16);
+        MeshCylinder      = BuildCylinderMesh(16);
+        MeshPlane         = BuildPlaneMesh();
+        MeshPlaneDouble   = BuildPlaneMesh(true);
+        MeshRamp          = BuildRampMesh();
         MeshWalkableFloor = BuildWalkableFloorMesh();
     }
 
@@ -48,14 +48,14 @@ public class SceneExtractor : BuildScene
         SceneDefinition scene
     )
     {
-        Meshes[KEY_ANALYTIC_BOX]          = CreateBuiltinMesh(MeshBox,         MeshType.AnalyticShape);
-        Meshes[KEY_ANALYTIC_SPHERE]       = CreateBuiltinMesh(MeshSphere,      MeshType.AnalyticShape);
-        Meshes[KEY_ANALYTIC_CYLINDER]     = CreateBuiltinMesh(MeshCylinder,    MeshType.AnalyticShape);
-        Meshes[KEY_ANALYTIC_PLANE_SINGLE] = CreateBuiltinMesh(MeshPlane,       MeshType.AnalyticPlane);
-        Meshes[KEY_ANALYTIC_PLANE_DOUBLE] = CreateBuiltinMesh(MeshPlaneDouble, MeshType.AnalyticPlane);
-        Meshes[KEY_ANALYTIC_RAMP]         = CreateBuiltinMesh(MeshRamp,        MeshType.AnalyticShape);
+        Meshes[KEY_ANALYTIC_BOX]          = CreateBuiltinMesh(MeshBox,           MeshType.AnalyticShape);
+        Meshes[KEY_ANALYTIC_SPHERE]       = CreateBuiltinMesh(MeshSphere,        MeshType.AnalyticShape);
+        Meshes[KEY_ANALYTIC_CYLINDER]     = CreateBuiltinMesh(MeshCylinder,      MeshType.AnalyticShape);
+        Meshes[KEY_ANALYTIC_PLANE_SINGLE] = CreateBuiltinMesh(MeshPlane,         MeshType.AnalyticPlane);
+        Meshes[KEY_ANALYTIC_PLANE_DOUBLE] = CreateBuiltinMesh(MeshPlaneDouble,   MeshType.AnalyticPlane);
+        Meshes[KEY_ANALYTIC_RAMP]         = CreateBuiltinMesh(MeshRamp,          MeshType.AnalyticShape);
         Meshes[KEY_WALKABLE_FLOOR]        = CreateBuiltinMesh(MeshWalkableFloor, MeshType.AnalyticPlane);
-        Meshes[KEY_MESH_CYLINDER]         = CreateBuiltinMesh(MeshCylinder,    MeshType.CylinderMesh);
+        Meshes[KEY_MESH_CYLINDER]         = CreateBuiltinMesh(MeshCylinder,      MeshType.CylinderMesh);
         foreach (var path in scene.MeshPaths.Values)
             AddMesh(path, MeshType.FileMesh);
 

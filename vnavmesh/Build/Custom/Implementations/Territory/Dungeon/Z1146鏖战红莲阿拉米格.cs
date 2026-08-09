@@ -2,10 +2,8 @@
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
 using AABB = vnavmesh.Common.Models.AABB;
-using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Dungeon;
 

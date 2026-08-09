@@ -385,7 +385,7 @@ internal static class CustomizationDraftApplier
 
     private static int ResolveInstanceIndex
     (
-        Mesh     mesh,
+        Mesh                    mesh,
         DraftSceneInstancePatch patch
     )
     {

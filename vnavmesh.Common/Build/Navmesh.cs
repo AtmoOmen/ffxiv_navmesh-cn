@@ -535,6 +535,7 @@ public record class Navmesh
             throw new Exception("体积缓存层级无效");
 
         var tilesPerLevel = new (int X, int Y, int Z)[numLevels];
+
         foreach (ref var l in tilesPerLevel.AsSpan())
         {
             l.X = reader.ReadInt32();
@@ -557,6 +558,7 @@ public record class Navmesh
             return;
 
         writer.Write(volume.Levels.Length);
+
         foreach (ref var l in volume.Levels.AsSpan())
         {
             writer.Write(l.NumCellsX);
@@ -580,6 +582,7 @@ public record class Navmesh
         volume.CompactRetainedState();
         SerializeVolumeTile(writer, volume.RootTile);
         writer.Write(volume.SurfaceTops.Count);
+
         foreach (var (voxel, topY) in volume.SurfaceTops)
         {
             writer.Write(voxel);
@@ -1165,7 +1168,7 @@ public record class Navmesh
     private bool TryFindMatchingOffMeshPolyRef
     (
         OffMeshConnection connection,
-        out long                      polyRef
+        out long          polyRef
     )
     {
         if (_mesh == null)

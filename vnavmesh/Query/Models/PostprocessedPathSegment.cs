@@ -1,6 +1,5 @@
 using System.Numerics;
 using vnavmesh.Movement.Planning;
-using vnavmesh.Query.Ground;
 using vnavmesh.Query.Ground.Models;
 
 namespace vnavmesh.Query.Models;

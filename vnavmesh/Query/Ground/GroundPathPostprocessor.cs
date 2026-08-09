@@ -169,10 +169,10 @@ internal sealed class GroundPathPostprocessor
 
     private List<GroundPathCorner> BuildGroundCornersFromStraightPath
     (
-        long[]             corridor,
-        DtStraightPath[]   straightPath,
-        int                straightPathCount,
-        CancellationToken  cancel
+        long[]            corridor,
+        DtStraightPath[]  straightPath,
+        int               straightPathCount,
+        CancellationToken cancel
     )
     {
         List<GroundPathCorner> result = new(straightPathCount);
@@ -235,9 +235,9 @@ internal sealed class GroundPathPostprocessor
 
             var polyRef = corridor[i + 1];
             var area    = ResolveArea(corridor, polyRef);
-            var flags  = toType == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION ?
-                             DtStraightPathFlags.DT_STRAIGHTPATH_OFFMESH_CONNECTION :
-                             (byte)0;
+            var flags = toType == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION ?
+                            DtStraightPathFlags.DT_STRAIGHTPATH_OFFMESH_CONNECTION :
+                            (byte)0;
             var position = new Vector3
             (
                 (left.X + right.X) * 0.5f,
@@ -484,8 +484,8 @@ internal sealed class GroundPathPostprocessor
                 cancel.ThrowIfCancellationRequested();
 
                 if (IsProtected(result, i, initialSourceIndex) ||
-                    IsSemanticAnchor(result[i])                 ||
-                    IsSemanticAnchor(result[i - 1])             ||
+                    IsSemanticAnchor(result[i])                ||
+                    IsSemanticAnchor(result[i - 1])            ||
                     IsSemanticAnchor(result[i + 1]))
                     continue;
 
@@ -562,7 +562,7 @@ internal sealed class GroundPathPostprocessor
 
         for (var sampleIndex = 1; sampleIndex <= RELAX_SEGMENT_SAMPLES; ++sampleIndex)
         {
-            var t = sampleIndex / (float)(RELAX_SEGMENT_SAMPLES + 1);
+            var t        = sampleIndex / (float)(RELAX_SEGMENT_SAMPLES + 1);
             var position = Vector3.Lerp(corner.Position, other.Position, t);
             if (!TryResolveStartPoly(position, corner.PolyRef, out var polyRef, out var projected))
                 continue;
@@ -588,9 +588,9 @@ internal sealed class GroundPathPostprocessor
 
     private bool TryGetWallClearance
     (
-        Vector3   position,
-        long      polyRef,
-        out float distance,
+        Vector3     position,
+        long        polyRef,
+        out float   distance,
         out Vector3 normal
     )
     {
@@ -618,8 +618,8 @@ internal sealed class GroundPathPostprocessor
         CancellationToken               cancel
     )
     {
-        List<GroundPathCorner> result = new(corners.Count) { corners[0] };
-        var current = 0;
+        List<GroundPathCorner> result  = new(corners.Count) { corners[0] };
+        var                    current = 0;
 
         while (current < corners.Count - 1)
         {
@@ -643,7 +643,7 @@ internal sealed class GroundPathPostprocessor
         GroundPathCorner end
     ) =>
         HorizontalDistance(start.Position, end.Position) <= MAX_CENTERLINE_SHORTCUT_DISTANCE &&
-        HasLineOfSight(start, end)                                                            &&
+        HasLineOfSight(start, end)                                                           &&
         HasPreferredClearance(start, end);
 
     private bool HasPreferredClearance
@@ -743,7 +743,7 @@ internal sealed class GroundPathPostprocessor
         GroundPathCorner second,
         GroundPathCorner next
     ) =>
-        HasSegmentPreferredClearance(previous, first) &&
+        HasSegmentPreferredClearance(previous, first)  &&
         HasSegmentPreferredClearance(first,    second) &&
         HasSegmentPreferredClearance(second,   next);
 
@@ -753,7 +753,7 @@ internal sealed class GroundPathPostprocessor
         GroundPathCorner end
     )
     {
-        var distance    = HorizontalDistance(start.Position, end.Position);
+        var distance = HorizontalDistance(start.Position, end.Position);
         var sampleCount = Math.Clamp
         (
             (int)MathF.Ceiling(distance / CLEARANCE_SAMPLE_STEP),
@@ -1019,35 +1019,35 @@ internal sealed class GroundPathPostprocessor
     {
         if (result.Count                                                  == 0                          ||
             Vector3.DistanceSquared(result[^1].Position, corner.Position) > DUPLICATE_POINT_DISTANCE_SQ ||
-            result[^1].Area                                               != corner.Area               ||
-            result[^1].LinkKind                                           != corner.LinkKind           ||
+            result[^1].Area                                               != corner.Area                ||
+            result[^1].LinkKind                                           != corner.LinkKind            ||
             result[^1].StraightPathFlags                                  != corner.StraightPathFlags) result.Add(corner);
     }
 
-    private const int   MAX_STRAIGHT_PATH_POINTS       = 4097;
-    private const float DUPLICATE_WAYPOINT_DISTANCE_SQ = 0.000001f;
-    private const int   MAX_CENTERLINE_LOOKAHEAD       = 64;
-    private const int   MAX_CLEARANCE_SAMPLES          = 256;
-    private const int   MAX_RAYCAST_POLYS              = 512;
-    private const int   MAX_START_POLY_CANDIDATES      = 32;
-    private const float MAX_SHORTCUT_VERTICAL_ERROR    = 0.75f;
+    private const int   MAX_STRAIGHT_PATH_POINTS         = 4097;
+    private const float DUPLICATE_WAYPOINT_DISTANCE_SQ   = 0.000001f;
+    private const int   MAX_CENTERLINE_LOOKAHEAD         = 64;
+    private const int   MAX_CLEARANCE_SAMPLES            = 256;
+    private const int   MAX_RAYCAST_POLYS                = 512;
+    private const int   MAX_START_POLY_CANDIDATES        = 32;
+    private const float MAX_SHORTCUT_VERTICAL_ERROR      = 0.75f;
     private const float MAX_CENTERLINE_SHORTCUT_DISTANCE = 500f;
-    private const float CLEARANCE_SAMPLE_STEP          = 0.50f;
-    private const float POINT_QUERY_HALF_EXTENT        = 0.10f;
-    private const float POINT_QUERY_HEIGHT             = 2f;
-    private const float MAX_PROJECTION_DISTANCE        = 0.15f;
-    private const float RAYCAST_START_INSET            = 0.02f;
-    private const float MIN_ROUNDING_SEGMENT_LENGTH    = 0.75f;
-    private const float MIN_TANGENT_DISTANCE           = 0.50f;
-    private const float MAX_TANGENT_SEGMENT_FRACTION   = 0.32f;
-    private const float PREFERRED_PATH_CLEARANCE       = 0.70f;
-    private const int   MAX_ARC_CLEARANCE_SAMPLES      = 32;
-    private const int   CLEARANCE_RELAX_ITERATIONS     = 4;
-    private const float MAX_RELAX_PUSH                 = 0.50f;
-    private const float MAX_RELAX_PROJECTION           = 0.50f;
-    private const int   RELAX_SEGMENT_SAMPLES          = 3;
-    private const float TURN_RADIUS                    = 5.00f;
-    private const float ROUNDING_MAX_DIRECTION_DOT     = 0.92f;
-    private const float ROUNDING_MIN_DIRECTION_DOT     = -0.70f;
-    private const float DUPLICATE_POINT_DISTANCE_SQ    = 0.000001f;
+    private const float CLEARANCE_SAMPLE_STEP            = 0.50f;
+    private const float POINT_QUERY_HALF_EXTENT          = 0.10f;
+    private const float POINT_QUERY_HEIGHT               = 2f;
+    private const float MAX_PROJECTION_DISTANCE          = 0.15f;
+    private const float RAYCAST_START_INSET              = 0.02f;
+    private const float MIN_ROUNDING_SEGMENT_LENGTH      = 0.75f;
+    private const float MIN_TANGENT_DISTANCE             = 0.50f;
+    private const float MAX_TANGENT_SEGMENT_FRACTION     = 0.32f;
+    private const float PREFERRED_PATH_CLEARANCE         = 0.70f;
+    private const int   MAX_ARC_CLEARANCE_SAMPLES        = 32;
+    private const int   CLEARANCE_RELAX_ITERATIONS       = 4;
+    private const float MAX_RELAX_PUSH                   = 0.50f;
+    private const float MAX_RELAX_PROJECTION             = 0.50f;
+    private const int   RELAX_SEGMENT_SAMPLES            = 3;
+    private const float TURN_RADIUS                      = 5.00f;
+    private const float ROUNDING_MAX_DIRECTION_DOT       = 0.92f;
+    private const float ROUNDING_MIN_DIRECTION_DOT       = -0.70f;
+    private const float DUPLICATE_POINT_DISTANCE_SQ      = 0.000001f;
 }

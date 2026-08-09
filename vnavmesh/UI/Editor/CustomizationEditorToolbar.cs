@@ -16,25 +16,25 @@ internal static class CustomizationEditorToolbar
 
     private static readonly ToolDefinition[] SelectionTools =
     [
-        new(FontAwesomeIcon.MousePointer, "浏览",   PickKind.None,           "查看和选择对象, 左侧选中后右侧显示可编辑内容"),
-        new(FontAwesomeIcon.Cube,         "碰撞体", PickKind.SelectCollider, "在游戏画面点选碰撞体, 选中后右侧直接编辑"),
-        new(FontAwesomeIcon.DrawPolygon,  "三角形", PickKind.SelectTriangle, "在游戏画面点选三角形, 选中后右侧直接编辑")
+        new(FontAwesomeIcon.MousePointer, "浏览", PickKind.None, "查看和选择对象, 左侧选中后右侧显示可编辑内容"),
+        new(FontAwesomeIcon.Cube, "碰撞体", PickKind.SelectCollider, "在游戏画面点选碰撞体, 选中后右侧直接编辑"),
+        new(FontAwesomeIcon.DrawPolygon, "三角形", PickKind.SelectTriangle, "在游戏画面点选三角形, 选中后右侧直接编辑")
     ];
 
     private static readonly ToolDefinition[] VolumeTools =
     [
-        new(FontAwesomeIcon.Cube,   "AABB",     PickKind.Aabb,             "在画面点两个世界点生成轴对齐障碍体"),
-        new(FontAwesomeIcon.Cube,   "旋转箱体", PickKind.OrientedBox,      "沿画面中两个世界点的水平连线生成旋转箱体障碍"),
-        new(FontAwesomeIcon.Circle, "圆柱",     PickKind.Cylinder,         "在画面点两个世界点生成圆柱障碍体"),
+        new(FontAwesomeIcon.Cube, "AABB", PickKind.Aabb, "在画面点两个世界点生成轴对齐障碍体"),
+        new(FontAwesomeIcon.Cube, "旋转箱体", PickKind.OrientedBox, "沿画面中两个世界点的水平连线生成旋转箱体障碍"),
+        new(FontAwesomeIcon.Circle, "圆柱", PickKind.Cylinder, "在画面点两个世界点生成圆柱障碍体"),
         new(FontAwesomeIcon.Circle, "定向圆柱", PickKind.OrientedCylinder, "沿画面中两个世界点生成任意方向圆柱体"),
-        new(FontAwesomeIcon.Circle, "球体",     PickKind.Sphere,           "先选择中心, 再选择表面点生成球形体积")
+        new(FontAwesomeIcon.Circle, "球体", PickKind.Sphere, "先选择中心, 再选择表面点生成球形体积")
     ];
 
     private static readonly ToolDefinition[] SurfaceTools =
     [
         new(FontAwesomeIcon.DrawPolygon, "地面", PickKind.WalkableFloor, "在画面点两个世界点生成可行走地面"),
-        new(FontAwesomeIcon.DrawPolygon, "墙体", PickKind.Wall,          "沿两个世界点的水平连线生成双面墙"),
-        new(FontAwesomeIcon.Route,       "斜坡", PickKind.Ramp,          "以较低点和较高点生成可行走斜坡")
+        new(FontAwesomeIcon.DrawPolygon, "墙体", PickKind.Wall, "沿两个世界点的水平连线生成双面墙"),
+        new(FontAwesomeIcon.Route, "斜坡", PickKind.Ramp, "以较低点和较高点生成可行走斜坡")
     ];
 
     private static readonly ToolDefinition[] RegionTools =
@@ -45,10 +45,10 @@ internal static class CustomizationEditorToolbar
 
     private static readonly ToolDefinition[] ConnectionTools =
     [
-        new(FontAwesomeIcon.Link,  "直连",       PickKind.LinkPoints,     "在画面点两个世界点生成网格连接点"),
-        new(FontAwesomeIcon.Route, "捷径",       PickKind.LinkShortcut,   "在画面点两个世界点生成普通移动捷径"),
+        new(FontAwesomeIcon.Link, "直连", PickKind.LinkPoints, "在画面点两个世界点生成网格连接点"),
+        new(FontAwesomeIcon.Route, "捷径", PickKind.LinkShortcut, "在画面点两个世界点生成普通移动捷径"),
         new(FontAwesomeIcon.Route, "客户端路径", PickKind.LinkClientPath, "在画面点两个世界点生成客户端路径连接"),
-        new(FontAwesomeIcon.Link,  "离网",       PickKind.OffMesh,        "在画面点两个世界点生成构建期离网连接")
+        new(FontAwesomeIcon.Link, "离网", PickKind.OffMesh, "在画面点两个世界点生成构建期离网连接")
     ];
 
     private static readonly (string Label, ToolDefinition[] Tools)[] ToolSections =
@@ -103,11 +103,11 @@ internal static class CustomizationEditorToolbar
             ref statusText
         );
 
-        var availableWidth = ImGui.GetContentRegionAvail().X;
-        var commandBarWidth = CalculateCommandBarWidth();
-        var toolbarSpacing = ImGui.GetStyle().ItemSpacing.X;
+        var availableWidth   = ImGui.GetContentRegionAvail().X;
+        var commandBarWidth  = CalculateCommandBarWidth();
+        var toolbarSpacing   = ImGui.GetStyle().ItemSpacing.X;
         var useCompactPicker = availableWidth < CalculateExpandedToolAreaWidth() + commandBarWidth + toolbarSpacing;
-        var stackCommands = availableWidth < CalculateCompactToolAreaWidth() + commandBarWidth + toolbarSpacing;
+        var stackCommands    = availableWidth < CalculateCompactToolAreaWidth()  + commandBarWidth + toolbarSpacing;
 
         using (ImRaii.Group())
         {
@@ -116,6 +116,7 @@ internal static class CustomizationEditorToolbar
                 using var group = ImRaii.Group();
 
                 DrawGroupLabel("工具");
+
                 if (useCompactPicker)
                 {
                     DrawCompactToolPicker
@@ -348,8 +349,12 @@ internal static class CustomizationEditorToolbar
             for (var column = 0; column < 2; column++)
             {
                 ImGui.TableNextColumn();
-                var firstSection = column == 0 ? 0 : 2;
-                var lastSection = column == 0 ? 2 : ToolSections.Length;
+                var firstSection = column == 0 ?
+                                       0 :
+                                       2;
+                var lastSection = column == 0 ?
+                                      2 :
+                                      ToolSections.Length;
 
                 for (var i = firstSection; i < lastSection; i++)
                 {
@@ -395,10 +400,11 @@ internal static class CustomizationEditorToolbar
     {
         ImGui.SameLine();
 
-        var activeTool = FindTool(tools, pickKind);
-        var buttonIcon = activeTool?.Icon ?? icon;
-        var buttonText = activeTool?.Label ?? label;
+        var activeTool  = FindTool(tools, pickKind);
+        var buttonIcon  = activeTool?.Icon  ?? icon;
+        var buttonText  = activeTool?.Label ?? label;
         var buttonWidth = CalculateToolGroupWidth(icon, label, tools);
+
         if (activeTool is not null)
         {
             ImGui.PushStyleColor(ImGuiCol.Button,        new Vector4(0.22f, 0.45f, 0.75f, 1f));
@@ -497,8 +503,10 @@ internal static class CustomizationEditorToolbar
     )
     {
         foreach (var section in ToolSections)
+        {
             if (FindTool(section.Tools, pickKind) is { } tool)
                 return tool;
+        }
 
         return null;
     }
@@ -510,8 +518,10 @@ internal static class CustomizationEditorToolbar
     )
     {
         foreach (var tool in tools)
+        {
             if (tool.Kind == pickKind)
                 return tool;
+        }
 
         return null;
     }
@@ -528,7 +538,7 @@ internal static class CustomizationEditorToolbar
         foreach (var tool in tools)
             width = Math.Max(width, ImGui.CalcTextSize($"{tool.Icon.ToIconString()}  {tool.Label}").X);
 
-        return width + ImGui.GetStyle().FramePadding.X * 2;
+        return width + (ImGui.GetStyle().FramePadding.X * 2);
     }
 
     private static float CalculateExpandedToolAreaWidth()
@@ -537,14 +547,14 @@ internal static class CustomizationEditorToolbar
         var width = ImGui.CalcTextSize("工具").X;
 
         foreach (var tool in SelectionTools)
-            width += ImGui.CalcTextSize($"{tool.Icon.ToIconString()}  {tool.Label}").X + style.FramePadding.X * 2;
+            width += ImGui.CalcTextSize($"{tool.Icon.ToIconString()}  {tool.Label}").X + (style.FramePadding.X * 2);
 
         width += CalculateToolGroupWidth(FontAwesomeIcon.Cube,        "体积", VolumeTools);
         width += CalculateToolGroupWidth(FontAwesomeIcon.DrawPolygon, "表面", SurfaceTools);
         width += CalculateToolGroupWidth(FontAwesomeIcon.Cube,        "区域", RegionTools);
         width += CalculateToolGroupWidth(FontAwesomeIcon.Link,        "连接", ConnectionTools);
 
-        return width + style.ItemSpacing.X * 7;
+        return width + (style.ItemSpacing.X * 7);
     }
 
     private static float CalculateCompactToolAreaWidth() =>
@@ -556,21 +566,21 @@ internal static class CustomizationEditorToolbar
         var caret = FontAwesomeIcon.CaretDown.ToIconString();
 
         foreach (var section in ToolSections)
-            foreach (var tool in section.Tools)
-                width = Math.Max(width, ImGui.CalcTextSize($"{tool.Icon.ToIconString()}  {tool.Label}  {caret}").X);
+        foreach (var tool in section.Tools)
+            width = Math.Max(width, ImGui.CalcTextSize($"{tool.Icon.ToIconString()}  {tool.Label}  {caret}").X);
 
-        return width + ImGui.GetStyle().FramePadding.X * 2;
+        return width + (ImGui.GetStyle().FramePadding.X * 2);
     }
 
     private static float CalculateCommandBarWidth()
     {
         var frameHeight = ImGui.GetFrameHeight();
-        var width = 0f;
+        var width       = 0f;
 
         foreach (var icon in CommandIcons)
             width += frameHeight + ImGui.CalcTextSize(icon.ToIconString()).X;
 
-        return width + ImGui.GetStyle().ItemSpacing.X * (CommandIcons.Length - 1);
+        return width + (ImGui.GetStyle().ItemSpacing.X * (CommandIcons.Length - 1));
     }
 
     private static void DrawGroupLabel
@@ -614,19 +624,19 @@ internal static class CustomizationEditorToolbar
     private static void DrawModeButton
     (
         FontAwesomeIcon icon,
-        string       label,
-        PickKind     kind,
-        string       tooltip,
-        ref PickKind pickKind,
-        ref Vector3? pendingPickPoint,
-        ref Vector3? currentPickPoint,
-        ref bool     lastPickMouseDown,
-        ref bool     lastWorldSelectMouseDown,
-        ref bool     lastPickEscapeDown,
-        ref string   statusText
+        string          label,
+        PickKind        kind,
+        string          tooltip,
+        ref PickKind    pickKind,
+        ref Vector3?    pendingPickPoint,
+        ref Vector3?    currentPickPoint,
+        ref bool        lastPickMouseDown,
+        ref bool        lastWorldSelectMouseDown,
+        ref bool        lastPickEscapeDown,
+        ref string      statusText
     )
     {
-        var active = pickKind == kind;
+        var active      = pickKind == kind;
         var buttonLabel = $"{icon.ToIconString()}  {label}";
 
         if (active)

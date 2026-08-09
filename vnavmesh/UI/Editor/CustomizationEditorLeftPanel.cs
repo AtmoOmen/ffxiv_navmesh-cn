@@ -2,7 +2,6 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using vnavmesh.Build.Custom.Editor;
 using vnavmesh.Build.Scene;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.UI.Debug.Collision;
 using vnavmesh.UI.Debug.Common;
@@ -21,7 +20,7 @@ internal static class CustomizationEditorLeftPanel
 
     public delegate void AddInstancePatchDelegate
     (
-        Mesh         mesh,
+        Mesh                        mesh,
         string                      key,
         int                         index,
         DraftSceneInstancePatchKind kind
@@ -29,7 +28,7 @@ internal static class CustomizationEditorLeftPanel
 
     public delegate void AddPartPatchDelegate
     (
-        Mesh     mesh,
+        Mesh                    mesh,
         string                  key,
         int                     partIndex,
         DraftScenePartPatchKind kind,
@@ -56,7 +55,9 @@ internal static class CustomizationEditorLeftPanel
 
         if (focusSelection != null)
         {
-            panelMode = IsPreviewSelectionKind(focusSelection.Kind) ? EditorPanelMode.Scene : EditorPanelMode.Draft;
+            panelMode = IsPreviewSelectionKind(focusSelection.Kind) ?
+                            EditorPanelMode.Scene :
+                            EditorPanelMode.Draft;
             searchText = string.Empty;
         }
 
@@ -72,9 +73,7 @@ internal static class CustomizationEditorLeftPanel
         var query = searchText.Trim();
 
         if (panelMode == EditorPanelMode.Draft)
-        {
             DrawDraftTree(ref selection, focusSelection, ref focusConsumed, workspace, previewBuilder, collision, query);
-        }
         else if (previewBuilder is { CurrentState: CustomizationPreviewBuilder.State.Ready, Extractor: not null })
         {
             DrawPreviewMeshes
@@ -93,9 +92,7 @@ internal static class CustomizationEditorLeftPanel
             );
         }
         else
-        {
             ImGui.TextDisabled($"场景预览 · {CustomizationEditorWidgets.FormatPreviewStateDisplayName(previewBuilder.CurrentState)}");
-        }
 
         if (focusConsumed)
             pendingFocusSelection = null;
@@ -223,8 +220,8 @@ internal static class CustomizationEditorLeftPanel
                         var focusVertex = focusSelection is
                                           {
                                               Kind: SelectionKind.PreviewVertex, Key: var vertexKey, Index: var vertexPartIndex
-                                          }                               &&
-                                          vertexKey       == key           &&
+                                          }                      &&
+                                          vertexKey       == key &&
                                           vertexPartIndex == partIndex;
                         if (focusVertex)
                             ImGui.SetNextItemOpen(true);
@@ -250,8 +247,8 @@ internal static class CustomizationEditorLeftPanel
                         var focusPrimitive = focusSelection is
                                              {
                                                  Kind: SelectionKind.PreviewPrimitive, Key: var primitiveKey, Index: var primitivePartIndex
-                                             }                                  &&
-                                             primitiveKey       == key           &&
+                                             }                         &&
+                                             primitiveKey       == key &&
                                              primitivePartIndex == partIndex;
                         if (focusPrimitive)
                             ImGui.SetNextItemOpen(true);
@@ -334,10 +331,10 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawMeshPreview
     (
-        MeshPart part,
-        Matrix4x3               transform,
-        DebugDrawer             dd,
-        uint                    color = 0xFF00FFAA
+        MeshPart    part,
+        Matrix4x3   transform,
+        DebugDrawer dd,
+        uint        color = 0xFF00FFAA
     )
     {
         foreach (var primitive in part.Primitives)
@@ -352,18 +349,18 @@ internal static class CustomizationEditorLeftPanel
         }
     }
 
-    private static unsafe void DrawPreviewVertices
+    private static void DrawPreviewVertices
     (
-        Mesh          mesh,
-        MeshPart      part,
-        string                       key,
-        int                          partIndex,
-        int                          instanceIndex,
-        ref Selection                selection,
-        Selection?                   focusSelection,
-        ref bool                     focusConsumed,
-        DebugDrawer                  dd,
-        AddPartPatchDelegate         onAddPartPatch
+        Mesh                 mesh,
+        MeshPart             part,
+        string               key,
+        int                  partIndex,
+        int                  instanceIndex,
+        ref Selection        selection,
+        Selection?           focusSelection,
+        ref bool             focusConsumed,
+        DebugDrawer          dd,
+        AddPartPatchDelegate onAddPartPatch
     )
     {
         var clipper = ImGui.ImGuiListClipper();
@@ -373,7 +370,7 @@ internal static class CustomizationEditorLeftPanel
             clipper.Begin(part.Vertices.Count);
 
             if (focusSelection is { Kind: SelectionKind.PreviewVertex, SubIndex: >= 0 } &&
-                focusSelection.Key   == key                                                     &&
+                focusSelection.Key   == key                                             &&
                 focusSelection.Index == partIndex)
                 clipper.ForceDisplayRangeByIndices(focusSelection.SubIndex, focusSelection.SubIndex + 1);
 
@@ -404,12 +401,13 @@ internal static class CustomizationEditorLeftPanel
                     if (ImGui.IsItemHovered())
                         DrawPreviewVertex(mesh, instanceIndex, vertex, dd);
 
-                    if (!focusConsumed && focusSelection is
+                    if (!focusConsumed &&
+                        focusSelection is
                         {
                             Kind: SelectionKind.PreviewVertex, Key: var focusKey, Index: var focusPartIndex, SubIndex: var focusVertexIndex
-                        }                                 &&
-                        focusKey         == key           &&
-                        focusPartIndex   == partIndex     &&
+                        }                             &&
+                        focusKey         == key       &&
+                        focusPartIndex   == partIndex &&
                         focusVertexIndex == vertexIndex)
                     {
                         ImGui.SetScrollHereY();
@@ -424,18 +422,18 @@ internal static class CustomizationEditorLeftPanel
         }
     }
 
-    private static unsafe void DrawPreviewPrimitives
+    private static void DrawPreviewPrimitives
     (
-        Mesh          mesh,
-        MeshPart      part,
-        string                       key,
-        int                          partIndex,
-        int                          instanceIndex,
-        ref Selection                selection,
-        Selection?                   focusSelection,
-        ref bool                     focusConsumed,
-        DebugDrawer                  dd,
-        AddPartPatchDelegate         onAddPartPatch
+        Mesh                 mesh,
+        MeshPart             part,
+        string               key,
+        int                  partIndex,
+        int                  instanceIndex,
+        ref Selection        selection,
+        Selection?           focusSelection,
+        ref bool             focusConsumed,
+        DebugDrawer          dd,
+        AddPartPatchDelegate onAddPartPatch
     )
     {
         var clipper = ImGui.ImGuiListClipper();
@@ -445,7 +443,7 @@ internal static class CustomizationEditorLeftPanel
             clipper.Begin(part.Primitives.Count);
 
             if (focusSelection is { Kind: SelectionKind.PreviewPrimitive, SubIndex: >= 0 } &&
-                focusSelection.Key   == key                                                        &&
+                focusSelection.Key   == key                                                &&
                 focusSelection.Index == partIndex)
                 clipper.ForceDisplayRangeByIndices(focusSelection.SubIndex, focusSelection.SubIndex + 1);
 
@@ -479,13 +477,14 @@ internal static class CustomizationEditorLeftPanel
                     if (ImGui.IsItemHovered())
                         DrawPreviewPrimitive(mesh, part, instanceIndex, primitive, dd);
 
-                    if (!focusConsumed && focusSelection is
+                    if (!focusConsumed &&
+                        focusSelection is
                         {
                             Kind: SelectionKind.PreviewPrimitive, Key: var focusKey, Index: var focusPartIndex,
                             SubIndex: var focusPrimitiveIndex
-                        }                                    &&
-                        focusKey            == key           &&
-                        focusPartIndex      == partIndex     &&
+                        }                                &&
+                        focusKey            == key       &&
+                        focusPartIndex      == partIndex &&
                         focusPrimitiveIndex == primitiveIndex)
                     {
                         ImGui.SetScrollHereY();
@@ -502,10 +501,10 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawPreviewVertex
     (
-        Mesh mesh,
-        int                 instanceIndex,
-        Vector3             vertex,
-        DebugDrawer         dd
+        Mesh        mesh,
+        int         instanceIndex,
+        Vector3     vertex,
+        DebugDrawer dd
     )
     {
         if (mesh.Instances.Count == 0)
@@ -519,11 +518,11 @@ internal static class CustomizationEditorLeftPanel
 
     private static void DrawPreviewPrimitive
     (
-        Mesh      mesh,
-        MeshPart  part,
-        int                      instanceIndex,
-        Primitive primitive,
-        DebugDrawer              dd
+        Mesh        mesh,
+        MeshPart    part,
+        int         instanceIndex,
+        Primitive   primitive,
+        DebugDrawer dd
     )
     {
         if (mesh.Instances.Count == 0)
@@ -649,11 +648,15 @@ internal static class CustomizationEditorLeftPanel
         string               query
     )
     {
-        var filteredCount = string.IsNullOrEmpty(query) ? items.Count : items.Count(item => MatchesSearch(query, item.Label));
+        var filteredCount = string.IsNullOrEmpty(query) ?
+                                items.Count :
+                                items.Count(item => MatchesSearch(query, item.Label));
         if (filteredCount == 0)
             return;
 
-        var countLabel = filteredCount == items.Count ? items.Count.ToString() : $"{filteredCount}/{items.Count}";
+        var countLabel = filteredCount == items.Count ?
+                             items.Count.ToString() :
+                             $"{filteredCount}/{items.Count}";
         if (!ImGui.TreeNodeEx($"{title} ({countLabel})", ImGuiTreeNodeFlags.DefaultOpen))
             return;
 
@@ -766,15 +769,15 @@ internal static class CustomizationEditorLeftPanel
 
         for (var i = 0; i < workspace.Draft.ColliderInsertions.Count; ++i)
         {
-            var item = workspace.Draft.ColliderInsertions[i];
-            var info = DescribeBounds(collision, CustomizationEditorSpatial.CreateColliderBounds(item));
+            var item   = workspace.Draft.ColliderInsertions[i];
+            var info   = DescribeBounds(collision, CustomizationEditorSpatial.CreateColliderBounds(item));
             var center = (item.Min + item.Max) * 0.5f;
             var size   = Vector3.Abs(item.Max - item.Min);
             var label = item.Kind == DraftSceneColliderInsertionKind.OrientedCylinder ?
                             $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Start:f1} -> {item.End:f1} · 半径 {item.Radius:f1}" :
-                        CustomizationEditorSpatial.UsesYRotation(item.Kind) ?
-                            $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} 中心 {center:f1} · {size.X:f1} × {size.Y:f1} × {size.Z:f1} · {item.RotationDegrees:f1}°" :
-                            $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Min:f1} -> {item.Max:f1}";
+                            CustomizationEditorSpatial.UsesYRotation(item.Kind) ?
+                                $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} 中心 {center:f1} · {size.X:f1} × {size.Y:f1} × {size.Z:f1} · {item.RotationDegrees:f1}°" :
+                                $"{CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} {item.Min:f1} -> {item.Max:f1}";
             entries.Add
             (
                 CreateDraftEntry(i, label, item.Note, item.Enabled, info)
@@ -935,15 +938,15 @@ internal static class CustomizationEditorLeftPanel
     ) =>
         item.Kind == DraftSceneInstancePatchKind.ClearInstances ?
             $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}" :
-        item.Kind == DraftSceneInstancePatchKind.Insert ?
-            $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} × {Math.Clamp(item.Count, 1, 1024)} @ {item.WorldTransform.Row3:f1}" :
-            $"{item.MeshKey} #{item.InstanceIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}";
+            item.Kind == DraftSceneInstancePatchKind.Insert ?
+                $"{item.MeshKey} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)} × {Math.Clamp(item.Count, 1, 1024)} @ {item.WorldTransform.Row3:f1}" :
+                $"{item.MeshKey} #{item.InstanceIndex} {CustomizationEditorWidgets.FormatEnumDisplayName(item.Kind)}";
 
     private static bool TryGetNearestInstanceBounds
     (
-        Mesh mesh,
-        DebugGameCollision  collision,
-        out AABB            bounds
+        Mesh               mesh,
+        DebugGameCollision collision,
+        out AABB           bounds
     )
     {
         if (mesh.Instances.Count == 0)
@@ -974,7 +977,7 @@ internal static class CustomizationEditorLeftPanel
 
     private static bool TryGetInstancePatchBounds
     (
-        Mesh     mesh,
+        Mesh                    mesh,
         DraftSceneInstancePatch patch,
         out AABB                bounds
     )
@@ -1003,9 +1006,9 @@ internal static class CustomizationEditorLeftPanel
 
     private static bool TryResolveInstance
     (
-        Mesh             mesh,
-        DraftSceneInstancePatch         patch,
-        out MeshInstance instance
+        Mesh                    mesh,
+        DraftSceneInstancePatch patch,
+        out MeshInstance        instance
     )
     {
         if (patch.InstanceId != 0)
@@ -1027,10 +1030,10 @@ internal static class CustomizationEditorLeftPanel
 
     private static List<int> GetVisiblePreviewInstanceIndices
     (
-        Mesh mesh,
-        DebugGameCollision  collision,
-        bool                forceFocused,
-        int                 focusedInstanceIndex
+        Mesh               mesh,
+        DebugGameCollision collision,
+        bool               forceFocused,
+        int                focusedInstanceIndex
     )
     {
         List<int> visibleIndices = [];
@@ -1047,9 +1050,9 @@ internal static class CustomizationEditorLeftPanel
 
     private static bool TryGetVisibleMeshBounds
     (
-        Mesh mesh,
-        List<int>           visibleInstanceIndices,
-        out AABB            bounds
+        Mesh      mesh,
+        List<int> visibleInstanceIndices,
+        out AABB  bounds
     )
     {
         if (visibleInstanceIndices.Count == 0)
@@ -1097,7 +1100,8 @@ internal static class CustomizationEditorLeftPanel
             Kind: SelectionKind.PreviewPart or SelectionKind.PreviewVertex or SelectionKind.PreviewPrimitive,
             Key: not null,
             Index: >= 0
-        } && focusSelection.Key == meshKey ?
+        } &&
+        focusSelection.Key == meshKey ?
             focusSelection.Index :
             -1;
 
@@ -1106,7 +1110,7 @@ internal static class CustomizationEditorLeftPanel
         Selection? focusSelection,
         string     meshKey
     ) =>
-        focusSelection != null &&
+        focusSelection     != null    &&
         focusSelection.Key == meshKey &&
         IsPreviewSelectionKind(focusSelection.Kind);
 

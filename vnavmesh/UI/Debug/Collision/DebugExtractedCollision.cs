@@ -4,7 +4,6 @@ using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using vnavmesh.Build;
 using vnavmesh.Build.Scene;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Utils;
@@ -316,8 +315,8 @@ public class DebugExtractedCollision : IDisposable
     private void VisualizeMeshPart
     (
         vnavmesh.Common.Build.Models.Mesh mesh,
-        int                 meshIndex,
-        int                 partIndex
+        int                               meshIndex,
+        int                               partIndex
     )
     {
         if (_dd.EffectMesh == null)
@@ -351,7 +350,7 @@ public class DebugExtractedCollision : IDisposable
     private void VisualizeVertex
     (
         vnavmesh.Common.Build.Models.Mesh mesh,
-        Vector3             v
+        Vector3                           v
     )
     {
         foreach (var i in mesh.Instances)
@@ -361,9 +360,9 @@ public class DebugExtractedCollision : IDisposable
     private void VisualizeTriangle
     (
         vnavmesh.Common.Build.Models.Mesh mesh,
-        Vector3             v1,
-        Vector3             v2,
-        Vector3             v3
+        Vector3                           v1,
+        Vector3                           v2,
+        Vector3                           v3
     )
     {
         foreach (var i in mesh.Instances)

@@ -1,6 +1,5 @@
 using System.Numerics;
 using vnavmesh.Common.Build.Flight;
-using vnavmesh.Query.Flight.Utils;
 
 namespace vnavmesh.Query.Flight;
 
@@ -19,9 +18,9 @@ public partial class VoxelPathfind
         var savedRadius   = avoidRadius;
         var savedRadiusSq = avoidRadiusSq;
         var savedMinDist  = minAvoidDistSq;
-        avoidRadius       = 0;
-        avoidRadiusSq     = 0;
-        minAvoidDistSq    = 0;
+        avoidRadius    = 0;
+        avoidRadiusSq  = 0;
+        minAvoidDistSq = 0;
 
         try
         {
@@ -82,14 +81,14 @@ public partial class VoxelPathfind
         if (BuildAroundAvoidWaypoints(fromPos, toPos) is not { Count: > 1 } corners)
             return null;
 
-        var merged = new List<(ulong voxel, Vector3 p)> { (fromVoxel, fromPos) };
+        var merged   = new List<(ulong voxel, Vector3 p)> { (fromVoxel, fromPos) };
         var curPos   = fromPos;
         var curVoxel = fromVoxel;
 
         for (var i = 1; i < corners.Count; ++i)
         {
             cancel.ThrowIfCancellationRequested();
-            var nextPos   = corners[i];
+            var nextPos = corners[i];
             var nextVoxel = i == corners.Count - 1 ?
                                 toVoxel :
                                 VoxelAt(nextPos);
@@ -100,9 +99,7 @@ public partial class VoxelPathfind
 
             if (!SegmentViolatesAvoid(curPos, nextPos) &&
                 VoxelSearch.LineOfSight(Volume, curVoxel, nextVoxel, curPos, nextPos))
-            {
                 leg = [(nextVoxel, nextPos)];
-            }
             else
             {
                 leg = FindPathUnavoided(curVoxel, nextVoxel, curPos, nextPos, returnIntermediatePoints, cancel);
@@ -132,10 +129,8 @@ public partial class VoxelPathfind
     )
     {
         for (var i = 1; i < path.Count; ++i)
-        {
             if (SegmentViolatesAvoid(path[i - 1].p, path[i].p))
                 return true;
-        }
 
         return false;
     }
@@ -182,13 +177,11 @@ public partial class VoxelPathfind
             var valid = true;
 
             for (var i = 1; i < path.Count; ++i)
-            {
                 if (SegmentViolatesAvoid(path[i - 1], path[i]))
                 {
                     valid = false;
                     break;
                 }
-            }
 
             if (!valid)
                 continue;
@@ -213,13 +206,14 @@ public partial class VoxelPathfind
         float   r
     )
     {
-        var dx = p.X - avoidCenter.X;
-        var dz = p.Z - avoidCenter.Z;
-        var dSq = (dx * dx) + (dz * dz);
-        var target = r + 0.01f;
+        var dx     = p.X       - avoidCenter.X;
+        var dz     = p.Z       - avoidCenter.Z;
+        var dSq    = (dx * dx) + (dz * dz);
+        var target = r         + 0.01f;
 
         if (dSq >= target * target)
             return p;
+
         if (dSq < 1e-6f)
         {
             dx  = 1;
@@ -233,21 +227,21 @@ public partial class VoxelPathfind
 
     private static bool TryCircleTangentsXZ
     (
-        Vector3 p,
-        Vector3 c,
-        float   r,
+        Vector3     p,
+        Vector3     c,
+        float       r,
         out Vector3 t1,
         out Vector3 t2
     )
     {
         t1 = t2 = default;
-        var dx = p.X - c.X;
-        var dz = p.Z - c.Z;
+        var dx  = p.X       - c.X;
+        var dz  = p.Z       - c.Z;
         var dSq = (dx * dx) + (dz * dz);
         if (dSq <= (r * r) + 1e-3f)
             return false;
 
-        var inv = r * r / dSq;
+        var inv = r * r                         / dSq;
         var h   = r * MathF.Sqrt(dSq - (r * r)) / dSq;
         var mx  = c.X + (inv * dx);
         var mz  = c.Z + (inv * dz);
@@ -258,23 +252,23 @@ public partial class VoxelPathfind
 
     private static void SampleCircleArc
     (
-        Vector3      from,
-        Vector3      to,
-        Vector3      c,
-        float        r,
-        float        y0,
-        float        y1,
+        Vector3       from,
+        Vector3       to,
+        Vector3       c,
+        float         r,
+        float         y0,
+        float         y1,
         List<Vector3> path
     )
     {
-        var a0 = MathF.Atan2(from.Z - c.Z, from.X - c.X);
-        var a1 = MathF.Atan2(to.Z   - c.Z, to.X   - c.X);
+        var a0   = MathF.Atan2(from.Z - c.Z, from.X - c.X);
+        var a1   = MathF.Atan2(to.Z   - c.Z, to.X   - c.X);
         var dccw = a1 - a0;
 
         while (dccw < 0)
             dccw += MathF.PI * 2;
 
-        var dcw   = dccw - (MathF.PI * 2);
+        var dcw = dccw - (MathF.PI * 2);
         var delta = MathF.Abs(dcw) < dccw ?
                         dcw :
                         dccw;
@@ -321,9 +315,9 @@ public partial class VoxelPathfind
         Vector3 b
     )
     {
-        var abx   = b.X - a.X;
-        var abz   = b.Z - a.Z;
-        var lenSq = (abx * abx) + (abz * abz);
+        var   abx   = b.X         - a.X;
+        var   abz   = b.Z         - a.Z;
+        var   lenSq = (abx * abx) + (abz * abz);
         float t;
 
         if (lenSq < 1e-6f)

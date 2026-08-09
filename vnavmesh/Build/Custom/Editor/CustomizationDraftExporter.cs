@@ -2,8 +2,6 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using DotRecast.Recast;
-using vnavmesh.Build.Scene;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
 
@@ -110,18 +108,24 @@ internal static class CustomizationDraftExporter
                 draft.PartPatches.Any(static x => IsValidPartPatch(x)         && x.Kind == DraftScenePartPatchKind.Vertex);
             var needsLocalBoundsHelpers = draft.PartPatches.Any(static x => IsValidPartPatch(x) && x.Kind == DraftScenePartPatchKind.Vertex);
             var needsVector =
-                hasSettings                                                                                                       ||
-                hasMesh                                                                                                           ||
-                draft.PartPatches.Any(static x => IsValidPartPatch(x)         && x.Kind == DraftScenePartPatchKind.Vertex)        ||
-                draft.InstancePatches.Any(static x => IsValidInstancePatch(x) && x.Kind is DraftSceneInstancePatchKind.Transform or
-                                                                                         DraftSceneInstancePatchKind.Insert) ||
+                hasSettings                                                                                        ||
+                hasMesh                                                                                            ||
+                draft.PartPatches.Any(static x => IsValidPartPatch(x) && x.Kind == DraftScenePartPatchKind.Vertex) ||
+                draft.InstancePatches.Any
+                (static x => IsValidInstancePatch(x) &&
+                             x.Kind is DraftSceneInstancePatchKind.Transform or
+                                 DraftSceneInstancePatchKind.Insert
+                ) ||
                 draft.ColliderInsertions.Any(static x => x.Enabled);
             var needsAabb = draft.ColliderInsertions.Any
-                            (static x => x.Enabled && x.Kind is DraftSceneColliderInsertionKind.Aabb or
-                                                                     DraftSceneColliderInsertionKind.Cylinder or
-                                                                     DraftSceneColliderInsertionKind.Sphere or
-                                                                     DraftSceneColliderInsertionKind.RemoveInstances or
-                                                                     DraftSceneColliderInsertionKind.SetInstanceFlags) || needsTransformBoundsHelper;
+                            (static x => x.Enabled &&
+                                         x.Kind is DraftSceneColliderInsertionKind.Aabb or
+                                             DraftSceneColliderInsertionKind.Cylinder or
+                                             DraftSceneColliderInsertionKind.Sphere or
+                                             DraftSceneColliderInsertionKind.RemoveInstances or
+                                             DraftSceneColliderInsertionKind.SetInstanceFlags
+                            ) ||
+                            needsTransformBoundsHelper;
             var needsMatrix = needsTransformBoundsHelper ||
                               draft.InstancePatches.Any(static x => IsValidInstancePatch(x) && x.Kind == DraftSceneInstancePatchKind.Insert);
             var needsRcPartition = draft.BuildProfile.PartitioningOverride.HasValue || draft.BuildSettings.Partitioning.HasValue;
@@ -153,24 +157,24 @@ internal static class CustomizationDraftExporter
         (
             DraftBuildProfileOverrides profile
         ) =>
-            profile.PartitioningOverride.HasValue               ||
-            profile.CellSizeOverride.HasValue                   ||
-            profile.CellHeightOverride.HasValue                 ||
-            profile.RegionMinSizeOverride.HasValue              ||
-            profile.RegionMergeSizeOverride.HasValue            ||
-            profile.PolyMaxEdgeLenOverride.HasValue             ||
-            profile.PolyMaxSimplificationErrorOverride.HasValue ||
-            profile.AgentRadiusOverride.HasValue                ||
-            profile.VolumeCellSizeOverride.HasValue            ||
-            profile.VolumeVerticalPaddingOverride.HasValue      ||
-            profile.VolumeWallThickenNormalYThresholdOverride.HasValue ||
-            profile.VolumeWallThickenHorizontalRadiusOverride.HasValue ||
-            profile.VolumeThinWallStripNormalYThresholdOverride.HasValue ||
+            profile.PartitioningOverride.HasValue                             ||
+            profile.CellSizeOverride.HasValue                                 ||
+            profile.CellHeightOverride.HasValue                               ||
+            profile.RegionMinSizeOverride.HasValue                            ||
+            profile.RegionMergeSizeOverride.HasValue                          ||
+            profile.PolyMaxEdgeLenOverride.HasValue                           ||
+            profile.PolyMaxSimplificationErrorOverride.HasValue               ||
+            profile.AgentRadiusOverride.HasValue                              ||
+            profile.VolumeCellSizeOverride.HasValue                           ||
+            profile.VolumeVerticalPaddingOverride.HasValue                    ||
+            profile.VolumeWallThickenNormalYThresholdOverride.HasValue        ||
+            profile.VolumeWallThickenHorizontalRadiusOverride.HasValue        ||
+            profile.VolumeThinWallStripNormalYThresholdOverride.HasValue      ||
             profile.VolumeThinWallStripMaxProjectedThicknessOverride.HasValue ||
-            profile.VolumeThinWallStripBaseRadiusOverride.HasValue ||
-            profile.VolumeThinWallStripExtraPaddingOverride.HasValue ||
-            profile.DetailSampleDistOverride.HasValue           ||
-            profile.GenerateEdgeClimbLinksOverride.HasValue     ||
+            profile.VolumeThinWallStripBaseRadiusOverride.HasValue            ||
+            profile.VolumeThinWallStripExtraPaddingOverride.HasValue          ||
+            profile.DetailSampleDistOverride.HasValue                         ||
+            profile.GenerateEdgeClimbLinksOverride.HasValue                   ||
             profile.GenerateEdgeJumpLinksOverride.HasValue;
 
         private static bool HasBuildSettingsOverrides
@@ -246,25 +250,25 @@ internal static class CustomizationDraftExporter
     )
     {
         var body = new StringBuilder();
-        AppendAssignment(body, 2, "profile.PartitioningOverride",               profile.PartitioningOverride,               FormatRcPartition);
-        AppendAssignment(body, 2, "profile.CellSizeOverride",                   profile.CellSizeOverride,                   FormatFloat);
-        AppendAssignment(body, 2, "profile.CellHeightOverride",                 profile.CellHeightOverride,                 FormatFloat);
-        AppendAssignment(body, 2, "profile.RegionMinSizeOverride",              profile.RegionMinSizeOverride,              FormatFloat);
-        AppendAssignment(body, 2, "profile.RegionMergeSizeOverride",            profile.RegionMergeSizeOverride,            FormatFloat);
-        AppendAssignment(body, 2, "profile.PolyMaxEdgeLenOverride",             profile.PolyMaxEdgeLenOverride,             FormatFloat);
-        AppendAssignment(body, 2, "profile.PolyMaxSimplificationErrorOverride", profile.PolyMaxSimplificationErrorOverride, FormatFloat);
-        AppendAssignment(body, 2, "profile.AgentRadiusOverride",                profile.AgentRadiusOverride,                FormatFloat);
-        AppendAssignment(body, 2, "profile.VolumeCellSizeOverride",             profile.VolumeCellSizeOverride,             FormatFloat);
-        AppendAssignment(body, 2, "profile.VolumeVerticalPaddingOverride",                    profile.VolumeVerticalPaddingOverride,                    FormatFloat);
-        AppendAssignment(body, 2, "profile.VolumeWallThickenNormalYThresholdOverride",        profile.VolumeWallThickenNormalYThresholdOverride,        FormatFloat);
-        AppendAssignment(body, 2, "profile.VolumeWallThickenHorizontalRadiusOverride",        profile.VolumeWallThickenHorizontalRadiusOverride,        FormatInt);
-        AppendAssignment(body, 2, "profile.VolumeThinWallStripNormalYThresholdOverride",      profile.VolumeThinWallStripNormalYThresholdOverride,      FormatFloat);
+        AppendAssignment(body, 2, "profile.PartitioningOverride",                             profile.PartitioningOverride, FormatRcPartition);
+        AppendAssignment(body, 2, "profile.CellSizeOverride",                                 profile.CellSizeOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.CellHeightOverride",                               profile.CellHeightOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.RegionMinSizeOverride",                            profile.RegionMinSizeOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.RegionMergeSizeOverride",                          profile.RegionMergeSizeOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.PolyMaxEdgeLenOverride",                           profile.PolyMaxEdgeLenOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.PolyMaxSimplificationErrorOverride",               profile.PolyMaxSimplificationErrorOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.AgentRadiusOverride",                              profile.AgentRadiusOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeCellSizeOverride",                           profile.VolumeCellSizeOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeVerticalPaddingOverride",                    profile.VolumeVerticalPaddingOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeWallThickenNormalYThresholdOverride",        profile.VolumeWallThickenNormalYThresholdOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeWallThickenHorizontalRadiusOverride",        profile.VolumeWallThickenHorizontalRadiusOverride, FormatInt);
+        AppendAssignment(body, 2, "profile.VolumeThinWallStripNormalYThresholdOverride",      profile.VolumeThinWallStripNormalYThresholdOverride, FormatFloat);
         AppendAssignment(body, 2, "profile.VolumeThinWallStripMaxProjectedThicknessOverride", profile.VolumeThinWallStripMaxProjectedThicknessOverride, FormatFloat);
-        AppendAssignment(body, 2, "profile.VolumeThinWallStripBaseRadiusOverride",            profile.VolumeThinWallStripBaseRadiusOverride,            FormatFloat);
-        AppendAssignment(body, 2, "profile.VolumeThinWallStripExtraPaddingOverride",          profile.VolumeThinWallStripExtraPaddingOverride,          FormatFloat);
-        AppendAssignment(body, 2, "profile.DetailSampleDistOverride",           profile.DetailSampleDistOverride,           FormatFloat);
-        AppendAssignment(body, 2, "profile.GenerateEdgeClimbLinksOverride",     profile.GenerateEdgeClimbLinksOverride,     FormatBool);
-        AppendAssignment(body, 2, "profile.GenerateEdgeJumpLinksOverride",      profile.GenerateEdgeJumpLinksOverride,      FormatBool);
+        AppendAssignment(body, 2, "profile.VolumeThinWallStripBaseRadiusOverride",            profile.VolumeThinWallStripBaseRadiusOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeThinWallStripExtraPaddingOverride",          profile.VolumeThinWallStripExtraPaddingOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.DetailSampleDistOverride",                         profile.DetailSampleDistOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.GenerateEdgeClimbLinksOverride",                   profile.GenerateEdgeClimbLinksOverride, FormatBool);
+        AppendAssignment(body, 2, "profile.GenerateEdgeJumpLinksOverride",                    profile.GenerateEdgeJumpLinksOverride, FormatBool);
 
         if (body.Length == 0)
             return;
@@ -380,9 +384,11 @@ internal static class CustomizationDraftExporter
                                    .Where(x => IsValidPartPatch(x) && string.Equals(x.MeshKey, meshKey, StringComparison.Ordinal))
                                    .ToArray();
             var instancePatches = draft.InstancePatches
-                                       .Where(x => IsValidInstancePatch(x) &&
-                                                   x.Kind != DraftSceneInstancePatchKind.Insert &&
-                                                   string.Equals(x.MeshKey, meshKey, StringComparison.Ordinal))
+                                       .Where
+                                       (x => IsValidInstancePatch(x)                      &&
+                                             x.Kind != DraftSceneInstancePatchKind.Insert &&
+                                             string.Equals(x.MeshKey, meshKey, StringComparison.Ordinal)
+                                       )
                                        .ToArray();
 
             Line(sb, 2, $"if (scene.Meshes.TryGetValue(\"{Escape(meshKey)}\", out var {meshVariable}))");
@@ -626,8 +632,8 @@ internal static class CustomizationDraftExporter
         DraftSceneColliderInsertion insertion
     )
     {
-        var min = Vector3.Min(insertion.Min, insertion.Max);
-        var max = Vector3.Max(insertion.Min, insertion.Max);
+        var min             = Vector3.Min(insertion.Min, insertion.Max);
+        var max             = Vector3.Max(insertion.Min, insertion.Max);
         var forceSetFlags   = FormatPrimitiveFlags(insertion.ForceSetPrimFlags);
         var forceClearFlags = FormatPrimitiveFlags(insertion.ForceClearPrimFlags);
 
@@ -703,6 +709,7 @@ internal static class CustomizationDraftExporter
             Line(sb, 4, $"Min = {FormatVector(min)},");
             Line(sb, 4, $"Max = {FormatVector(max)}");
             Line(sb, 3, "},");
+
             if (insertion.Kind == DraftSceneColliderInsertionKind.SetInstanceFlags)
             {
                 Line(sb, 3, $"{forceSetFlags},");

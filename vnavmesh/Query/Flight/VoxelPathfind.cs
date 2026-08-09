@@ -130,10 +130,14 @@ public partial class VoxelPathfind
         float             avoidRadius = 0
     )
     {
-        this.avoidCenter   = avoidCenter ?? default;
-        this.avoidRadius   = avoidRadius > 0 && avoidCenter.HasValue ? avoidRadius : 0;
-        avoidRadiusSq      = this.avoidRadius * this.avoidRadius;
-        minAvoidDistSq     = this.avoidRadius > 0 ? MathF.Min(avoidRadiusSq, FlatDistSq(fromPos)) : 0;
+        this.avoidCenter = avoidCenter ?? default;
+        this.avoidRadius = avoidRadius > 0 && avoidCenter.HasValue ?
+                               avoidRadius :
+                               0;
+        avoidRadiusSq = this.avoidRadius * this.avoidRadius;
+        minAvoidDistSq = this.avoidRadius > 0 ?
+                             MathF.Min(avoidRadiusSq, FlatDistSq(fromPos)) :
+                             0;
 
         BeginQuery();
 

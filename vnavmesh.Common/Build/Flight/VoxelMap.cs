@@ -14,7 +14,6 @@ public class VoxelMap
     private readonly int           l2ShiftZ;
     private readonly int           l1ShiftZ;
     private readonly SemaphoreSlim materializationGate = new(1, 1);
-    private          Dictionary<ulong, float> surfaceTops = [];
 
     private byte[]?           deferredTreePayload;
     private int               deferredTreeOffset;
@@ -129,9 +128,9 @@ public class VoxelMap
 
     public VoxelMap
     (
-        Vector3                        boundsMin,
-        Vector3                        boundsMax,
-        (int X, int Y, int Z)[]        tilesPerLevel
+        Vector3                 boundsMin,
+        Vector3                 boundsMax,
+        (int X, int Y, int Z)[] tilesPerLevel
     )
     {
         Levels = new VolumeLevel[tilesPerLevel.Length];
@@ -932,27 +931,27 @@ public class VoxelMap
         RootTile.CompactRetainedState();
     }
 
-    internal Dictionary<ulong, float> SurfaceTops => surfaceTops;
+    internal Dictionary<ulong, float> SurfaceTops { get; private set; } = [];
 
     internal void RecordSurfaceTop
     (
         ulong voxel,
         float topY
     ) =>
-        surfaceTops[voxel] = topY;
+        SurfaceTops[voxel] = topY;
 
     internal void ReplaceSurfaceTops
     (
         Dictionary<ulong, float> tops
     ) =>
-        surfaceTops = tops;
+        SurfaceTops = tops;
 
     public bool TryGetSurfaceTop
     (
-        ulong  voxel,
+        ulong     voxel,
         out float topY
     ) =>
-        surfaceTops.TryGetValue(voxel, out topY);
+        SurfaceTops.TryGetValue(voxel, out topY);
 
     public VolumeRootColumnBuildResult BuildRootColumn
     (
@@ -994,17 +993,17 @@ public class VoxelMap
 
     private ushort BuildTileContent
     (
-        Voxelizer         vox,
-        VolumeTile        parent,
-        List<VolumeTile>? rootSubdivision,
-        VolumeTile?       tileSubdivision,
-        int               rootX,
-        int               rootY,
-        int               rootZ,
-        int               leafX,
-        int               leafY,
-        int               leafZ,
-        ulong             voxelPrefix,
+        Voxelizer                       vox,
+        VolumeTile                      parent,
+        List<VolumeTile>?               rootSubdivision,
+        VolumeTile?                     tileSubdivision,
+        int                             rootX,
+        int                             rootY,
+        int                             rootZ,
+        int                             leafX,
+        int                             leafY,
+        int                             leafZ,
+        ulong                           voxelPrefix,
         List<(ulong Voxel, float TopY)> surfaceTops
     )
     {
@@ -1014,13 +1013,13 @@ public class VoxelMap
 
         if (!empty)
         {
-            if (level == Levels.Length - 1 &&
+            if (level == Levels.Length - 1                                                   &&
                 (leafY + 1 >= vox.SizeY || !vox.GetCellState(leafX, leafY + 1, leafZ).solid) &&
                 vox.TryGetSurfaceTop(leafX, leafY, leafZ, out var topY))
             {
-                var leafIndex = (ushort)parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ);
-                var leafVoxel = VoxelMap.EncodeSubIndex(voxelPrefix, leafIndex, 2) |
-                                ((ulong)VoxelMap.INDEX_LEVEL_MASK << 48);
+                var leafIndex = parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ);
+                var leafVoxel = EncodeSubIndex(voxelPrefix, leafIndex, 2) |
+                                ((ulong)INDEX_LEVEL_MASK << 48);
                 surfaceTops.Add((leafVoxel, topY));
             }
 
@@ -1031,9 +1030,9 @@ public class VoxelMap
         var (min, max) = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel(index));
         if (parent.Level + 1 >= Levels.Length)
             throw new InvalidOperationException("体积列构建遇到超出层级的混合体素");
-        var tile    = new VolumeTile(this, min, max, parent.Level + 1, false);
-        var localId = AppendSubdivision(rootSubdivision, tileSubdivision, tile);
-        var childPrefix = VoxelMap.EncodeSubIndex(voxelPrefix, (ushort)parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ), parent.Level);
+        var tile        = new VolumeTile(this, min, max, parent.Level + 1, false);
+        var localId     = AppendSubdivision(rootSubdivision, tileSubdivision, tile);
+        var childPrefix = EncodeSubIndex(voxelPrefix, parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ), parent.Level);
 
         ref var l           = ref Levels[tile.Level];
         var     childScaleX = leafScaleX[tile.Level];

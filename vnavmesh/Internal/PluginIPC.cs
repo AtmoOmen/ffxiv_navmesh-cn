@@ -31,7 +31,8 @@ internal class PluginIPC : IDisposable
         RegisterFunc
         (
             "Nav.PathfindAvoid",
-            (Vector3 from, Vector3 to, bool fly, Vector3 avoidCenter, float avoidRadius) => navmeshManager.QueryPath(from, to, fly, avoidCenter: avoidCenter, avoidRadius: avoidRadius)
+            (Vector3 from, Vector3 to, bool fly, Vector3 avoidCenter, float avoidRadius) => navmeshManager.QueryPath
+                (from, to, fly, avoidCenter: avoidCenter, avoidRadius: avoidRadius)
         );
         RegisterFunc
         (

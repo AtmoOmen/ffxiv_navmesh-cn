@@ -47,8 +47,8 @@ internal static class CustomizationEditorSpatial
         float   radius
     )
     {
-        var center     = (start + end) * 0.5f;
-        var halfAxis   = (end - start) * 0.5f;
+        var center     = (start + end)   * 0.5f;
+        var halfAxis   = (end   - start) * 0.5f;
         var axisLength = halfAxis.Length();
         var axis = axisLength > 0.0001f ?
                        halfAxis / axisLength :
@@ -61,7 +61,7 @@ internal static class CustomizationEditorSpatial
             radius * MathF.Sqrt(MathF.Max(0f, 1f - (axis.Z * axis.Z)))
         );
         var extents = Vector3.Abs(halfAxis) + radialExtents;
-        return new() { Min = center - extents, Max = center + extents };
+        return new() { Min = center         - extents, Max = center + extents };
     }
 
     public static AABB CreateInstancePatchBounds
@@ -89,9 +89,9 @@ internal static class CustomizationEditorSpatial
         DraftSceneColliderInsertionKind kind
     ) =>
         kind is DraftSceneColliderInsertionKind.OrientedBox or
-                DraftSceneColliderInsertionKind.Wall or
-                DraftSceneColliderInsertionKind.Ramp or
-                DraftSceneColliderInsertionKind.WalkableFloor;
+            DraftSceneColliderInsertionKind.Wall or
+            DraftSceneColliderInsertionKind.Ramp or
+            DraftSceneColliderInsertionKind.WalkableFloor;
 
     public static Vector3 RotateAroundY
     (

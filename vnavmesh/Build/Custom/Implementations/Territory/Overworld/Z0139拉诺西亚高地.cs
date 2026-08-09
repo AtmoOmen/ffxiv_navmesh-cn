@@ -258,9 +258,9 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
 
     private static MeshInstance? ResolveInstance
     (
-        Mesh mesh,
-        ulong               instanceId,
-        int                 instanceIndex
+        Mesh  mesh,
+        ulong instanceId,
+        int   instanceIndex
     )
     {
         var index = ResolveInstanceIndex(mesh, instanceId, instanceIndex);
@@ -271,9 +271,9 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
 
     private static int ResolveInstanceIndex
     (
-        Mesh mesh,
-        ulong               instanceId,
-        int                 instanceIndex
+        Mesh  mesh,
+        ulong instanceId,
+        int   instanceIndex
     )
     {
         if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].ID == instanceId))

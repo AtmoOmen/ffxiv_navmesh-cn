@@ -1,4 +1,3 @@
-using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using AABB = vnavmesh.Common.Models.AABB;
 using GameAABB = FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.AABB;
 using GameMatrix4x3 = FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math.Matrix4x3;

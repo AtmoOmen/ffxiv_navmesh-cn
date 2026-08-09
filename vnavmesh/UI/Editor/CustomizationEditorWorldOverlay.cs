@@ -4,7 +4,6 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using vnavmesh.Build.Custom.Editor;
 using vnavmesh.Build.Scene;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.UI.Debug.Collision;
@@ -153,10 +152,25 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (pendingPickPoint is { } pending)
         {
             dd.DrawWorldPointFilled(pending, 6, 0xFFFF00FF);
-            dd.DrawWorldText(pending, pickKind == PickKind.Sphere ? "中心" : "起点", 0xFFFF80FF);
+            dd.DrawWorldText
+            (
+                pending,
+                pickKind == PickKind.Sphere ?
+                    "中心" :
+                    "起点",
+                0xFFFF80FF
+            );
+
             if (currentPickPoint is { } current)
             {
-                dd.DrawWorldText(current, pickKind == PickKind.Sphere ? "半径" : "终点", 0xFFFFFF66);
+                dd.DrawWorldText
+                (
+                    current,
+                    pickKind == PickKind.Sphere ?
+                        "半径" :
+                        "终点",
+                    0xFFFFFF66
+                );
                 DrawPendingPickPreview(pickKind, pending, current, dd);
             }
         }
@@ -173,17 +187,17 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             var selected = selection is { Kind: SelectionKind.ColliderInsertion, Index: var selectedIndex and >= 0 } &&
                            selectedIndex == i;
-            var color = selected                                                        ? 0xFFFFD94A
-                        : insertion.Kind == DraftSceneColliderInsertionKind.Cylinder    ? 0xFF00FF00
+            var color = selected                                                             ? 0xFFFFD94A
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Cylinder         ? 0xFF00FF00
                         : insertion.Kind == DraftSceneColliderInsertionKind.OrientedCylinder ? 0xFF33DDBB
-                        : insertion.Kind == DraftSceneColliderInsertionKind.OrientedBox ? 0xFFFF66CC
-                        : insertion.Kind == DraftSceneColliderInsertionKind.Sphere      ? 0xFF66CCFF
-                        : insertion.Kind == DraftSceneColliderInsertionKind.WalkableFloor ? 0xFF4DFF88
-                        : insertion.Kind == DraftSceneColliderInsertionKind.Wall        ? 0xFFFF6688
-                        : insertion.Kind == DraftSceneColliderInsertionKind.Ramp        ? 0xFF66FF99
-                        : insertion.Kind == DraftSceneColliderInsertionKind.RemoveInstances ? 0xFFFF4D4D
+                        : insertion.Kind == DraftSceneColliderInsertionKind.OrientedBox      ? 0xFFFF66CC
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Sphere           ? 0xFF66CCFF
+                        : insertion.Kind == DraftSceneColliderInsertionKind.WalkableFloor    ? 0xFF4DFF88
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Wall             ? 0xFFFF6688
+                        : insertion.Kind == DraftSceneColliderInsertionKind.Ramp             ? 0xFF66FF99
+                        : insertion.Kind == DraftSceneColliderInsertionKind.RemoveInstances  ? 0xFFFF4D4D
                         : insertion.Kind == DraftSceneColliderInsertionKind.SetInstanceFlags ? 0xFFFFAA33
-                                                                                          : 0xFF00FFFF;
+                                                                                               : 0xFF00FFFF;
 
             if (insertion.Kind == DraftSceneColliderInsertionKind.Cylinder)
             {
@@ -198,32 +212,66 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 );
             }
             else if (insertion.Kind == DraftSceneColliderInsertionKind.OrientedCylinder)
-            {
-                DrawOrientedCylinder(insertion.Start, insertion.End, insertion.Radius, dd, color, selected ? 3 : 2);
-            }
+                DrawOrientedCylinder
+                (
+                    insertion.Start,
+                    insertion.End,
+                    insertion.Radius,
+                    dd,
+                    color,
+                    selected ?
+                        3 :
+                        2
+                );
             else if (insertion.Kind == DraftSceneColliderInsertionKind.Sphere)
             {
                 DrawEllipsoid
                 (
-                    (insertion.Min + insertion.Max) * 0.5f,
+                    (insertion.Min + insertion.Max)            * 0.5f,
                     Vector3.Abs(insertion.Max - insertion.Min) * 0.5f,
                     dd,
                     color,
-                    selected ? 3 : 2
+                    selected ?
+                        3 :
+                        2
                 );
             }
             else if (insertion.Kind == DraftSceneColliderInsertionKind.WalkableFloor)
-            {
-                DrawWalkableFloor(insertion.Min, insertion.Max, insertion.RotationDegrees, dd, color, selected ? 3 : 2);
-            }
+                DrawWalkableFloor
+                (
+                    insertion.Min,
+                    insertion.Max,
+                    insertion.RotationDegrees,
+                    dd,
+                    color,
+                    selected ?
+                        3 :
+                        2
+                );
             else if (insertion.Kind == DraftSceneColliderInsertionKind.Ramp)
-            {
-                DrawRamp(insertion.Min, insertion.Max, insertion.RotationDegrees, dd, color, selected ? 3 : 2);
-            }
+                DrawRamp
+                (
+                    insertion.Min,
+                    insertion.Max,
+                    insertion.RotationDegrees,
+                    dd,
+                    color,
+                    selected ?
+                        3 :
+                        2
+                );
             else if (CustomizationEditorSpatial.UsesYRotation(insertion.Kind))
-            {
-                DrawOrientedBox(insertion.Min, insertion.Max, insertion.RotationDegrees, dd, color, selected ? 3 : 2);
-            }
+                DrawOrientedBox
+                (
+                    insertion.Min,
+                    insertion.Max,
+                    insertion.RotationDegrees,
+                    dd,
+                    color,
+                    selected ?
+                        3 :
+                        2
+                );
             else
             {
                 dd.DrawWorldAABB
@@ -238,7 +286,15 @@ internal static unsafe class CustomizationEditorWorldOverlay
             }
 
             if (insertion.Kind == DraftSceneColliderInsertionKind.RemoveInstances)
-                DrawBoundsCross(bounds, dd, color, selected ? 3 : 2);
+                DrawBoundsCross
+                (
+                    bounds,
+                    dd,
+                    color,
+                    selected ?
+                        3 :
+                        2
+                );
 
             if (selected)
                 dd.DrawWorldText(bounds.Max, $"{CustomizationEditorWidgets.FormatEnumDisplayName(insertion.Kind)} #{i}", color);
@@ -313,7 +369,14 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             if (len < 0.001f)
             {
-                dd.DrawWorldPointFilled(link.Start, selected ? 7f : 5f, color);
+                dd.DrawWorldPointFilled
+                (
+                    link.Start,
+                    selected ?
+                        7f :
+                        5f,
+                    color
+                );
                 if (selected)
                     dd.DrawWorldText(link.Start, $"离网连接 #{i}", color);
                 continue;
@@ -332,7 +395,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 dd.DrawWorldArc(link.Start, link.End, 0.15f, 0f, 0f, color, thickness);
 
                 // 采样切线，在抛物线上绘制多个流动的大箭头
-                var h     = 0.15f * len;
+                var h = 0.15f * len;
                 var arrowSize = selected ?
                                     20f :
                                     15f;
@@ -404,6 +467,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         }
 
         var first = pendingPickPoint.Value;
+
         if (Vector3.DistanceSquared(first, point) < 0.01f)
         {
             statusText = $"{GetPickKindTitle(pickKind)}: 终点距离起点过近";
@@ -500,7 +564,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             return;
 
         if (TrySelectInsertedInstance
-            (ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, previewBuilder, ref statusText))
+                (ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, previewBuilder, ref statusText))
             return;
 
         if (TrySelectMeshLink(ref selection, ref pendingLeftPanelFocusSelection, rayOrigin, rayDirection, ref workspace, ref statusText))
@@ -709,8 +773,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 continue;
             }
 
-            var bounds         = CustomizationEditorSpatial.CreateBounds(item.Min, item.Max);
-            var localRayOrigin = rayOrigin;
+            var bounds            = CustomizationEditorSpatial.CreateBounds(item.Min, item.Max);
+            var localRayOrigin    = rayOrigin;
             var localRayDirection = rayDirection;
 
             if (item.Kind == DraftSceneColliderInsertionKind.Sphere)
@@ -725,7 +789,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
             if (CustomizationEditorSpatial.UsesYRotation(item.Kind))
             {
-                var center        = (bounds.Min + bounds.Max) * 0.5f;
+                var center = (bounds.Min                                                        + bounds.Max) * 0.5f;
                 localRayOrigin    = center + CustomizationEditorSpatial.RotateAroundY(rayOrigin - center, -item.RotationDegrees);
                 localRayDirection = CustomizationEditorSpatial.RotateAroundY(rayDirection, -item.RotationDegrees);
             }
@@ -804,15 +868,18 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         var bestIndex    = -1;
         var bestDistance = float.MaxValue;
+
         for (var i = 0; i < workspace.Draft.InstancePatches.Count; ++i)
         {
             var patch = workspace.Draft.InstancePatches[i];
-            if (!patch.Enabled || patch.Kind != DraftSceneInstancePatchKind.Insert ||
+            if (!patch.Enabled                                   ||
+                patch.Kind != DraftSceneInstancePatchKind.Insert ||
                 !previewBuilder.Extractor.Meshes.TryGetValue(patch.MeshKey, out var mesh))
                 continue;
 
             var transform = patch.WorldTransform.ToRuntime();
             var count     = Math.Clamp(patch.Count, 1, 1024);
+
             for (var copyIndex = 0; copyIndex < count; ++copyIndex)
             {
                 var copyTransform = transform;
@@ -1051,6 +1118,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     var center    = (item.Min + item.Max) * 0.5f;
                     var minHandle = item.Min;
                     var maxHandle = item.Max;
+
                     if (CustomizationEditorSpatial.UsesYRotation(item.Kind))
                     {
                         minHandle = center + CustomizationEditorSpatial.RotateAroundY(item.Min - center, item.RotationDegrees);
@@ -1069,11 +1137,11 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         ref draftEditState,
                         new()
                         {
-                            Mode        = DraftEditMode.ColliderInsertionMin,
-                            Index       = selection.Index,
-                            PlaneOrigin = minHandle,
-                            InitialA    = item.Min,
-                            InitialB    = item.Max,
+                            Mode                   = DraftEditMode.ColliderInsertionMin,
+                            Index                  = selection.Index,
+                            PlaneOrigin            = minHandle,
+                            InitialA               = item.Min,
+                            InitialB               = item.Max,
                             InitialRotationDegrees = item.RotationDegrees
                         },
                         "拖拽最小角点"
@@ -1090,11 +1158,11 @@ internal static unsafe class CustomizationEditorWorldOverlay
                         ref draftEditState,
                         new()
                         {
-                            Mode        = DraftEditMode.ColliderInsertionMax,
-                            Index       = selection.Index,
-                            PlaneOrigin = maxHandle,
-                            InitialA    = item.Min,
-                            InitialB    = item.Max,
+                            Mode                   = DraftEditMode.ColliderInsertionMax,
+                            Index                  = selection.Index,
+                            PlaneOrigin            = maxHandle,
+                            InitialA               = item.Min,
+                            InitialB               = item.Max,
                             InitialRotationDegrees = item.RotationDegrees
                         },
                         "拖拽最大角点"
@@ -1217,7 +1285,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
                     if (item.Kind == DraftSceneInstancePatchKind.Insert && item.Count > 1)
                     {
-                        var count = Math.Clamp(item.Count, 1, 1024);
+                        var count        = Math.Clamp(item.Count, 1, 1024);
                         var offsetHandle = item.WorldTransform.Translation + (item.Offset * (count - 1));
                         DrawHandle
                         (
@@ -1325,12 +1393,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
             ref draftEditState,
             new()
             {
-                Mode        = mode,
-                Index       = index,
-                InitialA    = start,
-                InitialB    = end,
+                Mode                   = mode,
+                Index                  = index,
+                InitialA               = start,
+                InitialB               = end,
                 InitialRotationDegrees = rotationDegrees,
-                PlaneOrigin = center
+                PlaneOrigin            = center
             },
             "拖拽整体位置"
         );
@@ -1399,6 +1467,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     return;
 
                 ref var cylinder = ref CollectionsMarshal.AsSpan(workspace.Draft.ColliderInsertions)[draftEditState.Index];
+
                 switch (draftEditState.Mode)
                 {
                     case DraftEditMode.OrientedCylinderStart:
@@ -1511,7 +1580,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
                     return;
 
                 ref var arrayPatch = ref CollectionsMarshal.AsSpan(workspace.Draft.InstancePatches)[draftEditState.Index];
-                var divisor = Math.Clamp(arrayPatch.Count, 2, 1024) - 1;
+                var     divisor    = Math.Clamp(arrayPatch.Count, 2, 1024) - 1;
                 arrayPatch.Offset = draftEditState.InitialA + (delta / divisor);
                 selection         = new(SelectionKind.InstancePatch, draftEditState.Index);
                 break;
@@ -1612,14 +1681,15 @@ internal static unsafe class CustomizationEditorWorldOverlay
         out float distance
     )
     {
-        var center  = (bounds.Min + bounds.Max) * 0.5f;
-        var extents = Vector3.Max((bounds.Max - bounds.Min) * 0.5f, new Vector3(0.005f));
+        var center         = (bounds.Min + bounds.Max) * 0.5f;
+        var extents        = Vector3.Max((bounds.Max - bounds.Min) * 0.5f, new Vector3(0.005f));
         var localOrigin    = (origin - center) / extents;
-        var localDirection = direction / extents;
-        var a = Vector3.Dot(localDirection, localDirection);
-        var b = 2f * Vector3.Dot(localOrigin, localDirection);
-        var c = Vector3.Dot(localOrigin, localOrigin) - 1f;
-        var discriminant = (b * b) - (4f * a * c);
+        var localDirection = direction         / extents;
+        var a              = Vector3.Dot(localDirection, localDirection);
+        var b              = 2f * Vector3.Dot(localOrigin, localDirection);
+        var c              = Vector3.Dot(localOrigin,      localOrigin) - 1f;
+        var discriminant   = (b * b)                                    - (4f * a * c);
+
         if (discriminant < 0f || a <= 0.000001f)
         {
             distance = 0f;
@@ -1629,7 +1699,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
         var root = MathF.Sqrt(discriminant);
         var near = (-b - root) / (2f * a);
         var far  = (-b + root) / (2f * a);
-        distance = near >= 0f ? near : far;
+        distance = near >= 0f ?
+                       near :
+                       far;
         return distance >= 0f;
     }
 
@@ -1646,27 +1718,29 @@ internal static unsafe class CustomizationEditorWorldOverlay
         radius = MathF.Max(MathF.Abs(radius), 0.005f);
         var axis       = end - start;
         var axisLength = axis.Length();
+
         if (axisLength <= 0.0001f)
         {
-            axis       = Vector3.UnitY * 0.01f;
-            axisLength = axis.Length();
-            start     -= axis * 0.5f;
+            axis       =  Vector3.UnitY * 0.01f;
+            axisLength =  axis.Length();
+            start      -= axis * 0.5f;
         }
 
-        var axisDirection = axis / axisLength;
+        var axisDirection   = axis / axisLength;
         var originFromStart = origin - start;
         var originAlongAxis = Vector3.Dot(originFromStart, axisDirection);
-        var rayAlongAxis    = Vector3.Dot(direction, axisDirection);
+        var rayAlongAxis    = Vector3.Dot(direction,       axisDirection);
         var radialOrigin    = originFromStart - (axisDirection * originAlongAxis);
         var radialDirection = direction       - (axisDirection * rayAlongAxis);
         var bestDistance    = float.MaxValue;
-        var a = Vector3.Dot(radialDirection, radialDirection);
-        var b = 2f * Vector3.Dot(radialOrigin, radialDirection);
-        var c = Vector3.Dot(radialOrigin, radialOrigin) - (radius * radius);
+        var a               = Vector3.Dot(radialDirection, radialDirection);
+        var b               = 2f * Vector3.Dot(radialOrigin, radialDirection);
+        var c               = Vector3.Dot(radialOrigin,      radialOrigin) - (radius * radius);
 
         if (a > 0.000001f)
         {
             var discriminant = (b * b) - (4f * a * c);
+
             if (discriminant >= 0f)
             {
                 var root = MathF.Sqrt(discriminant);
@@ -1692,6 +1766,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         if (MathF.Abs(rayAlongAxis) > 0.000001f)
         {
             var nearCap = -originAlongAxis / rayAlongAxis;
+
             if (nearCap >= 0f)
             {
                 var radialPoint = radialOrigin + (radialDirection * nearCap);
@@ -1700,6 +1775,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
             }
 
             var farCap = (axisLength - originAlongAxis) / rayAlongAxis;
+
             if (farCap >= 0f)
             {
                 var radialPoint = radialOrigin + (radialDirection * farCap);
@@ -1853,18 +1929,20 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
                 var transform = patch.WorldTransform.ToRuntime();
                 var count     = Math.Clamp(patch.Count, 1, 1024);
+
                 for (var copyIndex = 0; copyIndex < count; ++copyIndex)
                 {
                     var copyTransform = transform;
                     copyTransform.Row3 += patch.Offset * copyIndex;
-                    var bounds = CustomizationEditorSpatial.CalculateTransformedBounds(insertedMesh.LocalBounds, copyTransform);
-                    var insertedKey = (patch.MeshKey, (ulong)(copyIndex + 1), -i - 1);
+                    var     bounds          = CustomizationEditorSpatial.CalculateTransformedBounds(insertedMesh.LocalBounds, copyTransform);
+                    var     insertedKey     = (patch.MeshKey, (ulong)(copyIndex + 1), -i - 1);
                     ref var insertedOverlay = ref CollectionsMarshal.GetValueRefOrAddDefault(OverlaysCache, insertedKey, out _);
                     insertedOverlay                  ??= GetOrCreateOverlay(insertedMesh, copyTransform, bounds);
                     insertedOverlay.HasInsert        =   true;
                     insertedOverlay.DrawDetailedMesh =   count <= 32;
                     insertedOverlay.IsSelected       |=  selection.Kind == SelectionKind.InstancePatch && selection.Index == i;
                 }
+
                 continue;
             }
 
@@ -2047,11 +2125,11 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static void DrawFlagOverlay
     (
-        AABB                          bounds,
+        AABB           bounds,
         PrimitiveFlags setFlags,
         PrimitiveFlags clearFlags,
-        DebugDrawer                   dd,
-        bool                          isSelected
+        DebugDrawer    dd,
+        bool           isSelected
     )
     {
         var lines   = new List<string>(2);
@@ -2075,7 +2153,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static string FormatFlagOperation
     (
-        string                        prefix,
+        string         prefix,
         PrimitiveFlags flags
     )
     {
@@ -2097,8 +2175,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
     (
         PrimitiveFlags flags,
         PrimitiveFlags target,
-        string                        name,
-        List<string>                  names
+        string         name,
+        List<string>   names
     )
     {
         if (flags.HasFlag(target))
@@ -2107,10 +2185,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static bool TryResolvePatchedInstance
     (
-        SceneExtractor                  extractor,
-        DraftSceneInstancePatch         patch,
-        out Mesh         mesh,
-        out MeshInstance instance
+        SceneExtractor          extractor,
+        DraftSceneInstancePatch patch,
+        out Mesh                mesh,
+        out MeshInstance        instance
     )
     {
         mesh     = null!;
@@ -2135,11 +2213,11 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static void DrawMeshPreview
     (
-        MeshPart part,
-        Matrix4x3               transform,
-        DebugDrawer             dd,
-        uint                    color     = 0xFF00FFAA,
-        int                     thickness = 1
+        MeshPart    part,
+        Matrix4x3   transform,
+        DebugDrawer dd,
+        uint        color     = 0xFF00FFAA,
+        int         thickness = 1
     )
     {
         foreach (var primitive in part.Primitives)
@@ -2161,9 +2239,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
     private static InstanceOverlayInfo GetOrCreateOverlay
     (
-        Mesh mesh,
-        Matrix4x3           transform,
-        AABB                bounds
+        Mesh      mesh,
+        Matrix4x3 transform,
+        AABB      bounds
     )
     {
         if (OverlayPoolUsed < OverlayPool.Count)
@@ -2183,35 +2261,35 @@ internal static unsafe class CustomizationEditorWorldOverlay
     private sealed class InstanceOverlayInfo
     {
         public Mesh           Mesh = null!;
-        public Matrix4x3                     Transform;
-        public AABB                          Bounds;
-        public bool                          HasTransform;
-        public bool                          HasFlags;
-        public bool                          HasInsert;
-        public bool                          HasRemove;
-        public bool                          IsSelected;
-        public bool                          DrawDetailedMesh;
+        public Matrix4x3      Transform;
+        public AABB           Bounds;
+        public bool           HasTransform;
+        public bool           HasFlags;
+        public bool           HasInsert;
+        public bool           HasRemove;
+        public bool           IsSelected;
+        public bool           DrawDetailedMesh;
         public PrimitiveFlags FlagSetMask;
         public PrimitiveFlags FlagClearMask;
 
         public void Reset
         (
-            Mesh mesh,
-            Matrix4x3           transform,
-            AABB                bounds
+            Mesh      mesh,
+            Matrix4x3 transform,
+            AABB      bounds
         )
         {
-            Mesh          = mesh;
-            Transform     = transform;
-            Bounds        = bounds;
-            HasTransform  = false;
-            HasFlags      = false;
-            HasInsert     = false;
-            HasRemove     = false;
-            IsSelected    = false;
+            Mesh             = mesh;
+            Transform        = transform;
+            Bounds           = bounds;
+            HasTransform     = false;
+            HasFlags         = false;
+            HasInsert        = false;
+            HasRemove        = false;
+            IsSelected       = false;
             DrawDetailedMesh = true;
-            FlagSetMask   = PrimitiveFlags.None;
-            FlagClearMask = PrimitiveFlags.None;
+            FlagSetMask      = PrimitiveFlags.None;
+            FlagClearMask    = PrimitiveFlags.None;
         }
     }
 
@@ -2235,10 +2313,10 @@ internal static unsafe class CustomizationEditorWorldOverlay
                 NormalizeBounds(ref min, ref max);
                 var color = pickKind switch
                 {
-                    PickKind.Cylinder                 => 0xFF33FF66,
-                    PickKind.RemoveInstancesVolume    => 0xFFFF4D4D,
-                    PickKind.SetInstanceFlagsVolume   => 0xFFFFAA33,
-                    _                                 => 0xFF33DDFF
+                    PickKind.Cylinder               => 0xFF33FF66,
+                    PickKind.RemoveInstancesVolume  => 0xFFFF4D4D,
+                    PickKind.SetInstanceFlagsVolume => 0xFFFFAA33,
+                    _                               => 0xFF33DDFF
                 };
                 if (pickKind == PickKind.Cylinder)
                     dd.DrawWorldCylinder((min + max) * 0.5f, (max - min) * 0.5f, color, 2);
@@ -2252,9 +2330,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
             }
             case PickKind.OrientedBox:
             {
-                var center = (first + current) * 0.5f;
-                var delta  = current - first;
-                var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+                var center          = (first + current) * 0.5f;
+                var delta           = current - first;
+                var length          = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
                 var halfExtents     = new Vector3(length * 0.5f, 1f, 0.5f);
                 var rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
                 DrawOrientedBox(center - halfExtents, center + halfExtents, rotationDegrees, dd, 0xFFFF66CC, 2);
@@ -2295,9 +2373,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
             }
             case PickKind.Wall:
             {
-                var center = (first + current) * 0.5f;
-                var delta  = current - first;
-                var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+                var center          = (first + current) * 0.5f;
+                var delta           = current - first;
+                var length          = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
                 var halfExtents     = new Vector3(length * 0.5f, 1f, 0.025f);
                 var rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
                 DrawOrientedBox(center - halfExtents, center + halfExtents, rotationDegrees, dd, 0xFFFF6688, 2);
@@ -2306,13 +2384,17 @@ internal static unsafe class CustomizationEditorWorldOverlay
             }
             case PickKind.Ramp:
             {
-                var low    = first.Y <= current.Y ? first : current;
-                var high   = first.Y <= current.Y ? current : first;
-                var delta  = high - low;
-                var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
-                var height = MathF.Max(high.Y - low.Y, 0.5f);
-                var center = new Vector3((low.X + high.X) * 0.5f, low.Y + (height * 0.5f), (low.Z + high.Z) * 0.5f);
-                var halfExtents     = new Vector3(length * 0.5f, height * 0.5f, 0.75f);
+                var low = first.Y <= current.Y ?
+                              first :
+                              current;
+                var high = first.Y <= current.Y ?
+                               current :
+                               first;
+                var delta           = high - low;
+                var length          = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+                var height          = MathF.Max(high.Y                           - low.Y,              0.5f);
+                var center          = new Vector3((low.X + high.X) * 0.5f, low.Y + (height * 0.5f), (low.Z + high.Z) * 0.5f);
+                var halfExtents     = new Vector3(length           * 0.5f, height                                    * 0.5f, 0.75f);
                 var rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
                 DrawRamp(center - halfExtents, center + halfExtents, rotationDegrees, dd, 0xFF66FF99, 2);
                 dd.DrawWorldText(high, $"长 {length:f1} · 高 {height:f1} · 宽 1.5", 0xFF66FF99);
@@ -2342,7 +2424,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         int         thickness
     )
     {
-        var center      = (min + max) * 0.5f;
+        var center      = (min + max)            * 0.5f;
         var halfExtents = Vector3.Abs(max - min) * 0.5f;
 
         Vector3 ToWorld
@@ -2386,9 +2468,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
     )
     {
         const int SEGMENTS = 32;
-        var prevXZ = center + new Vector3(halfExtents.X, 0, 0);
-        var prevXY = prevXZ;
-        var prevYZ = center + new Vector3(0, halfExtents.Y, 0);
+        var       prevXZ   = center + new Vector3(halfExtents.X, 0, 0);
+        var       prevXY   = prevXZ;
+        var       prevYZ   = center + new Vector3(0, halfExtents.Y, 0);
 
         for (var i = 1; i <= SEGMENTS; ++i)
         {
@@ -2396,8 +2478,8 @@ internal static unsafe class CustomizationEditorWorldOverlay
             var cos     = MathF.Cos(radians);
             var sin     = MathF.Sin(radians);
             var nextXZ  = center + new Vector3(cos * halfExtents.X, 0, sin * halfExtents.Z);
-            var nextXY  = center + new Vector3(cos * halfExtents.X, sin * halfExtents.Y, 0);
-            var nextYZ  = center + new Vector3(0, cos * halfExtents.Y, sin * halfExtents.Z);
+            var nextXY  = center + new Vector3(cos * halfExtents.X, sin    * halfExtents.Y, 0);
+            var nextYZ  = center + new Vector3(0,                   cos    * halfExtents.Y, sin * halfExtents.Z);
             dd.DrawWorldLine(prevXZ, nextXZ, color, thickness);
             dd.DrawWorldLine(prevXY, nextXY, color, thickness);
             dd.DrawWorldLine(prevYZ, nextYZ, color, thickness);
@@ -2417,7 +2499,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         int         thickness
     )
     {
-        var center      = (min + max) * 0.5f;
+        var center      = (min + max)            * 0.5f;
         var halfExtents = Vector3.Abs(max - min) * 0.5f;
 
         Vector3 ToWorld
@@ -2449,9 +2531,9 @@ internal static unsafe class CustomizationEditorWorldOverlay
         int         thickness
     )
     {
-        const int SEGMENTS = 32;
-        var axis       = end - start;
-        var axisLength = axis.Length();
+        const int SEGMENTS   = 32;
+        var       axis       = end - start;
+        var       axisLength = axis.Length();
         var direction = axisLength > 0.0001f ?
                             axis / axisLength :
                             Vector3.UnitY;
@@ -2466,12 +2548,12 @@ internal static unsafe class CustomizationEditorWorldOverlay
 
         for (var i = 1; i <= SEGMENTS; ++i)
         {
-            var radians = i * (MathF.Tau / SEGMENTS);
-            var radial  = (radialX * MathF.Cos(radians)) + (radialZ * MathF.Sin(radians));
-            var nextStart = start + radial;
-            var nextEnd   = end   + radial;
+            var radians   = i * (MathF.Tau / SEGMENTS);
+            var radial    = (radialX       * MathF.Cos(radians)) + (radialZ * MathF.Sin(radians));
+            var nextStart = start                                + radial;
+            var nextEnd   = end                                  + radial;
             dd.DrawWorldLine(previousStart, nextStart, color, thickness);
-            dd.DrawWorldLine(previousEnd, nextEnd, color, thickness);
+            dd.DrawWorldLine(previousEnd,   nextEnd,   color, thickness);
             if (i % (SEGMENTS / 4) == 0)
                 dd.DrawWorldLine(nextStart, nextEnd, color, thickness);
             previousStart = nextStart;
@@ -2491,7 +2573,7 @@ internal static unsafe class CustomizationEditorWorldOverlay
         int         thickness
     )
     {
-        var center      = (min + max) * 0.5f;
+        var center      = (min + max)            * 0.5f;
         var halfExtents = Vector3.Abs(max - min) * 0.5f;
 
         Vector3 ToWorld
@@ -2502,22 +2584,22 @@ internal static unsafe class CustomizationEditorWorldOverlay
         ) =>
             center + CustomizationEditorSpatial.RotateAroundY(new(x, y, z), rotationDegrees);
 
-        var lowFront   = ToWorld(-halfExtents.X, -halfExtents.Y, -halfExtents.Z);
-        var lowBack    = ToWorld(-halfExtents.X, -halfExtents.Y, +halfExtents.Z);
-        var baseFront  = ToWorld(+halfExtents.X, -halfExtents.Y, -halfExtents.Z);
-        var baseBack   = ToWorld(+halfExtents.X, -halfExtents.Y, +halfExtents.Z);
-        var highFront  = ToWorld(+halfExtents.X, +halfExtents.Y, -halfExtents.Z);
-        var highBack   = ToWorld(+halfExtents.X, +halfExtents.Y, +halfExtents.Z);
+        var lowFront  = ToWorld(-halfExtents.X, -halfExtents.Y, -halfExtents.Z);
+        var lowBack   = ToWorld(-halfExtents.X, -halfExtents.Y, +halfExtents.Z);
+        var baseFront = ToWorld(+halfExtents.X, -halfExtents.Y, -halfExtents.Z);
+        var baseBack  = ToWorld(+halfExtents.X, -halfExtents.Y, +halfExtents.Z);
+        var highFront = ToWorld(+halfExtents.X, +halfExtents.Y, -halfExtents.Z);
+        var highBack  = ToWorld(+halfExtents.X, +halfExtents.Y, +halfExtents.Z);
 
-        dd.DrawWorldLine(lowFront, lowBack, color, thickness);
-        dd.DrawWorldLine(lowFront, baseFront, color, thickness);
-        dd.DrawWorldLine(lowBack, baseBack, color, thickness);
-        dd.DrawWorldLine(baseFront, baseBack, color, thickness);
+        dd.DrawWorldLine(lowFront,  lowBack,   color, thickness);
+        dd.DrawWorldLine(lowFront,  baseFront, color, thickness);
+        dd.DrawWorldLine(lowBack,   baseBack,  color, thickness);
+        dd.DrawWorldLine(baseFront, baseBack,  color, thickness);
         dd.DrawWorldLine(baseFront, highFront, color, thickness);
-        dd.DrawWorldLine(baseBack, highBack, color, thickness);
-        dd.DrawWorldLine(highFront, highBack, color, thickness);
-        dd.DrawWorldLine(lowFront, highFront, color, thickness);
-        dd.DrawWorldLine(lowBack, highBack, color, thickness);
+        dd.DrawWorldLine(baseBack,  highBack,  color, thickness);
+        dd.DrawWorldLine(highFront, highBack,  color, thickness);
+        dd.DrawWorldLine(lowFront,  highFront, color, thickness);
+        dd.DrawWorldLine(lowBack,   highBack,  color, thickness);
     }
 
     private static void NormalizeBounds
@@ -2604,23 +2686,23 @@ internal static unsafe class CustomizationEditorWorldOverlay
     ) =>
         kind switch
         {
-            PickKind.SelectCollider => "选中碰撞体",
-            PickKind.SelectTriangle => "选中三角形",
-            PickKind.Aabb           => "AABB 障碍",
-            PickKind.OrientedBox    => "旋转箱体障碍",
-            PickKind.Cylinder       => "圆柱障碍",
-            PickKind.OrientedCylinder => "定向圆柱障碍",
-            PickKind.Sphere         => "球形体积",
-            PickKind.WalkableFloor  => "可行走地面",
-            PickKind.Wall           => "墙体",
-            PickKind.Ramp           => "斜坡",
+            PickKind.SelectCollider         => "选中碰撞体",
+            PickKind.SelectTriangle         => "选中三角形",
+            PickKind.Aabb                   => "AABB 障碍",
+            PickKind.OrientedBox            => "旋转箱体障碍",
+            PickKind.Cylinder               => "圆柱障碍",
+            PickKind.OrientedCylinder       => "定向圆柱障碍",
+            PickKind.Sphere                 => "球形体积",
+            PickKind.WalkableFloor          => "可行走地面",
+            PickKind.Wall                   => "墙体",
+            PickKind.Ramp                   => "斜坡",
             PickKind.RemoveInstancesVolume  => "区域移除实例",
             PickKind.SetInstanceFlagsVolume => "区域标记实例",
-            PickKind.LinkPoints     => "网格连线",
-            PickKind.LinkShortcut   => "普通移动捷径",
-            PickKind.LinkClientPath => "客户端路径",
-            PickKind.OffMesh        => "离网连接",
-            _                       => "浏览"
+            PickKind.LinkPoints             => "网格连线",
+            PickKind.LinkShortcut           => "普通移动捷径",
+            PickKind.LinkClientPath         => "客户端路径",
+            PickKind.OffMesh                => "离网连接",
+            _                               => "浏览"
         };
 
     private static string GetDraftEditModeTitle

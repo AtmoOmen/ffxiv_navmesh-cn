@@ -610,8 +610,8 @@ public partial class VoxelPathfind
         if ((probeIndex & 0x3f) == 0)
             cancel.ThrowIfCancellationRequested();
 
-        var anchor   = path[anchorIndex];
-        var probe    = path[probeIndex];
+        var anchor = path[anchorIndex];
+        var probe  = path[probeIndex];
         if (SegmentViolatesAvoid(anchor.p, probe.p))
             return false;
 
@@ -855,5 +855,4 @@ public partial class VoxelPathfind
 
         return result;
     }
-
 }

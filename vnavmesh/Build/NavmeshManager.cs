@@ -402,8 +402,7 @@ public sealed class NavmeshManager : IDisposable
                     var pruneSeeds = points.ToArray();
                     if (ENABLE_UNREACHABLE_PRUNE)
                         Navmesh.DeferMeshMutation(mesh => PruneMesh(mesh, pruneSeeds));
-                    else
-                        Log($"已禁用不可达裁剪，跳过 {pruneSeeds.Length} 个种子点");
+                    Log($"已禁用不可达裁剪，跳过 {pruneSeeds.Length} 个种子点");
                 }
 
                 OnNavmeshChanged?.Invoke(Navmesh, Query);
@@ -601,7 +600,7 @@ public sealed class NavmeshManager : IDisposable
             {
                 cancel.ThrowIfCancellationRequested();
 
-                var settings  = customization.GetBuildSettings(scene);
+                var settings = customization.GetBuildSettings(scene);
                 settings.Flyable              = customization.IsFlyingSupported(scene);
                 settings.CustomizationVersion = customization.Version;
                 settings.OffMeshConnections.AddRange(OffMeshConnectionMetadataRegistry.Collect(customization));
@@ -616,12 +615,12 @@ public sealed class NavmeshManager : IDisposable
 
     private async Task<FileInfo> RunExternalBuild
     (
-        string               cacheKey,
-        BuildScene           scene,
-        NavmeshSettings      settings,
-        CancellationToken    cancel,
-        bool                 updateLoadProgress,
-        Action<double>?      onProgress = null
+        string            cacheKey,
+        BuildScene        scene,
+        NavmeshSettings   settings,
+        CancellationToken cancel,
+        bool              updateLoadProgress,
+        Action<double>?   onProgress = null
     )
     {
         paths.WorkerStateDirectory.Create();
@@ -729,13 +728,13 @@ public sealed class NavmeshManager : IDisposable
 
     internal async Task<Navmesh> BuildExternalNavmesh
     (
-        string               cacheKey,
-        BuildScene           scene,
-        NavmeshSettings      settings,
-        int                  customizationVersion,
-        string               buildSignature,
-        CancellationToken    cancel,
-        Action<double>?      onProgress = null
+        string            cacheKey,
+        BuildScene        scene,
+        NavmeshSettings   settings,
+        int               customizationVersion,
+        string            buildSignature,
+        CancellationToken cancel,
+        Action<double>?   onProgress = null
     )
     {
         var rawFile = await RunExternalBuild(cacheKey, scene, settings, cancel, false, onProgress);

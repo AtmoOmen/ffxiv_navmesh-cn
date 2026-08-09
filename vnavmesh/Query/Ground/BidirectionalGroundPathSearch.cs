@@ -57,7 +57,7 @@ internal static class BidirectionalGroundPathSearch
 
         while (true)
         {
-            var hasForward  = TryPeekValid(forward, out var forwardTop);
+            var hasForward  = TryPeekValid(forward,  out var forwardTop);
             var hasBackward = TryPeekValid(backward, out var backwardTop);
 
             if (!hasForward && !hasBackward)
@@ -112,6 +112,7 @@ internal static class BidirectionalGroundPathSearch
             }
 
             var partialScore = RcVec3f.Distance(node.Pos, endPos);
+
             if (partialScore < bestPartialScore)
             {
                 bestPartialScore   = partialScore;
@@ -190,7 +191,7 @@ internal static class BidirectionalGroundPathSearch
                 if (poly.GetPolyType() != DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
                     continue;
 
-                var connectionRef      = baseRef | (long)connection.poly;
+                var connectionRef      = baseRef | connection.poly;
                 var endIsBidirectional = connection.side == 0xff || (connection.flags & DT_OFFMESH_CON_BIDIR) != 0;
 
                 for (var linkIndex = poly.firstLink; linkIndex != DT_NULL_LINK; linkIndex = tile.links[linkIndex].next)
@@ -234,7 +235,7 @@ internal static class BidirectionalGroundPathSearch
             return index;
 
         var node = new SearchNode(refs);
-        index = state.Nodes.Count;
+        index                  = state.Nodes.Count;
         state.IndexByRef[refs] = index;
         state.Nodes.Add(node);
         return index;
@@ -247,22 +248,23 @@ internal static class BidirectionalGroundPathSearch
         float       f
     )
     {
-        node.F       = f;
-        node.IsOpen  = true;
+        node.F      = f;
+        node.IsOpen = true;
         node.Version++;
         state.Open.Enqueue(new HeapEntry(state.IndexByRef[node.Ref], f, node.Version), f);
     }
 
     private static bool TryPeekValid
     (
-        SearchState      state,
-        out HeapEntry    entry
+        SearchState   state,
+        out HeapEntry entry
     )
     {
         while (state.Open.Count > 0)
         {
-            var top = state.Open.Peek();
+            var top  = state.Open.Peek();
             var node = state.Nodes[top.NodeIndex];
+
             if (node.IsOpen && node.Version == top.Version)
             {
                 entry = top;
@@ -381,6 +383,7 @@ internal static class BidirectionalGroundPathSearch
             var newG = node.G + edgeCost;
 
             float heuristic;
+
             if (neighbourRef == endRef)
             {
                 var endCost = filter.GetCost
@@ -397,8 +400,8 @@ internal static class BidirectionalGroundPathSearch
                     null,
                     null
                 );
-                newG += endCost;
-                heuristic = 0;
+                newG      += endCost;
+                heuristic =  0;
             }
             else
                 heuristic = heuristicScale * RcVec3f.Distance(neighbour.Pos, endPos);
@@ -539,8 +542,10 @@ internal static class BidirectionalGroundPathSearch
         if (poly.GetPolyType() == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
         {
             if (reverseAdjacency.TryGetValue(node.Ref, out var incoming))
+            {
                 foreach (var predecessorRef in incoming)
                     Relax(predecessorRef);
+            }
 
             return;
         }
@@ -549,8 +554,10 @@ internal static class BidirectionalGroundPathSearch
             Relax(tile.links[linkIndex].refs);
 
         if (reverseAdjacency.TryGetValue(node.Ref, out var offMeshIncoming))
+        {
             foreach (var predecessorRef in offMeshIncoming)
                 Relax(predecessorRef);
+        }
     }
 
     private static RcVec3f GetOppositeOffMeshVertex
@@ -562,8 +569,8 @@ internal static class BidirectionalGroundPathSearch
     {
         var first  = poly.verts[0] * 3;
         var second = poly.verts[1] * 3;
-        var v0 = new RcVec3f(tile.data.verts[first], tile.data.verts[first + 1], tile.data.verts[first + 2]);
-        var v1 = new RcVec3f(tile.data.verts[second], tile.data.verts[second + 1], tile.data.verts[second + 2]);
+        var v0     = new RcVec3f(tile.data.verts[first],  tile.data.verts[first  + 1], tile.data.verts[first  + 2]);
+        var v1     = new RcVec3f(tile.data.verts[second], tile.data.verts[second + 1], tile.data.verts[second + 2]);
         return RcVec3f.DistanceSquared(v0, shared) >= RcVec3f.DistanceSquared(v1, shared) ?
                    v0 :
                    v1;
@@ -582,9 +589,9 @@ internal static class BidirectionalGroundPathSearch
         if (candidate >= meeting.BestPath)
             return;
 
-        meeting.BestPath       = candidate;
-        meeting.ForwardIndex   = forwardIndex;
-        meeting.BackwardIndex  = backwardIndex;
+        meeting.BestPath      = candidate;
+        meeting.ForwardIndex  = forwardIndex;
+        meeting.BackwardIndex = backwardIndex;
     }
 
     private static void BuildCorridor
@@ -638,7 +645,7 @@ internal static class BidirectionalGroundPathSearch
         long refs
     )
     {
-        public long    Ref { get; } = refs;
+        public long Ref { get; } = refs;
 
         public RcVec3f Pos { get; set; }
 

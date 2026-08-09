@@ -7,7 +7,6 @@ using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
 using AABB = vnavmesh.Common.Models.AABB;
-using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Alexandar;
 

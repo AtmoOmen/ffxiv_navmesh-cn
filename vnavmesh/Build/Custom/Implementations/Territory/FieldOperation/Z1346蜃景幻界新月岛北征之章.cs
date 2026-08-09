@@ -1,5 +1,4 @@
 using System.Numerics;
-using DotRecast.Recast;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
@@ -37,7 +36,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
                 instance0.WorldBounds = TransformBounds(instance0.WorldTransform, mesh0.LocalBounds);
             }
         }
-        
+
         // 美杜莎墙体1
         scene.InsertWallCollider
         (
@@ -47,7 +46,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             true,
             PrimitiveFlags.ForceUnwalkable
         );
-        
+
         if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b2/collision/o6b2_t1_roc04.pcb", out var mesh1))
         {
             // 阿尔戈尔石头1
@@ -63,7 +62,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
                 instance0.WorldBounds = TransformBounds(instance0.WorldTransform, mesh1.LocalBounds);
             }
         }
-        
+
         // 阿尔戈尔圆柱1
         scene.InsertCylinderCollider
         (
@@ -227,9 +226,9 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 
     private static MeshInstance? ResolveInstance
     (
-        Mesh mesh,
-        ulong               instanceId,
-        int                 instanceIndex
+        Mesh  mesh,
+        ulong instanceId,
+        int   instanceIndex
     )
     {
         var index = ResolveInstanceIndex(mesh, instanceId, instanceIndex);
@@ -240,9 +239,9 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 
     private static int ResolveInstanceIndex
     (
-        Mesh mesh,
-        ulong               instanceId,
-        int                 instanceIndex
+        Mesh  mesh,
+        ulong instanceId,
+        int   instanceIndex
     )
     {
         if (instanceIndex >= 0 && instanceIndex < mesh.Instances.Count && (instanceId == 0 || mesh.Instances[instanceIndex].ID == instanceId))
@@ -262,8 +261,8 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
     (
         MeshPart source,
         MeshPart target,
-        float                   halfWidth,
-        float                   heightOffset
+        float    halfWidth,
+        float    heightOffset
     )
     {
         foreach (var primitive in source.Primitives)

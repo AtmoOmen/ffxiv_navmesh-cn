@@ -5,7 +5,6 @@ using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.Internal;
-using AABB = vnavmesh.Common.Models.AABB;
 using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
 
 namespace vnavmesh.Build.Custom.Editor;
@@ -196,10 +195,10 @@ internal static class CustomizationDraftSeedBuilder
 
     private static void CopyColliderInsertions
     (
-        CustomizationDraft  draft,
-        string              meshKey,
-        Mesh defaultMesh,
-        Mesh customMesh
+        CustomizationDraft draft,
+        string             meshKey,
+        Mesh               defaultMesh,
+        Mesh               customMesh
     )
     {
         if (!IsColliderInsertionMeshKey(meshKey))
@@ -209,7 +208,7 @@ internal static class CustomizationDraftSeedBuilder
 
         foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.ID)))
         {
-            var center      = instance.WorldTransform.Row3;
+            var center = instance.WorldTransform.Row3;
             var halfExtents = new Vector3
             (
                 instance.WorldTransform.Row0.Length(),
@@ -230,11 +229,11 @@ internal static class CustomizationDraftSeedBuilder
                                       0f;
             var kind = meshKey switch
             {
-                "<cylinder>" when hasCylinderRotation     => DraftSceneColliderInsertionKind.OrientedCylinder,
-                "<cylinder>"                              => DraftSceneColliderInsertionKind.Cylinder,
-                "<sphere>"                                => DraftSceneColliderInsertionKind.Sphere,
+                "<cylinder>" when hasCylinderRotation      => DraftSceneColliderInsertionKind.OrientedCylinder,
+                "<cylinder>"                               => DraftSceneColliderInsertionKind.Cylinder,
+                "<sphere>"                                 => DraftSceneColliderInsertionKind.Sphere,
                 "<plane one-sided>" or "<plane two-sided>" => DraftSceneColliderInsertionKind.Wall,
-                "<ramp>"                                  => DraftSceneColliderInsertionKind.Ramp,
+                "<ramp>"                                   => DraftSceneColliderInsertionKind.Ramp,
                 "<walkable floor>"                         => DraftSceneColliderInsertionKind.WalkableFloor,
                 _ when hasYRotation                        => DraftSceneColliderInsertionKind.OrientedBox,
                 _                                          => DraftSceneColliderInsertionKind.Aabb
@@ -261,10 +260,10 @@ internal static class CustomizationDraftSeedBuilder
 
     private static void CopyInstancePatches
     (
-        CustomizationDraft  draft,
-        string              meshKey,
-        Mesh defaultMesh,
-        Mesh customMesh
+        CustomizationDraft draft,
+        string             meshKey,
+        Mesh               defaultMesh,
+        Mesh               customMesh
     )
     {
         if (customMesh.Instances.Count == 0 && defaultMesh.Instances.Count > 0)
@@ -274,9 +273,11 @@ internal static class CustomizationDraftSeedBuilder
         }
 
         var customById = customMesh.Instances.ToDictionary(static instance => instance.ID);
+
         if (!IsColliderInsertionMeshKey(meshKey))
         {
             var baseIds = defaultMesh.Instances.Select(static instance => instance.ID).ToHashSet();
+
             foreach (var instance in customMesh.Instances.Where(instance => !baseIds.Contains(instance.ID)))
             {
                 draft.InstancePatches.Add
@@ -354,10 +355,10 @@ internal static class CustomizationDraftSeedBuilder
 
     private static void CopyPartPatches
     (
-        CustomizationDraft  draft,
-        string              meshKey,
-        Mesh defaultMesh,
-        Mesh customMesh
+        CustomizationDraft draft,
+        string             meshKey,
+        Mesh               defaultMesh,
+        Mesh               customMesh
     )
     {
         var partCount = Math.Min(defaultMesh.Parts.Count, customMesh.Parts.Count);

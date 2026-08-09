@@ -55,7 +55,8 @@ internal sealed class NavmeshGroundQuery
         cancel.ThrowIfCancellationRequested();
 
         var pathFilter = avoidRadius > 0 && avoidCenter is { } center && NavmeshQuery.SegmentEntersAvoid(from, to, center, avoidRadius) ?
-                             new GroundAreaCostFilter(query.NavmeshData, avoidCenter: center, avoidRadius: avoidRadius, allowedStartRef: startRef, allowedEndRef: endRef) :
+                             new GroundAreaCostFilter
+                                 (query.NavmeshData, avoidCenter: center, avoidRadius: avoidRadius, allowedStartRef: startRef, allowedEndRef: endRef) :
                              query.GroundAreaFilter;
         var pathStatus = FindPath
         (
@@ -380,9 +381,9 @@ internal sealed class NavmeshGroundQuery
             DtPoly     poly
         )
         {
-            if (avoidRadius > 0 &&
-                refs != allowedStartRef &&
-                refs != allowedEndRef &&
+            if (avoidRadius > 0                &&
+                refs        != allowedStartRef &&
+                refs        != allowedEndRef   &&
                 PolyIntersectsAvoid(tile, poly))
                 return false;
 
@@ -411,7 +412,7 @@ internal sealed class NavmeshGroundQuery
                 sumZ += tile.data.verts[vertexIndex + 2];
             }
 
-            var inv = 1f / poly.vertCount;
+            var inv         = 1f   / poly.vertCount;
             var polyCenterX = sumX * inv;
             var polyCenterZ = sumZ * inv;
             var extentSq    = 0f;
@@ -419,8 +420,8 @@ internal sealed class NavmeshGroundQuery
             for (var i = 0; i < poly.vertCount; ++i)
             {
                 var vertexIndex = poly.verts[i] * 3;
-                var dx = tile.data.verts[vertexIndex]     - polyCenterX;
-                var dz = tile.data.verts[vertexIndex + 2] - polyCenterZ;
+                var dx          = tile.data.verts[vertexIndex]     - polyCenterX;
+                var dz          = tile.data.verts[vertexIndex + 2] - polyCenterZ;
                 extentSq = MathF.Max(extentSq, (dx * dx) + (dz * dz));
             }
 

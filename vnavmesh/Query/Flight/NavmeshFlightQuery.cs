@@ -146,7 +146,7 @@ internal sealed class NavmeshFlightQuery
 
         if (landingPoint is { } resolvedLandingPoint)
         {
-            finalDestination    = resolvedLandingPoint;
+            finalDestination = resolvedLandingPoint;
             var leafVerticalTolerance = MathF.Max(volumeQuery.Volume.Levels[^1].CellSize.Y, query.ConfigData.PathTolerance);
             completionTolerance = MathF.Max(query.ConfigData.PathTolerance, MathF.Max(HorizontalDistanceXZ(to, resolvedLandingPoint), leafVerticalTolerance));
             destinationAdjusted = Vector3.Distance(resolvedLandingPoint, to) > completionTolerance;
@@ -235,7 +235,7 @@ internal sealed class NavmeshFlightQuery
         Vector3 landingLeafSize
     )
     {
-        var volume = query.VolumeQuery!.Volume;
+        var volume   = query.VolumeQuery!.Volume;
         var safeLeaf = volume.FindLeafVoxel(safeDestination);
         if (!safeLeaf.empty || safeLeaf.voxel == VoxelMap.INVALID_VOXEL)
             return null;
@@ -337,14 +337,15 @@ internal sealed class NavmeshFlightQuery
     )
     {
         var toleranceFloor = MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
+
         if (query.FindNearestMeshPoly(safeFlightDestination, allowUnreachable: false) == 0 ||
-            query.FindNearestMeshPoly(requestedTarget, allowUnreachable: false) == 0)
+            query.FindNearestMeshPoly(requestedTarget,       allowUnreachable: false) == 0)
         {
             result = null!;
             return false;
         }
 
-        var groundResult   = groundQuery.PlanMeshPathDetailed(safeFlightDestination, requestedTarget, 0, cancel, avoidCenter, avoidRadius);
+        var groundResult = groundQuery.PlanMeshPathDetailed(safeFlightDestination, requestedTarget, 0, cancel, avoidCenter, avoidRadius);
 
         if (!groundResult.Succeeded || groundResult.Segments.Count == 0)
         {

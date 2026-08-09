@@ -61,23 +61,23 @@ public class NavmeshQuery
         float   radius
     )
     {
-        var abx = to.X - from.X;
-        var abz = to.Z - from.Z;
-        var lenSq = (abx * abx) + (abz * abz);
+        var   abx   = to.X        - from.X;
+        var   abz   = to.Z        - from.Z;
+        var   lenSq = (abx * abx) + (abz * abz);
         float t;
 
         if (lenSq < 1e-6f)
             t = 0;
         else
         {
-            t = ((center.X - from.X) * abx + (center.Z - from.Z) * abz) / lenSq;
+            t = (((center.X - from.X) * abx) + ((center.Z - from.Z) * abz)) / lenSq;
             t = Math.Clamp(t, 0f, 1f);
         }
 
-        var dx = from.X + (abx * t) - center.X;
-        var dz = from.Z + (abz * t) - center.Z;
-        var fromDx = from.X - center.X;
-        var fromDz = from.Z - center.Z;
+        var dx           = from.X + (abx * t) - center.X;
+        var dz           = from.Z + (abz * t) - center.Z;
+        var fromDx       = from.X             - center.X;
+        var fromDz       = from.Z             - center.Z;
         var minAllowedSq = MathF.Min(radius * radius, (fromDx * fromDx) + (fromDz * fromDz));
         return (dx * dx) + (dz * dz) + 1e-3f < minAllowedSq;
     }
@@ -94,12 +94,12 @@ public class NavmeshQuery
         PluginConfig config
     )
     {
-        NavmeshData      = navmesh;
-        ConfigData       = config;
-        GroundAreaFilter = new(navmesh);
+        NavmeshData         = navmesh;
+        ConfigData          = config;
+        GroundAreaFilter    = new(navmesh);
         groundPostprocessor = new(() => MeshQuery, () => GroundAreaFilter);
-        GroundQuery      = new(this);
-        FlightQuery      = new(this, GroundQuery);
+        GroundQuery         = new(this);
+        FlightQuery         = new(this, GroundQuery);
     }
 
     internal void ReleaseRetainedState()
@@ -595,7 +595,7 @@ public class NavmeshQuery
 
         return result;
     }
-    
+
     internal readonly record struct SurfaceAwareVolumeVoxelResolution
     (
         ulong   Voxel,

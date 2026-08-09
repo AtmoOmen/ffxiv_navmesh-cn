@@ -2,10 +2,10 @@ namespace vnavmesh.Common.Build.Models;
 
 public sealed record NavmeshBuildManifest
 (
-    string               ScenePath,
-    string               RawNavmeshPath,
-    string               CacheKey,
-    NavmeshSettings      Settings
+    string          ScenePath,
+    string          RawNavmeshPath,
+    string          CacheKey,
+    NavmeshSettings Settings
 );
 
 public sealed record NavmeshBuildResponse

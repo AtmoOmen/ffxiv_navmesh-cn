@@ -64,15 +64,15 @@ public class NavmeshBuilder
 
     public sealed class BuildTelemetrySummary
     {
-        public required int                              MaxAvailableCores       { get; init; }
-        public required int                              ThreadCount             { get; init; }
-        public required long                             ParallelTicks           { get; init; }
-        public required long                             AggregatedPhaseTicks    { get; init; }
-        public required int                              UniqueRasterJobCount    { get; init; }
-        public required double                           JobCoverageMultiplier   { get; init; }
-        public required long                             PreparedTerrainBytes    { get; init; }
-        public required IReadOnlyList<BuildPhaseSummary> Phases                  { get; init; }
-        public required IReadOnlyList<SlowTileSummary>   SlowTiles               { get; init; }
+        public required int                              MaxAvailableCores     { get; init; }
+        public required int                              ThreadCount           { get; init; }
+        public required long                             ParallelTicks         { get; init; }
+        public required long                             AggregatedPhaseTicks  { get; init; }
+        public required int                              UniqueRasterJobCount  { get; init; }
+        public required double                           JobCoverageMultiplier { get; init; }
+        public required long                             PreparedTerrainBytes  { get; init; }
+        public required IReadOnlyList<BuildPhaseSummary> Phases                { get; init; }
+        public required IReadOnlyList<SlowTileSummary>   SlowTiles             { get; init; }
     }
 
     private enum BuildPhase
@@ -171,8 +171,8 @@ public class NavmeshBuilder
 
     public static string ComputeBuildSignature
     (
-        SceneExtractor       scene,
-        NavmeshSettings      settings
+        SceneExtractor  scene,
+        NavmeshSettings settings
     )
     {
         var groundTiles = ResolveGroundTileCount(scene, settings);
@@ -206,8 +206,8 @@ public class NavmeshBuilder
 
     public NavmeshBuilder
     (
-        SceneExtractor       scene,
-        NavmeshSettings      settings
+        SceneExtractor  scene,
+        NavmeshSettings settings
     )
     {
         Settings       = settings;
@@ -252,14 +252,14 @@ public class NavmeshBuilder
         var tileWidthX     = navmeshParams.tileWidth;
         var tileWidthZ     = navmeshParams.tileHeight;
         var heightExtent   = volumeMax.Y - volumeMin.Y;
-        var l1x            = LargestPow2Floor(tileWidthX / volumeMidSize);
-        var l1z            = LargestPow2Floor(tileWidthZ / volumeMidSize);
-        var l2x            = LargestPow2Floor((tileWidthX / l1x) / volumeCellSize);
-        var l2z            = LargestPow2Floor((tileWidthZ / l1z) / volumeCellSize);
+        var l1x            = LargestPow2Floor(tileWidthX   / volumeMidSize);
+        var l1z            = LargestPow2Floor(tileWidthZ   / volumeMidSize);
+        var l2x            = LargestPow2Floor(tileWidthX   / l1x / volumeCellSize);
+        var l2z            = LargestPow2Floor(tileWidthZ   / l1z / volumeCellSize);
         var l0y            = LargestPow2Floor(heightExtent / volumeRootSize);
         var l0CellSizeY    = heightExtent / l0y;
         var l1y            = LargestPow2Floor(l0CellSizeY / volumeMidSize);
-        var l2y            = LargestPow2Floor((l0CellSizeY / l1y) / volumeCellSize);
+        var l2y            = LargestPow2Floor(l0CellSizeY / l1y / volumeCellSize);
         var volumeLevels = new (int X, int Y, int Z)[]
         {
             (NumTilesX, l0y, NumTilesZ),
@@ -332,8 +332,8 @@ public class NavmeshBuilder
 
     private static int ResolveGroundTileCount
     (
-        SceneExtractor       scene,
-        NavmeshSettings      settings
+        SceneExtractor  scene,
+        NavmeshSettings settings
     )
     {
         var min   = new Vector3(float.MaxValue);
@@ -467,11 +467,11 @@ public class NavmeshBuilder
 
         return new()
         {
-            MaxAvailableCores       = maxAvailableCores,
-            ThreadCount             = threadCount,
-            ParallelTicks           = parallelDuration.Ticks,
-            AggregatedPhaseTicks    = aggregatedPhaseTicks,
-            UniqueRasterJobCount    = uniqueRasterJobCount,
+            MaxAvailableCores    = maxAvailableCores,
+            ThreadCount          = threadCount,
+            ParallelTicks        = parallelDuration.Ticks,
+            AggregatedPhaseTicks = aggregatedPhaseTicks,
+            UniqueRasterJobCount = uniqueRasterJobCount,
             JobCoverageMultiplier = uniqueRasterJobCount > 0 ?
                                         totalRasterJobReferences / (double)uniqueRasterJobCount :
                                         0,
@@ -530,11 +530,11 @@ public class NavmeshBuilder
         Action<int>? onTileFinished
     )
     {
-        var tileCount     = NumTilesX * NumTilesZ;
+        var tileCount   = NumTilesX * NumTilesZ;
         var threadCount = Math.Max(1, Environment.ProcessorCount);
-        var builtTiles = new TileBuildResult[tileCount];
-        var buildTimer = StopWatchTimer.Create();
-        var nextIndex  = -1;
+        var builtTiles  = new TileBuildResult[tileCount];
+        var buildTimer  = StopWatchTimer.Create();
+        var nextIndex   = -1;
 
         Parallel.For
         (
@@ -1271,10 +1271,10 @@ public class NavmeshBuilder
     (
         MeshPart     part,
         MeshInstance instance,
-        int                     minTileX,
-        int                     maxTileX,
-        int                     minTileZ,
-        int                     maxTileZ
+        int          minTileX,
+        int          maxTileX,
+        int          minTileZ,
+        int          maxTileZ
     )
     {
         var prepared   = NavmeshRasterizer.PrepareTerrainGeometry(part, instance);

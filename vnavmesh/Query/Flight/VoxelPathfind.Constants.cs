@@ -214,7 +214,7 @@ public partial class VoxelPathfind
         int   L1Y,
         int   L1Z
     );
-    
+
     private struct VoxelNodeLookup
     {
         private ulong[] keys;
