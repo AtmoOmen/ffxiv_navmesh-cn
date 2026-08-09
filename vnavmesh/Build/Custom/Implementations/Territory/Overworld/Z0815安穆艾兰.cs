@@ -10,7 +10,7 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 [CustomizationTerritory(815)]
 public class Z0815安穆艾兰 : NavmeshCustomization
 {
-    public override int Version => 2;
+    public override int Version => 3;
 
     public Z0815安穆艾兰() =>
         ApplyAgentRadiusOneSettings();
@@ -30,7 +30,8 @@ public class Z0815安穆艾兰 : NavmeshCustomization
     public override void CustomizeSettings
     (
         DtNavMeshCreateParams config
-    ) =>
+    )
+    {
         // 新宫
         config.AddOffMeshConnection
         (
@@ -43,4 +44,18 @@ public class Z0815安穆艾兰 : NavmeshCustomization
             NavmeshPolyFlags.AllTraversable,
             NavmeshOffMeshKind.ManualOffMesh
         );
+
+        // 尾之道
+        config.AddOffMeshConnection
+        (
+            new(122.31265f, 26.299103f, -194.78415f),
+            new(140.46594f, 7.1558275f, -194.42236f),
+            0.5f,
+            false,
+            0,
+            NavmeshArea.ManualOffMesh,
+            NavmeshPolyFlags.ManualOffMesh,
+            NavmeshOffMeshKind.ManualOffMesh
+        );
+    }
 }
