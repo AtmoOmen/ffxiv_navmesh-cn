@@ -248,12 +248,19 @@ public class NavmeshBuilder
         }
 
         var volumeCellSize = MathF.Max(Settings.VolumeCellSize, 0.01f);
-        var perTileX       = NextPow2Ceil(navmeshParams.tileWidth  / volumeCellSize);
-        var perTileZ       = NextPow2Ceil(navmeshParams.tileHeight / volumeCellSize);
-        var totalY         = NextPow2Ceil((volumeMax.Y - volumeMin.Y) / volumeCellSize);
-        var (l1x, l2x)     = SplitPerTile(perTileX);
-        var (l1z, l2z)     = SplitPerTile(perTileZ);
-        var (l0y, l1y, l2y) = SplitTotal(totalY);
+        var volumeMidSize  = volumeCellSize * 4f;
+        var volumeRootSize = volumeCellSize * 16f;
+        var tileWidthX     = navmeshParams.tileWidth;
+        var tileWidthZ     = navmeshParams.tileHeight;
+        var heightExtent   = volumeMax.Y - volumeMin.Y;
+        var l1x            = LargestPow2Floor(tileWidthX / volumeMidSize);
+        var l1z            = LargestPow2Floor(tileWidthZ / volumeMidSize);
+        var l2x            = LargestPow2Floor((tileWidthX / l1x) / volumeCellSize);
+        var l2z            = LargestPow2Floor((tileWidthZ / l1z) / volumeCellSize);
+        var l0y            = LargestPow2Floor(heightExtent / volumeRootSize);
+        var l0CellSizeY    = heightExtent / l0y;
+        var l1y            = LargestPow2Floor(l0CellSizeY / volumeMidSize);
+        var l2y            = LargestPow2Floor((l0CellSizeY / l1y) / volumeCellSize);
         var volumeLevels = new (int X, int Y, int Z)[]
         {
             (NumTilesX, l0y, NumTilesZ),
@@ -276,9 +283,9 @@ public class NavmeshBuilder
 
         if (volume != null)
         {
-            _voxelizerNumX = perTileX;
-            _voxelizerNumY = totalY;
-            _voxelizerNumZ = perTileZ;
+            _voxelizerNumX = l1x * l2x;
+            _voxelizerNumY = l0y * l1y * l2y;
+            _voxelizerNumZ = l1z * l2z;
         }
 
         var bucketTimer    = StopWatchTimer.Create();
@@ -293,39 +300,16 @@ public class NavmeshBuilder
         TotalEstimatedTileWeight  = bucketedInputs.TotalEstimatedTileWeight;
         NavmeshBuildLog.Debug($"[NavmeshBuilder] 瓦片分桶耗时 {bucketTimer.Value().TotalMilliseconds:f1} ms");
 
-        static int NextPow2Ceil
+        static int LargestPow2Floor
         (
             float value
         )
         {
-            var count = Math.Max(1u, (uint)MathF.Ceiling(value));
-            return (int)BitOperations.RoundUpToPowerOf2(count);
-        }
+            if (value < 1f)
+                return 1;
 
-        static (int l1, int l2) SplitPerTile
-        (
-            int total
-        )
-        {
-            var l1 = total >= 4 ?
-                         4 :
-                         total;
-            return (l1, total / l1);
-        }
-
-        static (int l0, int l1, int l2) SplitTotal
-        (
-            int total
-        )
-        {
-            var l0 = total >= 8 ?
-                         8 :
-                         total;
-            var rest = total / l0;
-            var l1 = rest >= 8 ?
-                         8 :
-                         rest;
-            return (l0, l1, rest / l1);
+            var count = (uint)MathF.Floor(value);
+            return (int)(1u << BitOperations.Log2(count));
         }
     }
 

@@ -547,7 +547,7 @@ vnavmesh → **Export Obj** 可以将碰撞几何体导出为 Wavefront .obj 格
 | `GenerateEdgeJumpLinks` | false | 自动生成跳跃链接 |
 | `GroundTileSize` | 64 | 地面区块目标尺寸（世界单位） |
 | `GroundTileCountMax` | 32 | 地面区块每轴数量上限 |
-| `VolumeCellSize` | 4 | 飞行体积目标叶子体素尺寸（世界单位），实际按 2 的幂分级且不会大于该值 |
+| `VolumeCellSize` | 4 | 飞行体积最细叶子体素尺寸（世界单位），按 4/16/64 比例分级且实际不会小于该值 |
 | `VolumeVerticalPadding` | 0 | 飞行体积在场景垂直范围上下各扩展的高度 |
 | `VolumeWallThickenNormalYThreshold` | 0.15 | 体积墙体加厚的法线判定阈值 |
 | `VolumeWallThickenHorizontalRadius` | 1 | 体积墙体加厚的水平半径（体积体素） |

@@ -179,7 +179,7 @@ public class NavmeshSettings
     public bool Flyable;
 
     /// <summary>
-    /// 飞行体积的目标叶子体素尺寸，单位为世界单位。构建时按场景范围推导 2 的幂细分，实际体素不会大于该值；数值越大越省内存，但障碍细节越粗。
+    /// 飞行体积的最细叶子体素尺寸，单位为世界单位。构建时按 4/16/64 的比例推导三层 2 的幂细分，实际叶子体素不会小于该值；数值越大越省内存，但障碍细节越粗。
     /// </summary>
     public float VolumeCellSize = 4f;
 
