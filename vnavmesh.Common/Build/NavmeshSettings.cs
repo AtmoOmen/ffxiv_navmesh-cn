@@ -196,27 +196,27 @@ public class NavmeshSettings
     /// <summary>
     /// 体积墙体加厚的水平半径，单位为体积体素。数值越大，墙体在水平方向占用越厚。
     /// </summary>
-    public int VolumeWallThickenHorizontalRadius = 1;
+    public int VolumeWallThickenHorizontalRadius = 0;
 
     /// <summary>
     /// 体积细墙剥离的法线判定阈值，法线接近水平的细长墙面会被展开为实体。数值越大，越多的斜薄面会被处理。
     /// </summary>
-    public float VolumeThinWallStripNormalYThreshold = 0.30f;
+    public float VolumeThinWallStripNormalYThreshold = 0;
 
     /// <summary>
     /// 体积细墙允许的最大投影厚度，超过该厚度的面按普通体素处理。数值越大，越厚的薄墙也会被展开。
     /// </summary>
-    public float VolumeThinWallStripMaxProjectedThickness = 0.55f;
+    public float VolumeThinWallStripMaxProjectedThickness = 0;
 
     /// <summary>
     /// 体积细墙展开的基础半径下限，单位为体积体素。数值越大，细墙周围的最小占用范围越宽。
     /// </summary>
-    public float VolumeThinWallStripBaseRadius = 0.75f;
+    public float VolumeThinWallStripBaseRadius = 0;
 
     /// <summary>
     /// 体积细墙展开时在投影厚度之外附加的额外半径。数值越大，细墙边缘越厚。
     /// </summary>
-    public float VolumeThinWallStripExtraPadding = 0.20f;
+    public float VolumeThinWallStripExtraPadding = 0;
 
     #endregion
 
