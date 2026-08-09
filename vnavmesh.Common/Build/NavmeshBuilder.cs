@@ -618,6 +618,8 @@ public class NavmeshBuilder
                 }
 
                 parent.RootTile.AddSubdivisions(built.VolumeColumn.Subdivision);
+                foreach (var (voxel, topY) in built.VolumeColumn.SurfaceTops)
+                    parent.RecordSurfaceTop(voxel, topY);
             }
 
             if (collectIntermediates && built.DebugResult != null)

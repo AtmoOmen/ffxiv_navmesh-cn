@@ -147,7 +147,8 @@ internal sealed class NavmeshFlightQuery
         if (landingPoint is { } resolvedLandingPoint)
         {
             finalDestination    = resolvedLandingPoint;
-            completionTolerance = MathF.Max(query.ConfigData.PathTolerance, HorizontalDistanceXZ(to, resolvedLandingPoint));
+            var leafVerticalTolerance = MathF.Max(volumeQuery.Volume.Levels[^1].CellSize.Y, query.ConfigData.PathTolerance);
+            completionTolerance = MathF.Max(query.ConfigData.PathTolerance, MathF.Max(HorizontalDistanceXZ(to, resolvedLandingPoint), leafVerticalTolerance));
             destinationAdjusted = Vector3.Distance(resolvedLandingPoint, to) > completionTolerance;
 
             if (rawWaypoints.Count == 0 || Vector3.DistanceSquared(rawWaypoints[^1], resolvedLandingPoint) > 0.000001f)
@@ -159,8 +160,8 @@ internal sealed class NavmeshFlightQuery
             $"[算路] 飞行终点解析：请求终点 = {to:f3}，空体素终点 = {safeDestination:f3}，落地点 = {(landingPoint is { } lp ? lp.ToString("f3") : "无")}，最终终点 = {finalDestination:f3}，落地吸附 = {(landingPoint != null ? "是" : "否")}"
         );
 
-        var finalDestinationTolerance = landingPoint != null ?
-                                            completionTolerance :
+        var finalDestinationTolerance = landingPoint is { } resolvedLanding ?
+                                            MathF.Max(query.ConfigData.PathTolerance, HorizontalDistanceXZ(to, resolvedLanding)) :
                                             0;
 
         return new()
@@ -210,21 +211,48 @@ internal sealed class NavmeshFlightQuery
                                (requestedTarget, landingSearchExtent.X) ??
                            query.FindNearestPointOnMesh(requestedTarget, landingSearchExtent.X, landingSearchExtent.Y);
         if (landingPoint is not { } resolved)
-            return null;
+            return TryResolveVolumeLandingPoint(requestedTarget, safeDestination, landingLeafSize);
 
         var requestHorizontalDistance = HorizontalDistanceXZ(resolved, requestedTarget);
         if (requestHorizontalDistance > landingSearchExtent.X)
-            return null;
+            return TryResolveVolumeLandingPoint(requestedTarget, safeDestination, landingLeafSize);
 
         var safeHorizontalDistance = HorizontalDistanceXZ(resolved, safeDestination);
         if (safeHorizontalDistance > HorizontalDistanceXZ(safeDestination, requestedTarget) + toleranceFloor)
-            return null;
+            return TryResolveVolumeLandingPoint(requestedTarget, safeDestination, landingLeafSize);
 
         var verticalDrop = safeDestination.Y - resolved.Y;
         if (verticalDrop < -query.ConfigData.PathTolerance || verticalDrop > MathF.Abs(safeDestination.Y - requestedTarget.Y) + landingSearchExtent.Y)
-            return null;
+            return TryResolveVolumeLandingPoint(requestedTarget, safeDestination, landingLeafSize);
 
         return resolved;
+    }
+
+    private Vector3? TryResolveVolumeLandingPoint
+    (
+        Vector3 requestedTarget,
+        Vector3 safeDestination,
+        Vector3 landingLeafSize
+    )
+    {
+        var volume = query.VolumeQuery!.Volume;
+        var safeLeaf = volume.FindLeafVoxel(safeDestination);
+        if (!safeLeaf.empty || safeLeaf.voxel == VoxelMap.INVALID_VOXEL)
+            return null;
+
+        var belowPoint = safeDestination - new Vector3(0, MathF.Max(landingLeafSize.Y, float.Epsilon), 0);
+        var belowLeaf  = volume.FindLeafVoxel(belowPoint);
+        if (belowLeaf.empty)
+            return null;
+
+        var horizontalDistance = HorizontalDistanceXZ(requestedTarget, safeDestination);
+        if (horizontalDistance > MathF.Max(landingLeafSize.X, landingLeafSize.Z))
+            return null;
+
+        if (volume.TryGetSurfaceTop(belowLeaf.voxel, out var surfaceTopY))
+            return new Vector3(safeDestination.X, surfaceTopY + query.ConfigData.PathTolerance, safeDestination.Z);
+
+        return safeDestination;
     }
 
     private Vector3? TryBuildFlightGroundApproachPoint
@@ -309,6 +337,13 @@ internal sealed class NavmeshFlightQuery
     )
     {
         var toleranceFloor = MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
+        if (query.FindNearestMeshPoly(safeFlightDestination, allowUnreachable: false) == 0 ||
+            query.FindNearestMeshPoly(requestedTarget, allowUnreachable: false) == 0)
+        {
+            result = null!;
+            return false;
+        }
+
         var groundResult   = groundQuery.PlanMeshPathDetailed(safeFlightDestination, requestedTarget, 0, cancel, avoidCenter, avoidRadius);
 
         if (!groundResult.Succeeded || groundResult.Segments.Count == 0)

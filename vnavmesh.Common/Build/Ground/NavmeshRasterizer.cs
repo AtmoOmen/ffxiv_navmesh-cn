@@ -1660,7 +1660,9 @@ public class NavmeshRasterizer
         if (!includeInVolume || !TryMapVolumeSpan(x, z, y0, y1, out var volumeX, out var volumeZ, out var volumeY0, out var volumeY1))
             return;
 
-        _voxelizer!.AddSpan(volumeX, volumeZ, volumeY0, volumeY1);
+        var clampedY1 = Math.Min(y1, _voxSourceY - 1);
+        var worldTopY = _heightfield.bmin.Y + ((clampedY1 + 1) * _heightfield.ch);
+        _voxelizer!.AddSpan(volumeX, volumeZ, volumeY0, volumeY1, worldTopY);
     }
 
     private bool TryMapVolumeSpan

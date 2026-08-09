@@ -18,7 +18,7 @@ namespace vnavmesh.Common.Build;
 public record class Navmesh
 {
     public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 39;         // 更新后触发一次全量重构建
+    public static readonly uint Version = 40;         // 更新后触发一次全量重构建
 
     public int       CustomizationVersion { get; init; }
     public string    BuildSignature       { get; init; }
@@ -579,6 +579,12 @@ public record class Navmesh
         volume.EnsureMaterialized();
         volume.CompactRetainedState();
         SerializeVolumeTile(writer, volume.RootTile);
+        writer.Write(volume.SurfaceTops.Count);
+        foreach (var (voxel, topY) in volume.SurfaceTops)
+        {
+            writer.Write(voxel);
+            writer.Write(topY);
+        }
     }
 
     internal static void MaterializeDeferredVolumeTree
@@ -592,6 +598,7 @@ public record class Navmesh
         using var stream = new MemoryStream(payload, offset, length, false);
         using var reader = new BinaryReader(stream);
         DeserializeVolumeTile(reader, volume.RootTile);
+        DeserializeVolumeSurfaceTops(reader, volume);
     }
 
     internal static void MaterializeDeferredCompressedVolumeTree
@@ -605,6 +612,24 @@ public record class Navmesh
         using var stream         = new MemoryStream(decodedPayload, false);
         using var reader         = new BinaryReader(stream);
         DeserializeVolumeTile(reader, volume.RootTile);
+        DeserializeVolumeSurfaceTops(reader, volume);
+    }
+
+    private static void DeserializeVolumeSurfaceTops
+    (
+        BinaryReader reader,
+        VoxelMap     volume
+    )
+    {
+        var count = reader.ReadInt32();
+        if (count <= 0)
+            return;
+
+        var tops = new Dictionary<ulong, float>(count);
+        for (var i = 0; i < count; ++i)
+            tops[reader.ReadUInt64()] = reader.ReadSingle();
+
+        volume.ReplaceSurfaceTops(tops);
     }
 
     private static CacheSegmentTelemetry DecodeDeferredVolumeTreeSegment

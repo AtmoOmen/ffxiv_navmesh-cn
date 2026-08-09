@@ -1562,7 +1562,7 @@ public sealed class NavmeshManager : IDisposable
     private const float PRUNE_PRESERVE_COMPONENT_MIN_RATIO = 0.05f;
     private const int   PRUNE_PRESERVE_COMPONENT_MIN_POLYS = 256;
     private const float PRUNE_MIN_KEEP_RATIO               = 0.40f;
-    private const bool  ENABLE_UNREACHABLE_PRUNE           = true;
+    private const bool  ENABLE_UNREACHABLE_PRUNE           = false;
 
     #endregion
 }

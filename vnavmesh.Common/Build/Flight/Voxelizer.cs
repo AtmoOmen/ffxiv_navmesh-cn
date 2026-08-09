@@ -10,6 +10,7 @@ public class Voxelizer
 
     private readonly ulong[]  solidWords;
     private readonly ulong[]? emptyWords;
+    private readonly float[]  surfaceTop;
 
     public Voxelizer
     (
@@ -29,6 +30,8 @@ public class Voxelizer
         var numCells  = nx * ny * nz;
         var wordCount = (numCells + 63) >> 6;
         solidWords = GC.AllocateUninitializedArray<ulong>(wordCount);
+        surfaceTop = new float[numCells];
+        Array.Fill(surfaceTop, float.NaN);
         if (partial)
             emptyWords = GC.AllocateUninitializedArray<ulong>(wordCount);
     }
@@ -113,6 +116,16 @@ public class Voxelizer
         int z,
         int y0,
         int y1
+    ) =>
+        AddSpan(x, z, y0, y1, float.NaN);
+
+    public void AddSpan
+    (
+        int   x,
+        int   z,
+        int   y0,
+        int   y1,
+        float topY
     )
     {
         if ((uint)x >= (uint)SizeX || (uint)z >= (uint)SizeZ)
@@ -124,11 +137,38 @@ public class Voxelizer
         y1 = Math.Clamp(y1, y0, SizeY - 1);
         var startIndex = VoxelToIndex(x, y0, z);
         SetRange(solidWords, startIndex, y1 - y0 + 1);
+
+        if (!float.IsNaN(topY))
+        {
+            var topIndex = VoxelToIndex(x, y1, z);
+            var current  = surfaceTop[topIndex];
+            if (float.IsNaN(current) || topY > current)
+                surfaceTop[topIndex] = topY;
+        }
+    }
+
+    public bool TryGetSurfaceTop
+    (
+        int     x,
+        int     y,
+        int     z,
+        out float topY
+    )
+    {
+        if ((uint)x >= (uint)SizeX || (uint)y >= (uint)SizeY || (uint)z >= (uint)SizeZ)
+        {
+            topY = float.NaN;
+            return false;
+        }
+
+        topY = surfaceTop[VoxelToIndex(x, y, z)];
+        return !float.IsNaN(topY);
     }
 
     public void Clear()
     {
         Array.Clear(solidWords);
+        Array.Fill(surfaceTop, float.NaN);
         if (emptyWords != null)
             Array.Clear(emptyWords);
     }

@@ -14,6 +14,7 @@ public class VoxelMap
     private readonly int           l2ShiftZ;
     private readonly int           l1ShiftZ;
     private readonly SemaphoreSlim materializationGate = new(1, 1);
+    private          Dictionary<ulong, float> surfaceTops = [];
 
     private byte[]?           deferredTreePayload;
     private int               deferredTreeOffset;
@@ -931,6 +932,28 @@ public class VoxelMap
         RootTile.CompactRetainedState();
     }
 
+    internal Dictionary<ulong, float> SurfaceTops => surfaceTops;
+
+    internal void RecordSurfaceTop
+    (
+        ulong voxel,
+        float topY
+    ) =>
+        surfaceTops[voxel] = topY;
+
+    internal void ReplaceSurfaceTops
+    (
+        Dictionary<ulong, float> tops
+    ) =>
+        surfaceTops = tops;
+
+    public bool TryGetSurfaceTop
+    (
+        ulong  voxel,
+        out float topY
+    ) =>
+        surfaceTops.TryGetValue(voxel, out topY);
+
     public VolumeRootColumnBuildResult BuildRootColumn
     (
         Voxelizer vox,
@@ -941,9 +964,10 @@ public class VoxelMap
         var ny          = Levels[0].NumCellsY;
         var contents    = GC.AllocateUninitializedArray<ushort>(ny);
         var subdivision = new List<VolumeTile>(64);
+        var surfaceTops = new List<(ulong Voxel, float TopY)>();
         for (var ty = 0; ty < ny; ++ty)
-            contents[ty] = BuildTileContent(vox, RootTile, subdivision, null, tx, ty, tz, 0, ty * leafScaleY[0], 0);
-        return new() { Contents = contents, Subdivision = subdivision };
+            contents[ty] = BuildTileContent(vox, RootTile, subdivision, null, tx, ty, tz, 0, ty * leafScaleY[0], 0, 0, surfaceTops);
+        return new() { Contents = contents, Subdivision = subdivision, SurfaceTops = surfaceTops };
     }
 
     private static int AppendSubdivision
@@ -979,14 +1003,29 @@ public class VoxelMap
         int               rootZ,
         int               leafX,
         int               leafY,
-        int               leafZ
+        int               leafZ,
+        ulong             voxelPrefix,
+        List<(ulong Voxel, float TopY)> surfaceTops
     )
     {
         var level = parent.Level;
         var (solid, empty) = vox.ClassifyBox(leafX, leafY, leafZ, leafScaleX[level], leafScaleY[level], leafScaleZ[level]);
         if (!solid) return 0;
 
-        if (!empty) return VOXEL_OCCUPIED_BIT | VOXEL_ID_MASK;
+        if (!empty)
+        {
+            if (level == Levels.Length - 1 &&
+                (leafY + 1 >= vox.SizeY || !vox.GetCellState(leafX, leafY + 1, leafZ).solid) &&
+                vox.TryGetSurfaceTop(leafX, leafY, leafZ, out var topY))
+            {
+                var leafIndex = (ushort)parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ);
+                var leafVoxel = VoxelMap.EncodeSubIndex(voxelPrefix, leafIndex, 2) |
+                                ((ulong)VoxelMap.INDEX_LEVEL_MASK << 48);
+                surfaceTops.Add((leafVoxel, topY));
+            }
+
+            return VOXEL_OCCUPIED_BIT | VOXEL_ID_MASK;
+        }
 
         var index = parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ);
         var (min, max) = parent.CalculateSubdivisionBounds(parent.LevelDesc.IndexToVoxel(index));
@@ -994,6 +1033,7 @@ public class VoxelMap
             throw new InvalidOperationException("体积列构建遇到超出层级的混合体素");
         var tile    = new VolumeTile(this, min, max, parent.Level + 1, false);
         var localId = AppendSubdivision(rootSubdivision, tileSubdivision, tile);
+        var childPrefix = VoxelMap.EncodeSubIndex(voxelPrefix, (ushort)parent.LevelDesc.VoxelToIndex(rootX, rootY, rootZ), parent.Level);
 
         ref var l           = ref Levels[tile.Level];
         var     childScaleX = leafScaleX[tile.Level];
@@ -1014,7 +1054,9 @@ public class VoxelMap
                 z,
                 leafX + (x * childScaleX),
                 leafY + (y * childScaleY),
-                leafZ + (z * childScaleZ)
+                leafZ + (z * childScaleZ),
+                childPrefix,
+                surfaceTops
             );
 
         return (ushort)(VOXEL_OCCUPIED_BIT | localId);
