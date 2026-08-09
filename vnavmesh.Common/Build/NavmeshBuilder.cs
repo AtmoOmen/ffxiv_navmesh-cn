@@ -64,7 +64,6 @@ public class NavmeshBuilder
 
     public sealed class BuildTelemetrySummary
     {
-        public required int                              ConfiguredBuildMaxCores { get; init; }
         public required int                              MaxAvailableCores       { get; init; }
         public required int                              ThreadCount             { get; init; }
         public required long                             ParallelTicks           { get; init; }
@@ -387,7 +386,6 @@ public class NavmeshBuilder
     (
         IReadOnlyList<TileBuildResult> builtTiles,
         TimeSpan                       parallelDuration,
-        int                            configuredBuildMaxCores,
         int                            maxAvailableCores,
         int                            threadCount,
         int                            uniqueRasterJobCount,
@@ -469,7 +467,6 @@ public class NavmeshBuilder
 
         return new()
         {
-            ConfiguredBuildMaxCores = configuredBuildMaxCores,
             MaxAvailableCores       = maxAvailableCores,
             ThreadCount             = threadCount,
             ParallelTicks           = parallelDuration.Ticks,
@@ -491,7 +488,7 @@ public class NavmeshBuilder
     {
         NavmeshBuildLog.Debug
         (
-            $"[NavmeshBuilder] 构建线程信息：配置核心数 = {telemetry.ConfiguredBuildMaxCores}，可用核心数 = {telemetry.MaxAvailableCores}，实际线程数 = {telemetry.ThreadCount}"
+            $"[NavmeshBuilder] 构建线程信息：可用核心数 = {telemetry.MaxAvailableCores}，实际线程数 = {telemetry.ThreadCount}"
         );
         NavmeshBuildLog.Debug
         (
@@ -534,16 +531,7 @@ public class NavmeshBuilder
     )
     {
         var tileCount     = NumTilesX * NumTilesZ;
-        var maxThreads    = Environment.ProcessorCount;
-        var wantedThreads = Settings.BuildMaxCores;
-        var threadCount = Math.Clamp
-        (
-            wantedThreads <= 0 ?
-                maxThreads + wantedThreads :
-                wantedThreads,
-            1,
-            maxThreads
-        );
+        var threadCount = Math.Max(1, Environment.ProcessorCount);
         var builtTiles = new TileBuildResult[tileCount];
         var buildTimer = StopWatchTimer.Create();
         var nextIndex  = -1;
@@ -575,7 +563,6 @@ public class NavmeshBuilder
         (
             builtTiles,
             parallelDuration,
-            Settings.BuildMaxCores,
             Environment.ProcessorCount,
             threadCount,
             _uniqueRasterJobCount,
@@ -584,7 +571,7 @@ public class NavmeshBuilder
         );
         NavmeshBuildLog.Debug
         (
-            $"[NavmeshBuilder] 并行瓦片构建耗时 {parallelDuration.TotalMilliseconds:f1} ms，配置核心数 = {Settings.BuildMaxCores}，可用核心数 = {Environment.ProcessorCount}，实际线程数 = {threadCount}"
+            $"[NavmeshBuilder] 并行瓦片构建耗时 {parallelDuration.TotalMilliseconds:f1} ms，可用核心数 = {Environment.ProcessorCount}，实际线程数 = {threadCount}"
         );
         LogBuildTelemetry(LastBuildTelemetry);
         return builtTiles;

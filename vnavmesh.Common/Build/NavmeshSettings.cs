@@ -155,11 +155,6 @@ public class NavmeshSettings
     public int GroundTileCountMax = 32;
 
     /// <summary>
-    /// 构建使用的最大线程数。0 表示使用全部可用核心，负数表示从可用核心数中扣除，大于 0 时强制限制为指定值。
-    /// </summary>
-    public int BuildMaxCores = 0;
-
-    /// <summary>
     /// 定制定义版本号，由定制系统在构建前写入，用于让旧缓存失效。通常不需要手工调整，修改定制定义版本时应同步增大。
     /// </summary>
     public int CustomizationVersion;

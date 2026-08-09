@@ -1241,8 +1241,7 @@ internal static class CustomizationEditorInspector
 
         if (previewBuilder is { BuildTelemetry: { } telemetry })
         {
-            ImGui.TextUnformatted($"核心: {telemetry.ConfiguredBuildMaxCores} (可用 {telemetry.MaxAvailableCores})");
-            ImGui.TextUnformatted($"线程: {telemetry.ThreadCount}");
+            ImGui.TextUnformatted($"线程: {telemetry.ThreadCount} (可用 {telemetry.MaxAvailableCores})");
             ImGui.TextUnformatted($"并行构建耗时: {telemetry.ParallelTicks / (double)TimeSpan.TicksPerMillisecond:f1} ms");
 
             if (ImGui.TreeNodeEx("构建阶段", ImGuiTreeNodeFlags.DefaultOpen))
