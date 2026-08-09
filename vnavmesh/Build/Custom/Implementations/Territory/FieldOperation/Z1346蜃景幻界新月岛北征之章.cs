@@ -46,22 +46,16 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             true,
             PrimitiveFlags.ForceUnwalkable
         );
-
-        if (scene.Meshes.TryGetValue("bg/ex5/03_ocn_o6/btl/o6b2/collision/o6b2_t1_roc04.pcb", out var mesh1))
-        {
-            // 阿尔戈尔石头1
-            if (ResolveInstance(mesh1, 0xBA960100000000ul, 0) is { } instance0)
+        // 美杜莎圆柱1
+        scene.InsertCylinderCollider
+        (
+            new AABB
             {
-                instance0.WorldTransform = new()
-                {
-                    Row0 = new(1f, 0f, 0f),
-                    Row1 = new(0f, 1.9f, 0f),
-                    Row2 = new(0f, 0f, 1f),
-                    Row3 = new(597.207f, 56.358f, 294.8287f)
-                };
-                instance0.WorldBounds = TransformBounds(instance0.WorldTransform, mesh1.LocalBounds);
-            }
-        }
+                Min = new(-729.892f, 76.864494f, -187.0925f),
+                Max = new(-718.576f, 88.6455f, -174.62949f)
+            },
+            PrimitiveFlags.ForceUnwalkable
+        );
 
         // 阿尔戈尔圆柱1
         scene.InsertCylinderCollider
