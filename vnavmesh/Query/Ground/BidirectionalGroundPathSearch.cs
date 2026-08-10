@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 
@@ -8,7 +10,12 @@ using static DtDetour;
 
 internal static class BidirectionalGroundPathSearch
 {
-    private const int MAX_CORRIDOR_POLYS = 4096;
+    private const int   MAX_CORRIDOR_POLYS                  = 4096;
+    private const int   MIN_GEOMETRY_REFINEMENT_CORRIDOR    = 32;
+    private const int   MAX_GEOMETRY_REFINEMENT_POINTS      = 4097;
+    private const float GEOMETRY_REFINEMENT_MARGIN          = 0.25f;
+    private const float GEOMETRY_REFINEMENT_CORNER_PENALTY  = 0.20f;
+    private const float GEOMETRY_REFINEMENT_TURN_PENALTY    = 2.00f;
 
     private static readonly ConditionalWeakTable<DtNavMesh, Dictionary<long, List<long>>> s_reverseAdjacency = new();
 
@@ -89,6 +96,17 @@ internal static class BidirectionalGroundPathSearch
             status |= DtStatus.DT_PARTIAL_RESULT;
         }
 
+        status = RefineCorridorGeometry
+        (
+            meshQuery,
+            startPos,
+            endPos,
+            filter,
+            heuristicScale,
+            corridor,
+            status
+        );
+
         if (corridor.Count > MAX_CORRIDOR_POLYS)
         {
             corridor.RemoveRange(MAX_CORRIDOR_POLYS, corridor.Count - MAX_CORRIDOR_POLYS);
@@ -108,7 +126,17 @@ internal static class BidirectionalGroundPathSearch
             {
                 var backwardNode = backward.Nodes[backwardIndex];
                 if (backwardNode.IsClosed)
-                    TryRecordMeeting(meeting, entry.NodeIndex, node.G, backwardIndex, backwardNode.G);
+                    TryRecordMeeting
+                    (
+                        mesh,
+                        filter,
+                        forward,
+                        entry.NodeIndex,
+                        backward,
+                        backwardIndex,
+                        endRef,
+                        meeting
+                    );
             }
 
             var partialScore = RcVec3f.Distance(node.Pos, endPos);
@@ -145,7 +173,17 @@ internal static class BidirectionalGroundPathSearch
             {
                 var forwardNode = forward.Nodes[forwardIndex];
                 if (forwardNode.IsClosed)
-                    TryRecordMeeting(meeting, forwardIndex, forwardNode.G, entry.NodeIndex, node.G);
+                    TryRecordMeeting
+                    (
+                        mesh,
+                        filter,
+                        forward,
+                        forwardIndex,
+                        backward,
+                        entry.NodeIndex,
+                        endRef,
+                        meeting
+                    );
             }
 
             ExpandBackward
@@ -164,6 +202,132 @@ internal static class BidirectionalGroundPathSearch
                 meeting
             );
         }
+    }
+
+    private static DtStatus RefineCorridorGeometry
+    (
+        DtNavMeshQuery meshQuery,
+        RcVec3f        startPos,
+        RcVec3f        endPos,
+        IDtQueryFilter filter,
+        float          heuristicScale,
+        List<long>     corridor,
+        DtStatus       currentStatus
+    )
+    {
+        if (currentStatus.Failed() || currentStatus.IsPartial() || corridor.Count < MIN_GEOMETRY_REFINEMENT_CORRIDOR)
+            return currentStatus;
+
+        var candidateBuffer = ArrayPool<long>.Shared.Rent(MAX_CORRIDOR_POLYS);
+        var straightPath    = ArrayPool<DtStraightPath>.Shared.Rent(MAX_GEOMETRY_REFINEMENT_POINTS);
+
+        try
+        {
+            var candidateStatus = meshQuery.FindPath
+            (
+                corridor[0],
+                corridor[^1],
+                startPos,
+                endPos,
+                filter,
+                candidateBuffer.AsSpan(0, MAX_CORRIDOR_POLYS),
+                out var candidateCount,
+                MAX_CORRIDOR_POLYS,
+                heuristicScale == 0f ? DtFindPathOption.ZeroScale : DtFindPathOption.NoOption
+            );
+            if (candidateStatus.Failed()                          ||
+                candidateStatus.IsPartial()                       ||
+                candidateStatus.Has(DtStatus.DT_BUFFER_TOO_SMALL) ||
+                candidateCount == 0)
+                return currentStatus;
+
+            var straightPathBuffer = straightPath.AsSpan(0, MAX_GEOMETRY_REFINEMENT_POINTS);
+            var currentQuality = MeasurePathQuality
+            (
+                meshQuery,
+                startPos,
+                endPos,
+                CollectionsMarshal.AsSpan(corridor),
+                straightPathBuffer
+            );
+            var candidateQuality = MeasurePathQuality
+            (
+                meshQuery,
+                startPos,
+                endPos,
+                candidateBuffer.AsSpan(0, candidateCount),
+                straightPathBuffer
+            );
+            if (!candidateQuality.IsValid ||
+                (currentQuality.IsValid && candidateQuality.Score + GEOMETRY_REFINEMENT_MARGIN >= currentQuality.Score))
+                return currentStatus;
+
+            corridor.Clear();
+            for (var i = 0; i < candidateCount; ++i)
+                corridor.Add(candidateBuffer[i]);
+
+            return candidateStatus;
+        }
+        finally
+        {
+            ArrayPool<long>.Shared.Return(candidateBuffer);
+            ArrayPool<DtStraightPath>.Shared.Return(straightPath);
+        }
+    }
+
+    private static PathQuality MeasurePathQuality
+    (
+        DtNavMeshQuery       meshQuery,
+        RcVec3f              startPos,
+        RcVec3f              endPos,
+        Span<long>           corridor,
+        Span<DtStraightPath> straightPath
+    )
+    {
+        var status = meshQuery.FindStraightPath
+        (
+            startPos,
+            endPos,
+            corridor,
+            corridor.Length,
+            straightPath,
+            out var count,
+            straightPath.Length,
+            0
+        );
+        if (status.Failed() || status.Has(DtStatus.DT_BUFFER_TOO_SMALL) || count == 0)
+            return default;
+
+        var length     = 0f;
+        var turnAmount = 0f;
+        for (var i = 1; i < count; ++i)
+        {
+            var previous = straightPath[i - 1].pos;
+            var current  = straightPath[i].pos;
+            var dx       = current.X - previous.X;
+            var dz       = current.Z - previous.Z;
+            length += MathF.Sqrt((dx * dx) + (dz * dz));
+        }
+
+        for (var i = 1; i < count - 1; ++i)
+        {
+            var previous       = straightPath[i - 1].pos;
+            var current        = straightPath[i].pos;
+            var next           = straightPath[i + 1].pos;
+            var incomingX      = current.X - previous.X;
+            var incomingZ      = current.Z - previous.Z;
+            var outgoingX      = next.X - current.X;
+            var outgoingZ      = next.Z - current.Z;
+            var incomingLength = MathF.Sqrt((incomingX * incomingX) + (incomingZ * incomingZ));
+            var outgoingLength = MathF.Sqrt((outgoingX * outgoingX) + (outgoingZ * outgoingZ));
+            if (incomingLength <= 1e-4f || outgoingLength <= 1e-4f)
+                continue;
+
+            var directionDot = ((incomingX * outgoingX) + (incomingZ * outgoingZ)) / (incomingLength * outgoingLength);
+            turnAmount += 1f - Math.Clamp(directionDot, -1f, 1f);
+        }
+
+        return new(length, count, turnAmount, true);
     }
 
     private static Dictionary<long, List<long>> BuildReverseAdjacency
@@ -191,7 +355,7 @@ internal static class BidirectionalGroundPathSearch
                 if (poly.GetPolyType() != DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
                     continue;
 
-                var connectionRef      = baseRef | connection.poly;
+                var connectionRef      = baseRef | (long)(uint)connection.poly;
                 var endIsBidirectional = connection.side == 0xff || (connection.flags & DT_OFFMESH_CON_BIDIR) != 0;
 
                 for (var linkIndex = poly.firstLink; linkIndex != DT_NULL_LINK; linkIndex = tile.links[linkIndex].next)
@@ -310,8 +474,10 @@ internal static class BidirectionalGroundPathSearch
             return false;
 
         var t = 0.5f;
-        if (DtUtils.IntersectSegSeg2D(rayStart, rayEnd, left, right, out _, out var t2))
-            t = Math.Clamp(t2, 0.1f, 0.9f);
+        if (DtUtils.IntersectSegSeg2D(rayStart, rayEnd, left, right, out var rayParameter, out var portalParameter) &&
+            rayParameter    >= 0f && rayParameter    <= 1f &&
+            portalParameter >= 0f && portalParameter <= 1f)
+            t = Math.Clamp(portalParameter, 0.1f, 0.9f);
 
         point = RcVec3f.Lerp(left, right, t);
         return true;
@@ -424,7 +590,17 @@ internal static class BidirectionalGroundPathSearch
             {
                 var backwardNode = backward.Nodes[backwardIndex];
                 if (backwardNode.IsClosed)
-                    TryRecordMeeting(meeting, neighbourIndex, neighbour.G, backwardIndex, backwardNode.G);
+                    TryRecordMeeting
+                    (
+                        mesh,
+                        filter,
+                        forward,
+                        neighbourIndex,
+                        backward,
+                        backwardIndex,
+                        endRef,
+                        meeting
+                    );
             }
         }
     }
@@ -535,7 +711,17 @@ internal static class BidirectionalGroundPathSearch
             {
                 var forwardNode = forward.Nodes[forwardIndex];
                 if (forwardNode.IsClosed)
-                    TryRecordMeeting(meeting, forwardIndex, forwardNode.G, predecessorIndex, predecessor.G);
+                    TryRecordMeeting
+                    (
+                        mesh,
+                        filter,
+                        forward,
+                        forwardIndex,
+                        backward,
+                        predecessorIndex,
+                        endRef,
+                        meeting
+                    );
             }
         }
 
@@ -578,14 +764,63 @@ internal static class BidirectionalGroundPathSearch
 
     private static void TryRecordMeeting
     (
-        MeetingResult meeting,
-        int           forwardIndex,
-        float         forwardG,
-        int           backwardIndex,
-        float         backwardG
+        DtNavMesh      mesh,
+        IDtQueryFilter filter,
+        SearchState    forward,
+        int            forwardIndex,
+        SearchState    backward,
+        int            backwardIndex,
+        long           endRef,
+        MeetingResult  meeting
     )
     {
-        var candidate = forwardG + backwardG;
+        var forwardNode  = forward.Nodes[forwardIndex];
+        var backwardNode = backward.Nodes[backwardIndex];
+        var bridgeCost   = 0f;
+
+        if (forwardNode.Ref != endRef)
+        {
+            mesh.GetTileAndPolyByRefUnsafe(forwardNode.Ref, out var tile, out var poly);
+
+            long       previousRef  = 0;
+            DtMeshTile previousTile = null;
+            DtPoly     previousPoly = null;
+
+            if (forwardNode.ParentIndex >= 0)
+            {
+                var previous = forward.Nodes[forwardNode.ParentIndex];
+                previousRef = previous.Ref;
+                mesh.GetTileAndPolyByRefUnsafe(previousRef, out previousTile, out previousPoly);
+            }
+
+            long       nextRef  = 0;
+            DtMeshTile nextTile = null;
+            DtPoly     nextPoly = null;
+
+            if (backwardNode.ParentIndex >= 0)
+            {
+                var next = backward.Nodes[backwardNode.ParentIndex];
+                nextRef = next.Ref;
+                mesh.GetTileAndPolyByRefUnsafe(nextRef, out nextTile, out nextPoly);
+            }
+
+            bridgeCost = filter.GetCost
+            (
+                forwardNode.Pos,
+                backwardNode.Pos,
+                previousRef,
+                previousTile,
+                previousPoly,
+                forwardNode.Ref,
+                tile,
+                poly,
+                nextRef,
+                nextTile,
+                nextPoly
+            );
+        }
+
+        var candidate = forwardNode.G + bridgeCost + backwardNode.G;
         if (candidate >= meeting.BestPath)
             return;
 
@@ -669,6 +904,20 @@ internal static class BidirectionalGroundPathSearch
         public int ForwardIndex { get; set; } = -1;
 
         public int BackwardIndex { get; set; } = -1;
+    }
+
+    private readonly record struct PathQuality
+    (
+        float Length,
+        int   CornerCount,
+        float TurnAmount,
+        bool  IsValid
+    )
+    {
+        public float Score =>
+            Length                                                   +
+            (CornerCount * GEOMETRY_REFINEMENT_CORNER_PENALTY)       +
+            (TurnAmount * GEOMETRY_REFINEMENT_TURN_PENALTY);
     }
 
     private readonly record struct HeapEntry
