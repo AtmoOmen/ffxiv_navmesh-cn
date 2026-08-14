@@ -176,7 +176,7 @@ public class NavmeshSettings
     /// <summary>
     ///     飞行体积的最细叶子体素尺寸，单位为世界单位。构建时按 4/16/64 的比例推导三层 2 的幂细分，实际叶子体素不会小于该值；数值越大越省内存，但障碍细节越粗。
     /// </summary>
-    public float VolumeCellSize = 4f;
+    public float VolumeCellSize = 2f;
 
     /// <summary>
     ///     飞行体积在场景垂直范围上下各扩展的高度，用于在最高障碍上方保留空体素。默认 0 表示与场景包围盒一致。
