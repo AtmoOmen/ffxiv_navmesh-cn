@@ -111,7 +111,7 @@ public class NavmeshSettings
     /// <summary>
     ///     向下攀爬终点相对起点的水平搜索距离。数值越大覆盖范围越广，但可能生成过远的链接。
     /// </summary>
-    public float ClimbDownDistance = 0.4f;
+    public float ClimbDownDistance = 3.6f;
 
     /// <summary>
     ///     向下攀爬允许的最小落差值，低于该值不生成链接，避免把普通台阶当成跳落。
@@ -121,22 +121,22 @@ public class NavmeshSettings
     /// <summary>
     ///     向下攀爬允许的最大落差值，高于该值的落差不会生成链接。
     /// </summary>
-    public float ClimbDownMaxHeight = 5f;
-
-    /// <summary>
-    ///     边缘跳跃终点相对起点的水平搜索距离，决定跳跃能覆盖多远。
-    /// </summary>
-    public float EdgeJumpEndDistance = 2f;
+    public float ClimbDownMaxHeight = 1.8f;
 
     /// <summary>
     ///     边缘跳跃的起跳高度参数，控制轨迹最高点。数值越大轨迹越高，越容易越过障碍，但生成成本也越高。
     /// </summary>
     public float EdgeJumpHeight = 1.8f;
+    
+    /// <summary>
+    ///     边缘跳跃终点相对起点的水平搜索距离，决定跳跃能覆盖多远。
+    /// </summary>
+    public float EdgeJumpEndDistance = 12f;
 
     /// <summary>
     ///     边缘跳跃允许的最小落差值，低于该值不生成跳跃链接。
     /// </summary>
-    public float EdgeJumpMinDrop = 1.5f;
+    public float EdgeJumpMinDrop = 3f;
 
     /// <summary>
     ///     边缘跳跃允许的最大落差值，高于该值不生成跳跃链接。默认 500 表示基本不限制。

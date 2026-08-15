@@ -518,10 +518,6 @@ public class NavmeshQuery
                 continue;
             }
 
-            Service.Log.Debug
-            (
-                $"[算路] 体素定位触发扩搜：原始位置 = {p:f3}，搜索中心 = {searchCenter:f3}，搜索范围 = {expandedHalfExtent:f3}"
-            );
             return voxel;
         }
 

@@ -119,12 +119,12 @@ public readonly record struct NavmeshLinkTraversalProfile
 public static class NavmeshLinkTraversalProfiles
 {
     public static readonly NavmeshLinkTraversalProfile Ground             = new(1f, 0f);
-    public static readonly NavmeshLinkTraversalProfile GeneratedClimbDown = new(1f, 1.5f);
-    public static readonly NavmeshLinkTraversalProfile GeneratedEdgeJump  = new(1f, 3f);
-    public static readonly NavmeshLinkTraversalProfile ManualOffMesh      = new(1f, 0.5f);
-    public static readonly NavmeshLinkTraversalProfile Shortcut           = new(8f, 0f);
-    public static readonly NavmeshLinkTraversalProfile Teleport           = new(0f, 1f);
-    public static readonly NavmeshLinkTraversalProfile ClientPath         = new(0f, 3f);
+    public static readonly NavmeshLinkTraversalProfile GeneratedClimbDown = new(1f, 0f);
+    public static readonly NavmeshLinkTraversalProfile GeneratedEdgeJump  = new(1f, 0f);
+    public static readonly NavmeshLinkTraversalProfile ManualOffMesh      = new(1f, 0f);
+    public static readonly NavmeshLinkTraversalProfile Shortcut           = new(1f, 0f);
+    public static readonly NavmeshLinkTraversalProfile Teleport           = new(0f, 0f);
+    public static readonly NavmeshLinkTraversalProfile ClientPath         = new(0f, 0f);
 
     public static NavmeshLinkTraversalProfile Resolve
     (
