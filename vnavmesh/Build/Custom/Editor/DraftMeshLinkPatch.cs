@@ -1,5 +1,6 @@
 using System.Numerics;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Models;
 
 namespace vnavmesh.Build.Custom.Editor;
 

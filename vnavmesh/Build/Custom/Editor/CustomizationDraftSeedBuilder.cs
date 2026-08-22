@@ -3,6 +3,7 @@ using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.Internal;
 using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;

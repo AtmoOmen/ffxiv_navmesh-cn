@@ -8,6 +8,7 @@ using DotRecast.Recast;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Models;

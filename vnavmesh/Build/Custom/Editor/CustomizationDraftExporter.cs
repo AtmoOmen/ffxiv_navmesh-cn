@@ -4,6 +4,8 @@ using System.Text;
 using DotRecast.Recast;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
+using vnavmesh.Common.Build.Ground.Models;
 
 namespace vnavmesh.Build.Custom.Editor;
 

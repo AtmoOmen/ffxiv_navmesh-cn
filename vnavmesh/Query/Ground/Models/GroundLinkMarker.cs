@@ -1,5 +1,7 @@
 using System.Numerics;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
+using vnavmesh.Common.Build.Ground.Models;
 
 namespace vnavmesh.Query.Ground.Models;
 

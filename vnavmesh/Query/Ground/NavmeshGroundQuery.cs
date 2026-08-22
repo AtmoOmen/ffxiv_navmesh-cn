@@ -3,6 +3,8 @@ using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
+using vnavmesh.Common.Build.Ground.Models;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Utils;
 using vnavmesh.Movement.Planning;

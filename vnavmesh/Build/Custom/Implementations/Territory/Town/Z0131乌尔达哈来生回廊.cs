@@ -5,6 +5,7 @@ using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 using AABB = vnavmesh.Common.Models.AABB;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Town;

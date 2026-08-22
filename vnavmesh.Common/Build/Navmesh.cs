@@ -9,6 +9,8 @@ using DotRecast.Detour;
 using DotRecast.Detour.Io;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
+using vnavmesh.Common.Build.Ground.Models;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Utils;
 

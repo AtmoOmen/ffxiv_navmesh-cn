@@ -18,6 +18,7 @@ using vnavmesh.Build.Ground;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Common.Utils;

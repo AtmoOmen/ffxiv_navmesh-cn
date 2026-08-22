@@ -2,6 +2,8 @@ using System.Buffers;
 using System.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
+using vnavmesh.Common.Build.Ground.Models;
 using vnavmesh.Common.Extensions;
 using vnavmesh.Movement.Drivers;
 using vnavmesh.Movement.Planning;

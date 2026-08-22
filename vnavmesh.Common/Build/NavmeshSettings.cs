@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using DotRecast.Recast;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 
 namespace vnavmesh.Common.Build;

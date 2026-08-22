@@ -4,6 +4,8 @@ using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
+using vnavmesh.Common.Build.Ground.Models;
 using vnavmesh.Common.Build.Models;
 
 namespace vnavmesh.Build.Custom;

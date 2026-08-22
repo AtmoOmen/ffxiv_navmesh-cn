@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Movement.Execution;
 
 namespace vnavmesh.Movement.Drivers;

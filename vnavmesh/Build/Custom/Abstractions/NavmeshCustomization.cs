@@ -5,6 +5,8 @@ using Lumina.Excel.Sheets;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
+using vnavmesh.Common.Build.Ground.Models;
 using vnavmesh.Common.Extensions;
 
 namespace vnavmesh.Build.Custom.Abstractions;

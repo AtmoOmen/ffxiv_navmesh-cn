@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility.Raii;
 using vnavmesh.Build.Custom.Editor;
 using vnavmesh.Common.Build.Enums;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 
 namespace vnavmesh.UI.Editor;
 

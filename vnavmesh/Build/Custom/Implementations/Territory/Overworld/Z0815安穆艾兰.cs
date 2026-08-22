@@ -4,6 +4,7 @@ using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 

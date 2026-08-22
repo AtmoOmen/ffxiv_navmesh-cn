@@ -5,6 +5,7 @@ using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Dungeon;

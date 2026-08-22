@@ -1,5 +1,6 @@
 using DotRecast.Recast;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
 
 namespace vnavmesh.Build.Custom.Editor;
 

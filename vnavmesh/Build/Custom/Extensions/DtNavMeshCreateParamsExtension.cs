@@ -2,6 +2,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Common.Build.Ground;
+using vnavmesh.Common.Build.Ground.Enums;
+using vnavmesh.Common.Build.Ground.Models;
 
 namespace vnavmesh.Build.Custom.Extensions;
 
