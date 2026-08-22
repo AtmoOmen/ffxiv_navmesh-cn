@@ -102,7 +102,7 @@ public class NavmeshSettings
     /// <summary>
     ///     是否自动生成向下跳跃链接。开启后生成高到低单向跳跃连接，用于跨越断崖或跳下平台。
     /// </summary>
-    public bool GenerateEdgeJumpLinks = true;
+    public bool GenerateEdgeJumpLinks;
 
     /// <summary>
     ///     边缘链接检测时的地面容差，参与轨迹碰撞判断。数值越大越容易接受贴近地面的轨迹，但可能穿过障碍。
@@ -122,7 +122,7 @@ public class NavmeshSettings
     /// <summary>
     ///     向下攀爬允许的最大落差值，高于该值的落差不会生成链接。
     /// </summary>
-    public float ClimbDownMaxHeight = 1.8f;
+    public float ClimbDownMaxHeight = 3.6f;
 
     /// <summary>
     ///     边缘跳跃的起跳高度参数，控制轨迹最高点。数值越大轨迹越高，越容易越过障碍，但生成成本也越高。
