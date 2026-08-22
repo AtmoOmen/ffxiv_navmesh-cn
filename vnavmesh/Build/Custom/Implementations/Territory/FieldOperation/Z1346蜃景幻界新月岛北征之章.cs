@@ -16,6 +16,13 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 {
     public override int Version => 2;
 
+    public override void CustomizeBuildSettings
+    (
+        SceneDefinition definition,
+        NavmeshSettings settings
+    ) =>
+        settings.GenerateEdgeJumpLinks = true;
+
     public override void CustomizeScene
     (
         SceneExtractor scene

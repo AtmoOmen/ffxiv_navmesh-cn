@@ -7,7 +7,7 @@ public static class NavmeshLinkTraversalProfiles
 {
     public static readonly NavmeshLinkTraversalProfile Ground             = new(1f, 0f);
     public static readonly NavmeshLinkTraversalProfile GeneratedClimbDown = new(1f, 0f);
-    public static readonly NavmeshLinkTraversalProfile GeneratedEdgeJump  = new(1f, 12f);
+    public static readonly NavmeshLinkTraversalProfile GeneratedEdgeJump  = new(1f, 0f);
     public static readonly NavmeshLinkTraversalProfile ManualOffMesh      = new(1f, 0f);
     public static readonly NavmeshLinkTraversalProfile Shortcut           = new(1f, 0f);
     public static readonly NavmeshLinkTraversalProfile Teleport           = new(0f, 0f);

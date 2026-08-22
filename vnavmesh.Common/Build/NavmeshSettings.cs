@@ -137,12 +137,12 @@ public class NavmeshSettings
     /// <summary>
     ///     边缘跳跃允许的最小落差值，低于该值不生成跳跃链接。
     /// </summary>
-    public float EdgeJumpMinDrop = 3f;
+    public float EdgeJumpMinDrop = 3.6f;
 
     /// <summary>
-    ///     边缘跳跃允许的最大落差值，高于该值不生成跳跃链接。默认 500 表示基本不限制。
+    ///     边缘跳跃允许的最大落差值，高于该值不生成跳跃链接。
     /// </summary>
-    public float EdgeJumpMaxDrop = 500f;
+    public float EdgeJumpMaxDrop = 8f;
 
 
     /// <summary>
