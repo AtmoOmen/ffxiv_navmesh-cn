@@ -14,7 +14,7 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.FieldOperation;
 [CustomizationTerritory(1346)]
 internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 {
-    public override int Version => 2;
+    public override int Version => 3;
 
     public override void CustomizeBuildSettings
     (
@@ -151,9 +151,8 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
         );
 
 
-        // 湖边的墙
+        // 中心湖区周边的空气墙
         var blockers = new MeshPart();
-
         foreach (var (path, mesh) in scene.Meshes)
         {
             if (mesh.MeshType != MeshType.Terrain ||
@@ -188,6 +187,37 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             scene.Meshes["<z1346 invisible wall blockers>"] = blockerMesh;
         }
 
+        // 右上角湖区周边的空气墙
+        const float LAKE_MIN_X = 300f;
+        const float LAKE_MIN_Z = -1000f;
+        const float LAKE_MAX_X = 1000f;
+        const float LAKE_MAX_Z = -380f;
+
+        foreach (var (path, mesh) in scene.Meshes)
+        {
+            if (mesh.MeshType != MeshType.Terrain ||
+                !path.StartsWith("bg/ex5/03_ocn_o6/btl/o6b2/collision/tr", StringComparison.Ordinal))
+                continue;
+
+            foreach (var part in mesh.Parts)
+            {
+                if (part.LocalBounds.Min.X > LAKE_MAX_X ||
+                    part.LocalBounds.Max.X < LAKE_MIN_X ||
+                    part.LocalBounds.Min.Z > LAKE_MAX_Z ||
+                    part.LocalBounds.Max.Z < LAKE_MIN_Z)
+                    continue;
+
+                for (var i = 0; i < part.Primitives.Count; ++i)
+                {
+                    var primitive = part.Primitives[i];
+                    if (primitive.Material != 0x3C0Dul || !IsFlatAtSingleHeight(part, primitive))
+                        continue;
+
+                    primitive.Flags    |= PrimitiveFlags.ForceUnwalkable;
+                    part.Primitives[i] =  primitive;
+                }
+            }
+        }
     }
 
     public override void CustomizeMesh
@@ -223,7 +253,8 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
     private static Vector3 Abs
     (
         Vector3 value
-    ) => new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
+    ) => 
+        new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
 
     private static MeshInstance? ResolveInstance
     (
@@ -322,6 +353,19 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
             target.Primitives.Add(new(first, first + 2, first + 1, flags, primitive.Material));
             target.Primitives.Add(new(first        + 1, first + 2, first + 3, flags, primitive.Material));
         }
+    }
+
+    private static bool IsFlatAtSingleHeight
+    (
+        MeshPart  part,
+        Primitive primitive
+    )
+    {
+        var vertex1 = part.Vertices[primitive.V1];
+        var vertex2 = part.Vertices[primitive.V2];
+        var vertex3 = part.Vertices[primitive.V3];
+        return MathF.Abs(vertex1.Y - vertex2.Y) <= 0.02f &&
+               MathF.Abs(vertex2.Y - vertex3.Y) <= 0.02f;
     }
 
     private static AABB CalculateLocalBounds
