@@ -12,8 +12,10 @@ namespace vnavmesh.Query.Flight;
 
 internal sealed class NavmeshFlightQuery
 {
-    private const int   VOLUME_GOAL_FLOOD_LIMIT        = 50_000;
-    private const float VOLUME_GOAL_RETREAT_DISTANCE   = 24f;
+    private const int   VOLUME_GOAL_FLOOD_LIMIT      = 50_000;
+    private const int   VOLUME_OPEN_FLOOD_LIMIT      = 10_000;
+    private const int   VOLUME_SEED_LIFT_ATTEMPTS    = 8;
+    private const float VOLUME_RETREAT_SAMPLE_STEP   = 16f;
 
     private readonly NavmeshQuery       query;
     private readonly NavmeshGroundQuery groundQuery;
@@ -69,41 +71,21 @@ internal sealed class NavmeshFlightQuery
                                   endLocate.SafePoint;
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
 
-        // 终点被体积图上的小空腔关住时（例如门内的房间），正向搜索会把全部预算耗在逼近它的路上。
-        // 判定封闭后把飞行目标退到地面路径上，飞行段只需要飞到门口，剩下的一小段落地走完。
-        var searchVoxel = endVoxel;
-        var searchGoal  = safeDestination;
-        var retreated   = false;
-
-        if (IsVolumeGoalSealed(safeDestination, out var floodedCells))
+        // 体积图会把一串窄洞逐个堵死，飞行只能到达开阔空腔里的位置。
+        // 终点落在封闭空腔时，沿地面路径分段拼接：开阔段飞行，封闭段走地面。
+        if (IsVolumeRegionSmall(safeDestination, VOLUME_GOAL_FLOOD_LIMIT, out var floodedCells))
         {
             Service.Log.Debug($"[算路] 飞行终点所在的体积空腔只有 {floodedCells} 格，判定为封闭");
 
-            if (TryResolveRetreatGoal(from, to, cancel, out var retreatGoal))
-            {
-                var retreatLocate = query.FindNearestVolumeVoxelSurfaceAware(retreatGoal);
+            if (TryBuildSegmentedVolumePath(from, to, cancel, avoidCenter, avoidRadius, out var segmentedResult))
+                return segmentedResult;
 
-                if (retreatLocate.Voxel != VoxelMap.INVALID_VOXEL)
-                {
-                    searchVoxel = retreatLocate.Voxel;
-                    searchGoal  = retreatLocate.SafePoint;
-                    retreated   = true;
-                    Service.Log.Debug($"[算路] 飞行目标退至 {searchGoal:f3}");
-                }
-                else
-                {
-                    Service.Log.Warning($"[算路] 退让点 {retreatGoal:f3} 附近没有空体素，维持原飞行目标");
-                }
-            }
-            else
-            {
-                Service.Log.Warning("[算路] 无法从地面路径解析退让点，维持原飞行目标");
-            }
+            Service.Log.Warning("[算路] 分段拼接失败，改用直接搜索");
         }
 
         var searchTimer = StopWatchTimer.Create();
         var voxelPath   = volumeQuery.FindPath
-            (startVoxel, searchVoxel, safeStart, searchGoal, false, cancel, avoidCenter, avoidRadius);
+            (startVoxel, endVoxel, safeStart, safeDestination, false, cancel, avoidCenter, avoidRadius);
         var telemetry = volumeQuery.LastTelemetry;
 
         Service.Log.Debug
@@ -123,13 +105,6 @@ internal sealed class NavmeshFlightQuery
         List<Vector3> rawWaypoints = new(voxelPath.Count);
         foreach (var step in voxelPath)
             rawWaypoints.Add(step.p);
-
-        if (retreated && telemetry.Termination == VolumeSearchTermination.ReachedGoal)
-        {
-            if (!requestedTargetLeaf.empty &&
-                TryBuildFlightGroundTransitionResult(from, to, searchGoal, rawWaypoints, cancel, avoidCenter, avoidRadius, out var retreatedResult))
-                return retreatedResult;
-        }
 
         if (telemetry.Termination != VolumeSearchTermination.ReachedGoal)
         {
@@ -242,14 +217,15 @@ internal sealed class NavmeshFlightQuery
     }
 
     // 终点被体积图上的小空腔关住时（例如门内的房间），两个方向的搜索都会把预算耗在逼近它上。
-    // 这里不去寻路，只在叶体素网格上洪泛终点所在的分量：能在上限内穷尽，就说明它被封闭住了。
-    private bool IsVolumeGoalSealed
+    // 这里不去寻路，只在叶体素网格上洪泛给定位置所在的分量：能在上限内穷尽，说明它被封闭住了。
+    private bool IsVolumeRegionSmall
     (
-        Vector3 goalPoint,
-        out int floodedCells
+        Vector3 point,
+        int     limit,
+        out int cells
     )
     {
-        floodedCells = 0;
+        cells = 0;
 
         if (query.VolumeQuery == null)
             return false;
@@ -258,7 +234,27 @@ internal sealed class NavmeshFlightQuery
         var cellSize = volume.Levels[^1].CellSize;
         var origin   = volume.RootTile.BoundsMin;
 
-        var startCell = ToLeafCell(goalPoint, origin, cellSize);
+        var (sx, sy, sz) = ToLeafCell(point, origin, cellSize);
+        var seeded       = false;
+
+        // 采样点常常贴在地面上，取整后的格子可能落在脚下；向上找到第一个空格子作为种子
+        for (var attempt = 0; attempt < VOLUME_SEED_LIFT_ATTEMPTS; ++attempt, ++sy)
+        {
+            var seed = origin + (new Vector3(sx + 0.5f, sy + 0.5f, sz + 0.5f) * cellSize);
+            if (!volume.FindLeafVoxel(seed).empty)
+                continue;
+
+            seeded = true;
+            break;
+        }
+
+        if (!seeded)
+        {
+            cells = 0;
+            return true;
+        }
+
+        var startCell = (X: sx, Y: sy, Z: sz);
         var visited   = new HashSet<(int X, int Y, int Z)> { startCell };
         var queue     = new Queue<(int X, int Y, int Z)>();
         queue.Enqueue(startCell);
@@ -279,9 +275,9 @@ internal sealed class NavmeshFlightQuery
 
                 visited.Add(next);
 
-                if (visited.Count > VOLUME_GOAL_FLOOD_LIMIT)
+                if (visited.Count > limit)
                 {
-                    floodedCells = visited.Count;
+                    cells = visited.Count;
                     return false;
                 }
 
@@ -289,7 +285,7 @@ internal sealed class NavmeshFlightQuery
             }
         }
 
-        floodedCells = visited.Count;
+        cells = visited.Count;
         return true;
     }
 
@@ -314,48 +310,194 @@ internal sealed class NavmeshFlightQuery
         yield return (0, 0, -1);
     }
 
-    private bool TryResolveRetreatGoal
+    // 沿地面路径扫描出"开阔段 / 封闭段"的交替序列。开阔段说明那里的体积空腔连着起点一侧的大空间，
+    // 可以直接飞过去；封闭段是被体积图堵住的窄洞或门，只能走地面。
+    private List<(Vector3 Start, Vector3 End, bool Open)> ScanOpenRuns
+    (
+        IReadOnlyList<long> corridor,
+        Vector3             start,
+        Vector3             end
+    )
+    {
+        List<(Vector3 Point, bool Open)> samples = [(start, !IsVolumeRegionSmall(start, VOLUME_OPEN_FLOOD_LIMIT, out _))];
+
+        var previous  = start;
+        var lastProbe = start;
+
+        foreach (var polyRef in corridor)
+        {
+            if (!query.MeshQuery.ClosestPointOnPoly(polyRef, previous.ToRecast(), out var closest, out _).Succeeded())
+                break;
+
+            var point = closest.ToSystem();
+            previous = point;
+
+            if (Vector3.Distance(point, lastProbe) < VOLUME_RETREAT_SAMPLE_STEP)
+                continue;
+
+            lastProbe = point;
+            samples.Add((point, !IsVolumeRegionSmall(point, VOLUME_OPEN_FLOOD_LIMIT, out _)));
+        }
+
+        samples.Add((end, false));
+
+        List<(Vector3 Start, Vector3 End, bool Open)> runs = [];
+        var current = samples[0];
+
+        for (var i = 1; i < samples.Count; ++i)
+        {
+            if (samples[i].Open == current.Open)
+                continue;
+
+            runs.Add((current.Point, samples[i - 1].Point, current.Open));
+            current = samples[i];
+        }
+
+        runs.Add((current.Point, samples[^1].Point, current.Open));
+        return runs;
+    }
+
+    // 采样点贴在地面上，向上找到的第一个空体素必然与它同处一侧空腔，
+    // 用它当飞行端点可以避开"落到被堵住的那一侧"。
+    private bool TryResolveOpenVoxel
+    (
+        Vector3  point,
+        out ulong voxel,
+        out Vector3 safePoint
+    )
+    {
+        voxel     = VoxelMap.INVALID_VOXEL;
+        safePoint = point;
+
+        if (query.VolumeQuery == null)
+            return false;
+
+        var volume   = query.VolumeQuery.Volume;
+        var cellSize = volume.Levels[^1].CellSize;
+        var origin   = volume.RootTile.BoundsMin;
+
+        var (sx, sy, sz) = ToLeafCell(point, origin, cellSize);
+
+        for (var attempt = 0; attempt < VOLUME_SEED_LIFT_ATTEMPTS; ++attempt, ++sy)
+        {
+            var seed = origin + (new Vector3(sx + 0.5f, sy + 0.5f, sz + 0.5f) * cellSize);
+            var leaf = volume.FindLeafVoxel(seed);
+
+            if (!leaf.empty || leaf.voxel == VoxelMap.INVALID_VOXEL)
+                continue;
+
+            voxel     = leaf.voxel;
+            safePoint = seed;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryBuildSegmentedVolumePath
     (
         Vector3           from,
         Vector3           to,
         CancellationToken cancel,
-        out Vector3       retreatGoal
+        Vector3?          avoidCenter,
+        float             avoidRadius,
+        out PlannerResult result
     )
     {
-        retreatGoal = default;
+        result = null!;
 
-        var ground = groundQuery.PlanMeshPathDetailed(from, to, 0, cancel);
+        var volumeQuery = query.VolumeQuery;
+        if (volumeQuery == null)
+            return false;
+
+        var ground = groundQuery.PlanMeshPathDetailed(from, to, 0, cancel, avoidCenter, avoidRadius);
         if (!ground.Succeeded || ground.Segments.Count == 0)
             return false;
 
-        var segment  = ground.Segments[0];
-        var corridor = segment.Corridor;
+        var corridor = ground.Segments[0].Corridor;
         if (corridor.Count == 0)
             return false;
 
-        // 从终点端沿走廊逐个多边形往回退一段，让飞行目标避开门口这类体积上不可达的位置
-        var remaining = VOLUME_GOAL_RETREAT_DISTANCE;
-        var previous  = segment.EndPosition;
+        var runs = ScanOpenRuns(corridor, ground.Segments[0].StartPosition, to);
+        if (runs.Count == 0)
+            return false;
 
-        for (var i = corridor.Count - 1; i >= 0; --i)
+        List<PlannerPathSegment> segments = [];
+        var cursor     = from;
+        var lastStatus = ground.Status;
+
+        for (var i = 0; i < runs.Count; ++i)
         {
-            if (!query.MeshQuery.ClosestPointOnPoly(corridor[i], previous.ToRecast(), out var closest, out _).Succeeded())
-                break;
+            var run = runs[i];
 
-            var point    = closest.ToSystem();
-            var distance = Vector3.Distance(previous, point);
-
-            if (distance >= remaining)
+            if (run.Open)
             {
-                retreatGoal = Vector3.Lerp(previous, point, remaining / distance);
-                return true;
+                // 飞行段两端都取所在采样点正上方的空体素，保证落在开阔侧而不是被堵住的洞内
+                if (!TryResolveOpenVoxel(cursor, out var fromVoxel, out var fromPoint) ||
+                    !TryResolveOpenVoxel(run.End, out var toVoxel, out var toPoint))
+                    return false;
+
+                var flight = query.VolumeQuery!.FindPath
+                    (fromVoxel, toVoxel, fromPoint, toPoint, false, cancel, avoidCenter, avoidRadius);
+
+                if (flight.Count == 0)
+                    return false;
+
+                List<Vector3> points = new(flight.Count);
+                foreach (var step in flight)
+                    points.Add(step.p);
+
+                points.Add(toPoint);
+
+                segments.Add
+                (
+                    new()
+                    {
+                        MovementMode           = MovementMode.Flight,
+                        SegmentKind            = MovementSegmentKind.FlightTraverse,
+                        AllowVerticalControl   = true,
+                        GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
+                        TraversalStartPosition = cursor,
+                        StartPosition          = cursor,
+                        EndPosition            = run.End,
+                        Points                 = points
+                    }
+                );
+
+                cursor = run.End;
+                continue;
             }
 
-            remaining -= distance;
-            previous   = point;
+            // 地面段一直延伸到下一个开阔段的起点，这样紧接其后的飞行段两端都落在开阔侧
+            var groundEnd = i + 1 < runs.Count ?
+                                runs[i + 1].Start :
+                                run.End;
+            var groundRun = groundQuery.PlanMeshPathDetailed(cursor, groundEnd, 0, cancel, avoidCenter, avoidRadius);
+
+            if (!groundRun.Succeeded || groundRun.Segments.Count == 0)
+                return false;
+
+            lastStatus = groundRun.Status;
+            segments.AddRange(groundRun.Segments);
+            cursor = groundEnd;
         }
 
-        return false;
+        if (segments.Count == 0)
+            return false;
+
+        Service.Log.Debug($"[算路] 飞行终点被封闭，拼接出 {segments.Count} 段路径，其中开阔段 {runs.Count(r => r.Open)} 个");
+
+        result = new()
+        {
+            Status               = lastStatus,
+            RequestedMode        = MovementMode.Flight,
+            RequestedDestination = to,
+            FinalDestination     = ground.FinalDestination,
+            DestinationTolerance = MathF.Max
+                (ground.DestinationTolerance, MathF.Max(query.ConfigData.PathTolerance, HorizontalDistanceXZ(to, ground.FinalDestination))),
+            Segments = segments
+        };
+        return true;
     }
 
     // 体积图上能否从一点直线飞到另一点；用来判断"直接吸附到终点"会不会从门框这类薄壁上穿过去
