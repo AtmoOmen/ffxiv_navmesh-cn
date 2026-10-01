@@ -6,7 +6,7 @@ namespace vnavmesh.Query.Flight;
 
 public partial class VoxelPathfind
 {
-    private List<ulong> CollectNeighbours
+    internal List<ulong> CollectNeighbours
     (
         ulong voxel
     )

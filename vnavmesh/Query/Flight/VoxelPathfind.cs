@@ -158,6 +158,60 @@ public partial class VoxelPathfind
         return FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, QUERY_RELAY_BUDGET, cancel);
     }
 
+    // 在体积索引图上洪泛给定空体素所在的空腔，用于不寻路地判断两处是否连通。
+    // 只有在上限内穷尽才给出结论：分量含参照体素即连通，不含即被隔离；超限则无从判断。
+    internal VolumeFloodResult FloodEmptyRegion
+    (
+        ulong   seedVoxel,
+        ulong   referenceVoxel,
+        int     limit,
+        out int cells
+    )
+    {
+        cells = 0;
+
+        if (seedVoxel == VoxelMap.INVALID_VOXEL || referenceVoxel == VoxelMap.INVALID_VOXEL || !Volume.IsEmpty(seedVoxel))
+            return VolumeFloodResult.Unknown;
+
+        l1PathSet          = null;
+        l0PathSet          = null;
+        l1CorridorDistance = null;
+        l0CorridorDistance = null;
+
+        var visited = new HashSet<ulong> { seedVoxel };
+        var queue   = new Queue<ulong>();
+        queue.Enqueue(seedVoxel);
+
+        while (queue.Count > 0)
+        {
+            var voxel = queue.Dequeue();
+
+            if (voxel == referenceVoxel)
+            {
+                cells = visited.Count;
+                return VolumeFloodResult.Connected;
+            }
+
+            foreach (var neighbour in CollectNeighbours(voxel))
+            {
+                if (!visited.Add(neighbour))
+                    continue;
+
+                if (visited.Count > limit)
+                {
+                    cells = visited.Count;
+
+                    return VolumeFloodResult.Unknown;
+                }
+
+                queue.Enqueue(neighbour);
+            }
+        }
+
+        cells = visited.Count;
+        return VolumeFloodResult.Sealed;
+    }
+
     private List<(ulong voxel, Vector3 p)> FindPathInternal
     (
         ulong             fromVoxel,

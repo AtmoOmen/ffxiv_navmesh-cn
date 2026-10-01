@@ -66,20 +66,19 @@ internal sealed class NavmeshFlightQuery
                                   endLocate.SafePoint;
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
 
-        // 体积图会把一串窄洞逐个堵死，飞行只能到达开阔空腔里的位置。
-        // 终点落在封闭空腔时，沿地面路径分段拼接：开阔段飞行，封闭段走地面。
-        if (IsVolumeRegionSmall(safeDestination, VOLUME_GOAL_FLOOD_LIMIT, from, out var floodedCells, out var sealedNearest) &&
-            !IsSealedNearestAtStart(sealedNearest, from))
+        // 体积图会把一串窄洞逐个堵死，飞行只能到达与起点连通的位置。
+        // 终点空腔与起点不连通时，沿地面路径分段拼接：开阔段飞行，封闭段走地面。
+        if (volumeQuery.FloodEmptyRegion(endVoxel, startVoxel, VOLUME_GOAL_FLOOD_LIMIT, out var sealedCells) == VolumeFloodResult.Sealed)
         {
-            Service.Log.Debug($"[算路] 飞行终点所在的体积空腔只有 {floodedCells} 格，判定为封闭");
+            Service.Log.Debug($"[算路] 飞行终点所在的体积空腔只有 {sealedCells} 个体素，与起点不连通");
 
             // 起点落得到地面时靠地面路径分段，落不到地面才从体积图上逐层穿洞
             if (TryResolveGroundPoint(from) is not null)
             {
-                if (TryBuildSegmentedVolumePath(from, to, cancel, avoidCenter, avoidRadius, out var segmentedResult))
+                if (TryBuildSegmentedVolumePath(from, to, startVoxel, cancel, avoidCenter, avoidRadius, out var segmentedResult))
                     return segmentedResult;
             }
-            else if (TryBuildSealedGoalFallback(from, to, safeDestination, cancel, avoidCenter, avoidRadius, out var sealedResult))
+            else if (TryBuildSealedGoalFallback(from, to, safeDestination, startVoxel, cancel, avoidCenter, avoidRadius, out var sealedResult))
                 return sealedResult;
 
             // 终点在体积图上被隔离，地面又到不了，体积搜索只会去穷尽可达空间
@@ -220,92 +219,18 @@ internal sealed class NavmeshFlightQuery
         };
     }
 
-    // 终点被体积图上的小空腔关住时（例如门内的房间），两个方向的搜索都会把预算耗在逼近它上。
-    // 这里不去寻路，只在叶体素网格上洪泛给定位置所在的分量：能在上限内穷尽，说明它被封闭住了。
-    private bool IsVolumeRegionSmall
+    // 采样点处在与起点连通的空间里算开阔；取不到体素或洪泛没穷尽都按开阔处理，交给搜索去判断
+    private bool IsSampleOpen
     (
-        Vector3                   point,
-        int                       limit,
-        Vector3                   towards,
-        out int                   cells,
-        out (int X, int Y, int Z) nearest
+        Vector3 point,
+        ulong   startVoxel
     )
     {
-        cells   = 0;
-        nearest = default;
-
-        if (query.VolumeQuery == null)
-            return false;
-
-        var volume   = query.VolumeQuery.Volume;
-        var cellSize = volume.Levels[^1].CellSize;
-        var origin   = volume.RootTile.BoundsMin;
-
-        var (sx, sy, sz) = ToLeafCell(point, origin, cellSize);
-        var seeded = false;
-
-        // 采样点常常贴在地面上，取整后的格子可能落在脚下；向上找到第一个空格子作为种子
-        for (var attempt = 0; attempt < VOLUME_SEED_LIFT_ATTEMPTS; ++attempt, ++sy)
-        {
-            var seed = origin + (new Vector3(sx + 0.5f, sy + 0.5f, sz + 0.5f) * cellSize);
-            if (!volume.FindLeafVoxel(seed).empty)
-                continue;
-
-            seeded = true;
-            break;
-        }
-
-        if (!seeded)
-        {
-            cells = 0;
+        var volumeQuery = query.VolumeQuery;
+        if (volumeQuery == null || !TryResolveOpenVoxel(point, out var voxel, out _))
             return true;
-        }
 
-        var startCell = (X: sx, Y: sy, Z: sz);
-        var visited   = new HashSet<(int X, int Y, int Z)> { startCell };
-        var queue     = new Queue<(int X, int Y, int Z)>();
-        queue.Enqueue(startCell);
-
-        var bestDistance = float.MaxValue;
-        nearest = startCell;
-
-        while (queue.Count > 0)
-        {
-            var (cx, cy, cz) = queue.Dequeue();
-
-            var center   = origin + (new Vector3(cx + 0.5f, cy + 0.5f, cz + 0.5f) * cellSize);
-            var distance = Vector3.DistanceSquared(center, towards);
-
-            if (distance < bestDistance)
-            {
-                bestDistance = distance;
-                nearest      = (cx, cy, cz);
-            }
-
-            foreach (var (dx, dy, dz) in LeafNeighbours())
-            {
-                var next = (X: cx + dx, Y: cy + dy, Z: cz + dz);
-                if (visited.Contains(next))
-                    continue;
-
-                var world = origin + (new Vector3(next.X + 0.5f, next.Y + 0.5f, next.Z + 0.5f) * cellSize);
-                if (!volume.FindLeafVoxel(world).empty)
-                    continue;
-
-                visited.Add(next);
-
-                if (visited.Count > limit)
-                {
-                    cells = visited.Count;
-                    return false;
-                }
-
-                queue.Enqueue(next);
-            }
-        }
-
-        cells = visited.Count;
-        return true;
+        return volumeQuery.FloodEmptyRegion(voxel, startVoxel, VOLUME_OPEN_FLOOD_LIMIT, out _) != VolumeFloodResult.Sealed;
     }
 
     private static (int X, int Y, int Z) ToLeafCell
@@ -319,47 +244,17 @@ internal sealed class NavmeshFlightQuery
         return ((int)MathF.Floor(local.X), (int)MathF.Floor(local.Y), (int)MathF.Floor(local.Z));
     }
 
-    private static IEnumerable<(int, int, int)> LeafNeighbours()
-    {
-        yield return (1, 0, 0);
-        yield return (-1, 0, 0);
-        yield return (0, 1, 0);
-        yield return (0, -1, 0);
-        yield return (0, 0, 1);
-        yield return (0, 0, -1);
-    }
-
-    private Vector3 LeafCellCenter
-    (
-        (int X, int Y, int Z) cell
-    )
-    {
-        var volume = query.VolumeQuery!.Volume;
-        return volume.RootTile.BoundsMin + (new Vector3(cell.X + 0.5f, cell.Y + 0.5f, cell.Z + 0.5f) * volume.Levels[^1].CellSize);
-    }
-
-    // 分量已经覆盖到起点所在的那一格，说明起点与终点本来就在同一个空腔里，不必绕行地面
-    private bool IsSealedNearestAtStart
-    (
-        (int X, int Y, int Z) cell,
-        Vector3               start
-    )
-    {
-        var cellSize      = query.VolumeQuery!.Volume.Levels[^1].CellSize;
-        var coverDistance = MathF.Max(cellSize.X, MathF.Max(cellSize.Y, cellSize.Z));
-        return Vector3.Distance(LeafCellCenter(cell), start) <= coverDistance;
-    }
-
     // 沿地面路径扫描出"开阔段 / 封闭段"的交替序列。开阔段说明那里的体积空腔连着起点一侧的大空间，
     // 可以直接飞过去；封闭段是被体积图堵住的窄洞或门，只能走地面。
     private List<(Vector3 Start, Vector3 End, bool Open)> ScanOpenRuns
     (
         IReadOnlyList<long> corridor,
         Vector3             start,
-        Vector3             end
+        Vector3             end,
+        ulong               startVoxel
     )
     {
-        List<(Vector3 Point, bool Open)> samples = [(start, !IsVolumeRegionSmall(start, VOLUME_OPEN_FLOOD_LIMIT, start, out _, out _))];
+        List<(Vector3 Point, bool Open)> samples = [(start, IsSampleOpen(start, startVoxel))];
 
         var previous  = start;
         var lastProbe = start;
@@ -376,7 +271,7 @@ internal sealed class NavmeshFlightQuery
                 continue;
 
             lastProbe = point;
-            samples.Add((point, !IsVolumeRegionSmall(point, VOLUME_OPEN_FLOOD_LIMIT, point, out _, out _)));
+            samples.Add((point, IsSampleOpen(point, startVoxel)));
         }
 
         samples.Add((end, false));
@@ -420,6 +315,7 @@ internal sealed class NavmeshFlightQuery
         Vector3           from,
         Vector3           to,
         Vector3           safeDestination,
+        ulong             startVoxel,
         CancellationToken cancel,
         Vector3?          avoidCenter,
         float             avoidRadius,
@@ -437,16 +333,18 @@ internal sealed class NavmeshFlightQuery
 
         for (var hop = 0; hop < VOLUME_SEALED_HOP_LIMIT; ++hop)
         {
-            IsVolumeRegionSmall(cursor, VOLUME_GOAL_FLOOD_LIMIT, from, out _, out var nearest);
+            if (!TryResolveOpenVoxel(cursor, out var handoffVoxel, out var handoffPoint))
+                return false;
 
-            // 只有真的贴到起点所在的空间才算连通。"空腔很大"并不等于连通，
-            // 起点那一侧可能还隔着别的被体积图堵住的窄洞。
-            var nearestPoint = LeafCellCenter(nearest);
+            var region = volumeQuery.FloodEmptyRegion(handoffVoxel, startVoxel, VOLUME_GOAL_FLOOD_LIMIT, out _);
 
-            if (Vector3.Distance(nearestPoint, from) <= VOLUME_HANDOFF_REACH_DISTANCE)
+            // 分量够到起点体素才算连通；超限说明这一层太大、判断不了，交给搜索
+            if (region == VolumeFloodResult.Unknown)
+                return false;
+
+            if (region == VolumeFloodResult.Connected)
             {
-                if (!TryResolveOpenVoxel(from,   out var fromVoxel,    out var fromPoint) ||
-                    !TryResolveOpenVoxel(cursor, out var handoffVoxel, out var handoffPoint))
+                if (!TryResolveOpenVoxel(from, out var fromVoxel, out var fromPoint))
                     return false;
 
                 // 地面到不了终点时（终点在浮岛这类只能飞抵的位置），接上的地面段会停在地面能靠近的最近处；
@@ -502,7 +400,8 @@ internal sealed class NavmeshFlightQuery
                 return true;
             }
 
-            if (!TryStepOutsideRegion(volume, nearest, from, out var next))
+            // 这一层被隔离，朝起点方向穿过窄洞继续找
+            if (!TryStepOutsideRegion(volume, handoffPoint, from, out var next))
                 return false;
 
             cursor = next;
@@ -511,19 +410,20 @@ internal sealed class NavmeshFlightQuery
         return false;
     }
 
-    // 从封闭分量中离起点最近的一格出发，按"朝向起点"的优先顺序逐格外探，取紧邻的另一侧空体素
+    // 从分量边界处按"朝向起点"的优先顺序逐格外探，取紧邻的另一侧空体素
     private bool TryStepOutsideRegion
     (
-        VoxelMap              volume,
-        (int X, int Y, int Z) cell,
-        Vector3               towards,
-        out Vector3           next
+        VoxelMap    volume,
+        Vector3     edgePoint,
+        Vector3     towards,
+        out Vector3 next
     )
     {
         next = default;
 
         var cellSize = volume.Levels[^1].CellSize;
         var origin   = volume.RootTile.BoundsMin;
+        var cell     = ToLeafCell(edgePoint, origin, cellSize);
         var center   = origin  + (new Vector3(cell.X + 0.5f, cell.Y + 0.5f, cell.Z + 0.5f) * cellSize);
         var delta    = towards - center;
 
@@ -601,6 +501,7 @@ internal sealed class NavmeshFlightQuery
     (
         Vector3           from,
         Vector3           to,
+        ulong             startVoxel,
         CancellationToken cancel,
         Vector3?          avoidCenter,
         float             avoidRadius,
@@ -639,7 +540,7 @@ internal sealed class NavmeshFlightQuery
         if (corridor.Count == 0)
             return false;
 
-        var runs = ScanOpenRuns(corridor, ground.Segments[0].StartPosition, to);
+        var runs = ScanOpenRuns(corridor, ground.Segments[0].StartPosition, to, startVoxel);
         if (runs.Count == 0)
             return false;
 
@@ -1060,7 +961,6 @@ internal sealed class NavmeshFlightQuery
     private const int   VOLUME_SEED_LIFT_ATTEMPTS     = 8;
     private const int   VOLUME_SEALED_HOP_LIMIT       = 24;
     private const int   VOLUME_SEALED_STEP_LIMIT      = 64;
-    private const float VOLUME_HANDOFF_REACH_DISTANCE = 32f;
     private const float VOLUME_RETREAT_SAMPLE_STEP    = 16f;
     private const float VOLUME_GROUND_SEARCH_XZ       = 8f;
     private const float VOLUME_GROUND_SEARCH_Y        = 256f;
