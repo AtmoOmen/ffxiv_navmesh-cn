@@ -18,6 +18,9 @@ public partial class VoxelPathfind
     private const int    MAX_ANCESTOR_LOOK_BACK                                          = 6;
     private const int    RAYCAST_PARALLEL_NEIGHBOUR_THRESHOLD                            = 12;
     private const float  MAX_SEARCH_RAYCAST_DISTANCE_IN_LEAF_CELLS                       = 96f;
+    private const int    QUERY_RELAY_BUDGET                                              = 3;
+    private const float  QUERY_PROGRESS_MIN_IMPROVEMENT                                  = 1f;
+    private const float  QUERY_STALL_TIMEOUT_SECONDS                                     = 5f;
     private const float  SHORT_RANGE_HEURISTIC_WEIGHT                                    = 1.0f;
     private const float  SHORT_RANGE_FAST_HEURISTIC_WEIGHT                               = 1.35f;
     private const int    SHORT_RANGE_FAST_SEARCH_BASE_STEP_BUDGET                        = 4_096;

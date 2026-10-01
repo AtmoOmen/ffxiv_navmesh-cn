@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Query.Flight.Models;
@@ -67,8 +68,14 @@ public partial class VoxelPathfind
 
             if (ShouldAbortGuidedCorridorEarly())
                 return VolumeSearchTermination.SearchExhausted;
+
             if ((i & 0xff) == 0)
+            {
                 cancel.ThrowIfCancellationRequested();
+
+                if (ShouldAbortSearchOnTimeout())
+                    return VolumeSearchTermination.StepBudgetReached;
+            }
         }
 
         return VolumeSearchTermination.StepBudgetReached;
@@ -120,6 +127,25 @@ public partial class VoxelPathfind
 
         guidedCorridorEarlyAbortTriggered = true;
         return true;
+    }
+
+    // 终点被体积图隔离时，搜索会一路穷尽可达空间；这里在长时间没能更靠近目标时收手
+    private bool ShouldAbortSearchOnTimeout()
+    {
+        var now = Stopwatch.GetTimestamp();
+
+        if (bestNodeIndex >= 0 && bestNodeIndex < nodes.Count)
+        {
+            var bestDistance = NodeSpan[bestNodeIndex].HScore;
+
+            if (bestDistance < progressBestDistance - QUERY_PROGRESS_MIN_IMPROVEMENT)
+            {
+                progressBestDistance = bestDistance;
+                progressTimestamp    = now;
+            }
+        }
+
+        return Stopwatch.GetElapsedTime(progressTimestamp, now).TotalSeconds > QUERY_STALL_TIMEOUT_SECONDS;
     }
 
     private List<(ulong voxel, Vector3 p)> RunSearchAttempt

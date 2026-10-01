@@ -24,7 +24,7 @@ public partial class VoxelPathfind
 
         try
         {
-            return FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, true);
+            return FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, QUERY_RELAY_BUDGET, cancel);
         }
         finally
         {

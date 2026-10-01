@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using vnavmesh.Common.Build.Flight;
@@ -72,6 +73,8 @@ public partial class VoxelPathfind
     private int                        completedLineOfSightHits;
     private int                        completedPeakOpenListSize;
     private int                        completedSearchAttempts;
+    private long                       progressTimestamp;
+    private float                      progressBestDistance;
     private int                        coarseExpandedNodes;
     private Vector3                    avoidCenter;
     private float                      avoidRadius;
@@ -152,7 +155,7 @@ public partial class VoxelPathfind
             return FindPathAvoided(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);
         }
 
-        return FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel, true);
+        return FindPathInternal(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, QUERY_RELAY_BUDGET, cancel);
     }
 
     private List<(ulong voxel, Vector3 p)> FindPathInternal
@@ -162,8 +165,8 @@ public partial class VoxelPathfind
         Vector3           fromPos,
         Vector3           toPos,
         bool              returnIntermediatePoints,
-        CancellationToken cancel,
-        bool              allowRelay
+        int               relayBudget,
+        CancellationToken cancel
     )
     {
         l1PathSet               = null;
@@ -173,6 +176,10 @@ public partial class VoxelPathfind
         l1DistanceField         = null;
         l0DistanceField         = null;
         previouslyVisitedVoxels = null;
+
+        // 每层接力各自从起点重新计时，否则前一层停滞满后，后面的接力一上来就会被收手
+        progressTimestamp    = Stopwatch.GetTimestamp();
+        progressBestDistance = float.MaxValue;
 
         if (fromVoxel == toVoxel)
         {
@@ -280,29 +287,52 @@ public partial class VoxelPathfind
         if (lastTermination == VolumeSearchTermination.ReachedGoal)
             return RefineSimplifiedPath(longRangePath, cancel);
 
-        // Partial 接力：用当前路径终点作为新起点重新搜索
-        if (allowRelay && longRangePath.Count > 0)
+        if (longRangePath.Count == 0)
+            return [];
+
+        // Partial 接力：从上次的停点续算，每次都要比接力前更靠近目标，否则立即停止推进
+        var relayPath           = longRangePath;
+        var relayVoxel          = fromVoxel;
+        var relayOriginDistance = straightLineDistance;
+        var relayDistance       = Vector3.Distance(longRangePath[^1].p, toPos);
+
+        for (var attempt = 0; attempt < relayBudget; ++attempt)
         {
-            var relayPoint = longRangePath[^1];
-            var (relayVoxel, relayEmpty) = Volume.FindLeafVoxel(relayPoint.p);
-
-            if (relayEmpty && relayVoxel != VoxelMap.INVALID_VOXEL && relayVoxel != fromVoxel)
+            if (relayDistance >= relayOriginDistance)
             {
-                var remainingDistance = Vector3.Distance(relayPoint.p, toPos);
-                Service.Log.Debug($"[算路] 飞行体素 Partial 接力搜索：接力点 = {relayPoint.p:f3}，剩余距离 = {remainingDistance:f3}");
-
-                var relayPath = FindPathInternal(relayVoxel, toVoxel, relayPoint.p, toPos, returnIntermediatePoints, cancel, false);
-
-                if (relayPath.Count > 0)
-                {
-                    var mergedPath = VoxelPathUtil.MergePathSegments(longRangePath, relayPath, SCORE_EPSILON);
-                    return RefineSimplifiedPath(mergedPath, cancel);
-                }
+                Service.Log.Debug($"[算路] 飞行体素 Partial 接力打断：接力点 = {relayPath[^1].p:f3}，剩余距离 = {relayDistance:f3}，未比上一次接力点 {relayOriginDistance:f3} 更近");
+                break;
             }
+
+            var relayPoint = relayPath[^1];
+            var (nextVoxel, nextEmpty) = Volume.FindLeafVoxel(relayPoint.p);
+
+            if (!nextEmpty || nextVoxel == VoxelMap.INVALID_VOXEL || nextVoxel == relayVoxel)
+                break;
+
+            Service.Log.Debug($"[算路] 飞行体素 Partial 接力搜索：接力点 = {relayPoint.p:f3}，剩余距离 = {relayDistance:f3}，剩余接力次数 = {relayBudget - attempt - 1}");
+
+            var nextPath = FindPathInternal(nextVoxel, toVoxel, relayPoint.p, toPos, returnIntermediatePoints, 0, cancel);
+
+            if (nextPath.Count == 0)
+                break;
+
+            var nextDistance = Vector3.Distance(nextPath[^1].p, toPos);
+
+            if (nextDistance >= relayDistance)
+            {
+                Service.Log.Debug($"[算路] 飞行体素 Partial 接力打断：接力末端 = {nextPath[^1].p:f3}，距离 = {nextDistance:f3}，未比接力点 {relayDistance:f3} 更近");
+                break;
+            }
+
+            relayPath           = VoxelPathUtil.MergePathSegments(relayPath, nextPath, SCORE_EPSILON);
+            relayVoxel          = nextVoxel;
+            relayOriginDistance = relayDistance;
+            relayDistance       = nextDistance;
         }
 
-        return longRangePath.Count > 0 ?
-                   RefineSimplifiedPath(longRangePath, cancel) :
+        return relayPath.Count > 0 ?
+                   RefineSimplifiedPath(relayPath, cancel) :
                    [];
     }
 }

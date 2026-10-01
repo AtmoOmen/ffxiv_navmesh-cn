@@ -68,17 +68,23 @@ internal sealed class NavmeshFlightQuery
 
         // 体积图会把一串窄洞逐个堵死，飞行只能到达开阔空腔里的位置。
         // 终点落在封闭空腔时，沿地面路径分段拼接：开阔段飞行，封闭段走地面。
-        if (IsVolumeRegionSmall(safeDestination, VOLUME_GOAL_FLOOD_LIMIT, from, out var floodedCells, out _))
+        if (IsVolumeRegionSmall(safeDestination, VOLUME_GOAL_FLOOD_LIMIT, from, out var floodedCells, out var sealedNearest) &&
+            !IsSealedNearestAtStart(sealedNearest, from))
         {
             Service.Log.Debug($"[算路] 飞行终点所在的体积空腔只有 {floodedCells} 格，判定为封闭");
 
-            if (TryBuildSegmentedVolumePath(from, to, cancel, avoidCenter, avoidRadius, out var segmentedResult))
-                return segmentedResult;
-
-            if (TryBuildSealedGoalFallback(from, to, safeDestination, cancel, avoidCenter, avoidRadius, out var sealedResult))
+            // 起点落得到地面时靠地面路径分段，落不到地面才从体积图上逐层穿洞
+            if (TryResolveGroundPoint(from) is not null)
+            {
+                if (TryBuildSegmentedVolumePath(from, to, cancel, avoidCenter, avoidRadius, out var segmentedResult))
+                    return segmentedResult;
+            }
+            else if (TryBuildSealedGoalFallback(from, to, safeDestination, cancel, avoidCenter, avoidRadius, out var sealedResult))
                 return sealedResult;
 
-            Service.Log.Warning("[算路] 分段与穿层方案均失败，改用直接搜索");
+            // 终点在体积图上被隔离，地面又到不了，体积搜索只会去穷尽可达空间
+            Service.Log.Warning("[算路] 分段与穿层方案均失败，终点在体积图上不可达，返回 Partial");
+            return CreateFlightUnreachable(from, to);
         }
 
         var searchTimer = StopWatchTimer.Create();
@@ -323,6 +329,27 @@ internal sealed class NavmeshFlightQuery
         yield return (0, 0, -1);
     }
 
+    private Vector3 LeafCellCenter
+    (
+        (int X, int Y, int Z) cell
+    )
+    {
+        var volume = query.VolumeQuery!.Volume;
+        return volume.RootTile.BoundsMin + (new Vector3(cell.X + 0.5f, cell.Y + 0.5f, cell.Z + 0.5f) * volume.Levels[^1].CellSize);
+    }
+
+    // 分量已经覆盖到起点所在的那一格，说明起点与终点本来就在同一个空腔里，不必绕行地面
+    private bool IsSealedNearestAtStart
+    (
+        (int X, int Y, int Z) cell,
+        Vector3               start
+    )
+    {
+        var cellSize      = query.VolumeQuery!.Volume.Levels[^1].CellSize;
+        var coverDistance = MathF.Max(cellSize.X, MathF.Max(cellSize.Y, cellSize.Z));
+        return Vector3.Distance(LeafCellCenter(cell), start) <= coverDistance;
+    }
+
     // 沿地面路径扫描出"开阔段 / 封闭段"的交替序列。开阔段说明那里的体积空腔连着起点一侧的大空间，
     // 可以直接飞过去；封闭段是被体积图堵住的窄洞或门，只能走地面。
     private List<(Vector3 Start, Vector3 End, bool Open)> ScanOpenRuns
@@ -414,7 +441,7 @@ internal sealed class NavmeshFlightQuery
 
             // 只有真的贴到起点所在的空间才算连通。"空腔很大"并不等于连通，
             // 起点那一侧可能还隔着别的被体积图堵住的窄洞。
-            var nearestPoint = volume.RootTile.BoundsMin + (new Vector3(nearest.X + 0.5f, nearest.Y + 0.5f, nearest.Z + 0.5f) * volume.Levels[^1].CellSize);
+            var nearestPoint = LeafCellCenter(nearest);
 
             if (Vector3.Distance(nearestPoint, from) <= VOLUME_HANDOFF_REACH_DISTANCE)
             {
@@ -422,14 +449,20 @@ internal sealed class NavmeshFlightQuery
                     !TryResolveOpenVoxel(cursor, out var handoffVoxel, out var handoffPoint))
                     return false;
 
+                // 地面到不了终点时（终点在浮岛这类只能飞抵的位置），接上的地面段会停在地面能靠近的最近处；
+                // 先判地面再飞，可以省掉一次注定到不了终点的飞行搜索
+                var ground = groundQuery.PlanMeshPathDetailed(handoffPoint, to, 0, cancel, avoidCenter, avoidRadius);
+
+                if (ground.Status != PathfindStatus.Complete || ground.Segments.Count == 0)
+                {
+                    Service.Log.Warning($"[算路] 地面路径未到终点（{ground.Status}），穿层方案放弃");
+                    return false;
+                }
+
                 var flight = volumeQuery.FindPath
                     (fromVoxel, handoffVoxel, fromPoint, handoffPoint, false, cancel, avoidCenter, avoidRadius);
 
                 if (flight.Count == 0)
-                    return false;
-
-                var ground = groundQuery.PlanMeshPathDetailed(handoffPoint, to, 0, cancel, avoidCenter, avoidRadius);
-                if (!ground.Succeeded || ground.Segments.Count == 0)
                     return false;
 
                 List<Vector3> points = new(flight.Count);
@@ -885,7 +918,8 @@ internal sealed class NavmeshFlightQuery
 
         var groundResult = groundQuery.PlanMeshPathDetailed(resolvedGroundStart, requestedTarget, 0, cancel, avoidCenter, avoidRadius);
 
-        if (!groundResult.Succeeded || groundResult.Segments.Count == 0)
+        // 地面到不了目标时（目标在浮岛这类只能飞抵的位置），接上的地面段会停在地面能靠近的最近处
+        if (groundResult.Status != PathfindStatus.Complete || groundResult.Segments.Count == 0)
         {
             result = null!;
             return false;
@@ -958,6 +992,35 @@ internal sealed class NavmeshFlightQuery
             DestinationTolerance = 0
         };
 
+    // 终点被体积图关在与起点不连通的空腔里，且地面也到不了，此时没有可行的飞行路径
+    private static PlannerResult CreateFlightUnreachable
+    (
+        Vector3 start,
+        Vector3 destination
+    ) =>
+        new()
+        {
+            Status               = PathfindStatus.Partial,
+            RequestedMode        = MovementMode.Flight,
+            RequestedDestination = destination,
+            FinalDestination     = start,
+            DestinationTolerance = 0,
+            Segments =
+            [
+                new()
+                {
+                    MovementMode           = MovementMode.Flight,
+                    SegmentKind            = MovementSegmentKind.FlightTraverse,
+                    AllowVerticalControl   = true,
+                    GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
+                    TraversalStartPosition = start,
+                    StartPosition          = start,
+                    EndPosition            = start,
+                    Points                 = [start]
+                }
+            ]
+        };
+
     private static string GetLogVolumeSearchTermination
     (
         VolumeSearchTermination termination
@@ -989,7 +1052,7 @@ internal sealed class NavmeshFlightQuery
         var dz = left.Z             - right.Z;
         return MathF.Sqrt((dx * dx) + (dz * dz));
     }
-    
+
     #region 常量
 
     private const int   VOLUME_GOAL_FLOOD_LIMIT       = 50_000;
