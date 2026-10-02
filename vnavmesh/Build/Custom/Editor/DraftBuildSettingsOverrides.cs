@@ -25,11 +25,8 @@ public sealed class DraftBuildSettingsOverrides
     public bool?          GenerateEdgeClimbLinks;
     public bool?          GenerateEdgeJumpLinks;
     public float?         GroundTolerance;
-    public float?         ClimbDownDistance;
     public float?         ClimbDownMaxHeight;
     public float?         ClimbDownMinHeight;
-    public float?         EdgeJumpEndDistance;
-    public float?         EdgeJumpHeight;
     public float?         EdgeJumpMaxDrop;
     public float?         EdgeJumpMinDrop;
     public float?         GroundTileSize;

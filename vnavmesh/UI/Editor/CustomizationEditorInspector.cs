@@ -697,13 +697,6 @@ internal static class CustomizationEditorInspector
             );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
             (
-                "攀爬距离",
-                ref workspace.Draft.BuildSettings.ClimbDownDistance,
-                settingsDefaults.ClimbDownDistance,
-                "边缘攀爬采样的水平搜索距离"
-            );
-            changed |= CustomizationEditorWidgets.DrawNullableFloat
-            (
                 "最大高度",
                 ref workspace.Draft.BuildSettings.ClimbDownMaxHeight,
                 settingsDefaults.ClimbDownMaxHeight,
@@ -721,20 +714,6 @@ internal static class CustomizationEditorInspector
 
         if (ImGui.TreeNodeEx("边缘跳跃", ImGuiTreeNodeFlags.DefaultOpen))
         {
-            changed |= CustomizationEditorWidgets.DrawNullableFloat
-            (
-                "结束距离",
-                ref workspace.Draft.BuildSettings.EdgeJumpEndDistance,
-                settingsDefaults.EdgeJumpEndDistance,
-                "边缘跳跃终点水平搜索范围"
-            );
-            changed |= CustomizationEditorWidgets.DrawNullableFloat
-            (
-                "高度",
-                ref workspace.Draft.BuildSettings.EdgeJumpHeight,
-                settingsDefaults.EdgeJumpHeight,
-                "边缘跳跃高度阈值"
-            );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
             (
                 "最大落差",

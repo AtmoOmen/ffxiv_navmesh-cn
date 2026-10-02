@@ -202,11 +202,8 @@ internal static class CustomizationDraftExporter
             settings.GenerateEdgeClimbLinks.HasValue     ||
             settings.GenerateEdgeJumpLinks.HasValue      ||
             settings.GroundTolerance.HasValue            ||
-            settings.ClimbDownDistance.HasValue          ||
             settings.ClimbDownMaxHeight.HasValue         ||
             settings.ClimbDownMinHeight.HasValue         ||
-            settings.EdgeJumpEndDistance.HasValue        ||
-            settings.EdgeJumpHeight.HasValue             ||
             settings.EdgeJumpMaxDrop.HasValue            ||
             settings.EdgeJumpMinDrop.HasValue            ||
             settings.GroundTileSize.HasValue             ||
@@ -308,11 +305,8 @@ internal static class CustomizationDraftExporter
         AppendAssignment(body, 2, "settings.GenerateEdgeClimbLinks",     settings.GenerateEdgeClimbLinks,     FormatBool);
         AppendAssignment(body, 2, "settings.GenerateEdgeJumpLinks",      settings.GenerateEdgeJumpLinks,      FormatBool);
         AppendAssignment(body, 2, "settings.GroundTolerance",            settings.GroundTolerance,            FormatFloat);
-        AppendAssignment(body, 2, "settings.ClimbDownDistance",          settings.ClimbDownDistance,          FormatFloat);
         AppendAssignment(body, 2, "settings.ClimbDownMaxHeight",         settings.ClimbDownMaxHeight,         FormatFloat);
         AppendAssignment(body, 2, "settings.ClimbDownMinHeight",         settings.ClimbDownMinHeight,         FormatFloat);
-        AppendAssignment(body, 2, "settings.EdgeJumpEndDistance",        settings.EdgeJumpEndDistance,        FormatFloat);
-        AppendAssignment(body, 2, "settings.EdgeJumpHeight",             settings.EdgeJumpHeight,             FormatFloat);
         AppendAssignment(body, 2, "settings.EdgeJumpMaxDrop",            settings.EdgeJumpMaxDrop,            FormatFloat);
         AppendAssignment(body, 2, "settings.EdgeJumpMinDrop",            settings.EdgeJumpMinDrop,            FormatFloat);
         AppendAssignment(body, 2, "settings.GroundTileSize",             settings.GroundTileSize,             FormatFloat);

@@ -110,11 +110,6 @@ public class NavmeshSettings
     public float GroundTolerance = 0.3f;
 
     /// <summary>
-    ///     向下攀爬终点相对起点的水平搜索距离。数值越大覆盖范围越广，但可能生成过远的链接。
-    /// </summary>
-    public float ClimbDownDistance = 3.6f;
-
-    /// <summary>
     ///     向下攀爬允许的最小落差值，低于该值不生成链接，避免把普通台阶当成跳落。
     /// </summary>
     public float ClimbDownMinHeight = 0.6f;
@@ -123,16 +118,6 @@ public class NavmeshSettings
     ///     向下攀爬允许的最大落差值，高于该值的落差不会生成链接。
     /// </summary>
     public float ClimbDownMaxHeight = 3.6f;
-
-    /// <summary>
-    ///     边缘跳跃的起跳高度参数，控制轨迹最高点。数值越大轨迹越高，越容易越过障碍，但生成成本也越高。
-    /// </summary>
-    public float EdgeJumpHeight = 1.8f;
-
-    /// <summary>
-    ///     边缘跳跃终点相对起点的水平搜索距离，决定跳跃能覆盖多远。
-    /// </summary>
-    public float EdgeJumpEndDistance = 12f;
 
     /// <summary>
     ///     边缘跳跃允许的最小落差值，低于该值不生成跳跃链接。
@@ -244,14 +229,11 @@ public class NavmeshSettings
         AppendBool(nameof(FastBuild),              FastBuild);
         AppendBool(nameof(GenerateEdgeClimbLinks), GenerateEdgeClimbLinks);
         AppendBool(nameof(GenerateEdgeJumpLinks),  GenerateEdgeJumpLinks);
-        AppendFloat(nameof(GroundTolerance),     GroundTolerance);
-        AppendFloat(nameof(ClimbDownDistance),   ClimbDownDistance);
-        AppendFloat(nameof(ClimbDownMaxHeight),  ClimbDownMaxHeight);
-        AppendFloat(nameof(ClimbDownMinHeight),  ClimbDownMinHeight);
-        AppendFloat(nameof(EdgeJumpEndDistance), EdgeJumpEndDistance);
-        AppendFloat(nameof(EdgeJumpHeight),      EdgeJumpHeight);
-        AppendFloat(nameof(EdgeJumpMaxDrop),     EdgeJumpMaxDrop);
-        AppendFloat(nameof(EdgeJumpMinDrop),     EdgeJumpMinDrop);
+        AppendFloat(nameof(GroundTolerance),    GroundTolerance);
+        AppendFloat(nameof(ClimbDownMaxHeight), ClimbDownMaxHeight);
+        AppendFloat(nameof(ClimbDownMinHeight), ClimbDownMinHeight);
+        AppendFloat(nameof(EdgeJumpMaxDrop),    EdgeJumpMaxDrop);
+        AppendFloat(nameof(EdgeJumpMinDrop),    EdgeJumpMinDrop);
         AppendBool(nameof(Flyable), Flyable);
         AppendFloat(nameof(GroundTileSize), GroundTileSize);
         AppendInt(nameof(GroundTileCountMax), GroundTileCountMax);

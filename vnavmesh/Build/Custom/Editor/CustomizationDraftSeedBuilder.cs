@@ -155,15 +155,12 @@ internal static class CustomizationDraftSeedBuilder
             target.GenerateEdgeClimbLinks = current.GenerateEdgeClimbLinks;
         if (current.GenerateEdgeJumpLinks != defaults.GenerateEdgeJumpLinks)
             target.GenerateEdgeJumpLinks = current.GenerateEdgeJumpLinks;
-        CopyIfChanged(current.GroundTolerance,     defaults.GroundTolerance,     v => target.GroundTolerance     = v);
-        CopyIfChanged(current.ClimbDownDistance,   defaults.ClimbDownDistance,   v => target.ClimbDownDistance   = v);
-        CopyIfChanged(current.ClimbDownMaxHeight,  defaults.ClimbDownMaxHeight,  v => target.ClimbDownMaxHeight  = v);
-        CopyIfChanged(current.ClimbDownMinHeight,  defaults.ClimbDownMinHeight,  v => target.ClimbDownMinHeight  = v);
-        CopyIfChanged(current.EdgeJumpEndDistance, defaults.EdgeJumpEndDistance, v => target.EdgeJumpEndDistance = v);
-        CopyIfChanged(current.EdgeJumpHeight,      defaults.EdgeJumpHeight,      v => target.EdgeJumpHeight      = v);
-        CopyIfChanged(current.EdgeJumpMaxDrop,     defaults.EdgeJumpMaxDrop,     v => target.EdgeJumpMaxDrop     = v);
-        CopyIfChanged(current.EdgeJumpMinDrop,     defaults.EdgeJumpMinDrop,     v => target.EdgeJumpMinDrop     = v);
-        CopyIfChanged(current.GroundTileSize,      defaults.GroundTileSize,      v => target.GroundTileSize      = v);
+        CopyIfChanged(current.GroundTolerance,    defaults.GroundTolerance,    v => target.GroundTolerance    = v);
+        CopyIfChanged(current.ClimbDownMaxHeight, defaults.ClimbDownMaxHeight, v => target.ClimbDownMaxHeight = v);
+        CopyIfChanged(current.ClimbDownMinHeight, defaults.ClimbDownMinHeight, v => target.ClimbDownMinHeight = v);
+        CopyIfChanged(current.EdgeJumpMaxDrop,    defaults.EdgeJumpMaxDrop,    v => target.EdgeJumpMaxDrop    = v);
+        CopyIfChanged(current.EdgeJumpMinDrop,    defaults.EdgeJumpMinDrop,    v => target.EdgeJumpMinDrop    = v);
+        CopyIfChanged(current.GroundTileSize,     defaults.GroundTileSize,     v => target.GroundTileSize     = v);
         if (current.GroundTileCountMax != defaults.GroundTileCountMax)
             target.GroundTileCountMax = current.GroundTileCountMax;
         CopyIfChanged(current.VolumeCellSize, defaults.VolumeCellSize, v => target.VolumeCellSize = v);

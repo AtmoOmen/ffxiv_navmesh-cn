@@ -177,16 +177,10 @@ public class NavmeshCustomization
             settings.GenerateEdgeJumpLinks = Settings.GenerateEdgeJumpLinks;
         if (Settings.GroundTolerance != DefaultSettings.GroundTolerance)
             settings.GroundTolerance = Settings.GroundTolerance;
-        if (Settings.ClimbDownDistance != DefaultSettings.ClimbDownDistance)
-            settings.ClimbDownDistance = Settings.ClimbDownDistance;
         if (Settings.ClimbDownMaxHeight != DefaultSettings.ClimbDownMaxHeight)
             settings.ClimbDownMaxHeight = Settings.ClimbDownMaxHeight;
         if (Settings.ClimbDownMinHeight != DefaultSettings.ClimbDownMinHeight)
             settings.ClimbDownMinHeight = Settings.ClimbDownMinHeight;
-        if (Settings.EdgeJumpEndDistance != DefaultSettings.EdgeJumpEndDistance)
-            settings.EdgeJumpEndDistance = Settings.EdgeJumpEndDistance;
-        if (Settings.EdgeJumpHeight != DefaultSettings.EdgeJumpHeight)
-            settings.EdgeJumpHeight = Settings.EdgeJumpHeight;
         if (Settings.EdgeJumpMaxDrop != DefaultSettings.EdgeJumpMaxDrop)
             settings.EdgeJumpMaxDrop = Settings.EdgeJumpMaxDrop;
         if (Settings.EdgeJumpMinDrop != DefaultSettings.EdgeJumpMinDrop)

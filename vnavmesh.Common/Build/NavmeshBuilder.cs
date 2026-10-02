@@ -970,10 +970,12 @@ public class NavmeshBuilder
                     Settings.AgentMaxClimb,
                     Settings.GroundTolerance,
                     -Settings.AgentRadius * 0.2f,
-                    Settings.CellSize + (2 * Settings.AgentRadius) + Settings.ClimbDownDistance,
+                    CharacterPhysics.MOVE_SPEED,
+                    CharacterPhysics.MOVE_SPEED * CharacterPhysics.SPRINT_SPEED_MULTIPLIER,
+                    0,
+                    CharacterPhysics.GRAVITY,
                     -Settings.ClimbDownMaxHeight,
-                    -Settings.ClimbDownMinHeight,
-                    0
+                    -Settings.ClimbDownMinHeight
                 );
                 generatedClimbLinks = addConnections
                 (
@@ -995,10 +997,12 @@ public class NavmeshBuilder
                     Settings.AgentMaxClimb,
                     Settings.GroundTolerance,
                     -Settings.AgentRadius * 0.2f,
-                    Settings.EdgeJumpEndDistance,
+                    CharacterPhysics.MOVE_SPEED,
+                    CharacterPhysics.MOVE_SPEED * CharacterPhysics.SPRINT_SPEED_MULTIPLIER,
+                    CharacterPhysics.JUMP_SPEED,
+                    CharacterPhysics.GRAVITY,
                     -Settings.EdgeJumpMaxDrop,
-                    -Settings.EdgeJumpMinDrop,
-                    Settings.EdgeJumpHeight
+                    -Settings.EdgeJumpMinDrop
                 );
                 generatedJumpLinks = addConnections
                 (

@@ -129,16 +129,10 @@ internal static class CustomizationDraftApplier
             settings.GenerateEdgeJumpLinks = generateEdgeJumpLinks;
         if (overrides.GroundTolerance is { } groundTolerance)
             settings.GroundTolerance = groundTolerance;
-        if (overrides.ClimbDownDistance is { } climbDownDistance)
-            settings.ClimbDownDistance = climbDownDistance;
         if (overrides.ClimbDownMaxHeight is { } climbDownMaxHeight)
             settings.ClimbDownMaxHeight = climbDownMaxHeight;
         if (overrides.ClimbDownMinHeight is { } climbDownMinHeight)
             settings.ClimbDownMinHeight = climbDownMinHeight;
-        if (overrides.EdgeJumpEndDistance is { } edgeJumpEndDistance)
-            settings.EdgeJumpEndDistance = edgeJumpEndDistance;
-        if (overrides.EdgeJumpHeight is { } edgeJumpHeight)
-            settings.EdgeJumpHeight = edgeJumpHeight;
         if (overrides.EdgeJumpMaxDrop is { } edgeJumpMaxDrop)
             settings.EdgeJumpMaxDrop = edgeJumpMaxDrop;
         if (overrides.EdgeJumpMinDrop is { } edgeJumpMinDrop)
