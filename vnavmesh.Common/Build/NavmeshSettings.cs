@@ -128,7 +128,7 @@ public class NavmeshSettings
     ///     边缘跳跃的起跳高度参数，控制轨迹最高点。数值越大轨迹越高，越容易越过障碍，但生成成本也越高。
     /// </summary>
     public float EdgeJumpHeight = 1.8f;
-    
+
     /// <summary>
     ///     边缘跳跃终点相对起点的水平搜索距离，决定跳跃能覆盖多远。
     /// </summary>

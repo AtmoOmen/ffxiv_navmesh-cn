@@ -17,10 +17,10 @@ using vnavmesh.Common.Utils;
 namespace vnavmesh.Common.Build;
 
 // full set of data needed for navigation in the zone
-public record class Navmesh
+public record Navmesh
 {
-    public static readonly uint Magic   = 0x444D564E; // 'NVMD'
-    public static readonly uint Version = 40;         // 更新后触发一次全量重构建
+    public const uint MAGIC   = 0x444D564E; // 'NVMD'
+    public const uint VERSION = 41;         // 更新后触发一次全量重构建
 
     public int       CustomizationVersion { get; init; }
     public string    BuildSignature       { get; init; }
@@ -113,7 +113,7 @@ public record class Navmesh
 
         var magic   = reader.ReadUInt32();
         var version = reader.ReadUInt32();
-        if (magic != Magic || version != Version)
+        if (magic != MAGIC || version != VERSION)
             throw new Exception("缓存头无效");
 
         var customizationVersion = reader.ReadInt32();
@@ -181,8 +181,8 @@ public record class Navmesh
             () => volumeTreeSegment = EncodeSegment(CacheSegmentKind.VolumeTree, CacheCodec.FastLz, volumeWriter => SerializeVolumeTree(volumeWriter, Volume))
         );
 
-        writer.Write(Magic);
-        writer.Write(Version);
+        writer.Write(MAGIC);
+        writer.Write(VERSION);
         writer.Write(CustomizationVersion);
         writer.Write(BuildSignature);
         writer.Write(CustomizationApplied);
@@ -689,9 +689,8 @@ public record class Navmesh
 
         var subtreeCount = 0;
 
-        for (var i = 0; i < packedStates.Length; ++i)
+        foreach (var packedState in packedStates)
         {
-            var packedState = packedStates[i];
             if (s_invalidPackedState[packedState])
                 throw new Exception($"未知的体积单元状态字节: 0x{packedState:X2}");
 
