@@ -1,0 +1,58 @@
+name: Upstream Sync
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: CN
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/awgil/ffxiv_navmesh.git
+          git fetch upstream master --no-tags
+
+      - name: Detect missing commits
+        id: detect
+        run: |
+          behind=$(git rev-list --count HEAD..upstream/master)
+          echo "behind=$behind" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short=8 upstream/master)" >> "$GITHUB_OUTPUT"
+          echo "落后上游 master 的 commit 数量: $behind"
+
+      - name: Create pull request
+        if: steps.detect.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEHIND: ${{ steps.detect.outputs.behind }}
+        run: |
+          branch="upstream-sync-${{ steps.detect.outputs.sha }}"
+          existing=$(gh pr list --head "$branch" --state open --json number --jq 'length')
+          if [ "$existing" != "0" ]; then
+            echo "提醒 PR 已存在, 分支: $branch"
+            exit 0
+          fi
+          git push origin "upstream/master:refs/heads/$branch"
+          {
+            echo "上游 awgil/ffxiv_navmesh 的 master 分支存在 $BEHIND 个未合并进本仓库 CN 分支的 commit, 需要人工处理。"
+            echo
+            git log --format='- %h %s' HEAD..upstream/master
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create \
+            --base CN \
+            --head "$branch" \
+            --title "上游存在 $BEHIND 个未合并的 commit" \
+            --body-file "$RUNNER_TEMP/body.md"
