@@ -10,6 +10,7 @@ public class PluginConfig : IPluginConfiguration
     public int Version { get; set; } = 1;
 
     public bool  AutoLoadNavmesh      = true;
+    public int   CacheRetentionDays   = 7;
     public bool  EnableDTR            = true;
     public bool  ShowQueryStatusInDTR = true;
     public bool  AlignCameraToMovement;
@@ -38,11 +39,12 @@ public class PluginConfig : IPluginConfiguration
 
     private void DrawNavigationAndDisplaySection()
     {
-        DrawCheckbox("切换区域时自动加载导航数据", ref AutoLoadNavmesh,        "进入新区域后自动尝试载入对应的导航数据。");
-        DrawCheckbox("显示路径点",         ref ShowWaypoints,          "在世界中绘制当前路径的关键点。");
-        DrawCheckbox("始终显示游戏碰撞体积",    ref ForceShowGameCollision, "用于排查地形碰撞与导航结果之间的差异。");
-        DrawCheckbox("游戏隐藏界面时仍然渲染",   ref RenderWhenGameUiHidden, "即使使用游戏内隐藏界面功能，插件的调试渲染与窗口仍继续绘制。");
-        DrawCheckbox("启用 DTR 信息栏",    ref EnableDTR,              "在界面上方的信息栏显示插件状态。");
+        DrawCheckbox("切换区域时自动加载导航数据", ref AutoLoadNavmesh, "进入新区域后自动尝试载入对应的导航数据。");
+        DrawSliderInt("自动移除旧缓存（天）", ref CacheRetentionDays, 0, 90, "%d", "超过该时长未使用的区域缓存会在构建完成后被移除；设为 0 表示保留全部缓存。");
+        DrawCheckbox("显示路径点",       ref ShowWaypoints,          "在世界中绘制当前路径的关键点。");
+        DrawCheckbox("始终显示游戏碰撞体积",  ref ForceShowGameCollision, "用于排查地形碰撞与导航结果之间的差异。");
+        DrawCheckbox("游戏隐藏界面时仍然渲染", ref RenderWhenGameUiHidden, "即使使用游戏内隐藏界面功能，插件的调试渲染与窗口仍继续绘制。");
+        DrawCheckbox("启用 DTR 信息栏",  ref EnableDTR,              "在界面上方的信息栏显示插件状态。");
 
         using var disabled = ImRaii.Disabled(!EnableDTR);
         DrawCheckbox("在 DTR 信息栏中显示详细查询状态", ref ShowQueryStatusInDTR, "显示更细的查询状态变化，便于观察插件当前行为。");

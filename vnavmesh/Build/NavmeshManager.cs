@@ -17,7 +17,6 @@ using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Ground;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
-using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 using vnavmesh.Common.Extensions;
@@ -518,6 +517,9 @@ public sealed class NavmeshManager : IDisposable
         MoveRawBuildToCache(cacheKey, rawFile, cache);
         Log($"缓存写入耗时: {cacheWriteTimer.Value().TotalMilliseconds:f1} 毫秒");
 
+        if (RecordCacheAccess(cache))
+            RemoveExpiredCache();
+
         if (runtimeMesh.Volume != null)
         {
             var compactTimer = StopWatchTimer.Create();
@@ -574,6 +576,8 @@ public sealed class NavmeshManager : IDisposable
             if (requiresRewrite)
                 WriteCache(cacheKey, cache, mesh);
 
+            RecordCacheAccess(cache);
+
             customization.CustomizeMesh(mesh, layers);
 
             Log($"缓存命中。总耗时: {totalTimer.Value().TotalMilliseconds:f1} ms");
@@ -589,7 +593,7 @@ public sealed class NavmeshManager : IDisposable
         }
     }
 
-    private async Task<BuildSnapshot> CreateBuildSnapshot
+    private static async Task<BuildSnapshot> CreateBuildSnapshot
     (
         SceneDefinition      scene,
         NavmeshCustomization customization,
@@ -963,6 +967,7 @@ public sealed class NavmeshManager : IDisposable
             var replaceTimer = StopWatchTimer.Create();
             File.Move(tempPath, cache.FullName, true);
             var replaceDuration = replaceTimer.Value();
+            RecordCacheAccess(cache);
             LogCacheSegment("写入", telemetry.Mesh);
             LogCacheSegment("写入", telemetry.Volume);
             Log
@@ -1015,6 +1020,81 @@ public sealed class NavmeshManager : IDisposable
                 Log($"外置构建缓存复制失败。键: {cacheKey} 错误: {fallbackException}");
             }
         }
+    }
+
+    private static bool RecordCacheAccess
+    (
+        FileInfo cache
+    )
+    {
+        var accessPath = cache.FullName + CACHE_ACCESS_SUFFIX;
+        var tempPath   = $"{accessPath}.{Environment.ProcessId}.{Environment.CurrentManagedThreadId}.tmp";
+
+        try
+        {
+            File.WriteAllText(tempPath, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), new UTF8Encoding(false));
+            File.Move(tempPath, accessPath, true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log($"记录缓存访问时间失败。文件: {accessPath} 错误: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            TryDelete(tempPath);
+        }
+    }
+
+    private void RemoveExpiredCache()
+    {
+        if (config.CacheRetentionDays <= 0)
+            return;
+
+        try
+        {
+            var cutoff  = DateTime.UtcNow.AddDays(-config.CacheRetentionDays);
+            var caches  = cacheDirectory.EnumerateFiles().Where(static file => file.Extension.Equals(".navmesh", StringComparison.OrdinalIgnoreCase)).ToArray();
+            var removed = 0;
+
+            foreach (var cache in caches)
+            {
+                if (ReadCacheAccessTime(cache) > cutoff)
+                    continue;
+
+                TryDelete(cache.FullName);
+                TryDelete(cache.FullName + CACHE_ACCESS_SUFFIX);
+                ++removed;
+            }
+
+            if (removed > 0)
+                Log($"已移除 {removed} 个超过 {config.CacheRetentionDays} 天未访问的导航缓存");
+        }
+        catch (Exception ex)
+        {
+            Log($"清理过期导航缓存失败: {ex}");
+        }
+    }
+
+    private static DateTime ReadCacheAccessTime
+    (
+        FileInfo cache
+    )
+    {
+        var accessPath = cache.FullName + CACHE_ACCESS_SUFFIX;
+
+        try
+        {
+            if (File.Exists(accessPath))
+                return DateTime.Parse(File.ReadAllText(accessPath), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+        }
+        catch (Exception ex)
+        {
+            Log($"缓存访问记录读取失败。文件: {accessPath} 错误: {ex.Message}");
+        }
+
+        return DateTime.MinValue;
     }
 
     private void ExecuteWhenIdle
@@ -1394,40 +1474,6 @@ public sealed class NavmeshManager : IDisposable
         }
     }
 
-    private static HashSet<long> FindReachableMeshPolys
-    (
-        DtNavMeshQuery query,
-        params long[]  starting
-    )
-    {
-        HashSet<long> result = [];
-
-        List<long> queue = [.. starting];
-        queue.RemoveAll(static polyRef => polyRef == 0);
-
-        var navmesh = query.GetAttachedNavMesh();
-
-        while (queue.Count > 0)
-        {
-            var next = queue[^1];
-            queue.RemoveAt(queue.Count - 1);
-
-            if (!result.Add(next))
-                continue;
-
-            navmesh.GetTileAndPolyByRefUnsafe(next, out var nextTile, out var nextPoly);
-
-            for (var i = nextPoly.firstLink; i != DtDetour.DT_NULL_LINK; i = nextTile.links[i].next)
-            {
-                var neighbourRef = nextTile.links[i].refs;
-                if (neighbourRef != 0)
-                    queue.Add(neighbourRef);
-            }
-        }
-
-        return result;
-    }
-
     private static PruneTopology BuildPruneTopology
     (
         DtNavMesh mesh
@@ -1554,6 +1600,8 @@ public sealed class NavmeshManager : IDisposable
     );
 
     #region 常量
+
+    private const string CACHE_ACCESS_SUFFIX = ".lastaccess";
 
     private const float PRUNE_SEED_HALF_EXTENT_XZ          = 8.0f;
     private const float PRUNE_SEED_HALF_EXTENT_Y           = 16.0f;
