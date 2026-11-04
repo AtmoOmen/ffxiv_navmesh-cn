@@ -126,12 +126,6 @@ public class NavmeshCustomization
         CustomizeBuildSettings(definition, settings);
     }
 
-    /// <summary>
-    ///     <see cref="NavmeshSettings.AgentRadius" /> = 1f <br />
-    /// </summary>
-    protected void ApplyAgentRadiusOneSettings() =>
-        Settings.AgentRadius = 1f;
-
     #endregion
 
     private void ApplyLegacySettingsOverrides

@@ -12,9 +12,6 @@ internal class Z0152黑衣森林东部林区 : NavmeshCustomization
 {
     public override int Version => 2;
 
-    public Z0152黑衣森林东部林区() =>
-        ApplyAgentRadiusOneSettings();
-
     public override void CustomizeScene
     (
         SceneExtractor scene

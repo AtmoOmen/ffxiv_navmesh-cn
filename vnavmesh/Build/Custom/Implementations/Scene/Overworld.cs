@@ -1,6 +1,7 @@
 ﻿using Lumina.Excel.Sheets;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Scene;
+using vnavmesh.Common.Build;
 
 namespace vnavmesh.Build.Custom.Implementations.Scene;
 
@@ -9,12 +10,13 @@ public class Overworld : SceneNavmeshCustomization
     public override bool Matches
     (
         SceneDefinition definition
-    )
-    {
-        if (Service.LuminaRow<TerritoryType>(definition.TerritoryID) is not { TerritoryIntendedUse.RowId: 1 })
-            return false;
+    ) =>
+        Service.LuminaRow<TerritoryType>(definition.TerritoryID) is { TerritoryIntendedUse.RowId: 1 };
 
-        ApplyAgentRadiusOneSettings();
-        return true;
-    }
+    public override void CustomizeBuildSettings
+    (
+        SceneDefinition definition,
+        NavmeshSettings settings
+    ) =>
+        settings.AgentRadius = 1f;
 }

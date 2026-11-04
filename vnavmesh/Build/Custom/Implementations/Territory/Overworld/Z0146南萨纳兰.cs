@@ -10,9 +10,6 @@ internal class Z0146南萨纳兰 : NavmeshCustomization
 {
     public override int Version => 5;
 
-    public Z0146南萨纳兰() =>
-        ApplyAgentRadiusOneSettings();
-
     public override void CustomizeScene
     (
         SceneExtractor scene

@@ -1,4 +1,4 @@
-﻿using DotRecast.Detour;
+using DotRecast.Detour;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
@@ -12,9 +12,6 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 public class Z0815安穆艾兰 : NavmeshCustomization
 {
     public override int Version => 3;
-
-    public Z0815安穆艾兰() =>
-        ApplyAgentRadiusOneSettings();
 
     public override void CustomizeMesh
     (

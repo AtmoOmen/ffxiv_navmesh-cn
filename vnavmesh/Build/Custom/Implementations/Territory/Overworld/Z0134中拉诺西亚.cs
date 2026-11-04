@@ -10,9 +10,6 @@ public class Z0134中拉诺西亚 : NavmeshCustomization
 {
     public override int Version => 2;
 
-    public Z0134中拉诺西亚() =>
-        ApplyAgentRadiusOneSettings();
-
     public override void CustomizeScene
     (
         SceneExtractor scene

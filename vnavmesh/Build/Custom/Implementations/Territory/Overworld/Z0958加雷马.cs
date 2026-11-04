@@ -2,9 +2,6 @@ using DotRecast.Detour;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Custom.Extensions;
-using vnavmesh.Build.Scene;
-using vnavmesh.Common.Build;
-using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Ground.Enums;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
@@ -13,13 +10,6 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 internal class Z0958加雷马 : NavmeshCustomization
 {
     public override int Version => 1;
-
-    public override void CustomizeBuildSettings
-    (
-        SceneDefinition definition,
-        NavmeshSettings settings
-    ) =>
-        settings.AgentRadius = 1f;
 
     public override void CustomizeSettings
     (

@@ -1,8 +1,7 @@
-﻿using System.Numerics;
+using System.Numerics;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Build.Scene;
-using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Models;
 using AABB = vnavmesh.Common.Models.AABB;
 using Matrix4x3 = vnavmesh.Common.Models.Matrix4x3;
@@ -13,13 +12,6 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 internal class Z1191遗产之地 : NavmeshCustomization
 {
     public override int Version => 1;
-
-    public override void CustomizeBuildSettings
-    (
-        SceneDefinition definition,
-        NavmeshSettings settings
-    ) =>
-        settings.AgentRadius = 1f;
 
     public override void CustomizeScene
     (

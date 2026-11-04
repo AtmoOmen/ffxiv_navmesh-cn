@@ -1,4 +1,4 @@
-﻿using vnavmesh.Build.Custom.Abstractions;
+using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
 using vnavmesh.Common.Build;
 
@@ -8,9 +8,6 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 public class Z1187奥阔帕恰山 : NavmeshCustomization
 {
     public override int Version => 3;
-
-    public Z1187奥阔帕恰山() =>
-        ApplyAgentRadiusOneSettings();
 
     public override void CustomizeMesh
     (

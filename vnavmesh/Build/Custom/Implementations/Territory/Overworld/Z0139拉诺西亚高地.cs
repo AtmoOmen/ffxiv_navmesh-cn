@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using DotRecast.Detour;
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
@@ -6,7 +6,6 @@ using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
-using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 using AABB = vnavmesh.Common.Models.AABB;
@@ -25,7 +24,6 @@ internal class Z0139拉诺西亚高地 : NavmeshCustomization
         NavmeshSettings settings
     )
     {
-        settings.AgentRadius     = 1f;
         settings.Filtering       = NavmeshFilter.LowHangingObstacles | NavmeshFilter.LedgeSpans | NavmeshFilter.WalkableLowHeightSpans;
         settings.RegionMinSize   = 4f;
         settings.RegionMergeSize = 40f;

@@ -1,6 +1,5 @@
 using vnavmesh.Build.Custom.Abstractions;
 using vnavmesh.Build.Custom.Attributes;
-using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 
 namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
@@ -9,13 +8,6 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.Overworld;
 internal class Z0613红玉海 : NavmeshCustomization
 {
     public override int Version => 3;
-
-    public override void CustomizeBuildSettings
-    (
-        SceneDefinition definition,
-        NavmeshSettings settings
-    ) =>
-        settings.AgentRadius = 1f;
 
     public override void CustomizeMesh
     (

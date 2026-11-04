@@ -14,14 +14,14 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.FieldOperation;
 [CustomizationTerritory(1346)]
 internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 {
-    public override int Version => 3;
+    public override int Version => 4;
 
     public override void CustomizeBuildSettings
     (
         SceneDefinition definition,
         NavmeshSettings settings
     ) =>
-        settings.GenerateEdgeJumpLinks = true;
+        settings.GenerateEdgeJumpLinks = false;
 
     public override void CustomizeScene
     (
@@ -153,6 +153,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
 
         // 中心湖区周边的空气墙
         var blockers = new MeshPart();
+
         foreach (var (path, mesh) in scene.Meshes)
         {
             if (mesh.MeshType != MeshType.Terrain ||
@@ -256,7 +257,7 @@ internal class Z1346蜃景幻界新月岛北征之章 : NavmeshCustomization
     private static Vector3 Abs
     (
         Vector3 value
-    ) => 
+    ) =>
         new(MathF.Abs(value.X), MathF.Abs(value.Y), MathF.Abs(value.Z));
 
     private static MeshInstance? ResolveInstance

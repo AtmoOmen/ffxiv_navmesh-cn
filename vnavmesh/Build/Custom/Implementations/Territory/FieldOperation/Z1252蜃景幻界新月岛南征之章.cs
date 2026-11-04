@@ -6,7 +6,6 @@ using vnavmesh.Build.Custom.Extensions;
 using vnavmesh.Build.Scene;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Enums;
-using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 using AABB = vnavmesh.Common.Models.AABB;
@@ -17,7 +16,14 @@ namespace vnavmesh.Build.Custom.Implementations.Territory.FieldOperation;
 [CustomizationTerritory(1252)]
 internal class Z1252蜃景幻界新月岛南征之章 : NavmeshCustomization
 {
-    public override int Version => 2;
+    public override int Version => 3;
+
+    public override void CustomizeBuildSettings
+    (
+        SceneDefinition definition,
+        NavmeshSettings settings
+    ) =>
+        settings.GenerateEdgeJumpLinks = false;
 
     public override void CustomizeScene
     (
