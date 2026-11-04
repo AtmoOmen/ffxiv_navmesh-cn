@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using DotRecast.Recast;
-using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Models;
 
@@ -39,7 +38,7 @@ public class NavmeshSettings
     /// <summary>
     ///     可行走的最大坡度角度。超过该角度的斜面会被剔除，不参与地面寻路。
     /// </summary>
-    public float AgentMaxSlopeDeg = 45f;
+    public float AgentMaxSlopeDeg = 60f;
 
     /// <summary>
     ///     体素化后的过滤标记组合，控制低矮障碍、悬崖边缘、低净空与室内区域的剔除方式。按需增减 <see cref="NavmeshFilter" /> 位。
