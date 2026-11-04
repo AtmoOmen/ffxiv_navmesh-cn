@@ -1,4 +1,4 @@
-﻿namespace vnavmesh.Common.Build.Enums;
+namespace vnavmesh.Common.Build.Enums;
 
 [Flags]
 public enum PrimitiveFlags
@@ -8,5 +8,7 @@ public enum PrimitiveFlags
     FlyThrough      = 1 << 1,
     Unlandable      = 1 << 2,
     ForceWalkable   = 1 << 3,
-    Fishable        = 1 << 4
+    Fishable        = 1 << 4,
+    VolumeOnly      = 1 << 5,
+    Ignore          = 1 << 6
 }

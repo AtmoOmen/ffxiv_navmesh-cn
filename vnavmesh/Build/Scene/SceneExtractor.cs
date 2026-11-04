@@ -84,27 +84,23 @@ public class SceneExtractor : BuildScene
         {
             var info = ExtractBgPartInfo(scene, part.key, part.transform, part.crc, part.analytic);
             if (info.path.Length > 0)
-                AddInstance(Meshes[info.path], part.key, ref info.transform, ref info.bounds, part.matId);
+                AddInstance(Meshes[info.path], part.key, ref info.transform, ref info.bounds, part.matId, materialMask: part.matMask);
         }
 
         foreach (var coll in scene.Colliders)
         {
-            // try to filter out all colliders that become inactive under normal conditions (0x400)
-            // excluding the invisible walls surrounding overworld zones, which additionally have bit 0x10 set
-            if ((coll.matId & 0x410) == 0x400)
-                continue;
-
             var info = ExtractColliderInfo(scene, coll.key, coll.transform, coll.crc, coll.type);
             if (info.path.Length > 0)
-                AddInstance(Meshes[info.path], coll.key, ref info.transform, ref info.bounds, coll.matId);
+                AddInstance(Meshes[info.path], coll.key, ref info.transform, ref info.bounds, coll.matId, materialMask: coll.matMask);
         }
 
         // add fake colliders on overworld zone transitions to prevent fly pathfind from trying to go OOB there
         foreach (var ex in scene.ExitRanges)
         {
-            var transform = ToCommon(ex.transform.Compose());
-            var bounds    = CalculateBoxBounds(ref transform);
-            AddInstance(Meshes[KEY_ANALYTIC_BOX], ex.key, ref transform, ref bounds, 0x202411);
+            var exitTransform = ex.transform;
+            var transform     = ToCommon(exitTransform.Compose());
+            var bounds        = CalculateBoxBounds(ref transform);
+            AddInstance(Meshes[KEY_ANALYTIC_BOX], ex.key, ref transform, ref bounds, 0x202411, PrimitiveFlags.VolumeOnly);
         }
     }
 
@@ -215,16 +211,18 @@ public class SceneExtractor : BuildScene
         return mesh;
     }
 
-    private void AddInstance
+    private static void AddInstance
     (
-        Mesh          mesh,
-        ulong         id,
-        ref Matrix4x3 worldTransform,
-        ref AABB      worldBounds,
-        ulong         matId
+        Mesh           mesh,
+        ulong          id,
+        ref Matrix4x3  worldTransform,
+        ref AABB       worldBounds,
+        ulong          matId,
+        PrimitiveFlags flags        = PrimitiveFlags.None,
+        ulong          materialMask = 0
     )
     {
-        var instance = new MeshInstance(id, worldTransform, worldBounds, matId, ExtractMaterialFlags(matId), default);
+        var instance = new MeshInstance(id, worldTransform, worldBounds, matId, flags, default, materialMask);
         mesh.Instances.Add(instance);
     }
 
@@ -371,7 +369,7 @@ public class SceneExtractor : BuildScene
         return res;
     }
 
-    private unsafe void FillFromFileNode
+    private static unsafe void FillFromFileNode
     (
         List<MeshPart>    parts,
         MeshPCB.FileNode* node
@@ -384,7 +382,7 @@ public class SceneExtractor : BuildScene
         FillFromFileNode(parts, node->Child2);
     }
 
-    private unsafe MeshPart BuildMeshFromNode
+    private static unsafe MeshPart BuildMeshFromNode
     (
         MeshPCB.FileNode* node
     )
@@ -393,50 +391,9 @@ public class SceneExtractor : BuildScene
         for (var i = 0; i < node->NumVertsRaw + node->NumVertsCompressed; ++i)
             part.Vertices.Add(node->Vertex(i));
         foreach (ref var p in node->Primitives)
-            part.Primitives.Add(new(p.V1, p.V2, p.V3, ExtractMaterialFlags(p.Material), p.Material));
+            part.Primitives.Add(new(p.V1, p.V2, p.V3, CollisionMaterial.GetFlags(p.Material), p.Material));
         part.LocalBounds = CalculateLocalBounds(part.Vertices);
         return part;
-    }
-
-    private static ulong[] _materialsFlyThrough =
-    [
-        0x100000,  // generally set on the invisible walls surrounding walkable areas that can be flown from
-        0x1000000, // if this bit is set, flying upwards into the surface will trigger dive -> fly (or swim) transition
-        0x800000,  // not really sure what this is, appears on invisible roof of divable zones
-
-        // 0xBC00 can be dived into, but 0xB800 cannot. both allow fishing
-        // 0x400 is some kind of generic "this collider is conditionally active" flag, but it's set on zone walls, so we can't skip it
-        0xB400
-    ];
-
-    private PrimitiveFlags ExtractMaterialFlags
-    (
-        ulong mat
-    )
-    {
-        var res = PrimitiveFlags.None;
-
-        foreach (var fly in _materialsFlyThrough)
-        {
-            if ((mat & fly) == fly)
-                res |= PrimitiveFlags.FlyThrough;
-        }
-
-        if ((mat & 0x200000) != 0)
-            res |= PrimitiveFlags.Unlandable;
-
-        if ((mat & 0x2000000) != 0)
-            res |= PrimitiveFlags.ForceUnwalkable;
-
-        // 0x11 is set on all the invisible walls surrounding every zone; some are not marked as unlandable so we can't just use that
-        // some regular terrain materials have 0x10 set as well (see flowers in il mheg) which is why we check for both bits here
-        if ((mat & 0x1F) == 0x11)
-            res |= PrimitiveFlags.Unlandable | PrimitiveFlags.ForceUnwalkable;
-
-        if ((mat & 0x8000) != 0)
-            res |= PrimitiveFlags.Fishable;
-
-        return res;
     }
 
     private static MeshPart FinalizePart

@@ -17,7 +17,7 @@ namespace vnavmesh.Common.Build;
 public record Navmesh
 {
     public const uint MAGIC   = 0x444D564E; // 'NVMD'
-    public const uint VERSION = 41;         // 更新后触发一次全量重构建
+    public const uint VERSION = 42;         // 更新后触发一次全量重构建
 
     public int       CustomizationVersion { get; init; }
     public string    BuildSignature       { get; init; }

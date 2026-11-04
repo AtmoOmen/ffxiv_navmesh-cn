@@ -137,7 +137,8 @@ public class BuildScene
             AABB.Read(reader),
             reader.ReadUInt64(),
             (PrimitiveFlags)reader.ReadInt32(),
-            (PrimitiveFlags)reader.ReadInt32()
+            (PrimitiveFlags)reader.ReadInt32(),
+            reader.ReadUInt64()
         );
 
     private static void WriteInstance
@@ -152,5 +153,6 @@ public class BuildScene
         writer.Write(instance.Material);
         writer.Write((int)instance.ForceSetPrimFlags);
         writer.Write((int)instance.ForceClearPrimFlags);
+        writer.Write(instance.MaterialMask);
     }
 }

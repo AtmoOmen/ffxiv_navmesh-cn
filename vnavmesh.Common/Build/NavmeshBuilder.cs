@@ -1341,7 +1341,14 @@ public class NavmeshBuilder
                 continue;
             }
 
-            var flags           = (primitive.Flags & ~instance.ForceClearPrimFlags) | instance.ForceSetPrimFlags;
+            var flags = instance.GetPrimitiveFlags(primitive);
+
+            if (flags.HasFlag(PrimitiveFlags.Ignore))
+            {
+                primitiveInfos[primitiveIndex] = default;
+                continue;
+            }
+
             var realSolid       = !flags.HasFlag(PrimitiveFlags.FlyThrough);
             var forceWalkable   = flags.HasFlag(PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < walkableNormalThresholdSq * lenSq;

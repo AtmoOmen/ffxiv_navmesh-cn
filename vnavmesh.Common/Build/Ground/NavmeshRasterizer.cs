@@ -516,6 +516,7 @@ public class NavmeshRasterizer
         }
     }
 
+    private          bool volumeOnly;
     private          RcHeightfield _heightfield;
     private          RcContext _telemetry;
     private          Voxelizer? _voxelizer;
@@ -889,7 +890,8 @@ public class NavmeshRasterizer
         out int                 minimalY
     )
     {
-        minimalY = _maxY;
+        minimalY   = _maxY;
+        volumeOnly = job.Instance.ForceSetPrimFlags.HasFlag(PrimitiveFlags.VolumeOnly);
 
         if (prepared is { HasTilePrimitiveBuckets: true, PrimitiveInfos: not null })
         {
@@ -919,7 +921,8 @@ public class NavmeshRasterizer
         out int      minimalY
     )
     {
-        minimalY = _maxY;
+        minimalY   = _maxY;
+        volumeOnly = instance.ForceSetPrimFlags.HasFlag(PrimitiveFlags.VolumeOnly);
         if (!IntersectsHeightfield(instance.WorldTransform, part.LocalBounds))
             return false;
 
@@ -1009,7 +1012,10 @@ public class NavmeshRasterizer
             if (lenSq == 0)
                 continue;
 
-            var flags           = (p.Flags & ~instance.ForceClearPrimFlags) | instance.ForceSetPrimFlags;
+            var flags = instance.GetPrimitiveFlags(p);
+            if (flags.HasFlag(PrimitiveFlags.Ignore))
+                continue;
+
             var realSolid       = !flags.HasFlag(PrimitiveFlags.FlyThrough);
             var forceWalkable   = flags.HasFlag(PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
@@ -1430,7 +1436,10 @@ public class NavmeshRasterizer
                              0; // see below
             var normalUp = crossY > 0;
 
-            var flags           = (p.Flags & ~instance.ForceClearPrimFlags) | instance.ForceSetPrimFlags;
+            var flags = instance.GetPrimitiveFlags(p);
+            if (flags.HasFlag(PrimitiveFlags.Ignore))
+                continue;
+
             var realSolid       = !flags.HasFlag(PrimitiveFlags.FlyThrough);
             var forceWalkable   = flags.HasFlag(PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < _walkableNormalThreshold * _walkableNormalThreshold * lenSq;
@@ -1545,6 +1554,12 @@ public class NavmeshRasterizer
         bool mergeFromLowerBound = true
     )
     {
+        if (volumeOnly)
+        {
+            WriteVolumeSpan(x, z, y0, y1, includeInVolume);
+            return;
+        }
+
         var     yOrig    = (y0, y1);
         ref var cellHead = ref _heightfield.spans[(z * _heightfield.width) + x];
 
@@ -1620,6 +1635,9 @@ public class NavmeshRasterizer
     )
     {
         WriteVolumeSpan(x, z, y0, y1, includeInVolume);
+
+        if (volumeOnly)
+            return;
 
         if (_terrainSpans != null)
         {
@@ -2113,7 +2131,11 @@ public class NavmeshRasterizer
                     // TODO: move area-id calculations to extraction step + store indices in a form that allows using RasterizeTriangles()
                     foreach (var p in part.Primitives)
                     {
-                        var flags = (p.Flags & ~inst.ForceClearPrimFlags) | inst.ForceSetPrimFlags;
+                        var flags = inst.GetPrimitiveFlags(p);
+                        if (flags.HasFlag(PrimitiveFlags.Ignore) ||
+                            flags.HasFlag(PrimitiveFlags.VolumeOnly))
+                            continue;
+
                         if (_voxelizer != null && flags.HasFlag(PrimitiveFlags.FlyThrough))
                             continue; // TODO: rasterize to normal heightfield, can't do it right now, since we're using same heightfield for both mesh and volume
 
