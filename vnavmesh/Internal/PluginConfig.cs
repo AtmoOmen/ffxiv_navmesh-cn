@@ -1,6 +1,7 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Configuration;
 using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 
 namespace vnavmesh.Internal;
@@ -157,7 +158,7 @@ public class PluginConfig : IPluginConfiguration
         if (string.IsNullOrWhiteSpace(help))
             return;
 
-        ImGui.SameLine();
-        ImGuiComponents.HelpMarker(help);
+        using (ImRaii.PushColor(ImGuiCol.Text, ImGui.GetColorU32(ImGuiCol.TextDisabled)))
+            ImGui.TextWrapped(help);
     }
 }
