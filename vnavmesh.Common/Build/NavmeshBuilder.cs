@@ -1355,7 +1355,7 @@ public class NavmeshBuilder
             var unwalkable = flags.HasFlag(PrimitiveFlags.ForceUnwalkable) ||
                              (!forceWalkable &&
                               (unwalkableSlope || (includeVolume && flags.HasFlag(PrimitiveFlags.Unlandable))));
-            var projected = crossY != 0 && (!includeVolume || crossY * crossY >= PROJECTION_NORMAL_THRESHOLD_SQ * lenSq);
+            var projected = crossY * crossY >= PROJECTION_NORMAL_THRESHOLD_SQ * lenSq;
             var planeGradX = projected ?
                                  -crossX / crossY :
                                  0;
