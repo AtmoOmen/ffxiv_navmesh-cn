@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Numerics;
 using DotRecast.Detour;
-using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Ground.Models;
 using vnavmesh.Common.Extensions;
@@ -160,10 +159,9 @@ internal sealed class GroundPathPostprocessor
         initialSourceIndex                    = ResolveInitialSourceIndex(segment, straightPath, straightPathCount);
         rawCorners                            = BuildGroundCornersFromStraightPath(corridor, straightPath, straightPathCount, cancel);
 
-        if (!optimize)
-            return rawCorners;
-
-        return Optimize(rawCorners, corridor, initialSourceIndex, cancel);
+        return optimize ?
+                   Optimize(rawCorners, corridor, initialSourceIndex, cancel) :
+                   rawCorners;
     }
 
     private List<GroundPathCorner> BuildGroundCornersFromStraightPath
@@ -216,10 +214,9 @@ internal sealed class GroundPathPostprocessor
             straightPath.Length,
             straightPathOptions
         );
-        if (status.Failed())
-            throw new InvalidOperationException("地面路径后处理失败：无法生成 straight path");
-
-        return (straightPath, straightPathCount);
+        return status.Failed() ?
+                   throw new InvalidOperationException("地面路径后处理失败：无法生成 straight path") :
+                   (straightPath, straightPathCount);
     }
 
     private static int ResolveInitialSourceIndex
@@ -266,7 +263,7 @@ internal sealed class GroundPathPostprocessor
         return corners.Count - 1;
     }
 
-    private IReadOnlyList<GroundLinkMarker> BuildGroundLinkMarkers
+    private List<GroundLinkMarker> BuildGroundLinkMarkers
     (
         IReadOnlyList<GroundPathCorner> corners
     )
@@ -386,7 +383,7 @@ internal sealed class GroundPathPostprocessor
         return RoundCorners(prepared, initialSourceIndex, cancel);
     }
 
-    private IReadOnlyList<GroundPathCorner> RelaxAwayFromWalls
+    private List<GroundPathCorner> RelaxAwayFromWalls
     (
         IReadOnlyList<GroundPathCorner> corners,
         long[]                          corridor,
@@ -394,8 +391,8 @@ internal sealed class GroundPathPostprocessor
         CancellationToken               cancel
     )
     {
-        List<GroundPathCorner> result = [.. corners];
-        var originalLength = MeasurePolylineLength(result);
+        List<GroundPathCorner> result         = [.. corners];
+        var                    originalLength = MeasurePolylineLength(result);
         var maximumIncrease = MathF.Max
         (
             MIN_RELAX_TOTAL_INCREASE,
@@ -417,13 +414,17 @@ internal sealed class GroundPathPostprocessor
                     IsSemanticAnchor(result[i + 1]))
                     continue;
 
-                if (!TryRelaxCorner(result, corridor, i, out var relaxed, out var lengthDelta) ||
-                    currentLength + lengthDelta > originalLength + maximumIncrease)
+                if (!TryRelaxCorner(result, corridor, i, out var relaxed, out var lengthDelta))
                     continue;
 
-                result[i] = relaxed;
+                if (currentLength + lengthDelta > originalLength + maximumIncrease &&
+                    (!TryGetWallClearance(result[i], out var clearance, out _) ||
+                     clearance >= PREFERRED_PATH_CLEARANCE))
+                    continue;
+
+                result[i]     =  relaxed;
                 currentLength += lengthDelta;
-                changed   = true;
+                changed       =  true;
             }
 
             if (!changed)
@@ -449,18 +450,20 @@ internal sealed class GroundPathPostprocessor
         var next   = corners[index + 1];
 
         var hasOwnClearance = TryGetWallClearance(corner, out var ownDist, out var ownNormal);
-        var corridorPull = ComputeCorridorCenterPull(corner, prev, next, corridor);
+        var corridorPull    = ComputeCorridorCenterPull(corner, prev, next, corridor);
         var push = hasOwnClearance && ownDist < PREFERRED_PATH_CLEARANCE ?
                        corridorPull :
                        ComputeSmoothingPull(corner, prev, next);
 
-        if (hasOwnClearance && ownDist < PREFERRED_PATH_CLEARANCE &&
+        if (hasOwnClearance                    &&
+            ownDist < PREFERRED_PATH_CLEARANCE &&
             TryComputeClearanceRecoveryPush(corner, prev, next, corridorPull, ownDist, out var recoveryPush))
             push = recoveryPush;
         else
         {
-            if (hasOwnClearance && ownDist >= MIN_WALL_NORMAL_DISTANCE && ownDist < PREFERRED_PATH_CLEARANCE)
-                push += new Vector3(ownNormal.X, 0, ownNormal.Z) * MathF.Min(PREFERRED_PATH_CLEARANCE - ownDist, MAX_RELAX_PUSH);
+            if (hasOwnClearance &&
+                ownDist is >= MIN_WALL_NORMAL_DISTANCE and < PREFERRED_PATH_CLEARANCE)
+                push += ownNormal with { Y = 0 } * MathF.Min(PREFERRED_PATH_CLEARANCE - ownDist, MAX_RELAX_PUSH);
 
             push += ComputeSegmentPush(corner, prev);
             push += ComputeSegmentPush(corner, next);
@@ -483,12 +486,13 @@ internal sealed class GroundPathPostprocessor
             Position = projected,
             PolyRef = polyRef
         };
-        var currentLength = HorizontalDistance(prev.Position, corner.Position) +
+        var currentLength = HorizontalDistance(prev.Position,   corner.Position) +
                             HorizontalDistance(corner.Position, next.Position);
-        var candidateLength = HorizontalDistance(prev.Position, candidateCorner.Position) +
+        var candidateLength = HorizontalDistance(prev.Position,            candidateCorner.Position) +
                               HorizontalDistance(candidateCorner.Position, next.Position);
         lengthDelta = candidateLength - currentLength;
-        if (MeasureTurnAmount(prev.Position, candidateCorner.Position, next.Position) >
+        if ((!hasOwnClearance || ownDist >= PREFERRED_PATH_CLEARANCE) &&
+            MeasureTurnAmount(prev.Position, candidateCorner.Position, next.Position) >
             MeasureTurnAmount(prev.Position, corner.Position, next.Position) + MAX_RELAX_TURN_INCREASE)
             return false;
 
@@ -496,9 +500,9 @@ internal sealed class GroundPathPostprocessor
             return false;
         if (!TryGetWallClearance(candidateCorner, out var newDist, out _))
             return false;
-        if (hasOwnClearance && newDist < MathF.Min(ownDist, PREFERRED_PATH_CLEARANCE))
-            return false;
-        if (hasOwnClearance && ownDist < PREFERRED_PATH_CLEARANCE && newDist <= ownDist + 0.05f)
+        if (hasOwnClearance &&
+            (newDist < MathF.Min(ownDist, PREFERRED_PATH_CLEARANCE) ||
+             (ownDist < PREFERRED_PATH_CLEARANCE && newDist <= ownDist + 0.01f)))
             return false;
 
         relaxed = candidateCorner;
@@ -507,7 +511,7 @@ internal sealed class GroundPathPostprocessor
 
     private static float MeasurePolylineLength
     (
-        IReadOnlyList<GroundPathCorner> corners
+        List<GroundPathCorner> corners
     )
     {
         var length = 0f;
@@ -553,11 +557,11 @@ internal sealed class GroundPathPostprocessor
                 continue;
             if (!TryGetWallClearance(projected, polyRef, out var dist, out var normal))
                 continue;
-            if (dist < MIN_WALL_NORMAL_DISTANCE || dist >= PREFERRED_PATH_CLEARANCE)
+            if (dist is < MIN_WALL_NORMAL_DISTANCE or >= PREFERRED_PATH_CLEARANCE)
                 continue;
 
             var amount = MathF.Min(PREFERRED_PATH_CLEARANCE - dist, MAX_RELAX_PUSH) * 0.5f;
-            push += new Vector3(normal.X, 0, normal.Z) * amount;
+            push += normal with { Y = 0 } * amount;
         }
 
         return push;
@@ -577,8 +581,10 @@ internal sealed class GroundPathPostprocessor
 
         tangent = Vector2.Normalize(tangent);
         var normal      = new Vector2(-tangent.Y, tangent.X);
-        var sourceIndex = Math.Clamp(corner.SourceIndex, 0, corridor.Length - 1);
-        var firstPortal = Math.Max(0, sourceIndex - CENTERLINE_PORTAL_RADIUS);
+        var sourceIndex = Array.IndexOf(corridor, corner.PolyRef);
+        if (sourceIndex < 0)
+            return Vector3.Zero;
+        var firstPortal = Math.Max(0, sourceIndex  - CENTERLINE_PORTAL_RADIUS);
         var lastPortal  = Math.Min(corridor.Length - 2, sourceIndex + CENTERLINE_PORTAL_RADIUS);
         var target      = 0f;
         var totalWeight = 0f;
@@ -598,16 +604,16 @@ internal sealed class GroundPathPostprocessor
 
             var midpointX = (left.X + right.X) * 0.5f;
             var midpointZ = (left.Z + right.Z) * 0.5f;
-            var weight    = 1f / (Math.Abs(portalIndex - sourceIndex) + 1f);
-            target += ((midpointX * normal.X) + (midpointZ * normal.Y)) * weight;
+            var weight    = 1f                 / (Math.Abs(portalIndex - sourceIndex) + 1f);
+            target      += ((midpointX * normal.X) + (midpointZ * normal.Y)) * weight;
             totalWeight += weight;
         }
 
         if (totalWeight == 0f)
             return Vector3.Zero;
 
-        var current = (corner.Position.X * normal.X) + (corner.Position.Z * normal.Y);
-        var pull    = (target / totalWeight) - current;
+        var current = (corner.Position.X * normal.X)    + (corner.Position.Z * normal.Y);
+        var pull    = (target            / totalWeight) - current;
         return new Vector3(normal.X * pull, 0, normal.Y * pull) * CENTERLINE_PULL_WEIGHT;
     }
 
@@ -640,50 +646,96 @@ internal sealed class GroundPathPostprocessor
     )
     {
         push = Vector3.Zero;
-        var currentTurn     = MeasureTurnAmount(previous.Position, corner.Position, next.Position);
-        var preferred       = new Vector2(preferredDirection.X, preferredDirection.Z);
-        var preferredLength = preferred.Length();
-        if (preferredLength > 1e-4f)
-            preferred /= preferredLength;
+        var incoming = HorizontalDelta(previous.Position, corner.Position);
+        var outgoing = HorizontalDelta(corner.Position,   next.Position);
+        var outward  = Vector2.Zero;
+        if (incoming.LengthSquared() > 1e-6f &&
+            outgoing.LengthSquared() > 1e-6f)
+            outward = Vector2.Normalize(incoming) - Vector2.Normalize(outgoing);
 
-        var baseAngle = preferredLength > 1e-4f ?
-                            MathF.Atan2(preferred.Y, preferred.X) :
-                            0f;
+        var preferred = new Vector2(preferredDirection.X, preferredDirection.Z);
+        if (outward.LengthSquared() > 1e-6f)
+            preferred = outward;
+        if (preferred.LengthSquared() > 1e-6f)
+            preferred = Vector2.Normalize(preferred);
+
+        var baseAngle = MathF.Atan2(preferred.Y, preferred.X);
+        var originalLength = HorizontalDistance(previous.Position, corner.Position) +
+                             HorizontalDistance(corner.Position,   next.Position);
+        var originalPenalty = MeasureClearancePenalty(previous, corner) + MeasureClearancePenalty(corner, next);
+        if (!float.IsFinite(originalPenalty))
+            return false;
+
         var bestScore = float.NegativeInfinity;
+
         for (var directionIndex = 0; directionIndex < CLEARANCE_RECOVERY_DIRECTIONS; ++directionIndex)
         {
             var angle     = baseAngle + (MathF.Tau * directionIndex / CLEARANCE_RECOVERY_DIRECTIONS);
             var direction = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
-            var candidate = corner.Position + new Vector3(direction.X * MAX_RELAX_PUSH, 0, direction.Y * MAX_RELAX_PUSH);
-            if (!TryResolveStartPoly(candidate, corner.PolyRef, out var polyRef, out var projected) ||
-                HorizontalDistance(candidate, projected) > MAX_RELAX_PROJECTION)
-                continue;
 
-            var candidateCorner = corner with
+            for (var scale = 1f; scale >= 0.25f; scale *= 0.5f)
             {
-                Position = projected,
-                PolyRef = polyRef
-            };
-            var turn = MeasureTurnAmount(previous.Position, projected, next.Position);
-            if (turn > currentTurn + MAX_RELAX_TURN_INCREASE                         ||
-                !TryGetWallClearance(candidateCorner, out var clearance, out _)      ||
-                clearance <= currentClearance + 0.05f                                ||
-                !HasLineOfSight(previous, candidateCorner)                           ||
-                !HasLineOfSight(candidateCorner, next))
-                continue;
+                var distance  = MathF.Min(MAX_RELAX_PUSH, PREFERRED_PATH_CLEARANCE - currentClearance) * scale;
+                var candidate = corner.Position + new Vector3(direction.X * distance, 0, direction.Y * distance);
+                if (!TryResolveStartPoly(candidate, corner.PolyRef, out var polyRef, out var projected) ||
+                    HorizontalDistance(candidate, projected)   > MAX_RELAX_PROJECTION                   ||
+                    MathF.Abs(projected.Y - corner.Position.Y) > MAX_SHORTCUT_VERTICAL_ERROR)
+                    continue;
 
-            var alignment = preferredLength > 1e-4f ?
-                                Vector2.Dot(direction, preferred) :
-                                0f;
-            var score = clearance + (alignment * 0.1f) - (turn * 0.1f);
-            if (score <= bestScore)
-                continue;
+                var candidateCorner = corner with
+                {
+                    Position = projected,
+                    PolyRef = polyRef
+                };
+                if (!HasLineOfSight(corner, candidateCorner)                        ||
+                    !TryGetWallClearance(candidateCorner, out var clearance, out _) ||
+                    clearance <= currentClearance + 0.01f                           ||
+                    !HasLineOfSight(previous,        candidateCorner)               ||
+                    !HasLineOfSight(candidateCorner, next))
+                    continue;
 
-            bestScore = score;
-            push      = projected - corner.Position;
+                var penalty = MeasureClearancePenalty(previous, candidateCorner) + MeasureClearancePenalty(candidateCorner, next);
+                if (penalty > originalPenalty + 1e-4f)
+                    continue;
+
+                var length = HorizontalDistance(previous.Position, projected) + HorizontalDistance(projected, next.Position);
+                var score = MathF.Min(clearance, PREFERRED_PATH_CLEARANCE) -
+                            ((length - originalLength) * 0.1f)             -
+                            penalty +
+                            (Vector2.Dot(direction, preferred) * 0.01f);
+                if (score <= bestScore)
+                    continue;
+
+                bestScore = score;
+                push      = projected - corner.Position;
+            }
         }
 
         return !float.IsNegativeInfinity(bestScore);
+    }
+
+    private float MeasureClearancePenalty
+    (
+        GroundPathCorner start,
+        GroundPathCorner end
+    )
+    {
+        var distance    = HorizontalDistance(start.Position, end.Position);
+        var sampleCount = Math.Clamp((int)MathF.Ceiling(distance / CLEARANCE_SAMPLE_STEP), 2, MAX_CLEARANCE_SAMPLES);
+        var penalty     = 0f;
+
+        for (var i = 1; i < sampleCount; ++i)
+        {
+            var position = Vector3.Lerp(start.Position, end.Position, i / (float)sampleCount);
+            if (!TryResolveStartPoly(position, start.PolyRef, out var polyRef, out var projected) ||
+                !TryGetWallClearance(projected, polyRef, out var clearance, out _))
+                return float.PositiveInfinity;
+
+            var deficit = MathF.Max(0f, PREFERRED_PATH_CLEARANCE - clearance);
+            penalty += deficit * deficit;
+        }
+
+        return penalty * distance / sampleCount;
     }
 
     private bool TryGetWallClearance
@@ -728,7 +780,7 @@ internal sealed class GroundPathPostprocessor
     {
         var costs  = new float[corners.Count];
         var parent = new int[corners.Count];
-        Array.Fill(costs, float.PositiveInfinity);
+        Array.Fill(costs,  float.PositiveInfinity);
         Array.Fill(parent, -1);
         costs[0] = 0;
 
@@ -737,6 +789,7 @@ internal sealed class GroundPathPostprocessor
             cancel.ThrowIfCancellationRequested();
 
             var first = Math.Max(0, end - MAX_CENTERLINE_LOOKAHEAD);
+
             for (var start = first; start < end; ++start)
             {
                 if (end != start + 1 &&
@@ -818,9 +871,9 @@ internal sealed class GroundPathPostprocessor
 
     private List<GroundPathCorner> RoundCorners
     (
-        IReadOnlyList<GroundPathCorner> corners,
-        int                             initialSourceIndex,
-        CancellationToken               cancel
+        List<GroundPathCorner> corners,
+        int                    initialSourceIndex,
+        CancellationToken      cancel
     )
     {
         if (corners.Count <= 2)
@@ -920,7 +973,7 @@ internal sealed class GroundPathPostprocessor
         incoming /= incomingLength;
         outgoing /= outgoingLength;
         var directionDot = Vector2.Dot(incoming, outgoing);
-        if (directionDot > ROUNDING_MAX_DIRECTION_DOT || directionDot < ROUNDING_MIN_DIRECTION_DOT)
+        if (directionDot is > ROUNDING_MAX_DIRECTION_DOT or < ROUNDING_MIN_DIRECTION_DOT)
             return false;
 
         var turnStrength = Math.Clamp((1f - directionDot) * 0.5f, 0f, 1f);
