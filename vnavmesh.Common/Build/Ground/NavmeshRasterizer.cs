@@ -36,22 +36,25 @@ internal sealed class PreparedTerrainGeometry
         byte  Flags
     )
     {
-        private const byte FlagRealSolid = 1 << 0;
-        private const byte FlagNormalUp  = 1 << 1;
-        private const byte FlagProjected = 1 << 2;
-        private const byte FlagValid     = 1 << 3;
+        private const byte FlagRealSolid    = 1 << 0;
+        private const byte FlagNormalUp     = 1 << 1;
+        private const byte FlagProjected    = 1 << 2;
+        private const byte FlagValid        = 1 << 3;
+        private const byte FLAG_VOLUME_ONLY = 1 << 4;
 
-        public bool RealSolid => (Flags & FlagRealSolid) != 0;
-        public bool NormalUp  => (Flags & FlagNormalUp)  != 0;
-        public bool Projected => (Flags & FlagProjected) != 0;
-        public bool Valid     => (Flags & FlagValid)     != 0;
+        public bool RealSolid  => (Flags & FlagRealSolid)    != 0;
+        public bool NormalUp   => (Flags & FlagNormalUp)     != 0;
+        public bool Projected  => (Flags & FlagProjected)    != 0;
+        public bool Valid      => (Flags & FlagValid)        != 0;
+        public bool VolumeOnly => (Flags & FLAG_VOLUME_ONLY) != 0;
 
         public static byte BuildFlags
         (
             bool realSolid,
             bool normalUp,
             bool projected,
-            bool valid
+            bool valid,
+            bool volumeOnly
         )
         {
             byte flags = 0;
@@ -63,6 +66,8 @@ internal sealed class PreparedTerrainGeometry
                 flags |= FlagProjected;
             if (valid)
                 flags |= FlagValid;
+            if (volumeOnly)
+                flags |= FLAG_VOLUME_ONLY;
             return flags;
         }
     }
@@ -1093,11 +1098,14 @@ public class NavmeshRasterizer
 
                     y0 = Math.Clamp(y0, 0,  _maxY - 1);
                     y1 = Math.Clamp(y1, y0, _maxY - 1);
-                    AddSpan(x, z, y0, y1, areaId, realSolid);
+                    AddSpan(x, z, y0, y1, areaId, realSolid, includeInGround: !flags.HasFlag(PrimitiveFlags.VolumeOnly));
                     if (_voxelizer != null && realSolid)
                         WriteVolumeWallThickness(x, z, y0, y1, crossX, crossY, crossZ);
 
-                    if (realSolid && _iset != null && inverseCrossY != 0)
+                    if (realSolid                                 &&
+                        !flags.HasFlag(PrimitiveFlags.VolumeOnly) &&
+                        _iset         != null                     &&
+                        inverseCrossY != 0)
                     {
                         minimalY = Math.Min(minimalY, y0);
                         var cellXMid = heightfieldX + ((x + 0.5f) * cellXSize);
@@ -1253,11 +1261,16 @@ public class NavmeshRasterizer
 
                 y0 = Math.Clamp(y0, 0,  _maxY - 1);
                 y1 = Math.Clamp(y1, y0, _maxY - 1);
-                AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid);
+                AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid, !info.VolumeOnly);
                 if (_voxelizer != null && info.RealSolid)
                     WriteVolumeWallThicknessFromProjectedPlane(x, z, y0, y1, info.PlaneGradX, info.PlaneGradZ);
 
-                if (info.RealSolid && _iset != null)
+                if (info is
+                    {
+                        RealSolid: true,
+                        VolumeOnly: false
+                    } &&
+                    _iset != null)
                 {
                     minimalY = Math.Min(minimalY, y0);
                     var cellXMid = heightfieldX + ((x + 0.5f) * cellXSize);
@@ -1351,11 +1364,17 @@ public class NavmeshRasterizer
 
                 y0 = Math.Clamp(y0, 0,  _maxY - 1);
                 y1 = Math.Clamp(y1, y0, _maxY - 1);
-                AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid);
+                AddTerrainSpan(x, z, y0, y1, info.AreaId, info.RealSolid, !info.VolumeOnly);
                 if (_voxelizer != null && info.RealSolid)
                     WriteVolumeWallThicknessFromTriangle(x, z, y0, y1, worldVertices, offset1, offset2, offset3);
 
-                if (info.RealSolid && _iset != null && info.InverseCrossY != 0)
+                if (info is
+                    {
+                        RealSolid: true,
+                        VolumeOnly: false
+                    }                          &&
+                    _iset              != null &&
+                    info.InverseCrossY != 0)
                 {
                     minimalY = Math.Min(minimalY, y0);
                     var cellXMid = heightfieldX + ((x + 0.5f) * cellXSize);
@@ -1510,11 +1529,14 @@ public class NavmeshRasterizer
                     y0 = Math.Clamp(y0, 0,  _maxY - 1);
                     y1 = Math.Clamp(y1, y0, _maxY - 1);
 
-                    AddSpan(x, z, y0, y1, areaId, realSolid);
+                    AddSpan(x, z, y0, y1, areaId, realSolid, includeInGround: !flags.HasFlag(PrimitiveFlags.VolumeOnly));
                     if (_voxelizer != null && realSolid)
                         WriteVolumeWallThickness(x, z, y0, y1, v12cross13.X, crossY, v12cross13.Z);
 
-                    if (realSolid && _iset != null && invDiv != 0)
+                    if (realSolid                                 &&
+                        !flags.HasFlag(PrimitiveFlags.VolumeOnly) &&
+                        _iset  != null                            &&
+                        invDiv != 0)
                     {
                         minimalY = Math.Min(minimalY, y0);
                         var cellXMid = _heightfield.bmin.X + ((x + 0.5f) * _heightfield.cs);
@@ -1551,10 +1573,12 @@ public class NavmeshRasterizer
         int  y1,
         int  areaId,
         bool includeInVolume,
-        bool mergeFromLowerBound = true
+        bool mergeFromLowerBound = true,
+        bool includeInGround     = true
     )
     {
-        if (volumeOnly)
+        if (volumeOnly ||
+            !includeInGround)
         {
             WriteVolumeSpan(x, z, y0, y1, includeInVolume);
             return;
@@ -1631,12 +1655,14 @@ public class NavmeshRasterizer
         int  y0,
         int  y1,
         int  areaId,
-        bool includeInVolume
+        bool includeInVolume,
+        bool includeInGround
     )
     {
         WriteVolumeSpan(x, z, y0, y1, includeInVolume);
 
-        if (volumeOnly)
+        if (volumeOnly ||
+            !includeInGround)
             return;
 
         if (_terrainSpans != null)

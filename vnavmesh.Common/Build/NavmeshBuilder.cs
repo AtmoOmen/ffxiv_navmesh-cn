@@ -1337,7 +1337,7 @@ public class NavmeshBuilder
             if (lenSq == 0)
             {
                 primitiveInfos[primitiveIndex] = new
-                    (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, PreparedTerrainGeometry.PrimitiveInfo.BuildFlags(false, false, false, false));
+                    (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, PreparedTerrainGeometry.PrimitiveInfo.BuildFlags(false, false, false, false, false));
                 continue;
             }
 
@@ -1386,7 +1386,7 @@ public class NavmeshBuilder
                 unwalkable ?
                     0 :
                     RcRecast.RC_WALKABLE_AREA,
-                PreparedTerrainGeometry.PrimitiveInfo.BuildFlags(realSolid, crossY > 0, projected, true)
+                PreparedTerrainGeometry.PrimitiveInfo.BuildFlags(realSolid, crossY > 0, projected, true, flags.HasFlag(PrimitiveFlags.VolumeOnly))
             );
         }
 
