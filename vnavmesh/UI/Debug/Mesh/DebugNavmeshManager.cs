@@ -34,8 +34,7 @@ internal class DebugNavmeshManager : IDisposable
         uint              LineColor,
         uint              PointColor,
         uint              StartColor,
-        uint              EndColor,
-        string            Label
+        uint              EndColor
     );
 
     private NavmeshManager       manager;
@@ -358,7 +357,7 @@ internal class DebugNavmeshManager : IDisposable
             if (result.Succeeded)
             {
                 var renderedPath = renderStraightPathMode ?
-                                       new RenderedPath(renderPathRequestStart, result, 0xFF00BCD4u, 0xFF0097A7u, 0xFF1E88E5u, 0xFFE53935u, "StraightPath") :
+                                       new RenderedPath(renderPathRequestStart, result, 0xFF00BCD4u, 0xFF0097A7u, 0xFF1E88E5u, 0xFFE53935u) :
                                        new RenderedPath
                                        (
                                            renderPathRequestStart,
@@ -370,10 +369,7 @@ internal class DebugNavmeshManager : IDisposable
                                                0xFF27AE60u :
                                                0xFFD35400u,
                                            0xFF3498DBu,
-                                           0xFFE74C3Cu,
-                                           renderPathFlyMode ?
-                                               "Flight" :
-                                               "Ground"
+                                           0xFFE74C3Cu
                                        );
                 renderedPaths.Add(renderedPath);
             }
@@ -413,8 +409,10 @@ internal class DebugNavmeshManager : IDisposable
         RenderedPath renderedPath
     )
     {
-        List<Vector3> points       = [];
-        var           firstSegment = renderedPath.Result.Segments.FirstOrDefault();
+        List<Vector3> points = [];
+        var firstSegment = renderedPath.Result.Segments.Count > 0 ?
+                               renderedPath.Result.Segments[0] :
+                               null;
         var actualStart = firstSegment?.StartPosition ??
                           (renderedPath.Result.Waypoints.Count > 0 ?
                                renderedPath.Result.Waypoints[0] :

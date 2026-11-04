@@ -168,17 +168,6 @@ internal class PluginIPC : IDisposable
         disposeActions.Add(p.UnregisterFunc);
     }
 
-    private void RegisterFunc<TRet, T1>
-    (
-        string         name,
-        Func<T1, TRet> func
-    )
-    {
-        var p = Service.PluginInterface.GetIpcProvider<T1, TRet>("vnavmesh." + name);
-        p.RegisterFunc(func);
-        disposeActions.Add(p.UnregisterFunc);
-    }
-
     private void RegisterFunc<TRet, T1, T2>
     (
         string             name,

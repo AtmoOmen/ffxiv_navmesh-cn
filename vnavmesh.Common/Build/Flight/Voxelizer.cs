@@ -29,11 +29,11 @@ public class Voxelizer
 
         var numCells  = nx * ny * nz;
         var wordCount = (numCells + 63) >> 6;
-        solidWords = GC.AllocateUninitializedArray<ulong>(wordCount);
+        solidWords = new ulong[wordCount];
         surfaceTop = new float[numCells];
         Array.Fill(surfaceTop, float.NaN);
         if (partial)
-            emptyWords = GC.AllocateUninitializedArray<ulong>(wordCount);
+            emptyWords = new ulong[wordCount];
     }
 
     public int VoxelToIndex

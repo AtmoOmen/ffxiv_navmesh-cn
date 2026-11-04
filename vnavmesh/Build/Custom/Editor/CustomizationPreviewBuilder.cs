@@ -47,11 +47,10 @@ internal class CustomizationPreviewBuilder
         public          bool                                  NavmeshOwnedByManager { get; set; }
     }
 
-    private readonly object stateLock = new();
+    private readonly Lock stateLock = new();
 
     private PreviewResult?           publishedResult;
     private CancellationTokenSource? cancelSource;
-    private Task?                    activeTask;
     private Exception?               lastError;
     private int                      generation;
     private State                    currentState;
@@ -213,7 +212,7 @@ internal class CustomizationPreviewBuilder
             currentState = State.InProgress;
             lastError    = null;
             Volatile.Write(ref buildProgress, 0f);
-            activeTask = Task.Run(() => BuildPreviewAsync(requestGeneration, requestScene, customization, includeTiles, requestCancel.Token));
+            _ = Task.Run(() => BuildPreviewAsync(requestGeneration, requestScene, customization, includeTiles, requestCancel.Token), requestCancel.Token);
         }
 
         Service.Log.Debug("[navmesh] schedule async preview build");
@@ -264,7 +263,7 @@ internal class CustomizationPreviewBuilder
 
             oldCancel    = cancelSource;
             cancelSource = null;
-            activeTask   = null;
+
             currentState = State.NotBuilt;
             lastError    = null;
             Volatile.Write(ref buildProgress, -1f);
@@ -288,9 +287,9 @@ internal class CustomizationPreviewBuilder
     {
         try
         {
-            var            timer     = StopWatchTimer.Create();
-            var            result    = await CreatePreviewResult(requestGeneration, scene, customization, includeTiles, cancel);
-            PreviewResult? oldResult = null;
+            var            timer  = StopWatchTimer.Create();
+            var            result = await CreatePreviewResult(requestGeneration, scene, customization, includeTiles, cancel);
+            PreviewResult? oldResult;
 
             if (result.NavmeshData != null)
             {
@@ -331,7 +330,7 @@ internal class CustomizationPreviewBuilder
                 currentState    = State.Ready;
                 Volatile.Write(ref buildProgress, -1f);
                 manager.ExternalBuildProgress = -1f;
-                activeTask                    = null;
+
                 cancelSource?.Dispose();
                 cancelSource = null;
             }
@@ -403,13 +402,13 @@ internal class CustomizationPreviewBuilder
                           settings,
                           customization.Version,
                           buildSignature,
-                          cancel,
                           progress =>
                           {
                               var clamped = Math.Clamp((float)progress, 0f, 0.99f);
                               Volatile.Write(ref buildProgress, clamped);
                               manager.ExternalBuildProgress = clamped;
-                          }
+                          },
+                          cancel
                       );
         cancel.ThrowIfCancellationRequested();
 
@@ -441,7 +440,6 @@ internal class CustomizationPreviewBuilder
             if (requestGeneration != generation)
                 return;
 
-            activeTask = null;
             cancelSource?.Dispose();
             cancelSource = null;
             Volatile.Write(ref buildProgress, -1f);
@@ -463,7 +461,6 @@ internal class CustomizationPreviewBuilder
             if (requestGeneration != generation)
                 return;
 
-            activeTask = null;
             cancelSource?.Dispose();
             cancelSource = null;
             lastError    = error;
@@ -473,7 +470,7 @@ internal class CustomizationPreviewBuilder
         }
     }
 
-    private void ReleasePreviewResult
+    private static void ReleasePreviewResult
     (
         PreviewResult? result
     )
@@ -494,17 +491,16 @@ internal class CustomizationPreviewBuilder
         var clone = new SceneDefinition
         {
             TerritoryID               = source.TerritoryID,
-            ContentsFinderConditionID = source.ContentsFinderConditionID
+            ContentsFinderConditionID = source.ContentsFinderConditionID,
+            FestivalLayers            = [.. source.FestivalLayers],
+            ZoneSGs                   = [.. source.ZoneSGs],
+            Terrains                  = [.. source.Terrains],
+            AnalyticShapes            = source.AnalyticShapes.ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value),
+            MeshPaths                 = source.MeshPaths.ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value),
+            BgParts                   = [.. source.BgParts],
+            Colliders                 = [.. source.Colliders],
+            ExitRanges                = [.. source.ExitRanges]
         };
-
-        clone.FestivalLayers = [.. source.FestivalLayers];
-        clone.ZoneSGs        = [.. source.ZoneSGs];
-        clone.Terrains       = [.. source.Terrains];
-        clone.AnalyticShapes = source.AnalyticShapes.ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value);
-        clone.MeshPaths      = source.MeshPaths.ToDictionary(static kvp => kvp.Key, static kvp => kvp.Value);
-        clone.BgParts        = [.. source.BgParts];
-        clone.Colliders      = [.. source.Colliders];
-        clone.ExitRanges     = [.. source.ExitRanges];
         return clone;
     }
 }

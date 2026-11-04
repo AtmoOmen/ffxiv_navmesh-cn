@@ -389,8 +389,8 @@ internal sealed class CustomizationEditorView
                           settings,
                           baseCustomization.Version,
                           buildSignature,
-                          cancel,
-                          progress => manager.ExternalBuildProgress = Math.Clamp((float)progress, 0f, 0.99f)
+                          progress => manager.ExternalBuildProgress = Math.Clamp((float)progress, 0f, 0.99f),
+                          cancel
                       );
         }
         finally
@@ -639,7 +639,7 @@ internal sealed class CustomizationEditorView
         var scene = new SceneDefinition();
         scene.FillFromActiveLayout();
         scene.TerritoryID = territoryID;
-        var customization = BuildPreviewCustomization(scene);
+        var customization = BuildPreviewCustomization();
         previewBuilder.Rebuild(scene, customization, false);
     }
 
@@ -654,63 +654,71 @@ internal sealed class CustomizationEditorView
         var min             = Vector3.Min(a, b);
         var max             = Vector3.Max(a, b);
         var rotationDegrees = 0f;
-        var doubleSided     = true;
 
-        if (kind is DraftSceneColliderInsertionKind.OrientedBox or DraftSceneColliderInsertionKind.Wall)
+        switch (kind)
         {
-            var delta  = b - a;
-            var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
-            var halfExtents = kind == DraftSceneColliderInsertionKind.Wall ?
-                                  new Vector3(length * 0.5f, 1f, 0.025f) :
-                                  new Vector3(length * 0.5f, 1f, 0.5f);
-            min             = center - halfExtents;
-            max             = center + halfExtents;
-            rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
+            case DraftSceneColliderInsertionKind.OrientedBox or DraftSceneColliderInsertionKind.Wall:
+            {
+                var delta  = b - a;
+                var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+                var halfExtents = kind == DraftSceneColliderInsertionKind.Wall ?
+                                      new Vector3(length * 0.5f, 1f, 0.025f) :
+                                      new Vector3(length * 0.5f, 1f, 0.5f);
+                min             = center - halfExtents;
+                max             = center + halfExtents;
+                rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
+                break;
+            }
+            case DraftSceneColliderInsertionKind.Sphere:
+            {
+                var radius  = MathF.Max(Vector3.Distance(a, b), 0.05f);
+                var extents = new Vector3(radius);
+                center = a;
+                min    = center - extents;
+                max    = center + extents;
+                break;
+            }
+            case DraftSceneColliderInsertionKind.OrientedCylinder:
+            {
+                min = Vector3.Min(a, b) - new Vector3(0.5f);
+                max = Vector3.Max(a, b) + new Vector3(0.5f);
+                break;
+            }
+            case DraftSceneColliderInsertionKind.WalkableFloor:
+            {
+                var halfExtents = new Vector3
+                (
+                    MathF.Max(MathF.Abs(b.X - a.X) * 0.5f, 0.05f),
+                    0.005f,
+                    MathF.Max(MathF.Abs(b.Z - a.Z) * 0.5f, 0.05f)
+                );
+                center = (a + b) * 0.5f;
+                min    = center - halfExtents;
+                max    = center + halfExtents;
+                break;
+            }
+            case DraftSceneColliderInsertionKind.Ramp:
+            {
+                var low = a.Y <= b.Y ?
+                              a :
+                              b;
+                var high = a.Y <= b.Y ?
+                               b :
+                               a;
+                var delta  = high - low;
+                var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
+                var height = MathF.Max(high.Y - low.Y,                                        0.5f);
+                center = new((low.X           + high.X) * 0.5f, low.Y + (height * 0.5f), (low.Z + high.Z) * 0.5f);
+                var halfExtents = new Vector3(length                            * 0.5f, height * 0.5f, 0.75f);
+                min             = center - halfExtents;
+                max             = center + halfExtents;
+                rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
+                break;
+            }
+            default:
+                NormalizeBounds(ref min, ref max);
+                break;
         }
-        else if (kind == DraftSceneColliderInsertionKind.Sphere)
-        {
-            var radius  = MathF.Max(Vector3.Distance(a, b), 0.05f);
-            var extents = new Vector3(radius);
-            center = a;
-            min    = center - extents;
-            max    = center + extents;
-        }
-        else if (kind == DraftSceneColliderInsertionKind.OrientedCylinder)
-        {
-            min = Vector3.Min(a, b) - new Vector3(0.5f);
-            max = Vector3.Max(a, b) + new Vector3(0.5f);
-        }
-        else if (kind == DraftSceneColliderInsertionKind.WalkableFloor)
-        {
-            var halfExtents = new Vector3
-            (
-                MathF.Max(MathF.Abs(b.X - a.X) * 0.5f, 0.05f),
-                0.005f,
-                MathF.Max(MathF.Abs(b.Z - a.Z) * 0.5f, 0.05f)
-            );
-            center = (a + b) * 0.5f;
-            min    = center - halfExtents;
-            max    = center + halfExtents;
-        }
-        else if (kind == DraftSceneColliderInsertionKind.Ramp)
-        {
-            var low = a.Y <= b.Y ?
-                          a :
-                          b;
-            var high = a.Y <= b.Y ?
-                           b :
-                           a;
-            var delta  = high - low;
-            var length = MathF.Max(MathF.Sqrt((delta.X * delta.X) + (delta.Z * delta.Z)), 0.1f);
-            var height = MathF.Max(high.Y - low.Y,                                        0.5f);
-            center = new((low.X           + high.X) * 0.5f, low.Y + (height * 0.5f), (low.Z + high.Z) * 0.5f);
-            var halfExtents = new Vector3(length                            * 0.5f, height * 0.5f, 0.75f);
-            min             = center - halfExtents;
-            max             = center + halfExtents;
-            rotationDegrees = MathF.Atan2(-delta.Z, delta.X) * (180f / MathF.PI);
-        }
-        else
-            NormalizeBounds(ref min, ref max);
 
         ApplyDraftChange
         (() =>
@@ -726,7 +734,7 @@ internal sealed class CustomizationEditorView
                         End             = b,
                         Radius          = 0.5f,
                         RotationDegrees = rotationDegrees,
-                        DoubleSided     = doubleSided,
+                        DoubleSided     = true,
                         ForceSetPrimFlags = kind switch
                         {
                             DraftSceneColliderInsertionKind.Ramp or
@@ -872,8 +880,8 @@ internal sealed class CustomizationEditorView
         var vertexIndex = kind == DraftScenePartPatchKind.Vertex && subIndex >= 0 && subIndex < part.Vertices.Count ?
                               subIndex :
                               0;
-        var primitiveIndex = (kind == DraftScenePartPatchKind.PrimitiveFlags || kind == DraftScenePartPatchKind.PrimitiveEdit) &&
-                             subIndex >= 0                                                                                     &&
+        var primitiveIndex = kind is DraftScenePartPatchKind.PrimitiveFlags or DraftScenePartPatchKind.PrimitiveEdit &&
+                             subIndex >= 0                                                                           &&
                              subIndex < part.Primitives.Count ?
                                  subIndex :
                                  0;
@@ -959,15 +967,12 @@ internal sealed class CustomizationEditorView
         scene.FillFromActiveLayout();
         scene.TerritoryID = territoryID;
 
-        var customization = BuildPreviewCustomization(scene);
+        var customization = BuildPreviewCustomization();
         statusText = string.Empty;
         previewBuilder.Rebuild(scene, customization, true);
     }
 
-    private NavmeshCustomization BuildPreviewCustomization
-    (
-        SceneDefinition scene
-    )
+    private NavmeshCustomization BuildPreviewCustomization()
     {
         if (!workspace.IsApplied)
             return new NavmeshCustomization();

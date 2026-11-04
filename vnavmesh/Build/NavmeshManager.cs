@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO.Pipes;
 using System.Numerics;
-using System.Runtime;
 using System.Text;
 using System.Text.Json;
 using Dalamud.Game.ClientState.Conditions;
@@ -124,10 +123,10 @@ public sealed class NavmeshManager : IDisposable
         Vector3           to,
         bool              flying,
         float             range          = 0,
-        CancellationToken externalCancel = default,
         Vector3?          avoidCenter    = null,
-        float             avoidRadius    = 0
-    ) => (await QueryPathDetailed(from, to, flying, range, externalCancel, avoidCenter, avoidRadius)).Waypoints;
+        float             avoidRadius    = 0,
+        CancellationToken externalCancel = default
+    ) => (await QueryPathDetailed(from, to, flying, range, avoidCenter, avoidRadius, externalCancel)).Waypoints;
 
     internal Task<PostprocessedPath> QueryPathDetailed
     (
@@ -135,9 +134,9 @@ public sealed class NavmeshManager : IDisposable
         Vector3           to,
         bool              flying,
         float             range          = 0,
-        CancellationToken externalCancel = default,
         Vector3?          avoidCenter    = null,
-        float             avoidRadius    = 0
+        float             avoidRadius    = 0,
+        CancellationToken externalCancel = default
     )
     {
         if (currentCancelSource == null)
@@ -388,7 +387,20 @@ public sealed class NavmeshManager : IDisposable
                 Log($"场景快照耗时: {snapshotTimer.Value().TotalMilliseconds:f1} 毫秒");
 
                 Log($"开始构建。键: {cacheKey} 允许重载: {allowLoadFromCache}");
-                var (navmesh, cacheFile) = await BuildNavmesh(scene, cacheKey, allowLoadFromCache, cancel);
+                var (navmesh, cacheFile) = await Task.Run
+                                           (
+                                               async () =>
+                                               {
+                                                   var result = await BuildNavmesh(scene, cacheKey, allowLoadFromCache, cancel);
+                                                   cancel.ThrowIfCancellationRequested();
+                                                   var prepareTimer = StopWatchTimer.Create();
+                                                   result.Navmesh.PrepareForQueries();
+                                                   Log($"导航查询数据后台准备耗时: {prepareTimer.Value().TotalMilliseconds:f1} 毫秒");
+                                                   cancel.ThrowIfCancellationRequested();
+                                                   return result;
+                                               },
+                                               cancel
+                                           );
 
                 Log($"加载完毕。键: {cacheKey}");
 
@@ -495,7 +507,7 @@ public sealed class NavmeshManager : IDisposable
         cancel.ThrowIfCancellationRequested();
 
         var buildTimer = StopWatchTimer.Create();
-        var rawFile    = await RunExternalBuild(cacheKey, buildSnapshot.Scene, buildSnapshot.Settings, cancel, true);
+        var rawFile    = await RunExternalBuild(cacheKey, buildSnapshot.Scene, buildSnapshot.Settings, true, null, cancel);
         Log($"外置冷构建耗时: {buildTimer.Value().TotalMilliseconds:f1} 毫秒");
 
         Navmesh runtimeMesh;
@@ -623,9 +635,9 @@ public sealed class NavmeshManager : IDisposable
         string            cacheKey,
         BuildScene        scene,
         NavmeshSettings   settings,
-        CancellationToken cancel,
         bool              updateLoadProgress,
-        Action<double>?   onProgress = null
+        Action<double>?   onProgress,
+        CancellationToken cancel
     )
     {
         paths.WorkerStateDirectory.Create();
@@ -738,11 +750,11 @@ public sealed class NavmeshManager : IDisposable
         NavmeshSettings   settings,
         int               customizationVersion,
         string            buildSignature,
-        CancellationToken cancel,
-        Action<double>?   onProgress = null
+        Action<double>?   onProgress,
+        CancellationToken cancel
     )
     {
-        var rawFile = await RunExternalBuild(cacheKey, scene, settings, cancel, false, onProgress);
+        var rawFile = await RunExternalBuild(cacheKey, scene, settings, false, onProgress, cancel);
 
         try
         {
@@ -782,9 +794,15 @@ public sealed class NavmeshManager : IDisposable
         startInfo.ArgumentList.Add("--manifest");
         startInfo.ArgumentList.Add(manifestPath);
 
+        var workerThreadCount = Math.Max(1, Environment.ProcessorCount / 4);
+        startInfo.Environment["DOTNET_PROCESSOR_COUNT"] = workerThreadCount.ToString(CultureInfo.InvariantCulture);
+        startInfo.Environment["DOTNET_gcServer"]        = "1";
+        startInfo.Environment["DOTNET_GCHeapCount"]     = Math.Max(1, workerThreadCount / 8).ToString("X", CultureInfo.InvariantCulture);
+
         var process = Process.Start(startInfo) ?? throw new InvalidOperationException("无法启动外置导航网格构建程序");
-        _ = process.StandardOutput.ReadToEndAsync().ContinueWith(t => LogWorkerOutput("stdout", t), TaskScheduler.Default);
-        _ = process.StandardError.ReadToEndAsync().ContinueWith(t => LogWorkerOutput("stderr",  t), TaskScheduler.Default);
+        process.PriorityClass = ProcessPriorityClass.BelowNormal;
+        _                     = process.StandardOutput.ReadToEndAsync().ContinueWith(t => LogWorkerOutput("stdout", t), TaskScheduler.Default);
+        _                     = process.StandardError.ReadToEndAsync().ContinueWith(t => LogWorkerOutput("stderr",  t), TaskScheduler.Default);
         return process;
     }
 
@@ -1255,10 +1273,10 @@ public sealed class NavmeshManager : IDisposable
         Log($"旧场景重资源已释放: {reason}");
 
         if (navmesh.Volume != null)
-            RequestMemoryCompaction(reason);
+            RequestBackgroundCollection(reason);
     }
 
-    private static void RequestMemoryCompaction
+    private static void RequestBackgroundCollection
     (
         string reason
     ) =>
@@ -1267,9 +1285,8 @@ public sealed class NavmeshManager : IDisposable
             {
                 try
                 {
-                    GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, true, true);
-                    Log($"已请求大对象堆压缩: {reason}");
+                    GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, false, false);
+                    Log($"已请求后台垃圾回收: {reason}");
                 }
                 catch (Exception ex)
                 {

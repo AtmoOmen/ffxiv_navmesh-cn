@@ -16,7 +16,6 @@ public class AsyncMoveRequest : IDisposable
     private          Task<PostprocessedPath>? pendingTask;
     private          CancellationTokenSource? pendingTaskCancelSource;
     private          PendingMoveRequest?      pendingMoveRequest;
-    private          PendingMoveRequest?      activeMoveRequest;
     private          ExternalMoveRequest?     activeExternalMoveRequest;
     private          RecoveryRetry?           recoveryRetry;
 
@@ -32,27 +31,28 @@ public class AsyncMoveRequest : IDisposable
         this.executor = executor;
         this.executor.OnMovementFailure += failure =>
         {
-            if (failure.Reason == MovementFailureReason.RepathRequiredAfterUnstuck)
+            switch (failure.Reason)
             {
-                Service.Log.Information($"[自动防卡] 随机位移结束，开始重新算路：目标 = {failure.RequestedDestination:f3}");
-                MoveToInternal
-                (
-                    failure.RequestedDestination,
-                    failure.RequestedMode == MovementMode.Flight,
-                    failure.DestinationTolerance,
-                    PathRequestOrigin.RepathAfterUnstuck
-                );
-            }
-            else if (failure.Reason == MovementFailureReason.RepathRequired)
-            {
-                Service.Log.Information($"[自动算路] 检测到 ConditionFlag.Unknown101 消失，开始重新算路：目标 = {failure.RequestedDestination:f3}");
-                MoveToInternal
-                (
-                    failure.RequestedDestination,
-                    failure.RequestedMode == MovementMode.Flight,
-                    failure.DestinationTolerance,
-                    PathRequestOrigin.RepathAfterConditionChange
-                );
+                case MovementFailureReason.RepathRequiredAfterUnstuck:
+                    Service.Log.Information($"[自动防卡] 随机位移结束，开始重新算路：目标 = {failure.RequestedDestination:f3}");
+                    MoveToInternal
+                    (
+                        failure.RequestedDestination,
+                        failure.RequestedMode == MovementMode.Flight,
+                        failure.DestinationTolerance,
+                        PathRequestOrigin.RepathAfterUnstuck
+                    );
+                    break;
+                case MovementFailureReason.RepathRequired:
+                    Service.Log.Information($"[自动算路] 检测到 ConditionFlag.Unknown101 消失，开始重新算路：目标 = {failure.RequestedDestination:f3}");
+                    MoveToInternal
+                    (
+                        failure.RequestedDestination,
+                        failure.RequestedMode == MovementMode.Flight,
+                        failure.DestinationTolerance,
+                        PathRequestOrigin.RepathAfterConditionChange
+                    );
+                    break;
             }
         };
     }
@@ -71,13 +71,13 @@ public class AsyncMoveRequest : IDisposable
 
         pendingTaskCancelSource?.Dispose();
         pendingTaskCancelSource = null;
+        GC.SuppressFinalize(this);
     }
 
     public void Update()
     {
         if (pendingTask == null && recoveryRetry == null && !executor.IsRunning)
         {
-            activeMoveRequest         = null;
             activeExternalMoveRequest = null;
         }
 
@@ -101,32 +101,27 @@ public class AsyncMoveRequest : IDisposable
                 if (result.Succeeded)
                 {
                     executor.Execute(BuildPlan(result));
-                    activeMoveRequest = request;
                     activeExternalMoveRequest =
-                        request is { Origin: PathRequestOrigin.Normal } || request is { Origin: PathRequestOrigin.RepathAfterConditionChange } ?
+                        request is { Origin: PathRequestOrigin.Normal or PathRequestOrigin.RepathAfterConditionChange } ?
                             new(request.Value.Destination, request.Value.Fly, request.Value.Range) :
                             null;
                     recoveryRetry = null;
                 }
                 else if (request is { Origin: PathRequestOrigin.RepathAfterUnstuck })
                 {
-                    activeMoveRequest = request;
                     HandleFailedRepathAfterUnstuck(request.Value);
                 }
                 else
                 {
-                    activeMoveRequest         = null;
                     activeExternalMoveRequest = null;
                 }
             }
             catch (OperationCanceledException)
             {
-                activeMoveRequest         = null;
                 activeExternalMoveRequest = null;
             }
             catch (Exception ex)
             {
-                activeMoveRequest         = null;
                 activeExternalMoveRequest = null;
                 Plugin.DuoLog(ex, "算路失败");
             }
@@ -151,7 +146,6 @@ public class AsyncMoveRequest : IDisposable
     {
         recoveryRetry             = null;
         pendingMoveRequest        = null;
-        activeMoveRequest         = null;
         activeExternalMoveRequest = null;
         executor.Stop();
         CancelPendingPathfind();
@@ -203,7 +197,7 @@ public class AsyncMoveRequest : IDisposable
         Service.Log.Info($"已排队 {(fly ? "飞行" : "地面")} 移动：目标 = {dest:f3}{toleranceStr}");
         pendingTaskCancelSource = new();
         pendingTask = manager.QueryPathDetailed
-            (Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance, pendingTaskCancelSource.Token);
+            (Service.ObjectTable.LocalPlayer?.Position ?? default, dest, fly, resolvedDestinationTolerance, externalCancel: pendingTaskCancelSource.Token);
         pendingMoveRequest = new(dest, fly, resolvedDestinationTolerance, origin);
         return true;
     }
@@ -229,7 +223,7 @@ public class AsyncMoveRequest : IDisposable
         if (existing is not { } current)
             return false;
 
-        return (current.Origin == PathRequestOrigin.Normal || current.Origin == PathRequestOrigin.RepathAfterConditionChange) &&
+        return current.Origin is PathRequestOrigin.Normal or PathRequestOrigin.RepathAfterConditionChange &&
                IsEquivalentExternalRequest(new ExternalMoveRequest(current.Destination, current.Fly, current.Range), request);
     }
 

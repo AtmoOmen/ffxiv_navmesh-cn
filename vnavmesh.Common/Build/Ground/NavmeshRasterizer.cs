@@ -146,7 +146,7 @@ public class NavmeshRasterizer
             private          Entry[]   _entries   = GC.AllocateUninitializedArray<Entry>(1024);
             private          int       _nextFree  = 1;
             private          int       _freeList;
-            private readonly List<int> _touchedCells = new();
+            private readonly List<int> _touchedCells = [];
 
             internal void Reset
             (
@@ -157,8 +157,8 @@ public class NavmeshRasterizer
                     _cellHeads = new int[cellCount];
                 else
                 {
-                    for (var i = 0; i < _touchedCells.Count; ++i)
-                        _cellHeads[_touchedCells[i]] = 0;
+                    foreach (var cell in _touchedCells)
+                        _cellHeads[cell] = 0;
                 }
 
                 _nextFree = 1;
@@ -178,6 +178,27 @@ public class NavmeshRasterizer
                 ref var head = ref _cellHeads[cellIndex];
                 if (head == 0)
                     _touchedCells.Add(cellIndex);
+
+                if (head != 0)
+                {
+                    ref var first = ref _entries[head];
+
+                    if (first.Next == 0  &&
+                        first.Y0   <= y1 &&
+                        first.Y1   >= y0)
+                    {
+                        var heightDifference = first.Y1 - y1;
+                        if (heightDifference > walkableClimbThreshold ||
+                            (heightDifference >= -walkableClimbThreshold &&
+                             first.AreaId     > areaId))
+                            areaId = first.AreaId;
+
+                        first.Y0     = Math.Min(y0, first.Y0);
+                        first.Y1     = Math.Max(y1, first.Y1);
+                        first.AreaId = areaId;
+                        return;
+                    }
+                }
 
                 var prevMaxY = y0;
                 var nextMinY = y1;
@@ -403,9 +424,9 @@ public class NavmeshRasterizer
         }
 
         private readonly int[]         _firstIndices; // x then z
-        private readonly List<Entry[]> _pages        = new();
+        private readonly List<Entry[]> _pages        = [];
         private          int           _firstFree    = 1;
-        private readonly List<int>     _touchedCells = new();
+        private readonly List<int>     _touchedCells = [];
 
         public int NumCellsX { get; }
 
@@ -434,7 +455,7 @@ public class NavmeshRasterizer
             bool  normalUp
         )
         {
-            if (value <= -1024 || value >= 1024)
+            if (value is <= -1024 or >= 1024)
                 return;
             var pageIndex = _firstFree >> PageShift;
             if (pageIndex == _pages.Count)
@@ -482,14 +503,14 @@ public class NavmeshRasterizer
             }
             while (idx != 0);
 
-            bufferSort.Slice(0, cnt).Sort(bufferVoxel.Slice(0, cnt));
+            bufferSort[..cnt].Sort(bufferVoxel[..cnt]);
             return cnt;
         }
 
         public void Clear()
         {
-            for (var i = 0; i < _touchedCells.Count; ++i)
-                _firstIndices[_touchedCells[i]] = 0;
+            foreach (var cell in _touchedCells)
+                _firstIndices[cell] = 0;
             _firstFree = 1;
             _touchedCells.Clear();
         }
@@ -594,7 +615,7 @@ public class NavmeshRasterizer
         bool           solidBelowNonManifold
     )
     {
-        foreach (var (name, mesh) in geom.Meshes)
+        foreach (var mesh in geom.Meshes.Values)
         {
             if ((mesh.MeshType & types) == MeshType.None)
                 continue;
@@ -835,10 +856,9 @@ public class NavmeshRasterizer
         if (!IntersectsHeightfield(job.WorldBounds))
             return false;
 
-        if (job.TerrainLike && job.PreparedTerrain != null)
-            return RasterizePreparedTerrainPart(job, job.PreparedTerrain, out minimalY);
-
-        return RasterizePart(job.MeshType, job.Part, job.Instance, out minimalY);
+        return job is { TerrainLike: true, PreparedTerrain: not null } ?
+                   RasterizePreparedTerrainPart(job, job.PreparedTerrain, out minimalY) :
+                   RasterizePart(job.MeshType, job.Part, job.Instance, out minimalY);
     }
 
     // if it returns true, the mesh borders were rasterized, so intersection set could be modified
@@ -855,8 +875,8 @@ public class NavmeshRasterizer
 
         var parts = mesh.PartSpan;
 
-        for (var partIndex = 0; partIndex < parts.Length; ++partIndex)
-            if (RasterizePart(mesh.MeshType, parts[partIndex], instance, out var partMinY))
+        foreach (ref readonly var part in parts)
+            if (RasterizePart(mesh.MeshType, part, instance, out var partMinY))
                 minimalY = Math.Min(minimalY, partMinY);
 
         return true;
@@ -871,7 +891,7 @@ public class NavmeshRasterizer
     {
         minimalY = _maxY;
 
-        if (prepared.HasTilePrimitiveBuckets && prepared.PrimitiveInfos != null)
+        if (prepared is { HasTilePrimitiveBuckets: true, PrimitiveInfos: not null })
         {
             var primitiveIndices = prepared.GetTilePrimitiveIndices(_tileX, _tileZ);
             if (primitiveIndices.IsEmpty)
@@ -1026,9 +1046,9 @@ public class NavmeshRasterizer
             var remainOffset = tmpOffset + (7 * 3);
             var numInput     = 3;
 
-            CopyVertexTriplet(clipBuffer, sourceOffset,     worldVertices, offset1);
-            CopyVertexTriplet(clipBuffer, sourceOffset + 3, worldVertices, offset2);
-            CopyVertexTriplet(clipBuffer, sourceOffset + 6, worldVertices, offset3);
+            CopyVertexTriplet(clipBuffer, sourceOffset, worldVertices, offset1);
+            CopyVertexTriplet(clipBuffer, 3,            worldVertices, offset2);
+            CopyVertexTriplet(clipBuffer, 6,            worldVertices, offset3);
 
             for (var z = z0; z <= z1; ++z)
             {
@@ -1083,10 +1103,16 @@ public class NavmeshRasterizer
                         if (c >= 0 && b >= 0 && c + b <= 1)
                         {
                             var intersectY = ComputeTriangleIntersectY(v1y, v12y, v13y, b, c);
-                            if (normalUp && y0 > 0)
-                                _iset.Add(x, y0 - 1, z, intersectY, true);
-                            else if (!normalUp && y1 < _maxY - 1)
-                                _iset.Add(x, y1 + 1, z, intersectY, false);
+
+                            switch (normalUp)
+                            {
+                                case true when y0 > 0:
+                                    _iset.Add(x, y0 - 1, z, intersectY, true);
+                                    break;
+                                case false when y1 < _maxY - 1:
+                                    _iset.Add(x, y1 + 1, z, intersectY, false);
+                                    break;
+                            }
                         }
                     }
                 }
@@ -1107,10 +1133,9 @@ public class NavmeshRasterizer
         ref var primitiveRef = ref MemoryMarshal.GetReference(primitives);
         ref var infoRef      = ref MemoryMarshal.GetReference(primitiveInfos);
 
-        for (var bucketIndex = 0; bucketIndex < primitiveIndices.Length; ++bucketIndex)
+        foreach (var primitiveIndex in primitiveIndices)
         {
-            var              primitiveIndex = primitiveIndices[bucketIndex];
-            ref readonly var info           = ref Unsafe.Add(ref infoRef, primitiveIndex);
+            ref readonly var info = ref Unsafe.Add(ref infoRef, primitiveIndex);
             if (!info.Valid)
                 continue;
 
@@ -1170,9 +1195,9 @@ public class NavmeshRasterizer
         var         remainOffset = tmpOffset + (7 * 2);
         var         numInput     = 3;
 
-        CopyVertexPair(clipBuffer, sourceOffset,     info.V1X,             info.V1Z);
-        CopyVertexPair(clipBuffer, sourceOffset + 2, info.V1X + info.V12X, info.V1Z + info.V12Z);
-        CopyVertexPair(clipBuffer, sourceOffset + 4, info.V1X + info.V13X, info.V1Z + info.V13Z);
+        CopyVertexPair(clipBuffer, sourceOffset, info.V1X,             info.V1Z);
+        CopyVertexPair(clipBuffer, 2,            info.V1X + info.V12X, info.V1Z + info.V12Z);
+        CopyVertexPair(clipBuffer, 4,            info.V1X + info.V13X, info.V1Z + info.V13Z);
 
         for (var z = z0; z <= z1; ++z)
         {
@@ -1238,10 +1263,16 @@ public class NavmeshRasterizer
                     if (c >= 0 && b >= 0 && c + b <= 1)
                     {
                         var intersectY = (info.PlaneGradX * cellXMid) + (info.PlaneGradZ * cellZMid) + info.PlaneBias;
-                        if (info.NormalUp && y0 > 0)
-                            _iset.Add(x, y0 - 1, z, intersectY, true);
-                        else if (!info.NormalUp && y1 < _maxY - 1)
-                            _iset.Add(x, y1 + 1, z, intersectY, false);
+
+                        switch (info.NormalUp)
+                        {
+                            case true when y0 > 0:
+                                _iset.Add(x, y0 - 1, z, intersectY, true);
+                                break;
+                            case false when y1 < _maxY - 1:
+                                _iset.Add(x, y1 + 1, z, intersectY, false);
+                                break;
+                        }
                     }
                 }
             }
@@ -1274,9 +1305,9 @@ public class NavmeshRasterizer
         var         remainOffset = tmpOffset + (7 * 3);
         var         numInput     = 3;
 
-        CopyVertexTriplet(clipBuffer, sourceOffset,     worldVertices, offset1);
-        CopyVertexTriplet(clipBuffer, sourceOffset + 3, worldVertices, offset2);
-        CopyVertexTriplet(clipBuffer, sourceOffset + 6, worldVertices, offset3);
+        CopyVertexTriplet(clipBuffer, sourceOffset, worldVertices, offset1);
+        CopyVertexTriplet(clipBuffer, 3,            worldVertices, offset2);
+        CopyVertexTriplet(clipBuffer, 6,            worldVertices, offset3);
 
         for (var z = z0; z <= z1; ++z)
         {
@@ -1337,10 +1368,16 @@ public class NavmeshRasterizer
                             b,
                             c
                         );
-                        if (info.NormalUp && y0 > 0)
-                            _iset.Add(x, y0 - 1, z, intersectY, true);
-                        else if (!info.NormalUp && y1 < _maxY - 1)
-                            _iset.Add(x, y1 + 1, z, intersectY, false);
+
+                        switch (info.NormalUp)
+                        {
+                            case true when y0 > 0:
+                                _iset.Add(x, y0 - 1, z, intersectY, true);
+                                break;
+                            case false when y1 < _maxY - 1:
+                                _iset.Add(x, y1 + 1, z, intersectY, false);
+                                break;
+                        }
                     }
                 }
             }
@@ -1480,10 +1517,16 @@ public class NavmeshRasterizer
                         if (c >= 0 && b >= 0 && c + b <= 1)
                         {
                             var intersectY = v1.Y + (b * v12.Y) + (c * v13.Y);
-                            if (normalUp && y0 > 0)
-                                _iset.Add(x, y0 - 1, z, intersectY, true);
-                            else if (!normalUp && y1 < _maxY - 1)
-                                _iset.Add(x, y1 + 1, z, intersectY, false);
+
+                            switch (normalUp)
+                            {
+                                case true when y0 > 0:
+                                    _iset.Add(x, y0 - 1, z, intersectY, true);
+                                    break;
+                                case false when y1 < _maxY - 1:
+                                    _iset.Add(x, y1 + 1, z, intersectY, false);
+                                    break;
+                            }
                         }
                     }
                 }
@@ -1595,12 +1638,11 @@ public class NavmeshRasterizer
 
         var touchedCells = _terrainSpans.TouchedCells;
 
-        for (var i = 0; i < touchedCells.Count; ++i)
+        foreach (var cellIndex in touchedCells)
         {
-            var cellIndex = touchedCells[i];
-            var z         = cellIndex / _heightfield.width;
-            var x         = cellIndex - (z * _heightfield.width);
-            var entry     = _terrainSpans.Head(cellIndex);
+            var z     = cellIndex / _heightfield.width;
+            var x     = cellIndex - (z * _heightfield.width);
+            var entry = _terrainSpans.Head(cellIndex);
 
             while (entry != 0)
             {
@@ -1927,9 +1969,8 @@ public class NavmeshRasterizer
     )
     {
         var normalX = -planeGradX;
-        var normalY = 1f;
         var normalZ = -planeGradZ;
-        WriteVolumeWallThickness(x, z, y0, y1, normalX, normalY, normalZ);
+        WriteVolumeWallThickness(x, z, y0, y1, normalX, 1f, normalZ);
     }
 
     private void WriteVolumeWallThicknessFromTriangle
@@ -1990,11 +2031,10 @@ public class NavmeshRasterizer
         // fill interiors
         var cells = _iset.TouchedCells;
 
-        for (var celli = 0; celli < cells.Count; ++celli)
+        foreach (var cell in cells)
         {
-            var cell = cells[celli];
-            var z    = cell / _iset.NumCellsX;
-            var x    = cell - (z * _iset.NumCellsX);
+            var z = cell / _iset.NumCellsX;
+            var x = cell - (z * _iset.NumCellsX);
             if (z < z0 || z > z1 || x < x0 || x > x1)
                 continue;
 
@@ -2044,7 +2084,7 @@ public class NavmeshRasterizer
     {
         var vertices = new float[3 * 256];
 
-        foreach (var (name, mesh) in geom.Meshes)
+        foreach (var mesh in geom.Meshes.Values)
         {
             if ((mesh.MeshType & types) == MeshType.None)
                 continue;
@@ -2397,15 +2437,16 @@ public class NavmeshRasterizer
                 ++count1;
                 ++count2;
 
-                if (currentDelta > 0)
+                switch (currentDelta)
                 {
-                    CopyVertexTriplet(vertices, outputOffset1 + (count1 * 3), vertices, currentVertexOffset);
-                    ++count1;
-                }
-                else if (currentDelta < 0)
-                {
-                    CopyVertexTriplet(vertices, outputOffset2 + (count2 * 3), vertices, currentVertexOffset);
-                    ++count2;
+                    case > 0:
+                        CopyVertexTriplet(vertices, outputOffset1 + (count1 * 3), vertices, currentVertexOffset);
+                        ++count1;
+                        break;
+                    case < 0:
+                        CopyVertexTriplet(vertices, outputOffset2 + (count2 * 3), vertices, currentVertexOffset);
+                        ++count2;
+                        break;
                 }
             }
             else
@@ -2476,15 +2517,16 @@ public class NavmeshRasterizer
                 ++count1;
                 ++count2;
 
-                if (currentDelta > 0)
+                switch (currentDelta)
                 {
-                    CopyVertexPair(vertices, outputOffset1 + (count1 * 2), vertices[currentVertexOffset], vertices[currentVertexOffset + 1]);
-                    ++count1;
-                }
-                else if (currentDelta < 0)
-                {
-                    CopyVertexPair(vertices, outputOffset2 + (count2 * 2), vertices[currentVertexOffset], vertices[currentVertexOffset + 1]);
-                    ++count2;
+                    case > 0:
+                        CopyVertexPair(vertices, outputOffset1 + (count1 * 2), vertices[currentVertexOffset], vertices[currentVertexOffset + 1]);
+                        ++count1;
+                        break;
+                    case < 0:
+                        CopyVertexPair(vertices, outputOffset2 + (count2 * 2), vertices[currentVertexOffset], vertices[currentVertexOffset + 1]);
+                        ++count2;
+                        break;
                 }
             }
             else
@@ -2592,19 +2634,30 @@ public class NavmeshRasterizer
                 var s                             = dPrev / (dPrev - dCurr);
                 dest[cDest++] = remaining[cRem++] = vPrev + ((vCurr - vPrev) * s);
 
-                if (dCurr > 0)
-                    dest[cDest++] = vCurr;
-                else if (dCurr < 0)
-                    remaining[cRem++] = vCurr;
+                switch (dCurr)
+                {
+                    case > 0:
+                        dest[cDest++] = vCurr;
+                        break;
+                    case < 0:
+                        remaining[cRem++] = vCurr;
+                        break;
+                }
             }
             else
             {
-                if (dCurr      > 0) dest[cDest++]     = vCurr;
-                else if (dCurr < 0) remaining[cRem++] = vCurr;
-                else
+                switch (dCurr)
                 {
-                    dest[cDest++]     = vCurr;
-                    remaining[cRem++] = vCurr;
+                    case > 0:
+                        dest[cDest++] = vCurr;
+                        break;
+                    case < 0:
+                        remaining[cRem++] = vCurr;
+                        break;
+                    case 0:
+                        dest[cDest++]     = vCurr;
+                        remaining[cRem++] = vCurr;
+                        break;
                 }
             }
 
@@ -2643,19 +2696,30 @@ public class NavmeshRasterizer
                 var s                             = dPrev / (dPrev - dCurr);
                 dest[cDest++] = remaining[cRem++] = vPrev + ((vCurr - vPrev) * s);
 
-                if (dCurr > 0)
-                    dest[cDest++] = vCurr;
-                else if (dCurr < 0)
-                    remaining[cRem++] = vCurr;
+                switch (dCurr)
+                {
+                    case > 0:
+                        dest[cDest++] = vCurr;
+                        break;
+                    case < 0:
+                        remaining[cRem++] = vCurr;
+                        break;
+                }
             }
             else
             {
-                if (dCurr      > 0) dest[cDest++]     = vCurr;
-                else if (dCurr < 0) remaining[cRem++] = vCurr;
-                else
+                switch (dCurr)
                 {
-                    dest[cDest++]     = vCurr;
-                    remaining[cRem++] = vCurr;
+                    case > 0:
+                        dest[cDest++] = vCurr;
+                        break;
+                    case < 0:
+                        remaining[cRem++] = vCurr;
+                        break;
+                    case 0:
+                        dest[cDest++]     = vCurr;
+                        remaining[cRem++] = vCurr;
+                        break;
                 }
             }
 

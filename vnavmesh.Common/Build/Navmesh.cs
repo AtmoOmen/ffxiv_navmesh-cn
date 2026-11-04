@@ -1,6 +1,4 @@
-using System.Buffers;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using System.Text;
 using DotRecast.Core;
 using DotRecast.Core.Compression;
@@ -8,7 +6,6 @@ using DotRecast.Core.Numerics;
 using DotRecast.Detour;
 using DotRecast.Detour.Io;
 using vnavmesh.Common.Build.Flight;
-using vnavmesh.Common.Build.Ground;
 using vnavmesh.Common.Build.Ground.Enums;
 using vnavmesh.Common.Build.Ground.Models;
 using vnavmesh.Common.Build.Models;
@@ -62,6 +59,12 @@ public record Navmesh
 
     public int GeneratedClimbDownLinkCount { get; set; }
     public int GeneratedEdgeJumpLinkCount  { get; set; }
+
+    public void PrepareForQueries()
+    {
+        EnsureMeshMaterialized();
+        Volume?.EnsureMaterialized();
+    }
 
     public bool HasHeuristicSensitiveOffMeshLinks
     {
@@ -264,21 +267,6 @@ public record Navmesh
     private static (T Value, CacheSegmentTelemetry Telemetry) DecodeSegment<T>
     (
         CacheSegmentDescriptor descriptor,
-        byte[]                 payload,
-        Func<BinaryReader, T>  deserialize
-    )
-    {
-        var       timer          = StopWatchTimer.Create();
-        var       decodedPayload = DecodePayload(payload, descriptor.Codec, descriptor.UncompressedBytes);
-        using var segmentStream  = new MemoryStream(decodedPayload, 0, decodedPayload.Length, false, true);
-        using var segmentReader  = new BinaryReader(segmentStream);
-        var       value          = deserialize(segmentReader);
-        return (value, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
-    }
-
-    private static (T Value, CacheSegmentTelemetry Telemetry) DecodeSegment<T>
-    (
-        CacheSegmentDescriptor descriptor,
         Stream                 source,
         Func<BinaryReader, T>  deserialize
     )
@@ -360,9 +348,9 @@ public record Navmesh
 
         var decompressed = GC.AllocateUninitializedArray<byte>(outputLength);
         var actualBytes  = FastLZ.Decompress(payload, 0, payload.Length, decompressed, 0, outputLength);
-        if (actualBytes != outputLength)
-            throw new Exception($"FastLZ 解压失败: 期望 {outputLength} 字节, 实际 {actualBytes} 字节");
-        return decompressed;
+        return actualBytes == outputLength ?
+                   decompressed :
+                   throw new Exception($"FastLZ 解压失败: 期望 {outputLength} 字节, 实际 {actualBytes} 字节");
     }
 
     private static CacheSegmentDescriptor ReadSegmentDescriptor
@@ -388,71 +376,6 @@ public record Navmesh
         writer.Write(descriptor.Offset);
         writer.Write(descriptor.CompressedBytes);
         writer.Write(descriptor.UncompressedBytes);
-    }
-
-    private static float[] ReadSingleArray
-    (
-        BinaryReader reader,
-        int          count
-    )
-    {
-        if (count == 0)
-            return [];
-
-        var result = GC.AllocateUninitializedArray<float>(count);
-        reader.BaseStream.ReadExactly(MemoryMarshal.AsBytes(result.AsSpan()));
-        return result;
-    }
-
-    private static void WriteSingleArray
-    (
-        BinaryWriter        writer,
-        ReadOnlySpan<float> values
-    )
-    {
-        if (!values.IsEmpty)
-            writer.BaseStream.Write(MemoryMarshal.AsBytes(values));
-    }
-
-    private static int[] ReadByteBackedIntArray
-    (
-        BinaryReader reader,
-        int          count
-    )
-    {
-        if (count == 0)
-            return [];
-
-        var bytes = GC.AllocateUninitializedArray<byte>(count);
-        reader.BaseStream.ReadExactly(bytes);
-        var result = GC.AllocateUninitializedArray<int>(count);
-        for (var i = 0; i < count; ++i)
-            result[i] = bytes[i];
-        return result;
-    }
-
-    private static void WriteByteBackedIntArray
-    (
-        BinaryWriter      writer,
-        ReadOnlySpan<int> values
-    )
-    {
-        if (values.IsEmpty)
-            return;
-
-        var rented = ArrayPool<byte>.Shared.Rent(values.Length);
-
-        try
-        {
-            var bytes = rented.AsSpan(0, values.Length);
-            for (var i = 0; i < values.Length; ++i)
-                bytes[i] = (byte)values[i];
-            writer.BaseStream.Write(bytes);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(rented);
-        }
     }
 
     private static (Vector3 min, Vector3 max) DeserializeBounds
@@ -649,12 +572,17 @@ public record Navmesh
 
         if (volume != null)
         {
-            if (descriptor.Codec == CacheCodec.FastLz)
-                volume.SetDeferredTreeMaterializer(v => MaterializeDeferredCompressedVolumeTree(v, payload, descriptor.UncompressedBytes));
-            else if (descriptor.Codec == CacheCodec.None)
-                volume.SetDeferredTreePayload(payload, 0, payload.Length);
-            else
-                throw new Exception($"不支持的缓存编码: {descriptor.Codec}");
+            switch (descriptor.Codec)
+            {
+                case CacheCodec.FastLz:
+                    volume.SetDeferredTreeMaterializer(v => MaterializeDeferredCompressedVolumeTree(v, payload, descriptor.UncompressedBytes));
+                    break;
+                case CacheCodec.None:
+                    volume.SetDeferredTreePayload(payload, 0, payload.Length);
+                    break;
+                default:
+                    throw new Exception($"不支持的缓存编码: {descriptor.Codec}");
+            }
         }
 
         return new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value());
@@ -796,9 +724,7 @@ public record Navmesh
 
     private enum VolumeCellState : byte
     {
-        Empty     = 0,
-        SolidLeaf = 1,
-        Subtree   = 2
+        Subtree = 2
     }
 
     public readonly record struct CacheSegmentTelemetry
@@ -863,91 +789,6 @@ public record Navmesh
     {
         if (!BitConverter.IsLittleEndian)
             throw new PlatformNotSupportedException("缓存格式仅支持小端架构");
-    }
-
-    private sealed class CountingStream
-    (
-        Stream inner,
-        bool   leaveOpen
-    ) : Stream
-    {
-        public long BytesProcessed { get; private set; }
-
-        public override bool CanRead  => inner.CanRead;
-        public override bool CanSeek  => inner.CanSeek;
-        public override bool CanWrite => inner.CanWrite;
-        public override long Length   => inner.Length;
-
-        public override long Position
-        {
-            get => inner.Position;
-            set => inner.Position = value;
-        }
-
-        public override void Flush() => inner.Flush();
-
-        public override int Read
-        (
-            byte[] buffer,
-            int    offset,
-            int    count
-        )
-        {
-            var read = inner.Read(buffer, offset, count);
-            BytesProcessed += read;
-            return read;
-        }
-
-        public override int Read
-        (
-            Span<byte> buffer
-        )
-        {
-            var read = inner.Read(buffer);
-            BytesProcessed += read;
-            return read;
-        }
-
-        public override long Seek
-        (
-            long       offset,
-            SeekOrigin origin
-        ) => inner.Seek(offset, origin);
-
-        public override void SetLength
-        (
-            long value
-        ) => inner.SetLength(value);
-
-        public override void Write
-        (
-            byte[] buffer,
-            int    offset,
-            int    count
-        )
-        {
-            inner.Write(buffer, offset, count);
-            BytesProcessed += count;
-        }
-
-        public override void Write
-        (
-            ReadOnlySpan<byte> buffer
-        )
-        {
-            inner.Write(buffer);
-            BytesProcessed += buffer.Length;
-        }
-
-        protected override void Dispose
-        (
-            bool disposing
-        )
-        {
-            if (disposing && !leaveOpen)
-                inner.Dispose();
-            base.Dispose(disposing);
-        }
     }
 
     private sealed class SegmentReadStream
