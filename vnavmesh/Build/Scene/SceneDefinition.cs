@@ -1,6 +1,7 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine.Layer;
+using Lumina.Excel.Sheets;
 
 namespace vnavmesh.Build.Scene;
 
@@ -42,6 +43,8 @@ public class SceneDefinition
                                         layout->CfcId;
         ZoneSGs.AddRange(LayoutUtil.GetZoneSharedGroupsEnabled(TerritoryID));
 
+        var isDeepDungeon = Service.LuminaRow<TerritoryType>(TerritoryID)?.TerritoryIntendedUse.RowId == 31;
+
         foreach (var (_, v) in layout->Layers)
         {
             if (v.Value->FestivalId != 0)
@@ -61,7 +64,8 @@ public class SceneDefinition
             foreach (var (k, v) in *bgParts)
             {
                 var cast = (BgPartsLayoutInstance*)v.Value;
-                if ((cast->Flags3 & 0x10) == 0)
+                if (!isDeepDungeon &&
+                    (cast->Flags3 & 0x10) == 0)
                     continue;
 
                 if (cast->AnalyticShapeDataCrc != 0)

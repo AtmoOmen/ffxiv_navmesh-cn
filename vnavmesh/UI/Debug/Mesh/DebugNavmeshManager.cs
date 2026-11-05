@@ -1,9 +1,13 @@
+using System.Globalization;
 using System.Numerics;
+using System.Text;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
+using DotRecast.Detour;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using vnavmesh.Build;
+using vnavmesh.Build.Ground;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Common.Extensions;
@@ -55,6 +59,7 @@ internal class DebugNavmeshManager : IDisposable
     private Vector3                  renderPathRequestStart;
     private bool                     renderStraightPathMode;
     private bool                     showRawGroundPath = true;
+    private Task?                    recordSeedTask;
 
     public DebugNavmeshManager
     (
@@ -199,6 +204,21 @@ internal class DebugNavmeshManager : IDisposable
 
             if (player != null)
             {
+                if (FloodFill.Get() is { } floodFill)
+                {
+                    ImGui.SameLine();
+
+                    using (ImRaii.Disabled(recordSeedTask is { IsCompleted: false }))
+                    {
+                        if (ImGui.Button("记录种子点"))
+                            recordSeedTask = RecordSeedPoint(floodFill, Service.ClientState.TerritoryType, player.Position);
+                    }
+                }
+
+                ImGui.SameLine();
+                if (ImGui.Button("复制玩家连通区域"))
+                    CopyReachablePolygons(player.Position);
+
                 DrawPosition("玩家", player.Position);
                 var floor = manager.Query.FindPointOnFloor(player.Position);
                 if (floor != null)
@@ -301,6 +321,54 @@ internal class DebugNavmeshManager : IDisposable
         Vector3 startingPos
     ) =>
         manager.BuildBitmap([startingPos], "D:\\navmesh.bmp", 0.5f);
+
+    private static async Task RecordSeedPoint
+    (
+        FloodFill floodFill,
+        uint      territoryID,
+        Vector3   position
+    )
+    {
+        try
+        {
+            floodFill.AddPoint(territoryID, position);
+            await floodFill.Serialize();
+        }
+        catch (Exception ex)
+        {
+            Plugin.DuoLog(ex, "保存种子点失败");
+        }
+    }
+
+    private void CopyReachablePolygons
+    (
+        Vector3 startingPosition
+    )
+    {
+        var startPoly = manager.Query!.FindNearestMeshPoly(startingPosition);
+        if (startPoly == 0)
+            return;
+
+        var reachablePolys = manager.Query.FindReachableMeshPolys(startPoly);
+        var text           = new StringBuilder();
+
+        foreach (var polyRef in reachablePolys)
+        {
+            manager.Navmesh!.Mesh.GetTileAndPolyByRefUnsafe(polyRef, out var tile, out var poly);
+            if (poly.GetPolyType() != DtPolyTypes.DT_POLYTYPE_GROUND)
+                continue;
+
+            for (var i = 0; i < poly.vertCount; i++)
+            {
+                var vertex = NavmeshBitmap.GetVertex(tile, poly.verts[i]);
+                text.Append(CultureInfo.InvariantCulture, $"{vertex.X:F3},{vertex.Z:F3};");
+            }
+
+            text.Append('\n');
+        }
+
+        ImGui.SetClipboardText(text.ToString());
+    }
 
     public void DrawRenderedPaths()
     {
