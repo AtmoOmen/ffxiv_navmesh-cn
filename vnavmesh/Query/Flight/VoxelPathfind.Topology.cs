@@ -626,7 +626,7 @@ public partial class VoxelPathfind
         return first;
     }
 
-    private readonly record struct TopologyRegion
+    internal readonly record struct TopologyRegion
     (
         ushort Tile,
         int    Component

@@ -10,7 +10,7 @@ public partial class VoxelPathfind
     private readonly Dictionary<ulong, List<ushort>> regionCells  = [];
     private readonly Dictionary<ulong, ushort>       regionFaces  = [];
 
-    internal Vector3? FindNearestConnectedPoint(ulong source, Vector3 point, Vector3 halfExtent)
+    internal Vector3? FindNearestConnectedPoint(ulong source, Vector3 point, Vector3 halfExtent, IReadOnlySet<TopologyRegion>? reachableRegions = null)
     {
         lock (sync)
         {
@@ -23,7 +23,7 @@ public partial class VoxelPathfind
 
             foreach (var tileCandidate in EnumerateRootTiles(point, searchMin, searchMax))
             {
-                var connected = TakeConnectedCandidate(sourceRegion, sourcePoint, candidates, tileCandidate.Distance);
+                var connected = TakeConnectedCandidate(sourceRegion, sourcePoint, candidates, tileCandidate.Distance, reachableRegions);
                 if (connected.HasValue)
                     return connected;
 
@@ -42,7 +42,10 @@ public partial class VoxelPathfind
                     for (var column = 0; column < tile.Columns.Length - 1; column++)
                     for (var runIndex = tile.Columns[column]; runIndex < tile.Columns[column + 1]; runIndex++)
                     {
-                        var run   = tile.Runs[runIndex];
+                        var run = tile.Runs[runIndex];
+                        if (reachableRegions != null && !reachableRegions.Contains(new(tileCandidate.Tile, run.Component)))
+                            continue;
+
                         var cellX = column % tile.SizeX;
                         var cellZ = column / tile.SizeX;
                         intervals.Push((run.Start, run.End));
@@ -96,16 +99,25 @@ public partial class VoxelPathfind
                 }
             }
 
-            return TakeConnectedCandidate(sourceRegion, sourcePoint, candidates, float.PositiveInfinity);
+            return TakeConnectedCandidate(sourceRegion, sourcePoint, candidates, float.PositiveInfinity, reachableRegions);
         }
     }
 
-    private Vector3? TakeConnectedCandidate(TopologyRegion source, Vector3 sourcePoint, PriorityQueue<TopologyCandidate, float> candidates, float maxDistance)
+    private Vector3? TakeConnectedCandidate
+    (
+        TopologyRegion                          source,
+        Vector3                                 sourcePoint,
+        PriorityQueue<TopologyCandidate, float> candidates,
+        float                                   maxDistance,
+        IReadOnlySet<TopologyRegion>?           reachableRegions
+    )
     {
         while (candidates.TryPeek(out var candidate, out var distance) && distance <= maxDistance)
         {
             candidates.Dequeue();
-            if (AreTopologyRegionsConnected(source, candidate.Region, sourcePoint, candidate.Point))
+            var connected = reachableRegions?.Contains(candidate.Region) ??
+                            AreTopologyRegionsConnected(source, candidate.Region, sourcePoint, candidate.Point);
+            if (connected)
                 return candidate.Point;
         }
 

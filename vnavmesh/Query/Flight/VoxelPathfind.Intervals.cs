@@ -11,15 +11,16 @@ public partial class VoxelPathfind
         {
             ResetSearchState();
             lastSearchAttempts = 1;
-            var source              = LocateInterval(from);
-            var destination         = LocateInterval(to);
-            var corridor            = BuildIntervalCorridor(source, destination, to, cancel);
-            var sourceFrontier      = new PriorityQueue<IntervalKey, float>();
-            var destinationFrontier = new PriorityQueue<IntervalKey, float>();
-            var sourceRecords       = new Dictionary<IntervalKey, IntervalVisit>();
-            var destinationRecords  = new Dictionary<IntervalKey, IntervalVisit>();
-            var sourceBounds        = IntervalBounds(source);
-            var sourcePosition      = (sourceBounds.Min + sourceBounds.Max) * 0.5f;
+            var source               = LocateInterval(from);
+            var destination          = LocateInterval(to);
+            var requestedDestination = destination;
+            var corridor             = BuildIntervalCorridor(source, ref destination, ref to, cancel);
+            var sourceFrontier       = new PriorityQueue<IntervalKey, float>();
+            var destinationFrontier  = new PriorityQueue<IntervalKey, float>();
+            var sourceRecords        = new Dictionary<IntervalKey, IntervalVisit>();
+            var destinationRecords   = new Dictionary<IntervalKey, IntervalVisit>();
+            var sourceBounds         = IntervalBounds(source);
+            var sourcePosition       = (sourceBounds.Min + sourceBounds.Max) * 0.5f;
             sourcePosition.Y = from.Y;
             var destinationBounds   = IntervalBounds(destination);
             var destinationPosition = (destinationBounds.Min + destinationBounds.Max) * 0.5f;
@@ -32,6 +33,7 @@ public partial class VoxelPathfind
                 destinationFrontier.Clear();
             var best         = source;
             var bestDistance = float.PositiveInfinity;
+            var joined       = false;
 
             while (sourceFrontier.Count > 0 && destinationFrontier.Count > 0)
             {
@@ -69,7 +71,8 @@ public partial class VoxelPathfind
                 if (opposite.ContainsKey(current))
                 {
                     best        = current;
-                    goalReached = true;
+                    joined      = true;
+                    goalReached = destination == requestedDestination;
                     break;
                 }
 
@@ -173,7 +176,7 @@ public partial class VoxelPathfind
             generatedNodes = sourceRecords.Count + destinationRecords.Count;
             if (goalReached)
                 lastTermination = VolumeSearchTermination.ReachedGoal;
-            else if (sourceFrontier.Count == 0 || destinationFrontier.Count == 0)
+            else if (joined || sourceFrontier.Count == 0 || destinationFrontier.Count == 0)
                 lastTermination = VolumeSearchTermination.SearchExhausted;
             else
                 lastTermination = VolumeSearchTermination.StepBudgetReached;
@@ -181,7 +184,7 @@ public partial class VoxelPathfind
             positions.Add(from);
             positions.Reverse();
 
-            if (goalReached)
+            if (joined)
             {
                 positions.AddRange(BuildIntervalBranch(destinationRecords, best));
                 positions.Add(to);
@@ -195,7 +198,7 @@ public partial class VoxelPathfind
         }
     }
 
-    private HashSet<TopologyRegion> BuildIntervalCorridor(IntervalKey source, IntervalKey destination, Vector3 target, CancellationToken cancel)
+    private HashSet<TopologyRegion> BuildIntervalCorridor(IntervalKey source, ref IntervalKey destination, ref Vector3 target, CancellationToken cancel)
     {
         var first    = new TopologyRegion(source.Tile,      topologyTiles[source.Tile].Runs[source.Run].Component);
         var last     = new TopologyRegion(destination.Tile, topologyTiles[destination.Tile].Runs[destination.Run].Component);
@@ -214,17 +217,7 @@ public partial class VoxelPathfind
             coarseExpandedNodes++;
 
             if (current == last)
-            {
-                HashSet<TopologyRegion> corridor = [current];
-
-                while (current != first)
-                {
-                    current = parents[current];
-                    corridor.Add(current);
-                }
-
-                return corridor;
-            }
+                break;
 
             var info   = topologyTiles[current.Tile].Regions[current.Component];
             var center = (info.Min + info.Max) * 0.5f;
@@ -246,7 +239,32 @@ public partial class VoxelPathfind
             }
         }
 
-        return [];
+        if (!closed.Contains(last))
+        {
+            var bounds      = IntervalBounds(source);
+            var sourcePoint = (bounds.Min + bounds.Max) * 0.5f;
+            var sourceVoxel = Volume.FindLeafVoxel(sourcePoint).voxel;
+            var root        = Volume.RootTile;
+            var extent      = Vector3.Max(Vector3.Abs(root.BoundsMin - target), Vector3.Abs(root.BoundsMax - target));
+            var nearest     = FindNearestConnectedPoint(sourceVoxel, target, extent, closed);
+            if (!nearest.HasValue)
+                return [];
+
+            Service.Log.Debug($"[算路] 飞行终点与起点不连通：最近可达终点 = {nearest.Value:f3}，距请求终点 = {Vector3.Distance(nearest.Value, target):f3}，可达连通分量 = {closed.Count}");
+            target      = nearest.Value;
+            destination = LocateInterval(target);
+            last        = new(destination.Tile, topologyTiles[destination.Tile].Runs[destination.Run].Component);
+        }
+
+        HashSet<TopologyRegion> corridor = [last];
+
+        while (last != first)
+        {
+            last = parents[last];
+            corridor.Add(last);
+        }
+
+        return corridor;
     }
 
     private static List<Vector3> BuildIntervalBranch(Dictionary<IntervalKey, IntervalVisit> records, IntervalKey current)

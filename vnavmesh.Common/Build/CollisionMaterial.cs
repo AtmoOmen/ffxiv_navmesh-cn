@@ -23,8 +23,7 @@ public static class CollisionMaterial
         var res = PrimitiveFlags.None;
 
         if ((mat & 0x410) == 0x400)
-            // 这类表面不参与地面导航，但仍会阻挡飞行。
-            res |= PrimitiveFlags.VolumeOnly;
+            res |= PrimitiveFlags.Ignore;
 
         foreach (var fly in MaterialsFlyThrough)
         {
