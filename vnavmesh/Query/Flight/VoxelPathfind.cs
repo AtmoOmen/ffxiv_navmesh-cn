@@ -170,46 +170,35 @@ public partial class VoxelPathfind
     {
         cells = 0;
 
-        if (seedVoxel == VoxelMap.INVALID_VOXEL || referenceVoxel == VoxelMap.INVALID_VOXEL || !Volume.IsEmpty(seedVoxel))
+        if (seedVoxel == VoxelMap.INVALID_VOXEL || referenceVoxel == VoxelMap.INVALID_VOXEL || !Volume.IsEmpty(seedVoxel) || !Volume.IsEmpty(referenceVoxel))
             return VolumeFloodResult.Unknown;
 
-        l1PathSet          = null;
-        l0PathSet          = null;
-        l1CorridorDistance = null;
-        l0CorridorDistance = null;
-
-        var visited = new HashSet<ulong> { seedVoxel };
-        var queue   = new Queue<ulong>();
-        queue.Enqueue(seedVoxel);
-
-        while (queue.Count > 0)
+        lock (sync)
         {
-            var voxel = queue.Dequeue();
+            var seed      = ResolveTopologyRegion(seedVoxel);
+            var reference = ResolveTopologyRegion(referenceVoxel);
+            var visited   = new HashSet<TopologyRegion> { seed };
+            var queue     = new Queue<TopologyRegion>();
+            queue.Enqueue(seed);
 
-            if (voxel == referenceVoxel)
+            while (queue.TryDequeue(out var voxel))
             {
-                cells = visited.Count;
-                return VolumeFloodResult.Connected;
-            }
+                if (voxel == reference)
+                    return VolumeFloodResult.Connected;
 
-            foreach (var neighbour in CollectNeighbours(voxel))
-            {
-                if (!visited.Add(neighbour))
-                    continue;
-
-                if (visited.Count > limit)
-                {
-                    cells = visited.Count;
-
+                cells += topologyTiles[voxel.Tile].Regions[voxel.Component].Cells;
+                if (cells > limit)
                     return VolumeFloodResult.Unknown;
+
+                foreach (var neighbour in GetTopologyNeighbours(voxel))
+                {
+                    if (visited.Add(neighbour))
+                        queue.Enqueue(neighbour);
                 }
-
-                queue.Enqueue(neighbour);
             }
-        }
 
-        cells = visited.Count;
-        return VolumeFloodResult.Sealed;
+            return VolumeFloodResult.Sealed;
+        }
     }
 
     private List<(ulong voxel, Vector3 p)> FindPathInternal
@@ -289,6 +278,9 @@ public partial class VoxelPathfind
             if (lastTermination == VolumeSearchTermination.ReachedGoal)
                 return RefineSimplifiedPath(path, cancel);
 
+            if (avoidRadius <= 0)
+                return RefineSimplifiedPath(RunIntervalSearch(fromPos, toPos, cancel), cancel);
+
             RetainClosedSetKnowledge();
             path = RunSearchAttempt(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, RAYCAST_SEARCH_STEP_BUDGET, cancel);
 
@@ -331,9 +323,12 @@ public partial class VoxelPathfind
             (
                 guidedCorridorEarlyAbortTriggered ?
                     $"[算路] 飞行体素定向走廊搜索提前回退（进展停滞），访问节点 = {visitedNodes}，最佳距离 = {NodeSpan[bestNodeIndex].HScore:f3}，当前高差余量 = {MathF.Max(NodeSpan[bestNodeIndex].Position.Y - goalPos.Y, 0f):f3}" :
-                    $"[算路] 飞行体素定向走廊搜索未达终点（{lastTermination}），回退侧向探测/全搜索"
+                    $"[算路] 飞行体素定向走廊搜索未达终点（{lastTermination}），切换后续搜索"
             );
         }
+
+        if (avoidRadius <= 0)
+            return RefineSimplifiedPath(RunIntervalSearch(fromPos, toPos, cancel), cancel);
 
         RetainClosedSetKnowledge();
         var longRangePath = RunLongRangeFallback(fromVoxel, toVoxel, fromPos, toPos, returnIntermediatePoints, cancel);

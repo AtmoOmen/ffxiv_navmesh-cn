@@ -166,10 +166,7 @@ public partial class VoxelPathfind
         if (!TryResolveL1SeedIndex(l1Voxel, fromVoxel, fromPoint, out var fromSeedIndex) ||
             !TryResolveL1SeedIndex(l1Voxel, toVoxel,   toPoint,   out var toSeedIndex))
             return false;
-        if (fromSeedIndex == toSeedIndex)
-            return true;
-
-        return FloodFillL1SeedConnectivity(l1Voxel, fromSeedIndex, toSeedIndex);
+        return fromSeedIndex == toSeedIndex || FloodFillL1SeedConnectivity(l1Voxel, fromSeedIndex, toSeedIndex);
     }
 
     private ulong BuildPackedL1FaceConnectivity
@@ -252,18 +249,7 @@ public partial class VoxelPathfind
     {
         reachedTarget = false;
 
-        if (visited is null)
-        {
-            var totalCells = l2Desc.NumCellsTotal;
-            l1FloodFillVisited ??= new bool[totalCells];
-            if (l1FloodFillVisited.Length < totalCells)
-                l1FloodFillVisited = new bool[totalCells];
-            else
-                Array.Clear(l1FloodFillVisited);
-            visited = l1FloodFillVisited;
-        }
-
-        if (visited[seedIndex])
+        if (visited is not null && visited[seedIndex])
         {
             reachedTarget = targetSeedIndex == seedIndex;
             return 0;
@@ -273,81 +259,36 @@ public partial class VoxelPathfind
 
         if (!Volume.IsEmpty(seedLeaf))
         {
-            visited[seedIndex] = true;
+            visited?[seedIndex] = true;
             return 0;
         }
 
-        l1BfsQueue ??= new Queue<ushort>(l2Desc.NumCellsTotal);
-        l1BfsQueue.Clear();
-        var frontier = l1BfsQueue;
-        frontier.Enqueue(seedIndex);
-        visited[seedIndex] = true;
-
-        ushort reachableFaces = 0;
-
-        while (frontier.TryDequeue(out var currentIndex))
+        if (Volume.IsEmpty(l1Voxel))
         {
-            if (targetSeedIndex == currentIndex)
-                reachedTarget = true;
-
-            var (x, y, z) = l2Desc.IndexToVoxel(currentIndex);
-            if (y == 0)
-                reachableFaces |= 1 << L1_FACE_NEG_Y;
-            if (y == l2Desc.NumCellsY - 1)
-                reachableFaces |= 1 << L1_FACE_POS_Y;
-            if (x == 0)
-                reachableFaces |= 1 << L1_FACE_NEG_X;
-            if (x == l2Desc.NumCellsX - 1)
-                reachableFaces |= 1 << L1_FACE_POS_X;
-            if (z == 0)
-                reachableFaces |= 1 << L1_FACE_NEG_Z;
-            if (z == l2Desc.NumCellsZ - 1)
-                reachableFaces |= 1 << L1_FACE_POS_Z;
-
-            for (var dir = 0; dir < 6; ++dir)
-            {
-                var dx = dir switch
-                {
-                    L1_FACE_NEG_X => -1,
-                    L1_FACE_POS_X => 1,
-                    _             => 0
-                };
-                var dy = dir switch
-                {
-                    L1_FACE_NEG_Y => -1,
-                    L1_FACE_POS_Y => 1,
-                    _             => 0
-                };
-                var dz = dir switch
-                {
-                    L1_FACE_NEG_Z => -1,
-                    L1_FACE_POS_Z => 1,
-                    _             => 0
-                };
-                var nx = x + dx;
-                var ny = y + dy;
-                var nz = z + dz;
-                if (!l2Desc.InBounds(nx, ny, nz))
-                    continue;
-
-                var neighbourIndex = l2Desc.VoxelToIndex(nx, ny, nz);
-                if (visited[neighbourIndex])
-                    continue;
-
-                var neighbourLeaf = VoxelMap.EncodeSubIndex(l1Voxel, neighbourIndex, 2);
-
-                if (!Volume.IsEmpty(neighbourLeaf))
-                {
-                    visited[neighbourIndex] = true;
-                    continue;
-                }
-
-                visited[neighbourIndex] = true;
-                frontier.Enqueue(neighbourIndex);
-            }
+            if (visited is not null)
+                Array.Fill(visited, true);
+            reachedTarget = targetSeedIndex.HasValue;
+            return L1_ALL_FACES_MASK;
         }
 
-        return reachableFaces;
+        lock (sync)
+        {
+            var region = ResolveRegion(seedLeaf);
+
+            if (visited is not null)
+            {
+                foreach (var index in regionCells[region])
+                    visited[index] = true;
+            }
+
+            if (targetSeedIndex is { } target)
+            {
+                var targetLeaf = VoxelMap.EncodeSubIndex(l1Voxel, target, 2);
+                reachedTarget = Volume.IsEmpty(targetLeaf) && ResolveRegion(targetLeaf) == region;
+            }
+
+            return regionFaces[region];
+        }
     }
 
     private bool TryResolveL1SeedIndex
@@ -364,10 +305,7 @@ public partial class VoxelPathfind
             return true;
 
         seedIndex = ResolvePointL2IndexWithinL1(l1Voxel, point);
-        if (Volume.IsEmpty(VoxelMap.EncodeSubIndex(l1Voxel, seedIndex, 2)))
-            return true;
-
-        return TryFindNearestEmptyL1SeedIndex(l1Voxel, point, out seedIndex);
+        return Volume.IsEmpty(VoxelMap.EncodeSubIndex(l1Voxel, seedIndex, 2)) || TryFindNearestEmptyL1SeedIndex(l1Voxel, point, out seedIndex);
     }
 
     private ushort ResolvePointL2IndexWithinL1
@@ -436,6 +374,8 @@ public partial class VoxelPathfind
             EnqueueNeighbour(x,     y + 1, z);
             EnqueueNeighbour(x,     y,     z - 1);
             EnqueueNeighbour(x,     y,     z + 1);
+
+            continue;
 
             void EnqueueNeighbour
             (

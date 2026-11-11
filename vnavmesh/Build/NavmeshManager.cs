@@ -404,11 +404,8 @@ public sealed class NavmeshManager : IDisposable
 
                 Log($"加载完毕。键: {cacheKey}");
 
-                var query = new NavmeshQuery(navmesh, config);
-                await Task.Run(() => query.PrepareVolumeReachability(cancel), cancel);
-                cancel.ThrowIfCancellationRequested();
                 Navmesh = navmesh;
-                Query   = query;
+                Query   = new(Navmesh, config);
 
                 var ff = await FloodFill.GetAsync();
 
@@ -438,21 +435,16 @@ public sealed class NavmeshManager : IDisposable
         ClearState();
     }
 
-    internal async Task ReplaceMesh
+    internal void ReplaceMesh
     (
         Navmesh mesh
     )
     {
-        var cancel = currentCancelSource?.Token ?? CancellationToken.None;
-        var query = new NavmeshQuery(mesh, config);
-        await Task.Run(() => query.PrepareVolumeReachability(cancel), cancel);
-        cancel.ThrowIfCancellationRequested();
-
         var retiredNavmesh = Navmesh;
         var retiredQuery   = Query;
 
         Navmesh = mesh;
-        Query   = query;
+        Query   = new(Navmesh, config);
 
         Log("导航路网替换完成");
 

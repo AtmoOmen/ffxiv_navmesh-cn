@@ -32,8 +32,7 @@ public class NavmeshQuery
     {
         get
         {
-            if (released)
-                throw new ObjectDisposedException(nameof(NavmeshQuery));
+            ObjectDisposedException.ThrowIf(released, this);
 
             var existing = Volatile.Read(ref meshQuery);
             if (existing != null)
@@ -86,7 +85,6 @@ public class NavmeshQuery
 
     private DtNavMeshQuery? meshQuery;
     private VoxelPathfind?  volumeQuery;
-    private VoxelReachability? volumeReachability;
     private bool            released;
 
     public NavmeshQuery
@@ -103,12 +101,6 @@ public class NavmeshQuery
         FlightQuery         = new(this, GroundQuery);
     }
 
-    internal void PrepareVolumeReachability(CancellationToken cancel)
-    {
-        if (NavmeshData.Volume is { } volume)
-            volumeReachability = new(volume, cancel);
-    }
-
     internal void ReleaseRetainedState()
     {
         LastPath.Clear();
@@ -116,7 +108,6 @@ public class NavmeshQuery
         meshQuery = null;
         volumeQuery?.ReleaseRetainedState();
         volumeQuery = null;
-        volumeReachability = null;
         released    = true;
     }
 
@@ -162,7 +153,7 @@ public class NavmeshQuery
         {
             PlannerSegmentGeometryKind.MeshCorridor   => groundPostprocessor.ProcessSegment(segment, cancel),
             PlannerSegmentGeometryKind.DiscretePoints => VoxelPathfind.ProcessSegment(segment, cancel),
-            _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
+            _                                         => throw new ArgumentOutOfRangeException(nameof(segment), segment.GeometryKind, "未知粗路径几何类型")
         };
 
     private PostprocessedPathSegment ProcessStraightPathSegment
@@ -175,7 +166,7 @@ public class NavmeshQuery
         {
             PlannerSegmentGeometryKind.MeshCorridor   => groundPostprocessor.ProcessStraightPathSegment(segment, straightPathOptions, cancel),
             PlannerSegmentGeometryKind.DiscretePoints => VoxelPathfind.ProcessStraightPathSegment(segment, cancel),
-            _                                         => throw new ArgumentOutOfRangeException(nameof(segment.GeometryKind), segment.GeometryKind, "未知粗路径几何类型")
+            _                                         => throw new ArgumentOutOfRangeException(nameof(segment), segment.GeometryKind, "未知粗路径几何类型")
         };
 
     private static PostprocessedPath BuildPostprocessedPath
@@ -314,18 +305,16 @@ public class NavmeshQuery
     (
         Vector3     point,
         long        poly,
-        out Vector3 closestPoint,
-        out bool    isOverPoly
+        out Vector3 closestPoint
     )
     {
-        if (MeshQuery.ClosestPointOnPoly(poly, point.ToRecast(), out var closest, out isOverPoly).Succeeded())
+        if (MeshQuery.ClosestPointOnPoly(poly, point.ToRecast(), out var closest, out _).Succeeded())
         {
             closestPoint = closest.ToSystem();
             return true;
         }
 
         closestPoint = default;
-        isOverPoly   = false;
         return false;
     }
 
@@ -334,7 +323,7 @@ public class NavmeshQuery
         Vector3 p,
         long    poly
     ) =>
-        TryClosestPointOnPolyWithFlags(p, poly, out var closest, out _) ?
+        TryClosestPointOnPolyWithFlags(p, poly, out var closest) ?
             closest :
             null;
 
@@ -425,49 +414,23 @@ public class NavmeshQuery
             !float.IsFinite(halfExtentY)  ||
             halfExtentXZ < 0              ||
             halfExtentY  < 0              ||
-            VolumeQuery is not { } query ||
-            volumeReachability is not { } reachability ||
+            VolumeQuery is not { } query  ||
             Service.ObjectTable.LocalPlayer is not { } player)
             return null;
 
-        var volume = query.Volume;
-        var source = FindNearestVolumeVoxelSurfaceAware(player.Position).Voxel;
+        var volume     = query.Volume;
+        var sourceLeaf = volume.FindLeafVoxel(player.Position);
+        var source = sourceLeaf.empty ?
+                         sourceLeaf.voxel :
+                         VoxelSearch.FindNearestEmptyVoxel(volume, player.Position, new(5), true);
         if (source == VoxelMap.INVALID_VOXEL)
             return null;
 
         var requestedLeaf = volume.FindLeafVoxel(point);
-        if (requestedLeaf.empty
-            && reachability.IsConnected(source, requestedLeaf.voxel))
+        if (requestedLeaf.empty && query.IsConnected(source, requestedLeaf.voxel))
             return point;
 
-        var      halfExtent      = new Vector3(halfExtentXZ, halfExtentY, halfExtentXZ);
-        var      searchMin       = point - halfExtent;
-        var      searchMax       = point + halfExtent;
-        var nearestDistance = float.PositiveInfinity;
-        Vector3? nearestPoint = null;
-
-        foreach (var voxel in volume.RootTile.EnumerateLeafVoxels(searchMin, searchMax))
-        {
-            if (!voxel.empty
-                || !reachability.IsConnected(source, voxel.index))
-                continue;
-
-            var bounds = volume.VoxelBounds(voxel.index, 0.1f);
-            var min    = Vector3.Max(bounds.min, searchMin);
-            var max    = Vector3.Min(bounds.max, searchMax);
-            if (min.X > max.X || min.Y > max.Y || min.Z > max.Z)
-                continue;
-
-            var candidate = Vector3.Clamp(point, min, max);
-            var distance  = Vector3.DistanceSquared(point, candidate);
-            if (distance >= nearestDistance)
-                continue;
-
-            nearestDistance = distance;
-            nearestPoint = candidate;
-        }
-
-        return nearestPoint;
+        return query.FindNearestConnectedPoint(source, point, new(halfExtentXZ, halfExtentY, halfExtentXZ));
     }
 
     internal SurfaceAwareVolumeVoxelResolution FindNearestVolumeVoxelSurfaceAware

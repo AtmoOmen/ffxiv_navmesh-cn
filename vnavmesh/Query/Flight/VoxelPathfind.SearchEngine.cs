@@ -404,7 +404,7 @@ public partial class VoxelPathfind
         l0DistanceField          = null;
         l1FloodFillVisited       = null;
         l1BfsQueue               = null;
-        parallelEvaluationBuffer = Array.Empty<VolumeNeighbourEvaluation?>();
+        parallelEvaluationBuffer = [];
         ClearVisibilityCaches();
 
         lock (cacheLock)
@@ -416,6 +416,17 @@ public partial class VoxelPathfind
             l1FaceTransitionCache.Clear();
             pathLoSCache.Clear();
             clearanceCache.Clear();
+        }
+
+        lock (sync)
+        {
+            componentByRegion.Clear();
+            components.Clear();
+            regionByTile.Clear();
+            regionCells.Clear();
+            regionFaces.Clear();
+            topologyTiles.Clear();
+            topologyNeighbours.Clear();
         }
     }
 

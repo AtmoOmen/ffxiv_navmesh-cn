@@ -111,7 +111,7 @@ internal class PluginIPC : IDisposable
                       MapUtil.FlagToPoint(q) :
                       null
         );
-        
+
         // 体素
         RegisterFunc
         (
