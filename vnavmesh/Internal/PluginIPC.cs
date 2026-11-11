@@ -83,6 +83,7 @@ internal class PluginIPC : IDisposable
                 (startingPositions, filename, pixelSize, new AABB { Min = minBounds, Max = maxBounds })
         );
 
+        // 路网
         RegisterFunc
         (
             "Query.Mesh.NearestPoint",
@@ -109,6 +110,13 @@ internal class PluginIPC : IDisposable
             () => navmeshManager.Query is { } q ?
                       MapUtil.FlagToPoint(q) :
                       null
+        );
+        
+        // 体素
+        RegisterFunc
+        (
+            "Query.Voxel.NearestPoint",
+            (Vector3 point, float halfExtentXZ, float halfExtentY) => navmeshManager.Query?.FindNearestPointInVolume(point, halfExtentXZ, halfExtentY)
         );
 
         // 原始执行器入口：该接口直接消费外部点列，不经过算路层与后处理层。

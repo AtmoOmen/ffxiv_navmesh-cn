@@ -86,6 +86,7 @@ public class NavmeshQuery
 
     private DtNavMeshQuery? meshQuery;
     private VoxelPathfind?  volumeQuery;
+    private VoxelReachability? volumeReachability;
     private bool            released;
 
     public NavmeshQuery
@@ -102,6 +103,12 @@ public class NavmeshQuery
         FlightQuery         = new(this, GroundQuery);
     }
 
+    internal void PrepareVolumeReachability(CancellationToken cancel)
+    {
+        if (NavmeshData.Volume is { } volume)
+            volumeReachability = new(volume, cancel);
+    }
+
     internal void ReleaseRetainedState()
     {
         LastPath.Clear();
@@ -109,6 +116,7 @@ public class NavmeshQuery
         meshQuery = null;
         volumeQuery?.ReleaseRetainedState();
         volumeQuery = null;
+        volumeReachability = null;
         released    = true;
     }
 
@@ -401,6 +409,65 @@ public class NavmeshQuery
             return null;
 
         return fallbackFloor;
+    }
+
+    internal Vector3? FindNearestPointInVolume
+    (
+        Vector3 point,
+        float   halfExtentXZ,
+        float   halfExtentY
+    )
+    {
+        if (!float.IsFinite(point.X)      ||
+            !float.IsFinite(point.Y)      ||
+            !float.IsFinite(point.Z)      ||
+            !float.IsFinite(halfExtentXZ) ||
+            !float.IsFinite(halfExtentY)  ||
+            halfExtentXZ < 0              ||
+            halfExtentY  < 0              ||
+            VolumeQuery is not { } query ||
+            volumeReachability is not { } reachability ||
+            Service.ObjectTable.LocalPlayer is not { } player)
+            return null;
+
+        var volume = query.Volume;
+        var source = FindNearestVolumeVoxelSurfaceAware(player.Position).Voxel;
+        if (source == VoxelMap.INVALID_VOXEL)
+            return null;
+
+        var requestedLeaf = volume.FindLeafVoxel(point);
+        if (requestedLeaf.empty
+            && reachability.IsConnected(source, requestedLeaf.voxel))
+            return point;
+
+        var      halfExtent      = new Vector3(halfExtentXZ, halfExtentY, halfExtentXZ);
+        var      searchMin       = point - halfExtent;
+        var      searchMax       = point + halfExtent;
+        var nearestDistance = float.PositiveInfinity;
+        Vector3? nearestPoint = null;
+
+        foreach (var voxel in volume.RootTile.EnumerateLeafVoxels(searchMin, searchMax))
+        {
+            if (!voxel.empty
+                || !reachability.IsConnected(source, voxel.index))
+                continue;
+
+            var bounds = volume.VoxelBounds(voxel.index, 0.1f);
+            var min    = Vector3.Max(bounds.min, searchMin);
+            var max    = Vector3.Min(bounds.max, searchMax);
+            if (min.X > max.X || min.Y > max.Y || min.Z > max.Z)
+                continue;
+
+            var candidate = Vector3.Clamp(point, min, max);
+            var distance  = Vector3.DistanceSquared(point, candidate);
+            if (distance >= nearestDistance)
+                continue;
+
+            nearestDistance = distance;
+            nearestPoint = candidate;
+        }
+
+        return nearestPoint;
     }
 
     internal SurfaceAwareVolumeVoxelResolution FindNearestVolumeVoxelSurfaceAware

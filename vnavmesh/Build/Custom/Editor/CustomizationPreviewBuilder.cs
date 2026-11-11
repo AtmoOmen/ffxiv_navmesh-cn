@@ -239,11 +239,11 @@ internal class CustomizationPreviewBuilder
         };
 
         Service.Framework.Run
-        (() =>
+        (async () =>
             {
+                await manager.ReplaceMesh(navmesh);
                 lock (stateLock)
                 {
-                    manager.ReplaceMesh(navmesh);
                     result.NavmeshOwnedByManager = true;
                     publishedResult              = result;
                     currentState                 = State.Ready;
@@ -296,12 +296,12 @@ internal class CustomizationPreviewBuilder
                 var replaced = false;
                 await Service.Framework.Run
                 (
-                    () =>
+                    async () =>
                     {
                         if (requestGeneration != generation || cancel.IsCancellationRequested)
                             return;
 
-                        manager.ReplaceMesh(result.NavmeshData);
+                        await manager.ReplaceMesh(result.NavmeshData);
                         replaced = true;
                     },
                     cancel
