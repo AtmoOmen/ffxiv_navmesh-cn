@@ -1,7 +1,9 @@
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Lumina.Data;
 using Lumina.Excel;
+using CSFramework = FFXIVClientStructs.FFXIV.Client.System.Framework.Framework;
 
 namespace vnavmesh;
 
@@ -63,4 +65,8 @@ public class Service
         uint row
     ) where T : struct, IExcelRow<T> =>
         DataManager.GameData.GetExcelSheet<T>()?.GetRowOrDefault(row);
+    
+    // 客户端语言
+    public static unsafe Language ClientLanguage =>
+        (Language)(CSFramework.Instance()->ClientLanguage + 1);
 }

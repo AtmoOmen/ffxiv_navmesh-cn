@@ -16,8 +16,11 @@ public class PluginDTR
 {
     private readonly IDtrBarEntry dtrBarEntry = Service.DtrBar.Get("vnavmesh");
 
-    public void Dispose() =>
+    public void Dispose()
+    {
         dtrBarEntry.Remove();
+        GC.SuppressFinalize(this);
+    }
 
     public void Update()
     {
@@ -25,17 +28,21 @@ public class PluginDTR
 
         if (dtrBarEntry.Shown)
         {
-            var   loadProgress = manager.LoadTaskProgress;
-            float buildProgress;
+            var text         = new Localization(config.UILanguage);
+            var loadProgress = manager.LoadTaskProgress;
+            var buildProgress = loadProgress >= 0 ?
+                                    loadProgress :
+                                    manager.ExternalBuildProgress;
 
-            if (loadProgress >= 0)
-                buildProgress = loadProgress;
+            string meshStatus;
+            if (buildProgress >= 0)
+                meshStatus = $"{buildProgress * 100:f0}%";
             else
-                buildProgress = manager.ExternalBuildProgress;
+                meshStatus = manager.Navmesh != null ?
+                                 text.Ready :
+                                 text.NotReady;
 
-            var meshStatus = buildProgress >= 0 ? $"{buildProgress * 100:f0}%" : manager.Navmesh != null ? "就绪" : "未就绪";
-
-            var statusText = "导航: " + meshStatus;
+            var statusText = $"{text.Navigation}: {meshStatus}";
 
             if (config.ShowQueryStatusInDTR)
             {
@@ -49,20 +56,20 @@ public class PluginDTR
                     var activeCount = pathfindInProgress ?
                                           1 :
                                           0;
-                    statusText += $" | 算路: {activeCount}";
+                    statusText += $" | {text.Queries}: {activeCount}";
                     if (numQueued > 0)
-                        statusText += $" (等待中: {numQueued})";
+                        statusText += $" ({text.Queued}: {numQueued})";
                 }
 
                 if (asyncMoveActive)
-                    statusText += " | 算路中";
+                    statusText += $" | {text.Pathfinding}";
                 if (isMoving)
-                    statusText += " | 移动中";
+                    statusText += $" | {text.Moving}";
             }
             else
             {
                 if (asyncMove.TaskInProgress || movementExecutor.Waypoints.Count > 0)
-                    statusText = "导航: 算路中";
+                    statusText = $"{text.Navigation}: {text.Pathfinding}";
             }
 
             dtrBarEntry.Text = statusText;
