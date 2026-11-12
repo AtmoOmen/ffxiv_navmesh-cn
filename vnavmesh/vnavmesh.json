@@ -1,8 +1,8 @@
 {
   "Author": "veyn, AtmoOmen",
-  "Name": "vnavmesh",
-  "Punchline": "行遍千里!",
-  "Description": "不仅会自动寻路, 还能自动避障",
+  "Name": "vnavmesh CN",
+  "Punchline": "行遍千里！",
+  "Description": "不仅会自动寻路，还能自动避障。",
   "InternalName": "vnavmesh",
   "ApplicableVersion": "any",
   "IconUrl": "https://raw.githubusercontent.com/AtmoOmen/ffxiv_navmesh-cn/CN/Resources/icon2.png"
