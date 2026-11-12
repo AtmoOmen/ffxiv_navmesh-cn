@@ -222,6 +222,9 @@ public class SceneExtractor : BuildScene
         ulong          materialMask = 0
     )
     {
+        if ((mesh.MeshType & (MeshType.AnalyticShape | MeshType.AnalyticPlane | MeshType.CylinderMesh)) != 0)
+            materialMask = ulong.MaxValue;
+
         var instance = new MeshInstance(id, worldTransform, worldBounds, matId, flags, default, materialMask);
         mesh.Instances.Add(instance);
     }

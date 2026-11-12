@@ -1,5 +1,6 @@
 using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine;
+using FFXIVClientStructs.FFXIV.Client.LayoutEngine.Group;
 using FFXIVClientStructs.FFXIV.Client.LayoutEngine.Layer;
 using Lumina.Excel.Sheets;
 
@@ -43,7 +44,8 @@ public class SceneDefinition
                                         layout->CfcId;
         ZoneSGs.AddRange(LayoutUtil.GetZoneSharedGroupsEnabled(TerritoryID));
 
-        var isDeepDungeon = Service.LuminaRow<TerritoryType>(TerritoryID)?.TerritoryIntendedUse.RowId == 31;
+        var isDeepDungeon     = Service.LuminaRow<TerritoryType>(TerritoryID)?.TerritoryIntendedUse.RowId == 31;
+        var passableInstances = CollectPassableInstances(layout);
 
         foreach (var (_, v) in layout->Layers)
         {
@@ -64,6 +66,9 @@ public class SceneDefinition
             foreach (var (k, v) in *bgParts)
             {
                 var cast = (BgPartsLayoutInstance*)v.Value;
+                if (passableInstances.Contains((nint)cast))
+                    continue;
+
                 if (!isDeepDungeon &&
                     (cast->Flags3 & 0x10) == 0)
                     continue;
@@ -96,6 +101,9 @@ public class SceneDefinition
             foreach (var (k, v) in *colliders)
             {
                 var cast = (CollisionBoxLayoutInstance*)v.Value;
+                if (passableInstances.Contains((nint)cast))
+                    continue;
+
                 if ((cast->Flags3 & 0x10) == 0)
                     continue;
 
@@ -116,5 +124,47 @@ public class SceneDefinition
             foreach (var (k, v) in *exitRanges)
                 ExitRanges.Add((k, *v.Value->GetTransformImpl()));
         }
+    }
+
+    private static unsafe HashSet<nint> CollectPassableInstances
+    (
+        LayoutManager* layout
+    )
+    {
+        HashSet<nint> instances = [];
+        var           groups    = layout->InstancesByType.FindPtr(InstanceType.SharedGroup);
+        if (groups == null)
+            return instances;
+
+        foreach (var (_, entry) in *groups)
+        {
+            var group      = (SharedGroupLayoutInstance*)entry.Value;
+            var controller = group->ActionController1;
+            if (controller == null || controller->AnimationType is < 1 or > 3)
+                continue;
+
+            var door = (SGDoorActionController*)controller;
+
+            foreach (var doorObject in door->DoorObjects)
+            {
+                if (doorObject.Value != null)
+                    instances.Add((nint)doorObject.Value);
+            }
+
+            foreach (var collision in new ReadOnlySpan<nint>(&door->Collision, 4))
+            {
+                if (collision != 0)
+                    instances.Add(collision);
+            }
+        }
+
+        foreach (var (_, entry) in *groups)
+        {
+            var group = (SharedGroupLayoutInstance*)entry.Value;
+            if (group->NestingLevel == 0)
+                SceneTimelineGeometry.Collect(group, instances);
+        }
+
+        return instances;
     }
 }

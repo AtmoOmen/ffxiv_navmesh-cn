@@ -1305,7 +1305,6 @@ public class NavmeshBuilder
 
         var         primitiveInfos                 = GC.AllocateUninitializedArray<PreparedTerrainGeometry.PrimitiveInfo>(primitives.Length);
         var         walkableNormalThresholdSq      = _walkableNormalThreshold * _walkableNormalThreshold;
-        var         includeVolume                  = Navmesh.Volume != null;
         const float PROJECTION_NORMAL_THRESHOLD_SQ = 0.35f * 0.35f;
 
         for (var primitiveIndex = 0; primitiveIndex < primitives.Length; ++primitiveIndex)
@@ -1353,8 +1352,7 @@ public class NavmeshBuilder
             var forceWalkable   = flags.HasFlag(PrimitiveFlags.ForceWalkable);
             var unwalkableSlope = crossY <= 0 || crossY * crossY < walkableNormalThresholdSq * lenSq;
             var unwalkable = flags.HasFlag(PrimitiveFlags.ForceUnwalkable) ||
-                             (!forceWalkable &&
-                              (unwalkableSlope || (includeVolume && flags.HasFlag(PrimitiveFlags.Unlandable))));
+                             (!forceWalkable && unwalkableSlope);
             var projected = crossY * crossY >= PROJECTION_NORMAL_THRESHOLD_SQ * lenSq;
             var planeGradX = projected ?
                                  -crossX / crossY :

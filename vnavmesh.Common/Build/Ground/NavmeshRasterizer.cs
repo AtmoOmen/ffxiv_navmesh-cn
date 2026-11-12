@@ -2167,7 +2167,7 @@ public class NavmeshRasterizer
 
                         var unwalkable = flags.HasFlag(PrimitiveFlags.ForceUnwalkable);
 
-                        if (!unwalkable)
+                        if (!unwalkable && !flags.HasFlag(PrimitiveFlags.ForceWalkable))
                         {
                             var v1     = CachedVertex(vertices, p.V1);
                             var v2     = CachedVertex(vertices, p.V2);
