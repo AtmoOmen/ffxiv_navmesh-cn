@@ -11,6 +11,8 @@ namespace vnavmesh;
 
 public sealed class Plugin : IDalamudPlugin
 {
+    public static Version Version { get; private set; } = null!;
+    
     private readonly ServiceProvider serviceProvider;
 
     public void Dispose() =>
@@ -22,6 +24,8 @@ public sealed class Plugin : IDalamudPlugin
     )
     {
         MarkCurrentThreadAsMainThread();
+        
+        Version = Assembly.GetExecutingAssembly().GetName().Version;
 
         if (!dalamud.ConfigDirectory.Exists)
             dalamud.ConfigDirectory.Create();

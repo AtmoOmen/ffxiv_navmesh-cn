@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Numerics;
 using Dalamud.Game.Command;
+using Dalamud.Plugin.Services;
+using Lumina.Data;
 using vnavmesh.Build;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
@@ -16,6 +18,9 @@ internal sealed class PluginCommands : IDisposable
     private readonly AsyncMoveRequest     asyncMove;
     private readonly PluginWindows        windowProvider;
     private readonly CommandInfo          commandInfo;
+    private readonly CommandInfo          aliasCommandInfo;
+
+    private Language helpLanguage;
 
     public PluginCommands
     (
@@ -32,38 +37,38 @@ internal sealed class PluginCommands : IDisposable
         this.asyncMove        = asyncMove;
         this.windowProvider   = windowProvider;
 
+        helpLanguage = config.UILanguage;
         commandInfo = new(OnCommand)
         {
-            HelpMessage = """
-                          打开调试菜单
-                          /vnav moveto <X> <Y> <Z> → 移动到原始坐标
-                          /vnav movedir <X> <Y> <Z> → 按玩家面向移动指定单位
-                          /vnav movetarget → 移动到目标位置
-                          /vnav moveflag → 移动到标记位置
-                          /vnav flyto <X> <Y> <Z> → 飞行到原始坐标
-                          /vnav flydir <X> <Y> <Z> → 按玩家面向飞行指定单位
-                          /vnav flytarget → 飞行到目标位置
-                          /vnav flyflag → 飞行到标记位置
-                          /vnav stop → 停止所有移动
-                          /vnav reload → 从缓存重新加载当前区域导航网格
-                          /vnav rebuild → 从头重建当前区域导航网格
-                          /vnav aligncamera → 切换相机跟随移动方向
-                          /vnav aligncamera true|yes|enable → 启用相机跟随移动方向
-                          /vnav aligncamera false|no|disable → 禁用相机跟随移动方向
-                          /vnav dtr → 切换服务器信息栏状态
-                          /vnav collider → 切换碰撞调试可视化
-                          """,
-            ShowInHelp = true
+            HelpMessage = new Localization(helpLanguage).CommandHelp,
+            ShowInHelp  = true
+        };
+        aliasCommandInfo = new(OnCommand)
+        {
+            HelpMessage = commandInfo.HelpMessage,
+            ShowInHelp  = false
         };
 
         Service.CommandManager.AddHandler("/vnav",     commandInfo);
-        Service.CommandManager.AddHandler("/vnavmesh", new(OnCommand) { HelpMessage = commandInfo.HelpMessage, ShowInHelp = false });
+        Service.CommandManager.AddHandler("/vnavmesh", aliasCommandInfo);
+        Service.Framework.Update += OnFrameworkUpdate;
     }
 
     public void Dispose()
     {
+        Service.Framework.Update -= OnFrameworkUpdate;
         Service.CommandManager.RemoveHandler("/vnav");
         Service.CommandManager.RemoveHandler("/vnavmesh");
+    }
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        if (helpLanguage == config.UILanguage)
+            return;
+
+        helpLanguage                 = config.UILanguage;
+        commandInfo.HelpMessage      = new Localization(helpLanguage).CommandHelp;
+        aliasCommandInfo.HelpMessage = commandInfo.HelpMessage;
     }
 
     private void OnCommand
@@ -134,10 +139,6 @@ internal sealed class PluginCommands : IDisposable
                 break;
             case "dtr":
                 config.EnableDTR ^= true;
-                config.Save();
-                break;
-            case "collider":
-                config.ForceShowGameCollision ^= true;
                 config.Save();
                 break;
         }

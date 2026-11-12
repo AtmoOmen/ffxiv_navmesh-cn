@@ -29,8 +29,7 @@ public class MainWindow : Window, IDisposable
         NavmeshManager       manager,
         MovementPlanExecutor movementExecutor,
         AsyncMoveRequest     move
-    ) : base
-        ("vnavmesh 寻路导航")
+    ) : base($"vnavmesh {Plugin.Version}###vnavmesh.MainWindow")
     {
         this.config           = config;
         this.movementExecutor = movementExecutor;

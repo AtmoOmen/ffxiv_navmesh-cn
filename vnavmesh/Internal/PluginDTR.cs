@@ -44,33 +44,25 @@ public class PluginDTR
 
             var statusText = $"{text.Navigation}: {meshStatus}";
 
-            if (config.ShowQueryStatusInDTR)
-            {
-                var pathfindInProgress = manager.PathfindInProgress;
-                var numQueued          = manager.NumQueuedPathfindRequests;
-                var asyncMoveActive    = asyncMove.TaskInProgress;
-                var isMoving           = movementExecutor.Waypoints.Count > 0;
+            var pathfindInProgress = manager.PathfindInProgress;
+            var numQueued          = manager.NumQueuedPathfindRequests;
+            var asyncMoveActive    = asyncMove.TaskInProgress;
+            var isMoving           = movementExecutor.Waypoints.Count > 0;
 
-                if (pathfindInProgress || numQueued > 0)
-                {
-                    var activeCount = pathfindInProgress ?
-                                          1 :
-                                          0;
-                    statusText += $" | {text.Queries}: {activeCount}";
-                    if (numQueued > 0)
-                        statusText += $" ({text.Queued}: {numQueued})";
-                }
-
-                if (asyncMoveActive)
-                    statusText += $" | {text.Pathfinding}";
-                if (isMoving)
-                    statusText += $" | {text.Moving}";
-            }
-            else
+            if (pathfindInProgress || numQueued > 0)
             {
-                if (asyncMove.TaskInProgress || movementExecutor.Waypoints.Count > 0)
-                    statusText = $"{text.Navigation}: {text.Pathfinding}";
+                var activeCount = pathfindInProgress ?
+                                      1 :
+                                      0;
+                statusText += $" | {text.Queries}: {activeCount}";
+                if (numQueued > 0)
+                    statusText += $" ({text.Queued}: {numQueued})";
             }
+
+            if (asyncMoveActive)
+                statusText += $" | {text.Pathfinding}";
+            if (isMoving)
+                statusText += $" | {text.Moving}";
 
             dtrBarEntry.Text = statusText;
         }

@@ -53,7 +53,7 @@ public unsafe partial class DebugGameCollision : IDisposable
     private          float        _renderHorizontalDistance = DefaultCollisionRenderHorizontalDistance;
     private          float        _renderVerticalDistance   = DefaultCollisionRenderVerticalDistance;
 
-    private HashSet<nint> _streamedMeshes = new();
+    private HashSet<nint> _streamedMeshes = [];
     private BitMask       _availableLayers;
     private BitMask       _availableMaterials;
 
@@ -164,7 +164,7 @@ public unsafe partial class DebugGameCollision : IDisposable
     {
         using var n = _tree.Node($"场景 {index}：{s->NumColliders} 个碰撞体，{s->NumLoading} 个正在加载，流式加载={SphereStr(s->StreamingSphere)}###scene_{index}");
 
-        if (n.SelectedOrHovered || _config.ForceShowGameCollision)
+        if (n.SelectedOrHovered)
         {
             foreach (var coll in s->Colliders)
             {

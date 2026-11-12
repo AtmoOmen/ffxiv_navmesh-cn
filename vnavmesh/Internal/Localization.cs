@@ -9,18 +9,23 @@ internal readonly struct Localization
 {
     public static readonly Language[] Languages =
     [
-        Language.ChineseSimplified, Language.English, Language.Japanese, Language.German,
-        Language.French, Language.TraditionalChinese, Language.Korean
+        Language.ChineseSimplified,
+        Language.English,
+        Language.Japanese,
+        Language.German,
+        Language.French,
+        Language.TraditionalChinese,
+        Language.Korean
     ];
 
     public static readonly string[] LanguageNames =
     [
-        "简体中文", 
-        "English", 
-        "日本語", 
+        "简体中文",
+        "English",
+        "日本語",
         "Deutsch",
-        "Français", 
-        "繁體中文", 
+        "Français",
+        "繁體中文",
         "한국어"
     ];
 
@@ -82,243 +87,190 @@ internal readonly struct Localization
 
     public string AutoLoadNavmesh => Select
     (
-        chineseSimplified: "切换区域时自动加载导航数据",
+        chineseSimplified: "切换区域时自动加载导航",
         english: "Load navigation data when changing zones",
         japanese: "エリア移動時にナビゲーションデータを自動読み込み",
         german: "Navigationsdaten beim Gebietswechsel laden",
         french: "Charger les données de navigation au changement de zone",
-        chineseTraditional: "切換區域時自動載入導航資料",
+        chineseTraditional: "切換區域時自動載入導航",
         korean: "지역 변경 시 탐색 데이터 자동 로드"
     );
 
     public string AutoLoadNavmeshHelp => Select
     (
-        chineseSimplified: "进入新区域后自动尝试载入对应的导航数据。",
-        english: "Automatically load the navigation data for each new zone.",
-        japanese: "新しいエリアに入ると、対応するナビゲーションデータを自動で読み込みます。",
-        german: "Beim Betreten eines neuen Gebiets die zugehörigen Navigationsdaten automatisch laden.",
-        french: "Charger automatiquement les données de navigation de chaque nouvelle zone.",
-        chineseTraditional: "進入新區域後自動嘗試載入對應的導航資料。",
-        korean: "새 지역에 진입하면 해당 탐색 데이터를 자동으로 로드합니다."
+        chineseSimplified: "切换区域时，自动构建导航数据或加载已有的缓存数据。",
+        english: "Automatically build navigation data or load existing cached data when changing zones.",
+        japanese: "エリア移動時に、ナビゲーションデータを自動で構築するか、既存のキャッシュを読み込みます。",
+        german: "Beim Gebietswechsel automatisch Navigationsdaten erstellen oder vorhandene Cache-Daten laden.",
+        french: "Générer automatiquement les données de navigation ou charger le cache existant au changement de zone.",
+        chineseTraditional: "切換區域時，自動建置導航資料或載入已有的快取資料。",
+        korean: "지역 변경 시 탐색 데이터를 자동으로 생성하거나 기존 캐시 데이터를 로드합니다."
     );
 
     public string CacheRetentionDays => Select
     (
-        chineseSimplified: "自动移除旧缓存（天）",
-        english: "Remove old cache after (days)",
+        chineseSimplified: "旧缓存保留时间（天）",
+        english: "Old cache retention (days)",
         japanese: "古いキャッシュの保持日数",
-        german: "Alten Cache entfernen nach (Tagen)",
-        french: "Supprimer le cache après (jours)",
-        chineseTraditional: "自動移除舊快取（天）",
-        korean: "오래된 캐시 삭제 기준 (일)"
+        german: "Aufbewahrungsdauer alter Caches (Tage)",
+        french: "Durée de conservation du cache (jours)",
+        chineseTraditional: "舊快取保留時間（天）",
+        korean: "오래된 캐시 보관 기간 (일)"
     );
 
     public string CacheRetentionDaysHelp => Select
     (
-        chineseSimplified: "超过该时长未使用的区域缓存会在构建完成后被移除；设为 0 表示保留全部缓存。",
-        english: "Remove zone caches unused for this many days after a build completes. Set to 0 to keep all caches.",
-        japanese: "ビルド完了後、指定日数以上使用していないエリアのキャッシュを削除します。0 にするとすべて保持します。",
-        german: "Nach Abschluss einer Berechnung Gebietscaches entfernen, die so viele Tage ungenutzt sind. 0 behält alle Caches.",
-        french: "Après une génération, supprimer les caches inutilisés depuis ce nombre de jours. 0 conserve tous les caches.",
-        chineseTraditional: "超過該時長未使用的區域快取會在建置完成後被移除；設為 0 表示保留全部快取。",
-        korean: "생성이 완료되면 지정한 일수 동안 사용하지 않은 지역 캐시를 삭제합니다. 0으로 설정하면 모두 보관합니다."
+        chineseSimplified: "任一新导航数据构建完成后，会检查并移除超过该时长未使用的导航缓存；设为0表示保留全部缓存。",
+        english: "After any new navigation data is built, check for and remove navigation caches unused for longer than this period. Set to 0 to keep all caches.",
+        japanese: "新しいナビゲーションデータの構築が完了するたびに、指定日数を超えて使用していないキャッシュを確認して削除します。0 にするとすべて保持します。",
+        german:
+        "Nach jeder Erstellung neuer Navigationsdaten prüfen, welche Navigationscaches länger als angegeben ungenutzt sind, und diese entfernen. 0 behält alle Caches.",
+        french:
+        "Après chaque génération de nouvelles données de navigation, rechercher et supprimer les caches inutilisés depuis plus longtemps que cette durée. 0 conserve tous les caches.",
+        chineseTraditional: "任一新導航資料建置完成後，會檢查並移除超過該時長未使用的導航快取；設為 0 表示保留全部快取。",
+        korean: "새 탐색 데이터 생성이 완료될 때마다 지정한 기간보다 오래 사용하지 않은 탐색 캐시를 확인하고 삭제합니다. 0으로 설정하면 모두 보관합니다."
     );
 
     public string ShowWaypoints => Select
     (
-        chineseSimplified: "显示路径点",
-        english: "Show waypoints",
-        japanese: "経由点を表示",
-        german: "Wegpunkte anzeigen",
-        french: "Afficher les points de passage",
-        chineseTraditional: "顯示路徑點",
-        korean: "경유 지점 표시"
+        chineseSimplified: "显示路径",
+        english: "Show path",
+        japanese: "経路を表示",
+        german: "Pfad anzeigen",
+        french: "Afficher le chemin",
+        chineseTraditional: "顯示路徑",
+        korean: "경로 표시"
     );
 
     public string ShowWaypointsHelp => Select
     (
-        chineseSimplified: "在世界中绘制当前路径的关键点。",
-        english: "Draw the waypoints of the current path in the world.",
-        japanese: "現在の経路の経由点をワールド内に描画します。",
-        german: "Wegpunkte des aktuellen Pfads in der Spielwelt zeichnen.",
-        french: "Afficher les points de passage du chemin actuel dans le monde.",
-        chineseTraditional: "在世界中繪製目前路徑的關鍵點。",
-        korean: "현재 경로의 경유 지점을 게임 공간에 표시합니다."
-    );
-
-    public string ForceShowGameCollision => Select
-    (
-        chineseSimplified: "始终显示游戏碰撞体积",
-        english: "Always show game collision",
-        japanese: "ゲームの当たり判定を常に表示",
-        german: "Spielkollisionen immer anzeigen",
-        french: "Toujours afficher les collisions du jeu",
-        chineseTraditional: "始終顯示遊戲碰撞體積",
-        korean: "게임 충돌 영역 항상 표시"
-    );
-
-    public string ForceShowGameCollisionHelp => Select
-    (
-        chineseSimplified: "用于排查地形碰撞与导航结果之间的差异。",
-        english: "Inspect differences between terrain collision and navigation results.",
-        japanese: "地形の当たり判定とナビゲーション結果の違いを確認します。",
-        german: "Unterschiede zwischen Geländekollisionen und Navigationsergebnissen untersuchen.",
-        french: "Examiner les différences entre les collisions du terrain et les résultats de navigation.",
-        chineseTraditional: "用於排查地形碰撞與導航結果之間的差異。",
-        korean: "지형 충돌과 탐색 결과의 차이를 확인합니다."
+        chineseSimplified: "寻路过程中，绘制本次寻路的路径。",
+        english: "Draw the current path while navigating.",
+        japanese: "経路に沿って移動している間、現在の経路を描画します。",
+        german: "Während der Navigation den aktuellen Pfad zeichnen.",
+        french: "Afficher le chemin actuel pendant la navigation.",
+        chineseTraditional: "尋路過程中，繪製本次尋路的路徑。",
+        korean: "경로를 따라 이동하는 동안 현재 경로를 표시합니다."
     );
 
     public string RenderWhenGameUIHidden => Select
     (
-        chineseSimplified: "游戏隐藏界面时仍然渲染",
+        chineseSimplified: "隐藏游戏界面时仍然渲染",
         english: "Render while the game UI is hidden",
         japanese: "ゲーム UI 非表示時も描画",
         german: "Bei ausgeblendeter Spieloberfläche weiter rendern",
         french: "Afficher même si l’interface du jeu est masquée",
-        chineseTraditional: "遊戲隱藏介面時仍然繪製",
+        chineseTraditional: "隱藏遊戲介面時仍然繪製",
         korean: "게임 UI를 숨겨도 렌더링"
     );
 
     public string RenderWhenGameUIHiddenHelp => Select
     (
-        chineseSimplified: "即使使用游戏内隐藏界面功能，插件的调试渲染与窗口仍继续绘制。",
-        english: "Keep drawing plugin windows and debug visuals when the game UI is hidden.",
-        japanese: "ゲーム内で UI を非表示にしても、プラグインのウィンドウとデバッグ表示を描画します。",
-        german: "Plugin-Fenster und Debug-Anzeigen auch bei ausgeblendeter Spieloberfläche zeichnen.",
-        french: "Continuer à afficher les fenêtres du plugin et les éléments de débogage lorsque l’interface du jeu est masquée.",
-        chineseTraditional: "即使使用遊戲內隱藏介面功能，外掛的偵錯繪製與視窗仍繼續顯示。",
-        korean: "게임 UI가 숨겨져 있어도 플러그인 창과 디버그 표시를 계속 그립니다."
+        chineseSimplified: "隐藏游戏界面时，仍然继续渲染插件绘制的界面元素。",
+        english: "Keep rendering the plugin’s visual elements when the game UI is hidden.",
+        japanese: "ゲーム UI を非表示にしても、プラグインの表示要素を描画し続けます。",
+        german: "Die Anzeigeelemente des Plugins auch bei ausgeblendeter Spieloberfläche weiter zeichnen.",
+        french: "Continuer à afficher les éléments visuels du plugin lorsque l’interface du jeu est masquée.",
+        chineseTraditional: "隱藏遊戲介面時，仍然繼續繪製外掛的介面元素。",
+        korean: "게임 UI가 숨겨져 있어도 플러그인의 화면 요소를 계속 렌더링합니다."
     );
 
     public string EnableDTR => Select
     (
-        chineseSimplified: "启用 DTR 信息栏",
-        english: "Enable DTR bar",
-        japanese: "DTR バーを有効化",
-        german: "DTR-Leiste aktivieren",
-        french: "Activer la barre DTR",
-        chineseTraditional: "啟用 DTR 資訊列",
-        korean: "DTR 표시줄 사용"
+        chineseSimplified: "添加“基本信息”条目",
+        english: "Add a Server Info entry",
+        japanese: "サーバー情報に項目を追加",
+        german: "Eintrag zur Serverinfo hinzufügen",
+        french: "Ajouter une entrée aux informations serveur",
+        chineseTraditional: "新增「基本資訊」項目",
+        korean: "서버 정보에 항목 추가"
     );
 
     public string EnableDTRHelp => Select
     (
-        chineseSimplified: "在界面上方的信息栏显示插件状态。",
-        english: "Show plugin status in the information bar at the top of the screen.",
-        japanese: "画面上部の情報バーにプラグインの状態を表示します。",
-        german: "Plugin-Status in der Informationsleiste am oberen Bildschirmrand anzeigen.",
-        french: "Afficher l’état du plugin dans la barre d’informations en haut de l’écran.",
-        chineseTraditional: "在介面上方的資訊列顯示外掛狀態。",
-        korean: "화면 상단 정보 표시줄에 플러그인 상태를 표시합니다."
-    );
-
-    public string ShowQueryStatusInDTR => Select
-    (
-        chineseSimplified: "在 DTR 信息栏中显示详细查询状态",
-        english: "Show detailed query status in the DTR bar",
-        japanese: "DTR バーに詳細なクエリ状態を表示",
-        german: "Detaillierten Abfragestatus in der DTR-Leiste anzeigen",
-        french: "Afficher le détail des requêtes dans la barre DTR",
-        chineseTraditional: "在 DTR 資訊列中顯示詳細查詢狀態",
-        korean: "DTR 표시줄에 상세 요청 상태 표시"
-    );
-
-    public string ShowQueryStatusInDTRHelp => Select
-    (
-        chineseSimplified: "显示更细的查询状态变化，便于观察插件当前行为。",
-        english: "Show detailed query status changes to monitor current activity.",
-        japanese: "クエリ状態の変化を詳しく表示し、現在の動作を確認しやすくします。",
-        german: "Detaillierte Änderungen des Abfragestatus zur Überwachung der aktuellen Aktivität anzeigen.",
-        french: "Afficher les changements détaillés des requêtes pour suivre l’activité actuelle.",
-        chineseTraditional: "顯示更詳細的查詢狀態變化，便於觀察外掛目前的行為。",
-        korean: "현재 동작을 확인할 수 있도록 요청 상태 변화를 자세히 표시합니다."
+        chineseSimplified: "在“基本信息”界面内添加会显示插件信息的条目。",
+        english: "Add an entry displaying plugin information to the Server Info UI element.",
+        japanese: "サーバー情報の UI に、プラグインの情報を表示する項目を追加します。",
+        german: "Der Serverinfo ein Anzeigeelement mit Informationen zum Plugin hinzufügen.",
+        french: "Ajouter aux informations serveur une entrée affichant les informations du plugin.",
+        chineseTraditional: "在「基本資訊」介面內新增顯示外掛資訊的項目。",
+        korean: "서버 정보 UI에 플러그인 정보를 표시하는 항목을 추가합니다."
     );
 
     public string CancelMoveOnUserInput => Select
     (
-        chineseSimplified: "玩家产生移动输入时取消当前路径",
-        english: "Cancel the current path on movement input",
-        japanese: "移動入力時に現在の経路をキャンセル",
-        german: "Aktuellen Pfad bei Bewegungseingabe abbrechen",
-        french: "Annuler le chemin actuel lors d’une commande de déplacement",
-        chineseTraditional: "玩家產生移動輸入時取消目前路徑",
-        korean: "이동 입력 시 현재 경로 취소"
+        chineseSimplified: "手动移动时取消寻路",
+        english: "Cancel navigation when moving manually",
+        japanese: "手動移動時にナビゲーションをキャンセル",
+        german: "Navigation bei manueller Bewegung abbrechen",
+        french: "Annuler la navigation lors d’un déplacement manuel",
+        chineseTraditional: "手動移動時取消尋路",
+        korean: "직접 이동 시 경로 이동 취소"
     );
 
     public string CancelMoveOnUserInputHelp => Select
     (
-        chineseSimplified: "手动接管角色时立即停止自动移动。",
-        english: "Stop automatic movement immediately when moving manually.",
-        japanese: "手動で移動すると、自動移動を直ちに停止します。",
-        german: "Automatische Bewegung bei manueller Steuerung sofort stoppen.",
-        french: "Arrêter immédiatement le déplacement automatique lors d’un déplacement manuel.",
-        chineseTraditional: "手動接管角色時立即停止自動移動。",
-        korean: "직접 이동하면 자동 이동을 즉시 중지합니다."
+        chineseSimplified: "手动移动角色时，立刻取消当前正在进行的寻路任务。",
+        english: "Immediately cancel the current navigation task when moving the character manually.",
+        japanese: "キャラクターを手動で移動すると、実行中のナビゲーションを直ちにキャンセルします。",
+        german: "Die aktuelle Navigation sofort abbrechen, sobald der Charakter manuell bewegt wird.",
+        french: "Annuler immédiatement la navigation en cours lorsque le personnage est déplacé manuellement.",
+        chineseTraditional: "手動移動角色時，立刻取消目前正在進行的尋路任務。",
+        korean: "캐릭터를 직접 이동하면 진행 중인 경로 이동 작업을 즉시 취소합니다."
     );
 
     public string PathTolerance => Select
     (
-        chineseSimplified: "终点容差",
-        english: "Destination tolerance",
-        japanese: "到着判定の許容距離",
-        german: "Zieltoleranz",
-        french: "Tolérance à destination",
-        chineseTraditional: "終點容差",
-        korean: "목적지 허용 거리"
+        chineseSimplified: "默认终点容差",
+        english: "Default destination tolerance",
+        japanese: "到着判定の既定の許容距離",
+        german: "Standard-Zieltoleranz",
+        french: "Tolérance à destination par défaut",
+        chineseTraditional: "預設終點容差",
+        korean: "기본 목적지 허용 거리"
     );
 
     public string PathToleranceHelp => Select
     (
-        chineseSimplified: "角色进入目标点附近该范围后，视为已经到达最终目的地。",
-        english: "Consider the destination reached when the character enters this range.",
-        japanese: "目標地点からこの距離以内に入ると、目的地に到着したと判定します。",
-        german: "Das Ziel gilt als erreicht, sobald sich der Charakter in dieser Entfernung befindet.",
-        french: "Considérer la destination atteinte lorsque le personnage entre dans ce rayon.",
-        chineseTraditional: "角色進入目標點附近該範圍後，視為已經到達最終目的地。",
-        korean: "캐릭터가 목표 지점의 이 범위 안에 들어오면 도착한 것으로 간주합니다."
-    );
-
-    public string CameraTracking => Select
-    (
-        chineseSimplified: "镜头联动",
-        english: "Camera tracking",
-        japanese: "カメラ追従",
-        german: "Kameraführung",
-        french: "Suivi de la caméra",
-        chineseTraditional: "鏡頭連動",
-        korean: "카메라 추적"
+        chineseSimplified: "当距离目标点不足该设定值时，视为已经到达目的地并结束寻路。",
+        english: "When the distance to the target is less than this value, consider the destination reached and end navigation.",
+        japanese: "目標地点までの距離が設定値より短くなると、到着したと判定してナビゲーションを終了します。",
+        german: "Ist die Entfernung zum Ziel kleiner als dieser Wert, gilt das Ziel als erreicht und die Navigation endet.",
+        french: "Lorsque la distance à la cible est inférieure à cette valeur, considérer la destination atteinte et terminer la navigation.",
+        chineseTraditional: "當距離目標點不足該設定值時，視為已經到達目的地並結束尋路。",
+        korean: "목표 지점까지의 거리가 설정값보다 작아지면 목적지에 도착한 것으로 간주하고 경로 이동을 종료합니다."
     );
 
     public string AlignCameraToMovement => Select
     (
-        chineseSimplified: "镜头跟随移动方向",
-        english: "Face the camera in the movement direction",
-        japanese: "カメラを移動方向に向ける",
-        german: "Kamera in Bewegungsrichtung ausrichten",
-        french: "Orienter la caméra dans le sens du déplacement",
-        chineseTraditional: "鏡頭跟隨移動方向",
-        korean: "카메라를 이동 방향으로 회전"
+        chineseSimplified: "镜头跟随寻路移动方向",
+        english: "Face the camera in the navigation movement direction",
+        japanese: "ナビゲーション中の移動方向にカメラを向ける",
+        german: "Kamera während der Navigation in Bewegungsrichtung ausrichten",
+        french: "Orienter la caméra dans le sens du déplacement pendant la navigation",
+        chineseTraditional: "鏡頭跟隨尋路移動方向",
+        korean: "경로 이동 방향으로 카메라 회전"
     );
 
     public string AlignCameraToMovementHelp => Select
     (
-        chineseSimplified: "自动将镜头转向角色当前的移动方向。",
-        english: "Automatically turn the camera toward the character’s movement direction.",
-        japanese: "キャラクターの移動方向にカメラを自動で向けます。",
-        german: "Die Kamera automatisch in die Bewegungsrichtung des Charakters drehen.",
-        french: "Orienter automatiquement la caméra dans le sens du déplacement du personnage.",
-        chineseTraditional: "自動將鏡頭轉向角色目前的移動方向。",
-        korean: "캐릭터가 이동하는 방향으로 카메라를 자동 회전합니다."
+        chineseSimplified: "寻路时，自动将镜头转向角色当前的移动方向。",
+        english: "During navigation, automatically turn the camera toward the character’s current movement direction.",
+        japanese: "ナビゲーション中、キャラクターの現在の移動方向にカメラを自動で向けます。",
+        german: "Während der Navigation die Kamera automatisch in die aktuelle Bewegungsrichtung des Charakters drehen.",
+        french: "Pendant la navigation, orienter automatiquement la caméra dans le sens du déplacement actuel du personnage.",
+        chineseTraditional: "尋路時，自動將鏡頭轉向角色目前的移動方向。",
+        korean: "경로 이동 중 캐릭터의 현재 이동 방향으로 카메라를 자동 회전합니다."
     );
 
     public string AlignCameraHeight => Select
     (
-        chineseSimplified: "相机高度角",
+        chineseSimplified: "镜头高度角",
         english: "Camera elevation",
         japanese: "カメラの仰角",
         german: "Kameraneigung",
         french: "Inclinaison de la caméra",
-        chineseTraditional: "相機高度角",
+        chineseTraditional: "鏡頭高度角",
         korean: "카메라 고도각"
     );
 
@@ -335,79 +287,208 @@ internal readonly struct Localization
 
     public string StopOnStuck => Select
     (
-        chineseSimplified: "启用自动防卡",
-        english: "Enable automatic stuck recovery",
-        japanese: "スタックからの自動復帰を有効化",
-        german: "Automatische Befreiung aktivieren",
-        french: "Activer le déblocage automatique",
-        chineseTraditional: "啟用自動防卡",
-        korean: "자동 끼임 해제 사용"
+        chineseSimplified: "处理角色卡死",
+        english: "Recover when the character is stuck",
+        japanese: "キャラクターのスタックに対処",
+        german: "Feststeckenden Charakter befreien",
+        french: "Débloquer le personnage",
+        chineseTraditional: "處理角色卡住",
+        korean: "캐릭터 끼임 해제"
     );
 
     public string StopOnStuckHelp => Select
     (
-        chineseSimplified: "检测到角色长时间无法推进路径时，自动尝试跳跃或短时脱困。",
-        english: "Try jumping or brief recovery movements when the character stops making progress.",
-        japanese: "経路上で長時間進めない場合、ジャンプや短い移動で復帰を試みます。",
-        german: "Bei längerem Stillstand durch Springen oder kurze Bewegungen eine Befreiung versuchen.",
-        french: "Essayer de sauter ou de se dégager brièvement lorsque le personnage ne progresse plus.",
-        chineseTraditional: "偵測到角色長時間無法推進路徑時，自動嘗試跳躍或短暫脫困。",
-        korean: "캐릭터가 오랫동안 경로를 따라 진행하지 못하면 점프나 짧은 이동으로 해제를 시도합니다."
-    );
-
-    public string StuckHandlingDisabled => Select
-    (
-        chineseSimplified: "启用后可进一步配置卡住判定时长与冷却期。",
-        english: "Enable to configure the detection time and recovery cooldown.",
-        japanese: "有効にすると、スタック判定時間と復帰の待機時間を設定できます。",
-        german: "Aktivieren, um Erkennungsdauer und Abklingzeit einzustellen.",
-        french: "Activer pour configurer le délai de détection et le temps de recharge du déblocage.",
-        chineseTraditional: "啟用後可進一步設定卡住判定時長與冷卻期。",
-        korean: "사용하면 감지 시간과 해제 재사용 대기시간을 설정할 수 있습니다."
+        chineseSimplified: "寻路时，当检测到角色几乎未能有效移动一段时间后，自动尝试跳跃、朝着另一个方向移动和重新算路以脱困。",
+        english:
+        "During navigation, if the character makes almost no progress for a while, automatically try jumping, moving in another direction, and recalculating the path to get unstuck.",
+        japanese: "ナビゲーション中、一定時間ほとんど移動できていないことを検出すると、ジャンプ、別方向への移動、経路の再計算で自動的に復帰を試みます。",
+        german:
+        "Kommt der Charakter während der Navigation eine Zeit lang kaum voran, automatisch durch Springen, Bewegung in eine andere Richtung und Neuberechnung des Pfads eine Befreiung versuchen.",
+        french:
+        "Pendant la navigation, si le personnage ne progresse presque plus pendant un certain temps, essayer automatiquement de sauter, de changer de direction et de recalculer le chemin pour le débloquer.",
+        chineseTraditional: "尋路時，當偵測到角色一段時間內幾乎未能有效移動後，自動嘗試跳躍、朝另一個方向移動和重新計算路徑以脫困。",
+        korean: "경로 이동 중 일정 시간 동안 캐릭터가 거의 이동하지 못하면 점프, 다른 방향으로 이동, 경로 재계산을 자동으로 시도하여 끼임을 해제합니다."
     );
 
     public string UnstuckDetectionSeconds => Select
     (
-        chineseSimplified: "卡住判定时长 (秒)",
+        chineseSimplified: "卡死判定时长（秒）",
         english: "Stuck detection time (seconds)",
         japanese: "スタック判定時間（秒）",
         german: "Stillstandserkennung (Sekunden)",
         french: "Délai de détection du blocage (secondes)",
-        chineseTraditional: "卡住判定時長 (秒)",
+        chineseTraditional: "卡住判定時長（秒）",
         korean: "끼임 감지 시간 (초)"
     );
 
     public string UnstuckDetectionSecondsHelp => Select
     (
-        chineseSimplified: "持续几乎没有实际位移达到该时长后，开始尝试脱困。",
-        english: "Start recovery after this much time with almost no movement.",
-        japanese: "実際の移動がほとんどない状態がこの時間続くと、復帰を試みます。",
-        german: "Nach dieser Zeit ohne nennenswerte Bewegung eine Befreiung versuchen.",
-        french: "Commencer le déblocage après ce délai sans déplacement significatif.",
-        chineseTraditional: "持續幾乎沒有實際位移達到該時長後，開始嘗試脫困。",
-        korean: "실제 이동이 거의 없는 상태가 이 시간 동안 지속되면 해제를 시도합니다."
+        chineseSimplified: "当角色在设定时间内都未能有效移动，认定角色卡死。",
+        english: "Consider the character stuck if it makes no meaningful movement for this duration.",
+        japanese: "設定した時間の間、キャラクターがほとんど移動できない場合にスタックと判定します。",
+        german: "Den Charakter als feststeckend einstufen, wenn er sich für diese Dauer nicht nennenswert bewegt.",
+        french: "Considérer le personnage comme bloqué s’il ne se déplace pas de manière significative pendant cette durée.",
+        chineseTraditional: "當角色在設定時間內都未能有效移動，判定角色卡住。",
+        korean: "설정한 시간 동안 캐릭터가 유의미하게 이동하지 못하면 끼임 상태로 판단합니다."
     );
 
     public string UnstuckCooldownSeconds => Select
     (
-        chineseSimplified: "脱困冷却期 (秒)",
-        english: "Recovery cooldown (seconds)",
-        japanese: "復帰の待機時間（秒）",
-        german: "Befreiungsabklingzeit (Sekunden)",
-        french: "Temps de recharge du déblocage (secondes)",
-        chineseTraditional: "脫困冷卻期 (秒)",
-        korean: "끼임 해제 재사용 대기시간 (초)"
+        chineseSimplified: "尝试脱困间隔（秒）",
+        english: "Recovery attempt interval (seconds)",
+        japanese: "復帰試行の間隔（秒）",
+        german: "Intervall zwischen Befreiungsversuchen (Sekunden)",
+        french: "Intervalle entre les tentatives de déblocage (secondes)",
+        chineseTraditional: "嘗試脫困間隔（秒）",
+        korean: "끼임 해제 시도 간격 (초)"
     );
 
     public string UnstuckCooldownSecondsHelp => Select
     (
-        chineseSimplified: "每次随机位移脱困结束后，暂停重新判定卡住的时间。",
-        english: "Wait this long after each random recovery movement before checking for stuck movement again.",
-        japanese: "ランダム移動による復帰動作の後、この時間が経過するまでスタック判定を停止します。",
-        german: "Nach jeder zufälligen Befreiungsbewegung so lange bis zur nächsten Stillstandsprüfung warten.",
-        french: "Attendre ce délai après chaque déplacement aléatoire de déblocage avant de vérifier à nouveau le blocage.",
-        chineseTraditional: "每次隨機位移脫困結束後，暫停重新判定卡住的時間。",
-        korean: "무작위 이동을 통한 해제 동작이 끝난 후 다시 끼임을 감지할 때까지 기다리는 시간입니다."
+        chineseSimplified: "每次尝试脱困后，都会暂停卡死检测一段时间，然后再继续检测是否卡死。",
+        english: "After each recovery attempt, pause stuck detection for this duration before checking again.",
+        japanese: "復帰を試みるたびに、設定した時間だけスタック検出を停止してから、再び検出を行います。",
+        german: "Nach jedem Befreiungsversuch die Stillstandserkennung für diese Dauer aussetzen und anschließend fortsetzen.",
+        french: "Après chaque tentative de déblocage, suspendre la détection du blocage pendant cette durée avant de la reprendre.",
+        chineseTraditional: "每次嘗試脫困後，都會暫停卡住偵測一段時間，然後再繼續偵測是否卡住。",
+        korean: "끼임 해제를 시도할 때마다 설정한 시간 동안 끼임 감지를 일시 중지한 뒤 다시 감지합니다."
+    );
+
+    public string CommandHelp => Select
+    (
+        chineseSimplified: """
+                           /vnav 或 /vnavmesh：打开或关闭插件窗口；以下子命令均支持这两个命令名。
+                           /vnav moveto <X> <Y> <Z>：寻路移动到指定世界坐标。
+                           /vnav movedir <X> <Y> <Z>：以当前位置为起点，按世界坐标轴偏移指定距离后寻路移动。
+                           /vnav movetarget：寻路移动到当前目标的位置。
+                           /vnav moveflag：寻路移动到地图旗标的位置。
+                           /vnav flyto <X> <Y> <Z>：飞行寻路到指定世界坐标。
+                           /vnav flydir <X> <Y> <Z>：以当前位置为起点，按世界坐标轴偏移指定距离后飞行寻路。
+                           /vnav flytarget：飞行寻路到当前目标的位置。
+                           /vnav flyflag：飞行寻路到地图旗标的位置。
+                           坐标和偏移量均按 X、Y、Z 顺序填写，Y 表示高度；小数使用英文句点。
+                           /vnav stop：停止当前移动。
+                           /vnav reload：重新加载当前区域的导航数据，优先使用缓存。
+                           /vnav rebuild：重新构建当前区域的导航数据，不使用缓存。
+                           /vnav aligncamera：切换镜头跟随寻路移动方向的开关。
+                           /vnav aligncamera true|yes|enable：启用镜头跟随；任选一个参数。
+                           /vnav aligncamera false|no|disable：禁用镜头跟随；任选一个参数。
+                           /vnav dtr：显示或隐藏插件的“基本信息”条目。
+                           """,
+        english: """
+                 /vnav or /vnavmesh: Toggle the plugin window. Both command names support all subcommands below.
+                 /vnav moveto <X> <Y> <Z>: Navigate to the specified world coordinates.
+                 /vnav movedir <X> <Y> <Z>: Navigate to the current position plus the specified world-axis offsets.
+                 /vnav movetarget: Navigate to the current target’s position.
+                 /vnav moveflag: Navigate to the map flag’s position.
+                 /vnav flyto <X> <Y> <Z>: Navigate by flight to the specified world coordinates.
+                 /vnav flydir <X> <Y> <Z>: Navigate by flight to the current position plus the specified world-axis offsets.
+                 /vnav flytarget: Navigate by flight to the current target’s position.
+                 /vnav flyflag: Navigate by flight to the map flag’s position.
+                 Enter coordinates and offsets in X, Y, Z order; Y is height. Use a period as the decimal separator.
+                 /vnav stop: Stop the current movement.
+                 /vnav reload: Reload navigation data for the current zone, using the cache when available.
+                 /vnav rebuild: Rebuild navigation data for the current zone without using the cache.
+                 /vnav aligncamera: Toggle camera alignment with the navigation movement direction.
+                 /vnav aligncamera true|yes|enable: Enable camera alignment; choose one argument.
+                 /vnav aligncamera false|no|disable: Disable camera alignment; choose one argument.
+                 /vnav dtr: Show or hide the plugin’s Server Info entry.
+                 """,
+        japanese: """
+                  /vnav または /vnavmesh：プラグインのウィンドウを開閉します。以下のサブコマンドはどちらのコマンド名でも使用できます。
+                  /vnav moveto <X> <Y> <Z>：指定したワールド座標まで経路に沿って移動します。
+                  /vnav movedir <X> <Y> <Z>：現在位置にワールド座標軸で指定した変位を加えた地点まで移動します。
+                  /vnav movetarget：現在のターゲットの位置まで移動します。
+                  /vnav moveflag：地図のフラッグの位置まで移動します。
+                  /vnav flyto <X> <Y> <Z>：指定したワールド座標まで飛行経路に沿って移動します。
+                  /vnav flydir <X> <Y> <Z>：現在位置にワールド座標軸で指定した変位を加えた地点まで飛行移動します。
+                  /vnav flytarget：現在のターゲットの位置まで飛行移動します。
+                  /vnav flyflag：地図のフラッグの位置まで飛行移動します。
+                  座標と変位は X、Y、Z の順に指定します。Y は高さです。小数点には半角のピリオドを使用します。
+                  /vnav stop：現在の移動を停止します。
+                  /vnav reload：現在のエリアのナビゲーションデータを、キャッシュがあれば使用して再読み込みします。
+                  /vnav rebuild：キャッシュを使用せず、現在のエリアのナビゲーションデータを再構築します。
+                  /vnav aligncamera：ナビゲーション中の移動方向へのカメラ追従を切り替えます。
+                  /vnav aligncamera true|yes|enable：カメラ追従を有効にします。いずれか 1 つを指定します。
+                  /vnav aligncamera false|no|disable：カメラ追従を無効にします。いずれか 1 つを指定します。
+                  /vnav dtr：サーバー情報にあるプラグインの項目の表示を切り替えます。
+                  """,
+        german: """
+                /vnav oder /vnavmesh: Plugin-Fenster öffnen oder schließen. Beide Befehlsnamen unterstützen alle folgenden Unterbefehle.
+                /vnav moveto <X> <Y> <Z>: Zu den angegebenen Weltkoordinaten navigieren.
+                /vnav movedir <X> <Y> <Z>: Zur aktuellen Position zuzüglich der angegebenen Versätze entlang der Weltachsen navigieren.
+                /vnav movetarget: Zur Position des aktuellen Ziels navigieren.
+                /vnav moveflag: Zur Position der Kartenmarkierung navigieren.
+                /vnav flyto <X> <Y> <Z>: Im Flug zu den angegebenen Weltkoordinaten navigieren.
+                /vnav flydir <X> <Y> <Z>: Im Flug zur aktuellen Position zuzüglich der angegebenen Versätze entlang der Weltachsen navigieren.
+                /vnav flytarget: Im Flug zur Position des aktuellen Ziels navigieren.
+                /vnav flyflag: Im Flug zur Position der Kartenmarkierung navigieren.
+                Koordinaten und Versätze in der Reihenfolge X, Y, Z angeben; Y ist die Höhe. Einen Punkt als Dezimaltrennzeichen verwenden.
+                /vnav stop: Die aktuelle Bewegung stoppen.
+                /vnav reload: Navigationsdaten des aktuellen Gebiets neu laden und dabei den Cache verwenden, sofern vorhanden.
+                /vnav rebuild: Navigationsdaten des aktuellen Gebiets ohne Cache neu erstellen.
+                /vnav aligncamera: Die Ausrichtung der Kamera in Bewegungsrichtung während der Navigation umschalten.
+                /vnav aligncamera true|yes|enable: Kameraausrichtung aktivieren; ein Argument auswählen.
+                /vnav aligncamera false|no|disable: Kameraausrichtung deaktivieren; ein Argument auswählen.
+                /vnav dtr: Den Serverinfo-Eintrag des Plugins ein- oder ausblenden.
+                """,
+        french: """
+                /vnav ou /vnavmesh : ouvrir ou fermer la fenêtre du plugin. Les deux noms acceptent toutes les sous-commandes suivantes.
+                /vnav moveto <X> <Y> <Z> : suivre un chemin vers les coordonnées du monde indiquées.
+                /vnav movedir <X> <Y> <Z> : suivre un chemin vers la position actuelle augmentée des décalages indiqués selon les axes du monde.
+                /vnav movetarget : suivre un chemin vers la position de la cible actuelle.
+                /vnav moveflag : suivre un chemin vers la position du drapeau sur la carte.
+                /vnav flyto <X> <Y> <Z> : suivre un itinéraire de vol vers les coordonnées du monde indiquées.
+                /vnav flydir <X> <Y> <Z> : suivre un itinéraire de vol vers la position actuelle augmentée des décalages indiqués selon les axes du monde.
+                /vnav flytarget : suivre un itinéraire de vol vers la position de la cible actuelle.
+                /vnav flyflag : suivre un itinéraire de vol vers la position du drapeau sur la carte.
+                Saisir les coordonnées et décalages dans l’ordre X, Y, Z ; Y représente la hauteur. Utiliser un point comme séparateur décimal.
+                /vnav stop : arrêter le déplacement en cours.
+                /vnav reload : recharger les données de navigation de la zone actuelle en utilisant le cache s’il est disponible.
+                /vnav rebuild : régénérer les données de navigation de la zone actuelle sans utiliser le cache.
+                /vnav aligncamera : activer ou désactiver l’orientation de la caméra dans le sens du déplacement pendant la navigation.
+                /vnav aligncamera true|yes|enable : activer le suivi de la caméra ; choisir un seul argument.
+                /vnav aligncamera false|no|disable : désactiver le suivi de la caméra ; choisir un seul argument.
+                /vnav dtr : afficher ou masquer l’entrée du plugin dans les informations serveur.
+                """,
+        chineseTraditional: """
+                            /vnav 或 /vnavmesh：開啟或關閉外掛視窗；以下子命令均支援這兩個命令名稱。
+                            /vnav moveto <X> <Y> <Z>：尋路移動到指定世界座標。
+                            /vnav movedir <X> <Y> <Z>：以目前位置為起點，沿世界座標軸偏移指定距離後尋路移動。
+                            /vnav movetarget：尋路移動到目前目標的位置。
+                            /vnav moveflag：尋路移動到地圖旗標的位置。
+                            /vnav flyto <X> <Y> <Z>：飛行尋路到指定世界座標。
+                            /vnav flydir <X> <Y> <Z>：以目前位置為起點，沿世界座標軸偏移指定距離後飛行尋路。
+                            /vnav flytarget：飛行尋路到目前目標的位置。
+                            /vnav flyflag：飛行尋路到地圖旗標的位置。
+                            座標和偏移量均按 X、Y、Z 順序填寫，Y 表示高度；小數使用半形句點。
+                            /vnav stop：停止目前移動。
+                            /vnav reload：重新載入目前區域的導航資料，優先使用快取。
+                            /vnav rebuild：重新建置目前區域的導航資料，不使用快取。
+                            /vnav aligncamera：切換鏡頭跟隨尋路移動方向的開關。
+                            /vnav aligncamera true|yes|enable：啟用鏡頭跟隨；任選一個參數。
+                            /vnav aligncamera false|no|disable：停用鏡頭跟隨；任選一個參數。
+                            /vnav dtr：顯示或隱藏外掛的「基本資訊」項目。
+                            """,
+        korean: """
+                /vnav 또는 /vnavmesh: 플러그인 창을 열거나 닫습니다. 아래 하위 명령은 두 명령 이름 모두에서 사용할 수 있습니다.
+                /vnav moveto <X> <Y> <Z>: 지정한 월드 좌표까지 경로를 따라 이동합니다.
+                /vnav movedir <X> <Y> <Z>: 현재 위치에 월드 좌표축 기준 이동량을 더한 지점까지 경로를 따라 이동합니다.
+                /vnav movetarget: 현재 대상의 위치까지 경로를 따라 이동합니다.
+                /vnav moveflag: 지도 깃발의 위치까지 경로를 따라 이동합니다.
+                /vnav flyto <X> <Y> <Z>: 지정한 월드 좌표까지 비행 경로를 따라 이동합니다.
+                /vnav flydir <X> <Y> <Z>: 현재 위치에 월드 좌표축 기준 이동량을 더한 지점까지 비행 경로를 따라 이동합니다.
+                /vnav flytarget: 현재 대상의 위치까지 비행 경로를 따라 이동합니다.
+                /vnav flyflag: 지도 깃발의 위치까지 비행 경로를 따라 이동합니다.
+                좌표와 이동량은 X, Y, Z 순서로 입력하며 Y는 높이입니다. 소수점은 마침표를 사용합니다.
+                /vnav stop: 현재 이동을 중지합니다.
+                /vnav reload: 현재 지역의 탐색 데이터를 다시 로드하며, 캐시가 있으면 사용합니다.
+                /vnav rebuild: 캐시를 사용하지 않고 현재 지역의 탐색 데이터를 다시 생성합니다.
+                /vnav aligncamera: 경로 이동 방향으로 카메라를 회전하는 기능을 전환합니다.
+                /vnav aligncamera true|yes|enable: 카메라 따라가기를 켭니다. 인수 중 하나를 선택합니다.
+                /vnav aligncamera false|no|disable: 카메라 따라가기를 끕니다. 인수 중 하나를 선택합니다.
+                /vnav dtr: 서버 정보에 있는 플러그인 항목을 표시하거나 숨깁니다.
+                """
     );
 
     public string Ready => Select

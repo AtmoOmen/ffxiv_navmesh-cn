@@ -14,11 +14,9 @@ public class PluginConfig : IPluginConfiguration
     public bool  AutoLoadNavmesh      = true;
     public int   CacheRetentionDays   = 7;
     public bool  EnableDTR            = true;
-    public bool  ShowQueryStatusInDTR = true;
     public bool  AlignCameraToMovement;
     public float AlignCameraHeight = -15;
     public bool  ShowWaypoints;
-    public bool  ForceShowGameCollision;
     public bool  RenderWhenGameUiHidden;
     public bool  CancelMoveOnUserInput;
     public bool  StopOnStuck;
@@ -58,12 +56,8 @@ public class PluginConfig : IPluginConfiguration
         DrawCheckbox(text.AutoLoadNavmesh, ref AutoLoadNavmesh, text.AutoLoadNavmeshHelp);
         DrawSliderInt(text.CacheRetentionDays, ref CacheRetentionDays, 0, 90, "%d", text.CacheRetentionDaysHelp);
         DrawCheckbox(text.ShowWaypoints,          ref ShowWaypoints,          text.ShowWaypointsHelp);
-        DrawCheckbox(text.ForceShowGameCollision, ref ForceShowGameCollision, text.ForceShowGameCollisionHelp);
         DrawCheckbox(text.RenderWhenGameUIHidden, ref RenderWhenGameUiHidden, text.RenderWhenGameUIHiddenHelp);
         DrawCheckbox(text.EnableDTR,              ref EnableDTR,              text.EnableDTRHelp);
-
-        using var disabled = ImRaii.Disabled(!EnableDTR);
-        DrawCheckbox(text.ShowQueryStatusInDTR, ref ShowQueryStatusInDTR, text.ShowQueryStatusInDTRHelp);
     }
 
     private void DrawMovementAndCameraSection()
@@ -74,19 +68,12 @@ public class PluginConfig : IPluginConfiguration
         DrawSliderFloat(text.PathTolerance, ref PathTolerance, 0.01f, 1f, "%.2f", text.PathToleranceHelp);
 
         ImGui.Spacing();
-        ImGui.TextDisabled(text.CameraTracking);
         DrawCheckbox(text.AlignCameraToMovement, ref AlignCameraToMovement, text.AlignCameraToMovementHelp);
 
-        using (ImRaii.Disabled(!AlignCameraToMovement))
+        if (AlignCameraToMovement)
             DrawSliderFloat(text.AlignCameraHeight, ref AlignCameraHeight, -75, 75, "%.0f", text.AlignCameraHeightHelp);
         
         DrawCheckbox(text.StopOnStuck, ref StopOnStuck, text.StopOnStuckHelp);
-
-        if (!StopOnStuck)
-        {
-            ImGui.TextDisabled(text.StuckHandlingDisabled);
-            return;
-        }
 
         ImGui.Spacing();
         using var indent = ImRaii.PushIndent();
