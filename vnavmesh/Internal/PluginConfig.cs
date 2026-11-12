@@ -47,9 +47,8 @@ public class PluginConfig : IPluginConfiguration
         }
 
         ImGui.Spacing();
-        DrawSection(text.NavigationAndDisplay, text.NavigationAndDisplayDescription, DrawNavigationAndDisplaySection);
-        DrawSection(text.MovementAndCamera,    text.MovementAndCameraDescription,    DrawMovementAndCameraSection);
-        DrawSection(text.StuckHandling,        text.StuckHandlingDescription,        DrawStuckHandlingSection);
+        DrawSection(text.NavigationAndDisplay, DrawNavigationAndDisplaySection);
+        DrawSection(text.MovementAndCamera,    DrawMovementAndCameraSection);
     }
 
     private void DrawNavigationAndDisplaySection()
@@ -78,14 +77,9 @@ public class PluginConfig : IPluginConfiguration
         ImGui.TextDisabled(text.CameraTracking);
         DrawCheckbox(text.AlignCameraToMovement, ref AlignCameraToMovement, text.AlignCameraToMovementHelp);
 
-        using var disabled = ImRaii.Disabled(!AlignCameraToMovement);
-        DrawSliderFloat(text.AlignCameraHeight, ref AlignCameraHeight, -75, 75, "%.0f", text.AlignCameraHeightHelp);
-    }
-
-    private void DrawStuckHandlingSection()
-    {
-        var text = new Localization(UILanguage);
-
+        using (ImRaii.Disabled(!AlignCameraToMovement))
+            DrawSliderFloat(text.AlignCameraHeight, ref AlignCameraHeight, -75, 75, "%.0f", text.AlignCameraHeightHelp);
+        
         DrawCheckbox(text.StopOnStuck, ref StopOnStuck, text.StopOnStuckHelp);
 
         if (!StopOnStuck)
@@ -104,7 +98,6 @@ public class PluginConfig : IPluginConfiguration
     private static void DrawSection
     (
         string title,
-        string description,
         Action drawContent
     )
     {
@@ -112,9 +105,7 @@ public class PluginConfig : IPluginConfiguration
             return;
 
         using var id = ImRaii.PushId(title);
-
-        ImGui.TextDisabled(description);
-
+        
         ImGui.Spacing();
 
         using var indent = ImRaii.PushIndent();

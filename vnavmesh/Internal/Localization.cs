@@ -58,17 +58,6 @@ internal readonly struct Localization
         korean: "탐색 및 표시"
     );
 
-    public string NavigationAndDisplayDescription => Select
-    (
-        chineseSimplified: "控制导航数据加载、可视化以及 DTR 信息栏展示。",
-        english: "Configure navigation data loading, visualization and the DTR bar.",
-        japanese: "ナビゲーションデータの読み込み、可視化、DTR バーの表示を設定します。",
-        german: "Laden der Navigationsdaten, Visualisierung und DTR-Leiste konfigurieren.",
-        french: "Configurer le chargement des données de navigation, la visualisation et la barre DTR.",
-        chineseTraditional: "控制導航資料載入、視覺化以及 DTR 資訊列顯示。",
-        korean: "탐색 데이터 로드, 시각화 및 DTR 표시줄을 설정합니다."
-    );
-
     public string MovementAndCamera => Select
     (
         chineseSimplified: "移动与镜头",
@@ -80,17 +69,6 @@ internal readonly struct Localization
         korean: "이동 및 카메라"
     );
 
-    public string MovementAndCameraDescription => Select
-    (
-        chineseSimplified: "调整角色跟随行为、镜头联动与寻路细节。",
-        english: "Adjust movement behavior, camera tracking and pathfinding.",
-        japanese: "キャラクターの移動、カメラの追従、経路探索を調整します。",
-        german: "Bewegungsverhalten, Kameraführung und Wegfindung anpassen.",
-        french: "Ajuster le déplacement, le suivi de la caméra et la recherche de chemin.",
-        chineseTraditional: "調整角色跟隨行為、鏡頭連動與尋路細節。",
-        korean: "캐릭터 이동, 카메라 추적 및 경로 탐색을 조정합니다."
-    );
-
     public string StuckHandling => Select
     (
         chineseSimplified: "卡住处理",
@@ -100,17 +78,6 @@ internal readonly struct Localization
         french: "Déblocage",
         chineseTraditional: "卡住處理",
         korean: "끼임 해제"
-    );
-
-    public string StuckHandlingDescription => Select
-    (
-        chineseSimplified: "配置角色疑似卡住时的判定条件与恢复策略。",
-        english: "Configure stuck detection and recovery.",
-        japanese: "スタックの判定条件と復帰動作を設定します。",
-        german: "Erkennung und Behebung von Stillstand konfigurieren.",
-        french: "Configurer la détection de blocage et le déblocage.",
-        chineseTraditional: "設定角色疑似卡住時的判定條件與恢復策略。",
-        korean: "끼임 감지 조건과 해제 동작을 설정합니다."
     );
 
     public string AutoLoadNavmesh => Select
