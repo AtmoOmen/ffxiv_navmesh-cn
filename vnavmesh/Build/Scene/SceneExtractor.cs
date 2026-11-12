@@ -132,7 +132,7 @@ public class SceneExtractor : BuildScene
                 var (path, bounds) = (FileLayerGroupAnalyticCollider.Type)shape.transform.Type switch
                 {
                     FileLayerGroupAnalyticCollider.Type.Box    => (KEY_ANALYTIC_BOX, CalculateBoxBounds(ref resultingTransform)),
-                    FileLayerGroupAnalyticCollider.Type.Sphere => (KEY_ANALYTIC_SPHERE, CalculateSphereBounds(key, ref resultingTransform)),
+                    FileLayerGroupAnalyticCollider.Type.Sphere => (KEY_ANALYTIC_SPHERE, CalculateSphereBounds(ref resultingTransform)),
                     FileLayerGroupAnalyticCollider.Type.Cylinder => (KEY_MESH_CYLINDER,
                                                                         CalculateBoxBounds
                                                                             (ref resultingTransform)), // TODO: we can probably do a tighter fit for cylinders...
@@ -166,7 +166,7 @@ public class SceneExtractor : BuildScene
         var (path, bounds) = type switch
         {
             ColliderType.Box           => (KEY_ANALYTIC_BOX, CalculateBoxBounds(ref transform)),
-            ColliderType.Sphere        => (KEY_ANALYTIC_SPHERE, CalculateSphereBounds(key, ref transform)),
+            ColliderType.Sphere        => (KEY_ANALYTIC_SPHERE, CalculateSphereBounds(ref transform)),
             ColliderType.Cylinder      => (KEY_ANALYTIC_CYLINDER, CalculateBoxBounds(ref transform)),
             ColliderType.Plane         => (KEY_ANALYTIC_PLANE_SINGLE, CalculatePlaneBounds(ref transform)),
             ColliderType.Mesh          => (scene.MeshPaths[crc], CalculateMeshBounds(Meshes[scene.MeshPaths[crc]], ref transform)),
@@ -301,15 +301,16 @@ public class SceneExtractor : BuildScene
 
     private static AABB CalculateSphereBounds
     (
-        ulong         id,
         ref Matrix4x3 world
     )
     {
-        var scale = world.Row0.Length(); // note: a lot of code assumes it's uniform...
-        if (Math.Abs(scale - world.Row1.Length()) > 0.1 || Math.Abs(scale - world.Row2.Length()) > 0.1)
-            Service.Log.Error($"Sphere {id:X} has non-uniform scale");
-        var vscale = new Vector3(scale);
-        return new AABB { Min = world.Row3 - vscale, Max = world.Row3 + vscale };
+        var extent = new Vector3
+        (
+            new Vector3(world.Row0.X, world.Row1.X, world.Row2.X).Length(),
+            new Vector3(world.Row0.Y, world.Row1.Y, world.Row2.Y).Length(),
+            new Vector3(world.Row0.Z, world.Row1.Z, world.Row2.Z).Length()
+        );
+        return new AABB { Min = world.Row3 - extent, Max = world.Row3 + extent };
     }
 
     private static AABB CalculateMeshBounds
