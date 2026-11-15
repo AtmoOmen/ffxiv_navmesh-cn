@@ -159,12 +159,13 @@ public record Navmesh
         var volumeTreeSegment = volumeTreeDescriptor ?? throw new Exception("缓存缺少 VolumeTree 段");
         var requiresRewrite   = volumeTreeSegment.Codec != CacheCodec.FastLz;
         var source            = reader.BaseStream;
-        var (meshPayload, meshTelemetry)    = DecodeDeferredMeshSegment(meshSegment, source);
-        var (volume, volumeHeaderTelemetry) = DecodeSegment(volumeSegment, source, DeserializeVolumeHeader);
+        var (mesh, meshPayload, meshTelemetry) = DecodeMeshSegment(meshSegment, source);
+        var (volume, volumeHeaderTelemetry)    = DecodeSegment(volumeSegment, source, DeserializeVolumeHeader);
         var volumeTreeTelemetry = DecodeDeferredVolumeTreeSegment(volumeTreeSegment, source, volume);
         var volumeTelemetry     = CombineVolumeTelemetry(volumeHeaderTelemetry, volumeTreeTelemetry);
-        var navmesh             = new Navmesh(customizationVersion, buildSignature, customizationApplied, null!, volume);
-        navmesh.SetDeferredMeshPayload(meshPayload, meshSegment.Codec, meshSegment.UncompressedBytes);
+        var navmesh             = new Navmesh(customizationVersion, buildSignature, customizationApplied, mesh!, volume);
+        if (meshPayload != null)
+            navmesh.SetDeferredMeshPayload(meshPayload, meshSegment.Codec, meshSegment.UncompressedBytes);
         return new(navmesh, new(meshTelemetry, volumeTelemetry), requiresRewrite);
     }
 
@@ -416,15 +417,24 @@ public record Navmesh
     ) =>
         new DtMeshSetReader().Read(reader);
 
-    private static (byte[] Payload, CacheSegmentTelemetry Telemetry) DecodeDeferredMeshSegment
+    private static (DtNavMesh? Mesh, byte[]? Payload, CacheSegmentTelemetry Telemetry) DecodeMeshSegment
     (
         CacheSegmentDescriptor descriptor,
         Stream                 source
     )
     {
-        var timer   = StopWatchTimer.Create();
+        var timer = StopWatchTimer.Create();
+
+        if (descriptor.Codec == CacheCodec.None)
+        {
+            using var segmentStream = new SegmentReadStream(source, descriptor.Offset, descriptor.CompressedBytes);
+            using var reader        = new BinaryReader(segmentStream);
+            var       mesh          = DeserializeMesh(reader);
+            return (mesh, null, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
+        }
+
         var payload = ReadSegmentPayload(source, descriptor);
-        return (payload, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
+        return (null, payload, new(descriptor.Kind, descriptor.CompressedBytes, descriptor.UncompressedBytes, timer.Value()));
     }
 
     private static DtNavMesh DeserializeMeshPayload
