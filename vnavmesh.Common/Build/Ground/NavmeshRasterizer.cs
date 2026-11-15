@@ -521,6 +521,7 @@ public class NavmeshRasterizer
         }
     }
 
+    private readonly bool fillGroundInteriors;
     private          bool volumeOnly;
     private          RcHeightfield _heightfield;
     private          RcContext _telemetry;
@@ -564,11 +565,12 @@ public class NavmeshRasterizer
         int             tileZ   = -1
     )
     {
-        _heightfield = heightfield;
-        _telemetry   = telemetry;
-        _voxelizer   = voxelizer;
-        _scratch     = scratch ?? new();
-        _iset        = _scratch.AcquireIntersectionSet(fillInteriors, heightfield.width, heightfield.height);
+        _heightfield        = heightfield;
+        _telemetry          = telemetry;
+        _voxelizer          = voxelizer;
+        _scratch            = scratch ?? new();
+        fillGroundInteriors = fillInteriors;
+        _iset               = _scratch.AcquireIntersectionSet(fillInteriors || voxelizer != null, heightfield.width, heightfield.height);
         _terrainSpans = tileX >= 0 && tileZ >= 0 ?
                             _scratch.AcquireTerrainSpanBuffer(heightfield.width * heightfield.height) :
                             null;
@@ -1746,9 +1748,14 @@ public class NavmeshRasterizer
         if (!includeInVolume || !TryMapVolumeSpan(x, z, y0, y1, out var volumeX, out var volumeZ, out var volumeY0, out var volumeY1))
             return;
 
-        var clampedY1 = Math.Min(y1, _voxSourceY - 1);
-        var worldTopY = _heightfield.bmin.Y + ((clampedY1 + 1) * _heightfield.ch);
-        _voxelizer!.AddSpan(volumeX, volumeZ, volumeY0, volumeY1, worldTopY);
+        var clampedY1  = Math.Min(y1, _voxSourceY - 1);
+        var worldTopY  = _heightfield.bmin.Y + ((clampedY1 + 1) * _heightfield.ch);
+        var maxVolumeX = MapVoxelSpanMaxInclusive(x - _heightfield.borderSize, _voxSourceX, _voxelizer!.SizeX, _voxShiftX);
+        var maxVolumeZ = MapVoxelSpanMaxInclusive(z - _heightfield.borderSize, _voxSourceZ, _voxelizer.SizeZ,  _voxShiftZ);
+
+        for (var targetZ = volumeZ; targetZ <= maxVolumeZ; ++targetZ)
+        for (var targetX = volumeX; targetX <= maxVolumeX; ++targetX)
+            _voxelizer.AddSpan(targetX, targetZ, volumeY0, volumeY1, worldTopY);
     }
 
     private bool TryMapVolumeSpan
@@ -2095,7 +2102,7 @@ public class NavmeshRasterizer
                 // non-manifold mesh, assume everything below is interior
                 while (idx + 1 < cnt && solidVoxel[idx + 1] > yBelowNonManifold)
                     ++idx; // well i dunno, some terrain (eg south thanalan) is really _that_ fucked
-                AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, true, false);
+                AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, true, false, fillGroundInteriors);
                 ++idx;
             }
 
@@ -2112,7 +2119,7 @@ public class NavmeshRasterizer
                     break;
                 var maxY = solidVoxel[idx];
                 if (maxY >= minY)
-                    AddSpan(x, z, minY, maxY, 0, true);
+                    AddSpan(x, z, minY, maxY, 0, true, includeInGround: fillGroundInteriors);
             }
         }
 
