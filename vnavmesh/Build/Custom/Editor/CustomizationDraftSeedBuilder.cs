@@ -102,6 +102,8 @@ internal static class CustomizationDraftSeedBuilder
             target.AgentRadiusOverride = agentRadius;
         if (profile.VolumeCellSizeOverride is { } volumeCellSize)
             target.VolumeCellSizeOverride = volumeCellSize;
+        if (profile.VolumeCellHeightOverride is { } volumeCellHeight)
+            target.VolumeCellHeightOverride = volumeCellHeight;
         if (profile.VolumeVerticalPaddingOverride is { } volumeVerticalPadding)
             target.VolumeVerticalPaddingOverride = volumeVerticalPadding;
         if (profile.VolumeWallThickenNormalYThresholdOverride is { } volumeWallThickenNormalYThreshold)
@@ -163,7 +165,8 @@ internal static class CustomizationDraftSeedBuilder
         CopyIfChanged(current.GroundTileSize,     defaults.GroundTileSize,     v => target.GroundTileSize     = v);
         if (current.GroundTileCountMax != defaults.GroundTileCountMax)
             target.GroundTileCountMax = current.GroundTileCountMax;
-        CopyIfChanged(current.VolumeCellSize, defaults.VolumeCellSize, v => target.VolumeCellSize = v);
+        CopyIfChanged(current.VolumeCellSize,   defaults.VolumeCellSize,   v => target.VolumeCellSize   = v);
+        CopyIfChanged(current.VolumeCellHeight, defaults.VolumeCellHeight, v => target.VolumeCellHeight = v);
     }
 
     private static void CopySceneDiffs

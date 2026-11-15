@@ -249,22 +249,28 @@ public class NavmeshBuilder
             volumeMax.Y += Settings.VolumeVerticalPadding;
         }
 
-        var volumeCellSize     = MathF.Max(Settings.VolumeCellSize, 0.01f);
-        var volumeMidSize      = volumeCellSize * 4f;
-        var volumeRootSize     = volumeCellSize * 16f;
+        if (!float.IsFinite(Settings.VolumeCellSize) || Settings.VolumeCellSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(settings), Settings.VolumeCellSize, "VolumeCellSize 必须是有限的正数");
+
+        if (!float.IsFinite(Settings.VolumeCellHeight) || Settings.VolumeCellHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(settings), Settings.VolumeCellHeight, "VolumeCellHeight 必须是有限的正数");
+
+        var volumeCellSize     = Settings.VolumeCellSize;
+        var volumeMidSize      = volumeCellSize            * 8f;
+        var volumeMidHeight    = Settings.VolumeCellHeight * 8f;
+        var volumeRootHeight   = Settings.VolumeCellHeight * 32f;
         var tileWidthX         = navmeshParams.tileWidth;
         var tileWidthZ         = navmeshParams.tileHeight;
         var heightExtent       = volumeMax.Y - volumeMin.Y;
-        var l1x                = LargestPow2Floor(tileWidthX / volumeMidSize);
-        var l1z                = LargestPow2Floor(tileWidthZ / volumeMidSize);
-        var horizontalCellSize = MathF.Min(volumeCellSize, MathF.Max(Settings.CellSize, Settings.AgentRadius * 2f));
-        var l2x                = SmallestPow2Ceiling(tileWidthX / l1x / horizontalCellSize);
-        var l2z                = SmallestPow2Ceiling(tileWidthZ / l1z / horizontalCellSize);
-        var l0y                = LargestPow2Floor(heightExtent  / volumeRootSize);
+        var l1x                = LargestPow2Floor(tileWidthX    / volumeMidSize);
+        var l1z                = LargestPow2Floor(tileWidthZ    / volumeMidSize);
+        var l2x                = SmallestPow2Ceiling(tileWidthX / l1x / volumeCellSize);
+        var l2z                = SmallestPow2Ceiling(tileWidthZ / l1z / volumeCellSize);
+        var rootHeightCapacity = (ushort.MaxValue + 1) / NumTilesX / NumTilesZ;
+        var l0y                = Math.Min(LargestPow2Floor(heightExtent / volumeRootHeight), rootHeightCapacity);
         var l0CellSizeY        = heightExtent / l0y;
-        var l1y                = LargestPow2Floor(l0CellSizeY / volumeMidSize);
-        var verticalCellSize   = MathF.Min(volumeCellSize, MathF.Max(Settings.CellHeight, Settings.AgentHeight * 0.5f));
-        var l2y                = SmallestPow2Ceiling(l0CellSizeY / l1y / verticalCellSize);
+        var l1y                = LargestPow2Floor(l0CellSizeY    / volumeMidHeight);
+        var l2y                = SmallestPow2Ceiling(l0CellSizeY / l1y / Settings.VolumeCellHeight);
         var volumeLevels = new (int X, int Y, int Z)[]
         {
             (NumTilesX, l0y, NumTilesZ),

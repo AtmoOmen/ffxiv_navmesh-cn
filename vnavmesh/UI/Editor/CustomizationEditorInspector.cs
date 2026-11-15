@@ -456,10 +456,17 @@ internal static class CustomizationEditorInspector
         {
             changed |= CustomizationEditorWidgets.DrawNullableFloat
             (
-                "体积体素尺寸",
+                "体积体素水平尺寸",
                 ref workspace.Draft.BuildProfile.VolumeCellSizeOverride,
                 settingsDefaults.VolumeCellSize,
-                "飞行体积目标叶子体素尺寸, 单位与世界坐标一致"
+                "飞行体积叶子体素水平尺寸上限，单位与世界坐标一致"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "体积体素高度",
+                ref workspace.Draft.BuildProfile.VolumeCellHeightOverride,
+                settingsDefaults.VolumeCellHeight,
+                "飞行体积叶子体素高度上限，单位与世界坐标一致"
             );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
             (
@@ -749,10 +756,17 @@ internal static class CustomizationEditorInspector
             );
             changed |= CustomizationEditorWidgets.DrawNullableFloat
             (
-                "体积体素尺寸",
+                "体积体素水平尺寸",
                 ref workspace.Draft.BuildSettings.VolumeCellSize,
                 settingsDefaults.VolumeCellSize,
-                "飞行体积目标叶子体素尺寸, 单位与世界坐标一致"
+                "飞行体积叶子体素水平尺寸上限，单位与世界坐标一致"
+            );
+            changed |= CustomizationEditorWidgets.DrawNullableFloat
+            (
+                "体积体素高度",
+                ref workspace.Draft.BuildSettings.VolumeCellHeight,
+                settingsDefaults.VolumeCellHeight,
+                "飞行体积叶子体素高度上限，单位与世界坐标一致"
             );
             ImGui.TreePop();
         }

@@ -13,6 +13,7 @@ public sealed class DraftBuildProfileOverrides
     public float?       PolyMaxSimplificationErrorOverride;
     public float?       AgentRadiusOverride;
     public float?       VolumeCellSizeOverride;
+    public float?       VolumeCellHeightOverride;
     public float?       VolumeVerticalPaddingOverride;
     public float?       VolumeWallThickenNormalYThresholdOverride;
     public int?         VolumeWallThickenHorizontalRadiusOverride;

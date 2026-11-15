@@ -168,6 +168,7 @@ internal static class CustomizationDraftExporter
             profile.PolyMaxSimplificationErrorOverride.HasValue               ||
             profile.AgentRadiusOverride.HasValue                              ||
             profile.VolumeCellSizeOverride.HasValue                           ||
+            profile.VolumeCellHeightOverride.HasValue                         ||
             profile.VolumeVerticalPaddingOverride.HasValue                    ||
             profile.VolumeWallThickenNormalYThresholdOverride.HasValue        ||
             profile.VolumeWallThickenHorizontalRadiusOverride.HasValue        ||
@@ -208,7 +209,8 @@ internal static class CustomizationDraftExporter
             settings.EdgeJumpMinDrop.HasValue            ||
             settings.GroundTileSize.HasValue             ||
             settings.GroundTileCountMax.HasValue         ||
-            settings.VolumeCellSize.HasValue;
+            settings.VolumeCellSize.HasValue             ||
+            settings.VolumeCellHeight.HasValue;
     }
 
     private static void AppendUsings
@@ -258,6 +260,7 @@ internal static class CustomizationDraftExporter
         AppendAssignment(body, 2, "profile.PolyMaxSimplificationErrorOverride",               profile.PolyMaxSimplificationErrorOverride, FormatFloat);
         AppendAssignment(body, 2, "profile.AgentRadiusOverride",                              profile.AgentRadiusOverride, FormatFloat);
         AppendAssignment(body, 2, "profile.VolumeCellSizeOverride",                           profile.VolumeCellSizeOverride, FormatFloat);
+        AppendAssignment(body, 2, "profile.VolumeCellHeightOverride",                         profile.VolumeCellHeightOverride, FormatFloat);
         AppendAssignment(body, 2, "profile.VolumeVerticalPaddingOverride",                    profile.VolumeVerticalPaddingOverride, FormatFloat);
         AppendAssignment(body, 2, "profile.VolumeWallThickenNormalYThresholdOverride",        profile.VolumeWallThickenNormalYThresholdOverride, FormatFloat);
         AppendAssignment(body, 2, "profile.VolumeWallThickenHorizontalRadiusOverride",        profile.VolumeWallThickenHorizontalRadiusOverride, FormatInt);
@@ -312,6 +315,7 @@ internal static class CustomizationDraftExporter
         AppendAssignment(body, 2, "settings.GroundTileSize",             settings.GroundTileSize,             FormatFloat);
         AppendAssignment(body, 2, "settings.GroundTileCountMax",         settings.GroundTileCountMax,         FormatInt);
         AppendAssignment(body, 2, "settings.VolumeCellSize",             settings.VolumeCellSize,             FormatFloat);
+        AppendAssignment(body, 2, "settings.VolumeCellHeight",           settings.VolumeCellHeight,           FormatFloat);
 
         if (body.Length == 0)
             return;

@@ -14,6 +14,7 @@ public sealed class NavmeshBuildProfile
     public float?       PolyMaxSimplificationErrorOverride;
     public float?       AgentRadiusOverride;
     public float?       VolumeCellSizeOverride;
+    public float?       VolumeCellHeightOverride;
     public float?       VolumeVerticalPaddingOverride;
     public float?       VolumeWallThickenNormalYThresholdOverride;
     public int?         VolumeWallThickenHorizontalRadiusOverride;
@@ -48,6 +49,8 @@ public sealed class NavmeshBuildProfile
             settings.AgentRadius = agentRadius;
         if (VolumeCellSizeOverride is { } volumeCellSize)
             settings.VolumeCellSize = volumeCellSize;
+        if (VolumeCellHeightOverride is { } volumeCellHeight)
+            settings.VolumeCellHeight = volumeCellHeight;
         if (VolumeVerticalPaddingOverride is { } volumeVerticalPadding)
             settings.VolumeVerticalPadding = volumeVerticalPadding;
         if (VolumeWallThickenNormalYThresholdOverride is { } volumeWallThickenNormalYThreshold)

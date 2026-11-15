@@ -159,9 +159,14 @@ public class NavmeshSettings
     public bool Flyable;
 
     /// <summary>
-    ///     飞行体积叶子体素的尺寸上限，单位为世界单位。水平尺寸额外受角色直径约束，垂直尺寸额外受角色半高约束；角色直径和半高的下限分别为地面栅格宽度和高度。各轴按 2 的幂向上细分，避免取整后吞没狭窄通道。
+    ///     飞行体积叶子体素在水平方向的尺寸上限，单位为世界单位，必须是有限的正数。细分数量向上取整为 2 的幂，因此实际尺寸可能小于设定值。
     /// </summary>
-    public float VolumeCellSize = 2f;
+    public float VolumeCellSize = 1f;
+
+    /// <summary>
+    ///     飞行体积叶子体素在垂直方向的尺寸上限，单位为世界单位，必须是有限的正数。细分数量向上取整为 2 的幂，因此实际尺寸可能小于设定值。
+    /// </summary>
+    public float VolumeCellHeight = 1f;
 
     /// <summary>
     ///     飞行体积在场景垂直范围上下各扩展的高度，用于在最高障碍上方保留空体素。默认 0 表示与场景包围盒一致。
@@ -237,6 +242,7 @@ public class NavmeshSettings
         AppendFloat(nameof(GroundTileSize), GroundTileSize);
         AppendInt(nameof(GroundTileCountMax), GroundTileCountMax);
         AppendFloat(nameof(VolumeCellSize),                    VolumeCellSize);
+        AppendFloat(nameof(VolumeCellHeight),                  VolumeCellHeight);
         AppendFloat(nameof(VolumeVerticalPadding),             VolumeVerticalPadding);
         AppendFloat(nameof(VolumeWallThickenNormalYThreshold), VolumeWallThickenNormalYThreshold);
         AppendInt(nameof(VolumeWallThickenHorizontalRadius), VolumeWallThickenHorizontalRadius);

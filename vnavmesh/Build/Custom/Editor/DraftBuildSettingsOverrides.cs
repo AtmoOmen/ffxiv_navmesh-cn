@@ -32,4 +32,5 @@ public sealed class DraftBuildSettingsOverrides
     public float?         GroundTileSize;
     public int?           GroundTileCountMax;
     public float?         VolumeCellSize;
+    public float?         VolumeCellHeight;
 }

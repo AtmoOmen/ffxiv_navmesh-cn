@@ -22,8 +22,11 @@ public sealed class VolumeLevel
         int     nz
     )
     {
-        if ((nx & (nx - 1)) != 0 || (ny & (ny - 1)) != 0 || (nz & (nz - 1)) != 0)
+        if (!BitOperations.IsPow2(nx) || !BitOperations.IsPow2(ny) || !BitOperations.IsPow2(nz))
             throw new ArgumentException($"Non-power-of-2 cell size not supported: got {nx}*{ny}*{nz}");
+
+        if ((long)nx * ny * nz > (long)ushort.MaxValue + 1)
+            throw new ArgumentException($"体素层级单元数超过 16 位索引容量: {nx}*{ny}*{nz}");
 
         CellSize    = extent         / new Vector3(nx, ny, nz);
         InvCellSize = new Vector3(1) / CellSize;
