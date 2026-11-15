@@ -9,6 +9,7 @@ using vnavmesh.Query.Enums;
 using vnavmesh.Query.Flight;
 using vnavmesh.Query.Ground;
 using vnavmesh.Query.Models;
+using vnavmesh.Query.Utils;
 
 namespace vnavmesh.Query;
 
@@ -82,6 +83,7 @@ public class NavmeshQuery
     }
 
     private readonly GroundPathPostprocessor groundPostprocessor;
+    private readonly MeshNearestPointQuery   nearestPointQuery;
 
     private DtNavMeshQuery? meshQuery;
     private VoxelPathfind?  volumeQuery;
@@ -99,6 +101,7 @@ public class NavmeshQuery
         groundPostprocessor = new(() => MeshQuery, () => GroundAreaFilter);
         GroundQuery         = new(this);
         FlightQuery         = new(this, GroundQuery);
+        nearestPointQuery   = new(navmesh.Mesh);
     }
 
     internal void ReleaseRetainedState()
@@ -236,14 +239,14 @@ public class NavmeshQuery
         bool    allowUnreachable = true
     )
     {
-        MeshQuery.FindNearestPoly
+        nearestPointQuery.FindNearest
         (
-            p.ToRecast(),
-            new(0, halfExtentY, 0),
+            p,
+            0,
+            halfExtentY,
             allowUnreachable ?
                 AllTraversableFilter :
                 GroundAreaFilter,
-            out _,
             out _,
             out var isOverPoly
         );
@@ -256,21 +259,18 @@ public class NavmeshQuery
         float   halfExtentXZ     = 5,
         float   halfExtentY      = 5,
         bool    allowUnreachable = true
-    )
-    {
-        MeshQuery.FindNearestPoly
+    ) =>
+        nearestPointQuery.FindNearest
         (
-            p.ToRecast(),
-            new(halfExtentXZ, halfExtentY, halfExtentXZ),
+            p,
+            halfExtentXZ,
+            halfExtentY,
             allowUnreachable ?
                 AllTraversableFilter :
                 GroundAreaFilter,
-            out var nearestRef,
             out _,
             out _
         );
-        return nearestRef;
-    }
 
     internal List<long> FindIntersectingMeshPolys
     (
@@ -333,9 +333,23 @@ public class NavmeshQuery
         float   halfExtentXZ     = 5,
         float   halfExtentY      = 5,
         bool    allowUnreachable = true
-    ) =>
-        FindNearestPointOnMeshPoly
-            (p, FindNearestMeshPoly(p, halfExtentXZ, halfExtentY, allowUnreachable));
+    )
+    {
+        var reference = nearestPointQuery.FindNearest
+        (
+            p,
+            halfExtentXZ,
+            halfExtentY,
+            allowUnreachable ?
+                AllTraversableFilter :
+                GroundAreaFilter,
+            out var point,
+            out _
+        );
+        return reference != 0 ?
+                   point :
+                   null;
+    }
 
     internal Vector3? FindRandomPointOnMeshAroundCircle
     (
@@ -576,8 +590,17 @@ public class NavmeshQuery
         bool    allowUnreachable
     )
     {
-        IEnumerable<long> polys = FindIntersectingMeshPolys(p, new(halfExtentXZ, 2048, halfExtentXZ), allowUnreachable);
-        return polys.Select(poly => FindNearestPointOnMeshPoly(p, poly)).Where(pt => pt != null && pt.Value.Y <= p.Y).MaxBy(pt => pt!.Value.Y);
+        var query = new MeshFloorPointQuery(NavmeshData.Mesh, p.ToRecast());
+        MeshQuery.QueryPolygons
+        (
+            p.ToRecast(),
+            new(halfExtentXZ, 2048, halfExtentXZ),
+            allowUnreachable ?
+                AllTraversableFilter :
+                GroundAreaFilter,
+            query
+        );
+        return query.Point;
     }
 
     private static float HorizontalDistanceXZ
