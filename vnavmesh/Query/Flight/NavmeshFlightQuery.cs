@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Common.Extensions;
@@ -40,13 +41,11 @@ internal sealed class NavmeshFlightQuery
             return CreateFlightFailure(to);
         }
 
-        var volumeQuery    = query.VolumeQuery!;
-        var volume         = volumeQuery.Volume;
-        var locateTimer    = StopWatchTimer.Create();
-        var startLocate    = query.FindNearestVolumeVoxelSurfaceAware(from);
-        var endLocate      = query.FindNearestVolumeVoxelSurfaceAware(to);
-        var startVoxel     = startLocate.Voxel;
-        var endVoxel       = endLocate.Voxel;
+        var volumeQuery = query.VolumeQuery!;
+        var volume      = volumeQuery.Volume;
+        var locateTimer = StopWatchTimer.Create();
+        var (startVoxel, _, startSafePoint, _, startUsedSurfaceAnchor) = query.FindNearestVolumeVoxelSurfaceAware(from);
+        var (endVoxel, _, endSafePoint, _, endUsedSurfaceAnchor)       = query.FindNearestVolumeVoxelSurfaceAware(to);
         var locateDuration = locateTimer.Value();
         Service.Log.Debug($"[算路] 飞行体素 {startVoxel:X} -> {endVoxel:X}");
 
@@ -58,12 +57,12 @@ internal sealed class NavmeshFlightQuery
 
         var requestedStartLeaf  = volume.FindLeafVoxel(from);
         var requestedTargetLeaf = volume.FindLeafVoxel(to);
-        var safeStart = !startLocate.UsedSurfaceAnchor && requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ?
+        var safeStart = !startUsedSurfaceAnchor && requestedStartLeaf.empty && requestedStartLeaf.voxel == startVoxel ?
                             from :
-                            startLocate.SafePoint;
-        var safeDestination = !endLocate.UsedSurfaceAnchor && requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ?
+                            startSafePoint;
+        var safeDestination = !endUsedSurfaceAnchor && requestedTargetLeaf.empty && requestedTargetLeaf.voxel == endVoxel ?
                                   to :
-                                  endLocate.SafePoint;
+                                  endSafePoint;
         var safeDestinationAdjusted = Vector3.DistanceSquared(safeDestination, to) > 0.000001f;
 
         // 体积图会把一串窄洞逐个堵死，飞行只能到达与起点连通的位置。
@@ -75,10 +74,10 @@ internal sealed class NavmeshFlightQuery
             // 起点落得到地面时靠地面路径分段，落不到地面才从体积图上逐层穿洞
             if (TryResolveGroundPoint(from) is not null)
             {
-                if (TryBuildSegmentedVolumePath(from, to, startVoxel, cancel, avoidCenter, avoidRadius, out var segmentedResult))
+                if (TryBuildSegmentedVolumePath(from, to, startVoxel, avoidCenter, avoidRadius, out var segmentedResult, cancel))
                     return segmentedResult;
             }
-            else if (TryBuildSealedGoalFallback(from, to, safeDestination, startVoxel, cancel, avoidCenter, avoidRadius, out var sealedResult))
+            else if (TryBuildSealedGoalFallback(from, to, safeDestination, startVoxel, avoidCenter, avoidRadius, out var sealedResult, cancel))
                 return sealedResult;
 
             // 终点在体积图上被隔离，地面又到不了，体积搜索只会去穷尽可达空间
@@ -136,7 +135,7 @@ internal sealed class NavmeshFlightQuery
                 );
 
                 if (!requestedTargetLeaf.empty &&
-                    TryBuildFlightGroundTransitionResult(from, to, partialDestination, rawWaypoints, cancel, avoidCenter, avoidRadius, out var fallbackResult))
+                    TryBuildFlightGroundTransitionResult(from, to, partialDestination, rawWaypoints, avoidCenter, avoidRadius, out var fallbackResult, cancel))
                     return fallbackResult;
 
                 return new()
@@ -165,19 +164,18 @@ internal sealed class NavmeshFlightQuery
         }
 
         if (!requestedTargetLeaf.empty &&
-            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, cancel, avoidCenter, avoidRadius, out var hybridResult))
+            TryBuildFlightGroundTransitionResult(from, to, safeDestination, rawWaypoints, avoidCenter, avoidRadius, out var hybridResult, cancel))
             return hybridResult;
 
         var finalDestination    = safeDestination;
         var destinationAdjusted = safeDestinationAdjusted;
         var landingPoint        = TryResolveFlightLandingPoint(to, safeDestination);
-        var completionTolerance = MathF.Max(query.ConfigData.PathTolerance, HorizontalDistanceXZ(to, safeDestination));
 
         if (landingPoint is { } resolvedLandingPoint)
         {
             finalDestination = resolvedLandingPoint;
             var leafVerticalTolerance = MathF.Max(volumeQuery.Volume.Levels[^1].CellSize.Y, query.ConfigData.PathTolerance);
-            completionTolerance = MathF.Max(query.ConfigData.PathTolerance, MathF.Max(HorizontalDistanceXZ(to, resolvedLandingPoint), leafVerticalTolerance));
+            var completionTolerance   = MathF.Max(query.ConfigData.PathTolerance, MathF.Max(HorizontalDistanceXZ(to, resolvedLandingPoint), leafVerticalTolerance));
             destinationAdjusted = Vector3.Distance(resolvedLandingPoint, to) > completionTolerance;
 
             if (rawWaypoints.Count == 0 || Vector3.DistanceSquared(rawWaypoints[^1], resolvedLandingPoint) > 0.000001f)
@@ -186,7 +184,7 @@ internal sealed class NavmeshFlightQuery
 
         Service.Log.Debug
         (
-            $"[算路] 飞行终点解析：请求终点 = {to:f3}，空体素终点 = {safeDestination:f3}，落地点 = {(landingPoint is { } lp ? lp.ToString("f3") : "无")}，最终终点 = {finalDestination:f3}，落地吸附 = {(landingPoint != null ? "是" : "否")}"
+            $"[算路] 飞行终点解析：请求终点 = {to:f3}，空体素终点 = {safeDestination:f3}，落地点 = {(landingPoint is { } lp ? lp.ToString("f3", CultureInfo.InvariantCulture) : "无")}，最终终点 = {finalDestination:f3}，落地吸附 = {(landingPoint != null ? "是" : "否")}"
         );
 
         var finalDestinationTolerance = landingPoint is { } resolvedLanding ?
@@ -219,7 +217,6 @@ internal sealed class NavmeshFlightQuery
         };
     }
 
-    // 采样点处在与起点连通的空间里算开阔；取不到体素或洪泛没穷尽都按开阔处理，交给搜索去判断
     private bool IsSampleOpen
     (
         Vector3 point,
@@ -228,9 +225,9 @@ internal sealed class NavmeshFlightQuery
     {
         var volumeQuery = query.VolumeQuery;
         if (volumeQuery == null || !TryResolveOpenVoxel(point, out var voxel, out _))
-            return true;
+            return false;
 
-        return volumeQuery.FloodEmptyRegion(voxel, startVoxel, VOLUME_OPEN_FLOOD_LIMIT, out _) != VolumeFloodResult.Sealed;
+        return volumeQuery.IsConnected(startVoxel, voxel);
     }
 
     private static (int X, int Y, int Z) ToLeafCell
@@ -245,7 +242,7 @@ internal sealed class NavmeshFlightQuery
     }
 
     // 沿地面路径扫描出"开阔段 / 封闭段"的交替序列。开阔段说明那里的体积空腔连着起点一侧的大空间，
-    // 可以直接飞过去；封闭段是被体积图堵住的窄洞或门，只能走地面。
+    // 封闭段是被体积图堵住的窄洞或门，只能走地面。
     private List<(Vector3 Start, Vector3 End, bool Open)> ScanOpenRuns
     (
         IReadOnlyList<long> corridor,
@@ -316,10 +313,10 @@ internal sealed class NavmeshFlightQuery
         Vector3           to,
         Vector3           safeDestination,
         ulong             startVoxel,
-        CancellationToken cancel,
         Vector3?          avoidCenter,
         float             avoidRadius,
-        out PlannerResult result
+        out PlannerResult result,
+        CancellationToken cancel
     )
     {
         result = null!;
@@ -337,10 +334,6 @@ internal sealed class NavmeshFlightQuery
                 return false;
 
             var region = volumeQuery.FloodEmptyRegion(handoffVoxel, startVoxel, VOLUME_GOAL_FLOOD_LIMIT, out _);
-
-            // 分量够到起点体素才算连通；超限说明这一层太大、判断不了，交给搜索
-            if (region == VolumeFloodResult.Unknown)
-                return false;
 
             if (region == VolumeFloodResult.Connected)
             {
@@ -360,7 +353,7 @@ internal sealed class NavmeshFlightQuery
                 var flight = volumeQuery.FindPath
                     (fromVoxel, handoffVoxel, fromPoint, handoffPoint, false, cancel, avoidCenter, avoidRadius);
 
-                if (flight.Count == 0)
+                if (flight.Count == 0 || volumeQuery.LastTelemetry.Termination != VolumeSearchTermination.ReachedGoal)
                     return false;
 
                 List<Vector3> points = new(flight.Count);
@@ -381,9 +374,9 @@ internal sealed class NavmeshFlightQuery
                         StartPosition          = from,
                         EndPosition            = handoffPoint,
                         Points                 = points
-                    }
+                    },
+                    .. ground.Segments
                 ];
-                segments.AddRange(ground.Segments);
 
                 Service.Log.Debug($"[算路] 体积图上穿过 {hop} 层封闭空腔后取得接地点 {handoffPoint:f3}");
 
@@ -400,6 +393,9 @@ internal sealed class NavmeshFlightQuery
                 return true;
             }
 
+            if (region != VolumeFloodResult.Sealed)
+                return false;
+
             // 这一层被隔离，朝起点方向穿过窄洞继续找
             if (!TryStepOutsideRegion(volume, handoffPoint, from, out var next))
                 return false;
@@ -411,7 +407,7 @@ internal sealed class NavmeshFlightQuery
     }
 
     // 从分量边界处按"朝向起点"的优先顺序逐格外探，取紧邻的另一侧空体素
-    private bool TryStepOutsideRegion
+    private static bool TryStepOutsideRegion
     (
         VoxelMap    volume,
         Vector3     edgePoint,
@@ -502,10 +498,10 @@ internal sealed class NavmeshFlightQuery
         Vector3           from,
         Vector3           to,
         ulong             startVoxel,
-        CancellationToken cancel,
         Vector3?          avoidCenter,
         float             avoidRadius,
-        out PlannerResult result
+        out PlannerResult result,
+        CancellationToken cancel
     )
     {
         result = null!;
@@ -562,32 +558,33 @@ internal sealed class NavmeshFlightQuery
                 var flight = query.VolumeQuery!.FindPath
                     (fromVoxel, toVoxel, fromPoint, toPoint, false, cancel, avoidCenter, avoidRadius);
 
-                if (flight.Count == 0)
-                    return false;
+                if (flight.Count > 0 && volumeQuery.LastTelemetry.Termination == VolumeSearchTermination.ReachedGoal)
+                {
+                    List<Vector3> points = new(flight.Count);
+                    foreach (var step in flight)
+                        points.Add(step.p);
 
-                List<Vector3> points = new(flight.Count);
-                foreach (var step in flight)
-                    points.Add(step.p);
+                    segments.Add
+                    (
+                        new()
+                        {
+                            MovementMode           = MovementMode.Flight,
+                            SegmentKind            = MovementSegmentKind.FlightTraverse,
+                            AllowVerticalControl   = true,
+                            GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
+                            TraversalStartPosition = cursor,
+                            StartPosition          = cursor,
+                            EndPosition            = toPoint,
+                            Points                 = points
+                        }
+                    );
 
-                points.Add(toPoint);
+                    cursor = toPoint;
+                    continue;
+                }
 
-                segments.Add
-                (
-                    new()
-                    {
-                        MovementMode           = MovementMode.Flight,
-                        SegmentKind            = MovementSegmentKind.FlightTraverse,
-                        AllowVerticalControl   = true,
-                        GeometryKind           = PlannerSegmentGeometryKind.DiscretePoints,
-                        TraversalStartPosition = cursor,
-                        StartPosition          = cursor,
-                        EndPosition            = run.End,
-                        Points                 = points
-                    }
-                );
-
-                cursor = run.End;
-                continue;
+                Service.Log.Debug
+                    ($"[算路] 分段飞行未抵达目标，沿地面走廊通过：起点 = {cursor:f3}，目标 = {run.End:f3}，终止 = {GetLogVolumeSearchTermination(volumeQuery.LastTelemetry.Termination)}");
             }
 
             // 地面段一直延伸到下一个开阔段的起点，这样紧接其后的飞行段两端都落在开阔侧
@@ -596,12 +593,12 @@ internal sealed class NavmeshFlightQuery
                                 run.End;
             var groundRun = groundQuery.PlanMeshPathDetailed(cursor, groundEnd, 0, cancel, avoidCenter, avoidRadius);
 
-            if (!groundRun.Succeeded || groundRun.Segments.Count == 0)
+            if (groundRun.Status != PathfindStatus.Complete || groundRun.Segments.Count == 0)
                 return false;
 
             lastStatus = groundRun.Status;
             segments.AddRange(groundRun.Segments);
-            cursor = groundEnd;
+            cursor = groundRun.FinalDestination;
         }
 
         if (segments.Count == 0)
@@ -704,10 +701,9 @@ internal sealed class NavmeshFlightQuery
         if (horizontalDistance > MathF.Max(landingLeafSize.X, landingLeafSize.Z))
             return null;
 
-        if (volume.TryGetSurfaceTop(belowLeaf.voxel, out var surfaceTopY))
-            return new Vector3(safeDestination.X, surfaceTopY + query.ConfigData.PathTolerance, safeDestination.Z);
-
-        return safeDestination;
+        return volume.TryGetSurfaceTop(belowLeaf.voxel, out var surfaceTopY) ?
+                   safeDestination with { Y = surfaceTopY + query.ConfigData.PathTolerance } :
+                   safeDestination;
     }
 
     private Vector3? TryBuildFlightGroundApproachPoint
@@ -749,12 +745,11 @@ internal sealed class NavmeshFlightQuery
             transitionPoint.Z - (leadDelta.Y  * approachHorizontal)
         );
 
-        var approachLocate = query.FindNearestVolumeVoxelSurfaceAware(candidate, transitionTolerance, MathF.Max(toleranceFloor, verticalDrop));
-        var approachVoxel  = approachLocate.Voxel;
-        if (approachVoxel == VoxelMap.INVALID_VOXEL)
-            return candidate;
-
-        return approachLocate.SafePoint;
+        var (approachVoxel, _, approachSafePoint, _, _) = query.FindNearestVolumeVoxelSurfaceAware
+            (candidate, transitionTolerance, MathF.Max(toleranceFloor, verticalDrop));
+        return approachVoxel == VoxelMap.INVALID_VOXEL ?
+                   candidate :
+                   approachSafePoint;
     }
 
     private void TrimFlightWaypointsForGroundTransition
@@ -791,10 +786,10 @@ internal sealed class NavmeshFlightQuery
         Vector3           requestedTarget,
         Vector3           safeFlightDestination,
         List<Vector3>     rawFlightWaypoints,
-        CancellationToken cancel,
         Vector3?          avoidCenter,
         float             avoidRadius,
-        out PlannerResult result
+        out PlannerResult result,
+        CancellationToken cancel
     )
     {
         var toleranceFloor = MathF.Max(query.ConfigData.PathTolerance, float.Epsilon);
@@ -826,6 +821,13 @@ internal sealed class NavmeshFlightQuery
             return false;
         }
 
+        if (groundResult.Segments.Count                                                                           == 1 &&
+            Vector3.DistanceSquared(groundResult.Segments[0].StartPosition, groundResult.Segments[0].EndPosition) <= toleranceFloor * toleranceFloor)
+        {
+            result = null!;
+            return false;
+        }
+
         var transitionPoint = groundResult.Segments[0].StartPosition;
         var approachPoint = TryBuildFlightGroundApproachPoint(safeFlightDestination, transitionPoint, groundResult.Segments[0].EndPosition, requestedTarget);
         List<Vector3> flightWaypoints = [.. rawFlightWaypoints];
@@ -852,17 +854,16 @@ internal sealed class NavmeshFlightQuery
                 StartPosition          = requestedStart,
                 EndPosition            = transitionPoint,
                 Points                 = flightWaypoints
-            }
+            },
+            .. groundResult.Segments
         ];
-        foreach (var segment in groundResult.Segments)
-            segments.Add(segment);
 
         var transitionAdjusted = Vector3.Distance
                                      (safeFlightDestination, transitionPoint) >
                                  MathF.Max(toleranceFloor, MathF.Abs(safeFlightDestination.Y - transitionPoint.Y));
         Service.Log.Debug
         (
-            $"[算路] 飞行接地面续算：空体素终点 = {safeFlightDestination:f3}，近地点 = {(approachPoint is { } ap ? ap.ToString("f3") : "无")}，桥接点 = {transitionPoint:f3}，桥接修正 = {(transitionAdjusted ? "是" : "否")}，地面结果 = {groundResult.Status}，地面段数 = {groundResult.Segments.Count}"
+            $"[算路] 飞行接地面续算：空体素终点 = {safeFlightDestination:f3}，近地点 = {(approachPoint is { } ap ? ap.ToString("f3", CultureInfo.InvariantCulture) : "无")}，桥接点 = {transitionPoint:f3}，桥接修正 = {(transitionAdjusted ? "是" : "否")}，地面结果 = {groundResult.Status}，地面段数 = {groundResult.Segments.Count}"
         );
 
         var destinationTolerance = MathF.Max
@@ -956,14 +957,13 @@ internal sealed class NavmeshFlightQuery
 
     #region 常量
 
-    private const int   VOLUME_GOAL_FLOOD_LIMIT       = 50_000;
-    private const int   VOLUME_OPEN_FLOOD_LIMIT       = 10_000;
-    private const int   VOLUME_SEED_LIFT_ATTEMPTS     = 8;
-    private const int   VOLUME_SEALED_HOP_LIMIT       = 24;
-    private const int   VOLUME_SEALED_STEP_LIMIT      = 64;
-    private const float VOLUME_RETREAT_SAMPLE_STEP    = 16f;
-    private const float VOLUME_GROUND_SEARCH_XZ       = 8f;
-    private const float VOLUME_GROUND_SEARCH_Y        = 256f;
+    private const int   VOLUME_GOAL_FLOOD_LIMIT    = 50_000;
+    private const int   VOLUME_SEED_LIFT_ATTEMPTS  = 8;
+    private const int   VOLUME_SEALED_HOP_LIMIT    = 24;
+    private const int   VOLUME_SEALED_STEP_LIMIT   = 64;
+    private const float VOLUME_RETREAT_SAMPLE_STEP = 16f;
+    private const float VOLUME_GROUND_SEARCH_XZ    = 8f;
+    private const float VOLUME_GROUND_SEARCH_Y     = 256f;
 
     #endregion
 }

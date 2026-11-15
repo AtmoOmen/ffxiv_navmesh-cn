@@ -814,14 +814,31 @@ public class NavmeshRasterizer
         Action<RasterJob>?      onJobFinished = null
     )
     {
-        foreach (ref readonly var job in jobs)
+        var instanceMinY       = _maxY;
+        var instanceRasterized = false;
+
+        for (var jobIndex = 0; jobIndex < jobs.Length; ++jobIndex)
         {
-            if (RasterizeJob(job, out var minY) && perMeshInteriors)
+            ref readonly var job = ref jobs[jobIndex];
+
+            if (RasterizeJob(job, out var minY))
             {
-                var z0 = Math.Clamp((int)((job.WorldBounds.Min.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
-                var z1 = Math.Clamp((int)((job.WorldBounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
-                var x0 = Math.Clamp((int)((job.WorldBounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
-                var x1 = Math.Clamp((int)((job.WorldBounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
+                instanceMinY       = Math.Min(instanceMinY, minY);
+                instanceRasterized = true;
+            }
+
+            onJobFinished?.Invoke(job);
+
+            if (jobIndex + 1 < jobs.Length && ReferenceEquals(job.Instance, jobs[jobIndex + 1].Instance))
+                continue;
+
+            if (instanceRasterized && perMeshInteriors)
+            {
+                var bounds = job.Instance.WorldBounds;
+                var z0     = Math.Clamp((int)((bounds.Min.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
+                var z1     = Math.Clamp((int)((bounds.Max.Z - _heightfield.bmin.Z) * _invCellXZ), 0, _heightfield.height - 1);
+                var x0     = Math.Clamp((int)((bounds.Min.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
+                var x1     = Math.Clamp((int)((bounds.Max.X - _heightfield.bmin.X) * _invCellXZ), 0, _heightfield.width  - 1);
                 FillInterior
                 (
                     z0,
@@ -829,12 +846,13 @@ public class NavmeshRasterizer
                     x0,
                     x1,
                     solidBelowNonManifold ?
-                        minY :
+                        instanceMinY :
                         _maxY
                 );
             }
 
-            onJobFinished?.Invoke(job);
+            instanceMinY       = _maxY;
+            instanceRasterized = false;
         }
 
         FlushTerrainSpans();
