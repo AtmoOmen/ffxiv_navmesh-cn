@@ -510,25 +510,51 @@ internal sealed class NavmeshFlightQuery
         if (volumeQuery == null)
             return false;
 
-        // 起点可能停在半空中，地面寻路只有正负五码的定位范围；先沿垂直方向放宽搜索把它落到地面上
-        if (TryResolveGroundPoint(from) is not { } groundStart)
+        var groundStart = TryResolveGroundPoint(from);
+        var ground = groundStart is { } projectedStart ?
+                         groundQuery.PlanMeshPathDetailed(projectedStart, to, 0, cancel, avoidCenter, avoidRadius) :
+                         null;
+
+        if (ground is not { Status: PathfindStatus.Complete, Segments.Count: > 0 })
         {
-            Service.Log.Warning($"[算路] 无法把起点 {from:f3} 落到地面上，分段拼接放弃");
-            return false;
+            var              mesh      = query.NavmeshData.Mesh;
+            HashSet<Vector3> entrances = [];
+
+            for (var tileIndex = 0; tileIndex < mesh.GetMaxTiles(); ++tileIndex)
+            {
+                cancel.ThrowIfCancellationRequested();
+                var tile = mesh.GetTile(tileIndex);
+                if (tile?.data?.header == null || tile.data.offMeshCons == null)
+                    continue;
+
+                for (var connectionIndex = 0; connectionIndex < tile.data.header.offMeshConCount; ++connectionIndex)
+                {
+                    var connection = tile.data.offMeshCons[connectionIndex];
+                    entrances.Add(connection.pos[0].ToSystem());
+                    if (connection.flags != 0)
+                        entrances.Add(connection.pos[1].ToSystem());
+                }
+            }
+
+            foreach (var entrance in entrances.OrderBy(point => Vector3.DistanceSquared(from, point)))
+            {
+                cancel.ThrowIfCancellationRequested();
+                if (!IsSampleOpen(entrance, startVoxel))
+                    continue;
+
+                var candidate = groundQuery.PlanMeshPathDetailed(entrance, to, 0, cancel, avoidCenter, avoidRadius);
+                if (candidate is not { Status: PathfindStatus.Complete, Segments.Count: > 0 })
+                    continue;
+
+                ground = candidate;
+                Service.Log.Debug($"[算路] 飞行改从离网连接入口接入地面走廊：起点 = {from:f3}，入口 = {entrance:f3}");
+                break;
+            }
         }
 
-        var ground = groundQuery.PlanMeshPathDetailed(groundStart, to, 0, cancel, avoidCenter, avoidRadius);
-
-        if (!ground.Succeeded || ground.Segments.Count == 0)
+        if (ground is not { Status: PathfindStatus.Complete, Segments.Count: > 0 })
         {
-            Service.Log.Warning($"[算路] 地面路径不可用（起点 {groundStart:f3}），分段拼接放弃");
-            return false;
-        }
-
-        // 地面本身就被隔断时，用它分段只会拼出一条到不了终点的路，交给穿层方案
-        if (ground.Status != PathfindStatus.Complete)
-        {
-            Service.Log.Warning($"[算路] 地面路径不完整（{ground.Status}），分段拼接放弃");
+            Service.Log.Warning("[算路] 未找到飞行可达且能到达终点的地面接入点，分段拼接放弃");
             return false;
         }
 
