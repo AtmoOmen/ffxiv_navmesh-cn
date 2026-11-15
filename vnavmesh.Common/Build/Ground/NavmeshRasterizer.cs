@@ -297,6 +297,7 @@ public class NavmeshRasterizer
         private uint[]             _solidSort          = [];
         private int[]              _solidVoxel         = [];
         private IntersectionSet?   _intersectionSet;
+        private IntersectionSet?   volumeIntersectionSet;
         private TerrainSpanBuffer? _terrainSpanBuffer;
 
         internal Span<Vector3> WorldVertices
@@ -376,6 +377,15 @@ public class NavmeshRasterizer
             _terrainSpanBuffer ??= new();
             _terrainSpanBuffer.Reset(cellCount);
             return _terrainSpanBuffer;
+        }
+
+        internal IntersectionSet AcquireVolumeIntersectionSet(int numCellsX, int numCellsZ)
+        {
+            if (volumeIntersectionSet == null || volumeIntersectionSet.NumCellsX != numCellsX || volumeIntersectionSet.NumCellsZ != numCellsZ)
+                volumeIntersectionSet = new(numCellsX, numCellsZ);
+            else
+                volumeIntersectionSet.Clear();
+            return volumeIntersectionSet;
         }
     }
 
@@ -527,6 +537,7 @@ public class NavmeshRasterizer
     private          RcContext _telemetry;
     private          Voxelizer? _voxelizer;
     private          IntersectionSet? _iset;
+    private readonly IntersectionSet? volumeIntersections;
     private          ScratchBuffers.TerrainSpanBuffer? _terrainSpans;
     private          float _invCellXZ;
     private          float _invCellY;
@@ -571,6 +582,9 @@ public class NavmeshRasterizer
         _scratch            = scratch ?? new();
         fillGroundInteriors = fillInteriors;
         _iset               = _scratch.AcquireIntersectionSet(fillInteriors || voxelizer != null, heightfield.width, heightfield.height);
+        volumeIntersections = voxelizer != null ?
+                                  _scratch.AcquireVolumeIntersectionSet(heightfield.width, heightfield.height) :
+                                  null;
         _terrainSpans = tileX >= 0 && tileZ >= 0 ?
                             _scratch.AcquireTerrainSpanBuffer(heightfield.width * heightfield.height) :
                             null;
@@ -660,7 +674,8 @@ public class NavmeshRasterizer
                 _heightfield.width - 1,
                 solidBelowNonManifold ?
                     0 :
-                    _maxY
+                    _maxY,
+                true
             );
         }
     }
@@ -707,7 +722,8 @@ public class NavmeshRasterizer
                 _heightfield.width - 1,
                 solidBelowNonManifold ?
                     0 :
-                    _maxY
+                    _maxY,
+                true
             );
         }
     }
@@ -754,7 +770,8 @@ public class NavmeshRasterizer
                 _heightfield.width - 1,
                 solidBelowNonManifold ?
                     0 :
-                    _maxY
+                    _maxY,
+                true
             );
         }
     }
@@ -801,7 +818,8 @@ public class NavmeshRasterizer
                 _heightfield.width - 1,
                 solidBelowNonManifold ?
                     0 :
-                    _maxY
+                    _maxY,
+                true
             );
         }
     }
@@ -867,7 +885,8 @@ public class NavmeshRasterizer
                 _heightfield.width - 1,
                 solidBelowNonManifold ?
                     0 :
-                    _maxY
+                    _maxY,
+                true
             );
         }
     }
@@ -1141,10 +1160,10 @@ public class NavmeshRasterizer
                             switch (normalUp)
                             {
                                 case true when y0 > 0:
-                                    _iset.Add(x, y0 - 1, z, intersectY, true);
+                                    AddIntersection(x, y0 - 1, z, intersectY, true);
                                     break;
                                 case false when y1 < _maxY - 1:
-                                    _iset.Add(x, y1 + 1, z, intersectY, false);
+                                    AddIntersection(x, y1 + 1, z, intersectY, false);
                                     break;
                             }
                         }
@@ -1306,10 +1325,10 @@ public class NavmeshRasterizer
                         switch (info.NormalUp)
                         {
                             case true when y0 > 0:
-                                _iset.Add(x, y0 - 1, z, intersectY, true);
+                                AddIntersection(x, y0 - 1, z, intersectY, true);
                                 break;
                             case false when y1 < _maxY - 1:
-                                _iset.Add(x, y1 + 1, z, intersectY, false);
+                                AddIntersection(x, y1 + 1, z, intersectY, false);
                                 break;
                         }
                     }
@@ -1417,10 +1436,10 @@ public class NavmeshRasterizer
                         switch (info.NormalUp)
                         {
                             case true when y0 > 0:
-                                _iset.Add(x, y0 - 1, z, intersectY, true);
+                                AddIntersection(x, y0 - 1, z, intersectY, true);
                                 break;
                             case false when y1 < _maxY - 1:
-                                _iset.Add(x, y1 + 1, z, intersectY, false);
+                                AddIntersection(x, y1 + 1, z, intersectY, false);
                                 break;
                         }
                     }
@@ -1572,10 +1591,10 @@ public class NavmeshRasterizer
                             switch (normalUp)
                             {
                                 case true when y0 > 0:
-                                    _iset.Add(x, y0 - 1, z, intersectY, true);
+                                    AddIntersection(x, y0 - 1, z, intersectY, true);
                                     break;
                                 case false when y1 < _maxY - 1:
-                                    _iset.Add(x, y1 + 1, z, intersectY, false);
+                                    AddIntersection(x, y1 + 1, z, intersectY, false);
                                     break;
                             }
                         }
@@ -2085,29 +2104,52 @@ public class NavmeshRasterizer
         _heightfield.spanPool.Free(spanIndex);
 
     // TODO: maintain non-empty cells in intersection set?
+    private void AddIntersection(int x, int y, int z, float height, bool normalUp)
+    {
+        _iset!.Add(x, y, z, height, normalUp);
+        volumeIntersections?.Add(x, y, z, height, normalUp);
+    }
+
     private void FillInterior
     (
-        int z0,
-        int z1,
-        int x0,
-        int x1,
-        int yBelowNonManifold
+        int  z0,
+        int  z1,
+        int  x0,
+        int  x1,
+        int  yBelowNonManifold,
+        bool aggregateVolume = false
     )
     {
         if (_iset == null)
             return; // interior filling is disabled
 
-        // fill interiors
-        var cells = _iset.TouchedCells;
+        FillInteriorCells(_iset, z0, z1, x0, x1, yBelowNonManifold, !aggregateVolume, fillGroundInteriors);
+        if (aggregateVolume && volumeIntersections != null)
+            FillInteriorCells(volumeIntersections, z0, z1, x0, x1, yBelowNonManifold, true, false);
+    }
+
+    private void FillInteriorCells
+    (
+        IntersectionSet intersections,
+        int             z0,
+        int             z1,
+        int             x0,
+        int             x1,
+        int             yBelowNonManifold,
+        bool            includeInVolume,
+        bool            includeInGround
+    )
+    {
+        var cells = intersections.TouchedCells;
 
         foreach (var cell in cells)
         {
-            var z = cell / _iset.NumCellsX;
-            var x = cell - (z * _iset.NumCellsX);
+            var z = cell / intersections.NumCellsX;
+            var x = cell - (z * intersections.NumCellsX);
             if (z < z0 || z > z1 || x < x0 || x > x1)
                 continue;
 
-            var cnt = _iset.FetchSorted(cell, _scratch);
+            var cnt = intersections.FetchSorted(cell, _scratch);
             if (cnt == 0)
                 continue; // empty
 
@@ -2120,7 +2162,7 @@ public class NavmeshRasterizer
                 // non-manifold mesh, assume everything below is interior
                 while (idx + 1 < cnt && solidVoxel[idx + 1] > yBelowNonManifold)
                     ++idx; // well i dunno, some terrain (eg south thanalan) is really _that_ fucked
-                AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, true, false, fillGroundInteriors);
+                AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, includeInVolume, false, includeInGround);
                 ++idx;
             }
 
@@ -2137,11 +2179,11 @@ public class NavmeshRasterizer
                     break;
                 var maxY = solidVoxel[idx];
                 if (maxY >= minY)
-                    AddSpan(x, z, minY, maxY, 0, true, includeInGround: fillGroundInteriors);
+                    AddSpan(x, z, minY, maxY, 0, includeInVolume, includeInGround: includeInGround);
             }
         }
 
-        _iset.Clear();
+        intersections.Clear();
     }
 
     // TODO: remove after i'm confident in my replacement code
