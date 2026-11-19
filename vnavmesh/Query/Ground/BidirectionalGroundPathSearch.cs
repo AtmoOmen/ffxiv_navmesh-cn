@@ -10,14 +10,14 @@ using static DtDetour;
 
 internal static class BidirectionalGroundPathSearch
 {
-    private const int   MAX_CORRIDOR_POLYS                  = 4096;
-    private const int   MIN_GEOMETRY_REFINEMENT_CORRIDOR    = 32;
-    private const int   MAX_GEOMETRY_REFINEMENT_POINTS      = 4097;
-    private const float GEOMETRY_REFINEMENT_MARGIN          = 0.25f;
-    private const float GEOMETRY_REFINEMENT_CORNER_PENALTY  = 0.20f;
-    private const float GEOMETRY_REFINEMENT_TURN_PENALTY    = 2.00f;
+    private const int   MAX_CORRIDOR_POLYS                 = 4096;
+    private const int   MIN_GEOMETRY_REFINEMENT_CORRIDOR   = 32;
+    private const int   MAX_GEOMETRY_REFINEMENT_POINTS     = 4097;
+    private const float GEOMETRY_REFINEMENT_MARGIN         = 0.25f;
+    private const float GEOMETRY_REFINEMENT_CORNER_PENALTY = 0.20f;
+    private const float GEOMETRY_REFINEMENT_TURN_PENALTY   = 2.00f;
 
-    private static readonly ConditionalWeakTable<DtNavMesh, Dictionary<long, List<long>>> s_reverseAdjacency = new();
+    private static readonly ConditionalWeakTable<DtNavMesh, Dictionary<long, List<long>>> ReverseAdjacency = new();
 
     internal static DtStatus FindPath
     (
@@ -33,34 +33,36 @@ internal static class BidirectionalGroundPathSearch
     {
         corridor.Clear();
 
+        var mesh = meshQuery.GetAttachedNavMesh();
+        if (!mesh.IsValidPolyRef(startRef)  ||
+            !mesh.IsValidPolyRef(endRef)    ||
+            !startPos.IsFinite()            ||
+            !endPos.IsFinite()              ||
+            !float.IsFinite(heuristicScale) ||
+            heuristicScale < 0)
+            return DtStatus.DT_FAILURE | DtStatus.DT_INVALID_PARAM;
+
         if (startRef == endRef)
         {
             corridor.Add(startRef);
             return DtStatus.DT_SUCCESS;
         }
 
-        var mesh = meshQuery.GetAttachedNavMesh();
-        if (!mesh.IsValidPolyRef(startRef) || !mesh.IsValidPolyRef(endRef))
-            return DtStatus.DT_FAILURE | DtStatus.DT_INVALID_PARAM;
+        var context  = new SearchContext(meshQuery, filter, startRef, endRef, startPos, endPos, heuristicScale);
+        var forward  = context.Forward;
+        var backward = context.Backward;
 
-        var reverseAdjacency = s_reverseAdjacency.GetValue(mesh, static m => BuildReverseAdjacency(m));
-        var forward          = new SearchState();
-        var backward         = new SearchState();
-
-        var forwardStartIndex = GetOrCreateNode(forward, startRef);
+        var forwardStartIndex = GetOrCreateNode(forward, 0, startRef, startPos);
         var forwardStart      = forward.Nodes[forwardStartIndex];
-        forwardStart.Pos = startPos;
-        Push(forward, forwardStart, heuristicScale * RcVec3f.Distance(startPos, endPos));
+        Push(forward, forwardStart, context.SourceTargetEstimate);
 
-        var backwardEndIndex = GetOrCreateNode(backward, endRef);
+        var backwardEndIndex = GetOrCreateNode(backward, endRef, 0, endPos);
         var backwardEnd      = backward.Nodes[backwardEndIndex];
-        backwardEnd.Pos = endPos;
-        Push(backward, backwardEnd, heuristicScale * RcVec3f.Distance(endPos, startPos));
+        Push(backward, backwardEnd, context.SourceTargetEstimate);
 
-        var meeting              = new MeetingResult();
-        var bestPartialForward   = 0;
-        var bestPartialScore     = RcVec3f.Distance(startPos, endPos);
-        var sourceTargetEstimate = heuristicScale * RcVec3f.Distance(startPos, endPos);
+        var meeting            = context.Meeting;
+        var bestPartialForward = 0;
+        var bestPartialScore   = RcVec3f.Distance(startPos, endPos);
 
         while (true)
         {
@@ -72,7 +74,7 @@ internal static class BidirectionalGroundPathSearch
 
             if (hasForward && hasBackward)
             {
-                if (forwardTop.F + backwardTop.F >= meeting.BestPath + sourceTargetEstimate)
+                if (forwardTop.F + backwardTop.F >= meeting.BestPath + context.SourceTargetEstimate)
                     break;
 
                 if (forwardTop.F < backwardTop.F)
@@ -88,7 +90,7 @@ internal static class BidirectionalGroundPathSearch
 
         var status = DtStatus.DT_SUCCESS;
 
-        if (meeting.ForwardIndex >= 0 && meeting.BackwardIndex >= 0)
+        if (meeting is { ForwardIndex: >= 0, BackwardIndex: >= 0 })
             BuildCorridor(forward, backward, meeting.ForwardIndex, meeting.BackwardIndex, corridor);
         else
         {
@@ -122,44 +124,15 @@ internal static class BidirectionalGroundPathSearch
             node.IsOpen   = false;
             node.IsClosed = true;
 
-            if (backward.IndexByRef.TryGetValue(node.Ref, out var backwardIndex))
-            {
-                var backwardNode = backward.Nodes[backwardIndex];
-                if (backwardNode.IsClosed)
-                    TryRecordMeeting
-                    (
-                        mesh,
-                        filter,
-                        forward,
-                        entry.NodeIndex,
-                        backward,
-                        backwardIndex,
-                        endRef,
-                        meeting
-                    );
-            }
-
             var partialScore = RcVec3f.Distance(node.Pos, endPos);
 
-            if (partialScore < bestPartialScore)
+            if (node.Ref != 0 && partialScore < bestPartialScore)
             {
                 bestPartialScore   = partialScore;
                 bestPartialForward = entry.NodeIndex;
             }
 
-            ExpandForward
-            (
-                meshQuery,
-                mesh,
-                filter,
-                heuristicScale,
-                forward,
-                backward,
-                entry.NodeIndex,
-                endRef,
-                endPos,
-                meeting
-            );
+            ExpandForward(context, entry.NodeIndex);
         }
 
         void ExpandBackwardSide()
@@ -169,38 +142,7 @@ internal static class BidirectionalGroundPathSearch
             node.IsOpen   = false;
             node.IsClosed = true;
 
-            if (forward.IndexByRef.TryGetValue(node.Ref, out var forwardIndex))
-            {
-                var forwardNode = forward.Nodes[forwardIndex];
-                if (forwardNode.IsClosed)
-                    TryRecordMeeting
-                    (
-                        mesh,
-                        filter,
-                        forward,
-                        forwardIndex,
-                        backward,
-                        entry.NodeIndex,
-                        endRef,
-                        meeting
-                    );
-            }
-
-            ExpandBackward
-            (
-                meshQuery,
-                mesh,
-                filter,
-                heuristicScale,
-                forward,
-                backward,
-                reverseAdjacency,
-                entry.NodeIndex,
-                endRef,
-                startPos,
-                endPos,
-                meeting
-            );
+            ExpandBackward(context, entry.NodeIndex);
         }
     }
 
@@ -233,7 +175,9 @@ internal static class BidirectionalGroundPathSearch
                 candidateBuffer.AsSpan(0, MAX_CORRIDOR_POLYS),
                 out var candidateCount,
                 MAX_CORRIDOR_POLYS,
-                heuristicScale == 0f ? DtFindPathOption.ZeroScale : DtFindPathOption.NoOption
+                heuristicScale == 0f ?
+                    DtFindPathOption.ZeroScale :
+                    DtFindPathOption.NoOption
             );
             if (candidateStatus.Failed()                          ||
                 candidateStatus.IsPartial()                       ||
@@ -300,6 +244,7 @@ internal static class BidirectionalGroundPathSearch
 
         var length     = 0f;
         var turnAmount = 0f;
+
         for (var i = 1; i < count; ++i)
         {
             var previous = straightPath[i - 1].pos;
@@ -316,8 +261,8 @@ internal static class BidirectionalGroundPathSearch
             var next           = straightPath[i + 1].pos;
             var incomingX      = current.X - previous.X;
             var incomingZ      = current.Z - previous.Z;
-            var outgoingX      = next.X - current.X;
-            var outgoingZ      = next.Z - current.Z;
+            var outgoingX      = next.X    - current.X;
+            var outgoingZ      = next.Z    - current.Z;
             var incomingLength = MathF.Sqrt((incomingX * incomingX) + (incomingZ * incomingZ));
             var outgoingLength = MathF.Sqrt((outgoingX * outgoingX) + (outgoingZ * outgoingZ));
             if (incomingLength <= 1e-4f || outgoingLength <= 1e-4f)
@@ -340,23 +285,15 @@ internal static class BidirectionalGroundPathSearch
         for (var tileIndex = 0; tileIndex < mesh.GetMaxTiles(); ++tileIndex)
         {
             var tile = mesh.GetTile(tileIndex);
-            if (tile?.data?.header == null || tile.data.offMeshCons == null || tile.links == null)
+            if (tile?.data?.header == null || tile.links == null)
                 continue;
 
             var baseRef = mesh.GetPolyRefBase(tile);
 
-            for (var connectionIndex = 0; connectionIndex < tile.data.header.offMeshConCount; ++connectionIndex)
+            for (var polyIndex = 0; polyIndex < tile.data.header.polyCount; ++polyIndex)
             {
-                var connection = tile.data.offMeshCons[connectionIndex];
-                if (connection == null || connection.poly < 0 || connection.poly >= tile.data.header.polyCount)
-                    continue;
-
-                var poly = tile.data.polys[connection.poly];
-                if (poly.GetPolyType() != DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
-                    continue;
-
-                var connectionRef      = baseRef | (long)(uint)connection.poly;
-                var endIsBidirectional = connection.side == 0xff || (connection.flags & DT_OFFMESH_CON_BIDIR) != 0;
+                var poly    = tile.data.polys[polyIndex];
+                var polyRef = baseRef | (uint)polyIndex;
 
                 for (var linkIndex = poly.firstLink; linkIndex != DT_NULL_LINK; linkIndex = tile.links[linkIndex].next)
                 {
@@ -364,10 +301,7 @@ internal static class BidirectionalGroundPathSearch
                     if (link.refs == 0)
                         continue;
 
-                    AddReverseEntry(reverse, link.refs, connectionRef);
-
-                    if (link.edge == 0 || (link.edge == 1 && endIsBidirectional))
-                        AddReverseEntry(reverse, connectionRef, link.refs);
+                    AddReverseEntry(reverse, link.refs, polyRef);
                 }
             }
         }
@@ -392,15 +326,17 @@ internal static class BidirectionalGroundPathSearch
     private static int GetOrCreateNode
     (
         SearchState state,
-        long        refs
+        long        fromRef,
+        long        refs,
+        RcVec3f     position
     )
     {
-        if (state.IndexByRef.TryGetValue(refs, out var index))
+        if (state.IndexByPortal.TryGetValue((fromRef, refs), out var index))
             return index;
 
-        var node = new SearchNode(refs);
-        index                  = state.Nodes.Count;
-        state.IndexByRef[refs] = index;
+        var node = new SearchNode(fromRef, refs, position);
+        index                                = state.Nodes.Count;
+        state.IndexByPortal[(fromRef, refs)] = index;
         state.Nodes.Add(node);
         return index;
     }
@@ -415,7 +351,7 @@ internal static class BidirectionalGroundPathSearch
         node.F      = f;
         node.IsOpen = true;
         node.Version++;
-        state.Open.Enqueue(new HeapEntry(state.IndexByRef[node.Ref], f, node.Version), f);
+        state.Open.Enqueue(new HeapEntry(state.IndexByPortal[(node.FromRef, node.Ref)], f, node.Version), f);
     }
 
     private static bool TryPeekValid
@@ -473,360 +409,212 @@ internal static class BidirectionalGroundPathSearch
         if (meshQuery.GetPortalPoints(fromRef, toRef, out var left, out var right, out _, out _).Failed())
             return false;
 
-        var t = 0.5f;
-        if (DtUtils.IntersectSegSeg2D(rayStart, rayEnd, left, right, out var rayParameter, out var portalParameter) &&
-            rayParameter    >= 0f && rayParameter    <= 1f &&
-            portalParameter >= 0f && portalParameter <= 1f)
-            t = Math.Clamp(portalParameter, 0.1f, 0.9f);
-
-        point = RcVec3f.Lerp(left, right, t);
+        point = ResolvePortalPoint(rayStart, rayEnd, left, right);
         return true;
+    }
+
+    internal static RcVec3f ResolvePortalPoint
+    (
+        RcVec3f rayStart,
+        RcVec3f rayEnd,
+        RcVec3f left,
+        RcVec3f right
+    )
+    {
+        if (DtUtils.IntersectSegSeg2D(rayStart, rayEnd, left, right, out var rayParameter, out var portalParameter) &&
+            rayParameter is >= 0f and <= 1f                                                                         &&
+            portalParameter is >= 0f and <= 1f)
+            return RcVec3f.Lerp(left, right, portalParameter);
+
+        DtUtils.DistancePtSegSqr2D(rayStart, left, right, out var startParameter);
+        DtUtils.DistancePtSegSqr2D(rayEnd,   left, right, out var endParameter);
+        Span<float> parameters      = [startParameter, endParameter, 0f, 1f];
+        var         nearestDistance = float.PositiveInfinity;
+        var         result          = left;
+
+        foreach (var parameter in parameters)
+        {
+            var candidate = RcVec3f.Lerp(left, right, parameter);
+            var distance  = DtUtils.DistancePtSegSqr2D(candidate, rayStart, rayEnd, out _);
+            if (distance >= nearestDistance)
+                continue;
+
+            nearestDistance = distance;
+            result          = candidate;
+        }
+
+        return result;
     }
 
     private static void ExpandForward
     (
-        DtNavMeshQuery meshQuery,
-        DtNavMesh      mesh,
-        IDtQueryFilter filter,
-        float          heuristicScale,
-        SearchState    forward,
-        SearchState    backward,
-        int            nodeIndex,
-        long           endRef,
-        RcVec3f        endPos,
-        MeetingResult  meeting
+        SearchContext context,
+        int           nodeIndex
     )
     {
-        var node = forward.Nodes[nodeIndex];
-        mesh.GetTileAndPolyByRefUnsafe(node.Ref, out var tile, out var poly);
+        var node = context.Forward.Nodes[nodeIndex];
+        if (node.Ref == 0)
+            return;
 
-        long       prevRef  = 0;
-        DtMeshTile prevTile = null;
-        DtPoly     prevPoly = null;
+        context.Mesh.GetTileAndPolyByRefUnsafe(node.Ref, out var tile, out var poly);
+        if (!context.Filter.PassFilter(node.Ref, tile, poly))
+            return;
 
-        if (node.ParentIndex >= 0)
+        if (node.Ref == context.EndRef)
         {
-            var parent = forward.Nodes[node.ParentIndex];
-            prevRef = parent.Ref;
-            mesh.GetTileAndPolyByRefUnsafe(prevRef, out prevTile, out prevPoly);
+            RelaxTransition(context, nodeIndex, node.FromRef, node.Ref, 0, false);
+            return;
         }
 
         for (var linkIndex = poly.firstLink; linkIndex != DT_NULL_LINK; linkIndex = tile.links[linkIndex].next)
         {
             var neighbourRef = tile.links[linkIndex].refs;
-            if (neighbourRef == 0 || neighbourRef == prevRef)
+            if (neighbourRef == 0 || neighbourRef == node.FromRef)
                 continue;
 
-            mesh.GetTileAndPolyByRefUnsafe(neighbourRef, out var neighbourTile, out var neighbourPoly);
-            if (!filter.PassFilter(neighbourRef, neighbourTile, neighbourPoly))
-                continue;
-
-            var neighbourIndex = GetOrCreateNode(forward, neighbourRef);
-            var neighbour      = forward.Nodes[neighbourIndex];
-
-            if (!neighbour.IsOpen && !neighbour.IsClosed)
-            {
-                if (!TryComputePortalIntersection(meshQuery, node.Pos, node.Ref, endPos, neighbourRef, out var entryPos))
-                    continue;
-
-                neighbour.Pos = entryPos;
-            }
-
-            var edgeCost = filter.GetCost
-            (
-                node.Pos,
-                neighbour.Pos,
-                prevRef,
-                prevTile,
-                prevPoly,
-                node.Ref,
-                tile,
-                poly,
-                neighbourRef,
-                neighbourTile,
-                neighbourPoly
-            );
-            var newG = node.G + edgeCost;
-
-            float heuristic;
-
-            if (neighbourRef == endRef)
-            {
-                var endCost = filter.GetCost
-                (
-                    neighbour.Pos,
-                    endPos,
-                    node.Ref,
-                    tile,
-                    poly,
-                    neighbourRef,
-                    neighbourTile,
-                    neighbourPoly,
-                    0,
-                    null,
-                    null
-                );
-                newG      += endCost;
-                heuristic =  0;
-            }
-            else
-                heuristic = heuristicScale * RcVec3f.Distance(neighbour.Pos, endPos);
-
-            if (neighbour.IsOpen && newG >= neighbour.G)
-                continue;
-
-            if (neighbour.IsClosed && newG >= neighbour.G)
-                continue;
-
-            neighbour.G           = newG;
-            neighbour.F           = newG + heuristic;
-            neighbour.ParentIndex = nodeIndex;
-            neighbour.IsClosed    = false;
-            neighbour.IsOpen      = true;
-            neighbour.Version++;
-            forward.Open.Enqueue(new HeapEntry(neighbourIndex, neighbour.F, neighbour.Version), neighbour.F);
-
-            if (backward.IndexByRef.TryGetValue(neighbourRef, out var backwardIndex))
-            {
-                var backwardNode = backward.Nodes[backwardIndex];
-                if (backwardNode.IsClosed)
-                    TryRecordMeeting
-                    (
-                        mesh,
-                        filter,
-                        forward,
-                        neighbourIndex,
-                        backward,
-                        backwardIndex,
-                        endRef,
-                        meeting
-                    );
-            }
+            RelaxTransition(context, nodeIndex, node.FromRef, node.Ref, neighbourRef, false);
         }
     }
 
     private static void ExpandBackward
     (
-        DtNavMeshQuery               meshQuery,
-        DtNavMesh                    mesh,
-        IDtQueryFilter               filter,
-        float                        heuristicScale,
-        SearchState                  forward,
-        SearchState                  backward,
-        Dictionary<long, List<long>> reverseAdjacency,
-        int                          nodeIndex,
-        long                         endRef,
-        RcVec3f                      startPos,
-        RcVec3f                      endPos,
-        MeetingResult                meeting
+        SearchContext context,
+        int           nodeIndex
     )
     {
-        var node = backward.Nodes[nodeIndex];
-        mesh.GetTileAndPolyByRefUnsafe(node.Ref, out var tile, out var poly);
-
-        if (!filter.PassFilter(node.Ref, tile, poly))
+        var node = context.Backward.Nodes[nodeIndex];
+        if (node.FromRef == 0)
             return;
 
-        long parentRef = 0;
-        if (node.ParentIndex >= 0)
-            parentRef = backward.Nodes[node.ParentIndex].Ref;
+        context.Mesh.GetTileAndPolyByRefUnsafe(node.FromRef, out var tile, out var poly);
+        if (!context.Filter.PassFilter(node.FromRef, tile, poly))
+            return;
 
-        void Relax
+        if (node.FromRef == context.StartRef)
+        {
+            RelaxTransition(context, nodeIndex, 0, node.FromRef, node.Ref, true);
+            return;
+        }
+
+        if (!context.IncomingEdges.TryGetValue(node.FromRef, out var incoming))
+            return;
+
+        foreach (var predecessorRef in incoming)
+        {
+            if (predecessorRef == node.Ref)
+                continue;
+
+            RelaxTransition(context, nodeIndex, predecessorRef, node.FromRef, node.Ref, true);
+        }
+    }
+
+    private static void RelaxTransition
+    (
+        SearchContext context,
+        int           nodeIndex,
+        long          previousRef,
+        long          currentRef,
+        long          nextRef,
+        bool          reverse
+    )
+    {
+        var active = reverse ?
+                         context.Backward :
+                         context.Forward;
+        var opposite = reverse ?
+                           context.Forward :
+                           context.Backward;
+        var node = active.Nodes[nodeIndex];
+        var fromRef = reverse ?
+                          previousRef :
+                          currentRef;
+        var toRef = reverse ?
+                        currentRef :
+                        nextRef;
+        RcVec3f position;
+
+        if (fromRef == 0)
+            position = context.StartPosition;
+        else if (toRef == 0)
+            position = context.EndPosition;
+        else if (!TryComputePortalIntersection(context.MeshQuery, context.StartPosition, fromRef, context.EndPosition, toRef, out position))
+            return;
+
+        context.Mesh.GetTileAndPolyByRefUnsafe(currentRef, out var currentTile, out var currentPoly);
+
+        DtMeshTile previousTile = null;
+        DtPoly     previousPoly = null;
+        if (previousRef != 0)
+            context.Mesh.GetTileAndPolyByRefUnsafe(previousRef, out previousTile, out previousPoly);
+
+        DtMeshTile nextTile = null;
+        DtPoly     nextPoly = null;
+        if (nextRef != 0)
+            context.Mesh.GetTileAndPolyByRefUnsafe(nextRef, out nextTile, out nextPoly);
+
+        var adjacentRef = reverse ?
+                              previousRef :
+                              nextRef;
+        var adjacentTile = reverse ?
+                               previousTile :
+                               nextTile;
+        var adjacentPoly = reverse ?
+                               previousPoly :
+                               nextPoly;
+        if (adjacentRef != 0 && !context.Filter.PassFilter(adjacentRef, adjacentTile, adjacentPoly))
+            return;
+
+        var edgeCost = context.Filter.GetCost
         (
-            long predecessorRef
-        )
-        {
-            if (predecessorRef == 0 || predecessorRef == parentRef)
-                return;
-
-            mesh.GetTileAndPolyByRefUnsafe(predecessorRef, out var predecessorTile, out var predecessorPoly);
-            if (!filter.PassFilter(predecessorRef, predecessorTile, predecessorPoly))
-                return;
-
-            var predecessorIndex = GetOrCreateNode(backward, predecessorRef);
-            var predecessor      = backward.Nodes[predecessorIndex];
-
-            if (!predecessor.IsOpen && !predecessor.IsClosed)
-            {
-                if (!TryComputePortalIntersection(meshQuery, node.Pos, predecessorRef, startPos, node.Ref, out var entryPos))
-                    return;
-
-                predecessor.Pos = predecessorPoly.GetPolyType() == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION ?
-                                      GetOppositeOffMeshVertex(predecessorTile, predecessorPoly, entryPos) :
-                                      entryPos;
-            }
-
-            var edgeCost = filter.GetCost
-            (
-                predecessor.Pos,
+            reverse ?
+                position :
                 node.Pos,
-                0,
-                null,
-                null,
-                predecessorRef,
-                predecessorTile,
-                predecessorPoly,
-                node.Ref,
-                tile,
-                poly
-            );
-            var newG = node.G + edgeCost;
-
-            if (node.Ref == endRef)
-            {
-                var endCost = filter.GetCost
-                (
-                    node.Pos,
-                    endPos,
-                    predecessorRef,
-                    predecessorTile,
-                    predecessorPoly,
-                    node.Ref,
-                    tile,
-                    poly,
-                    0,
-                    null,
-                    null
-                );
-                newG += endCost;
-            }
-
-            var heuristic = heuristicScale * RcVec3f.Distance(predecessor.Pos, startPos);
-
-            if (predecessor.IsOpen && newG >= predecessor.G)
-                return;
-
-            if (predecessor.IsClosed && newG >= predecessor.G)
-                return;
-
-            predecessor.G           = newG;
-            predecessor.F           = newG + heuristic;
-            predecessor.ParentIndex = nodeIndex;
-            predecessor.IsClosed    = false;
-            predecessor.IsOpen      = true;
-            predecessor.Version++;
-            backward.Open.Enqueue(new HeapEntry(predecessorIndex, predecessor.F, predecessor.Version), predecessor.F);
-
-            if (forward.IndexByRef.TryGetValue(predecessorRef, out var forwardIndex))
-            {
-                var forwardNode = forward.Nodes[forwardIndex];
-                if (forwardNode.IsClosed)
-                    TryRecordMeeting
-                    (
-                        mesh,
-                        filter,
-                        forward,
-                        forwardIndex,
-                        backward,
-                        predecessorIndex,
-                        endRef,
-                        meeting
-                    );
-            }
-        }
-
-        if (poly.GetPolyType() == DtPolyTypes.DT_POLYTYPE_OFFMESH_CONNECTION)
-        {
-            if (reverseAdjacency.TryGetValue(node.Ref, out var incoming))
-            {
-                foreach (var predecessorRef in incoming)
-                    Relax(predecessorRef);
-            }
-
-            return;
-        }
-
-        for (var linkIndex = poly.firstLink; linkIndex != DT_NULL_LINK; linkIndex = tile.links[linkIndex].next)
-            Relax(tile.links[linkIndex].refs);
-
-        if (reverseAdjacency.TryGetValue(node.Ref, out var offMeshIncoming))
-        {
-            foreach (var predecessorRef in offMeshIncoming)
-                Relax(predecessorRef);
-        }
-    }
-
-    private static RcVec3f GetOppositeOffMeshVertex
-    (
-        DtMeshTile tile,
-        DtPoly     poly,
-        RcVec3f    shared
-    )
-    {
-        var first  = poly.verts[0] * 3;
-        var second = poly.verts[1] * 3;
-        var v0     = new RcVec3f(tile.data.verts[first],  tile.data.verts[first  + 1], tile.data.verts[first  + 2]);
-        var v1     = new RcVec3f(tile.data.verts[second], tile.data.verts[second + 1], tile.data.verts[second + 2]);
-        return RcVec3f.DistanceSquared(v0, shared) >= RcVec3f.DistanceSquared(v1, shared) ?
-                   v0 :
-                   v1;
-    }
-
-    private static void TryRecordMeeting
-    (
-        DtNavMesh      mesh,
-        IDtQueryFilter filter,
-        SearchState    forward,
-        int            forwardIndex,
-        SearchState    backward,
-        int            backwardIndex,
-        long           endRef,
-        MeetingResult  meeting
-    )
-    {
-        var forwardNode  = forward.Nodes[forwardIndex];
-        var backwardNode = backward.Nodes[backwardIndex];
-        var bridgeCost   = 0f;
-
-        if (forwardNode.Ref != endRef)
-        {
-            mesh.GetTileAndPolyByRefUnsafe(forwardNode.Ref, out var tile, out var poly);
-
-            long       previousRef  = 0;
-            DtMeshTile previousTile = null;
-            DtPoly     previousPoly = null;
-
-            if (forwardNode.ParentIndex >= 0)
-            {
-                var previous = forward.Nodes[forwardNode.ParentIndex];
-                previousRef = previous.Ref;
-                mesh.GetTileAndPolyByRefUnsafe(previousRef, out previousTile, out previousPoly);
-            }
-
-            long       nextRef  = 0;
-            DtMeshTile nextTile = null;
-            DtPoly     nextPoly = null;
-
-            if (backwardNode.ParentIndex >= 0)
-            {
-                var next = backward.Nodes[backwardNode.ParentIndex];
-                nextRef = next.Ref;
-                mesh.GetTileAndPolyByRefUnsafe(nextRef, out nextTile, out nextPoly);
-            }
-
-            bridgeCost = filter.GetCost
-            (
-                forwardNode.Pos,
-                backwardNode.Pos,
-                previousRef,
-                previousTile,
-                previousPoly,
-                forwardNode.Ref,
-                tile,
-                poly,
-                nextRef,
-                nextTile,
-                nextPoly
-            );
-        }
-
-        var candidate = forwardNode.G + bridgeCost + backwardNode.G;
-        if (candidate >= meeting.BestPath)
+            reverse ?
+                node.Pos :
+                position,
+            previousRef,
+            previousTile,
+            previousPoly,
+            currentRef,
+            currentTile,
+            currentPoly,
+            nextRef,
+            nextTile,
+            nextPoly
+        );
+        var newG           = node.G + edgeCost;
+        var neighbourIndex = GetOrCreateNode(active, fromRef, toRef, position);
+        var neighbour      = active.Nodes[neighbourIndex];
+        if ((neighbour.IsOpen || neighbour.IsClosed) && newG >= neighbour.G)
             return;
 
-        meeting.BestPath      = candidate;
-        meeting.ForwardIndex  = forwardIndex;
-        meeting.BackwardIndex = backwardIndex;
+        neighbour.G           = newG;
+        neighbour.ParentIndex = nodeIndex;
+        neighbour.IsClosed    = false;
+
+        var distanceFromStart = RcVec3f.Distance(position, context.StartPosition);
+        var distanceToEnd     = RcVec3f.Distance(position, context.EndPosition);
+        var potential = reverse ?
+                            distanceFromStart - distanceToEnd :
+                            distanceToEnd     - distanceFromStart;
+        var heuristic = ((context.HeuristicScale * potential) + context.SourceTargetEstimate) * 0.5f;
+        Push(active, neighbour, newG + heuristic);
+
+        if (!opposite.IndexByPortal.TryGetValue((fromRef, toRef), out var oppositeIndex))
+            return;
+
+        var oppositeNode = opposite.Nodes[oppositeIndex];
+        var candidate    = newG + oppositeNode.G;
+        if (candidate >= context.Meeting.BestPath)
+            return;
+
+        context.Meeting.BestPath = candidate;
+        context.Meeting.ForwardIndex = reverse ?
+                                           oppositeIndex :
+                                           neighbourIndex;
+        context.Meeting.BackwardIndex = reverse ?
+                                            neighbourIndex :
+                                            oppositeIndex;
     }
 
     private static void BuildCorridor
@@ -847,9 +635,17 @@ internal static class BidirectionalGroundPathSearch
         for (var index = meetBackward; index >= 0; index = backward.Nodes[index].ParentIndex)
             backwardChain.Add(backward.Nodes[index].Ref);
 
-        corridor.AddRange(forwardChain);
+        foreach (var reference in forwardChain)
+        {
+            if (reference != 0)
+                corridor.Add(reference);
+        }
+
         for (var index = 1; index < backwardChain.Count; ++index)
-            corridor.Add(backwardChain[index]);
+        {
+            if (backwardChain[index] != 0)
+                corridor.Add(backwardChain[index]);
+        }
     }
 
     private static void BuildPartialCorridor
@@ -866,23 +662,65 @@ internal static class BidirectionalGroundPathSearch
         corridor.AddRange(chain);
     }
 
+    private sealed class SearchContext
+    (
+        DtNavMeshQuery meshQuery,
+        IDtQueryFilter filter,
+        long           startRef,
+        long           endRef,
+        RcVec3f        startPosition,
+        RcVec3f        endPosition,
+        float          heuristicScale
+    )
+    {
+        public DtNavMeshQuery MeshQuery { get; } = meshQuery;
+
+        public DtNavMesh Mesh { get; } = meshQuery.GetAttachedNavMesh();
+
+        public IDtQueryFilter Filter { get; } = filter;
+
+        public long StartRef { get; } = startRef;
+
+        public long EndRef { get; } = endRef;
+
+        public RcVec3f StartPosition { get; } = startPosition;
+
+        public RcVec3f EndPosition { get; } = endPosition;
+
+        public float HeuristicScale { get; } = heuristicScale;
+
+        public float SourceTargetEstimate { get; } = heuristicScale * RcVec3f.Distance(startPosition, endPosition);
+
+        public Dictionary<long, List<long>> IncomingEdges { get; } = ReverseAdjacency.GetValue(meshQuery.GetAttachedNavMesh(), BuildReverseAdjacency);
+
+        public SearchState Forward { get; } = new();
+
+        public SearchState Backward { get; } = new();
+
+        public MeetingResult Meeting { get; } = new();
+    }
+
     private sealed class SearchState
     {
         public List<SearchNode> Nodes { get; } = [];
 
-        public Dictionary<long, int> IndexByRef { get; } = [];
+        public Dictionary<(long FromRef, long Ref), int> IndexByPortal { get; } = [];
 
         public PriorityQueue<HeapEntry, float> Open { get; } = new();
     }
 
     private sealed class SearchNode
     (
-        long refs
+        long    fromRef,
+        long    refs,
+        RcVec3f position
     )
     {
+        public long FromRef { get; } = fromRef;
+
         public long Ref { get; } = refs;
 
-        public RcVec3f Pos { get; set; }
+        public RcVec3f Pos { get; } = position;
 
         public float G { get; set; }
 
@@ -915,9 +753,9 @@ internal static class BidirectionalGroundPathSearch
     )
     {
         public float Score =>
-            Length                                                   +
-            (CornerCount * GEOMETRY_REFINEMENT_CORNER_PENALTY)       +
-            (TurnAmount * GEOMETRY_REFINEMENT_TURN_PENALTY);
+            Length                                             +
+            (CornerCount * GEOMETRY_REFINEMENT_CORNER_PENALTY) +
+            (TurnAmount  * GEOMETRY_REFINEMENT_TURN_PENALTY);
     }
 
     private readonly record struct HeapEntry
