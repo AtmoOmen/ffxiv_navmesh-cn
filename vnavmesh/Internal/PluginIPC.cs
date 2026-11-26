@@ -101,7 +101,7 @@ internal class PluginIPC : IDisposable
         RegisterFunc
         (
             "Query.Mesh.PointOnFloor",
-            (Vector3 p, bool allowUnlandable, float halfExtentXZ) => navmeshManager.Query?.FindPointOnFloor(p, halfExtentXZ, allowUnlandable)
+            (Vector3 p, bool allowUnlandable, float halfExtentXZ) => navmeshManager.Query?.FindReachablePointOnFloor(p, halfExtentXZ, allowUnlandable)
         );
         RegisterFunc
         (

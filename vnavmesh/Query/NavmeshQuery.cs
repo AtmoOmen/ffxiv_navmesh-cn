@@ -89,8 +89,8 @@ public class NavmeshQuery
     private DtNavMeshQuery? meshQuery;
     private VoxelPathfind?  volumeQuery;
     private bool            released;
-    private long            flagSourcePoly;
-    private HashSet<long>?  flagReachablePolys;
+    private long            floorSourcePoly;
+    private HashSet<long>?  floorReachablePolys;
 
     public NavmeshQuery
     (
@@ -111,8 +111,8 @@ public class NavmeshQuery
     {
         LastPath.Clear();
         LastPath.TrimExcess();
-        meshQuery          = null;
-        flagReachablePolys = null;
+        meshQuery           = null;
+        floorReachablePolys = null;
         volumeQuery?.ReleaseRetainedState();
         volumeQuery = null;
         released    = true;
@@ -383,7 +383,25 @@ public class NavmeshQuery
     {
         var map = AgentMap.Instance();
         if (map                  == null ||
-            map->FlagMarkerCount == 0    ||
+            map->FlagMarkerCount == 0)
+            return null;
+
+        var marker = map->FlagMapMarkers[0];
+        return FindReachablePointOnFloor(new(marker.XFloat, float.MaxValue, marker.YFloat), 0);
+    }
+
+    internal Vector3? FindReachablePointOnFloor
+    (
+        Vector3 p,
+        float   halfExtentXZ     = 5,
+        bool    allowUnreachable = true
+    )
+    {
+        if (!float.IsFinite(p.X)          ||
+            !float.IsFinite(p.Y)          ||
+            !float.IsFinite(p.Z)          ||
+            !float.IsFinite(halfExtentXZ) ||
+            halfExtentXZ < 0              ||
             Service.ObjectTable.LocalPlayer is not { } player)
             return null;
 
@@ -402,30 +420,31 @@ public class NavmeshQuery
             if (sourcePoly == 0)
                 return null;
 
-            if (flagReachablePolys == null ||
-                flagSourcePoly     != sourcePoly)
+            if (floorReachablePolys == null ||
+                floorSourcePoly     != sourcePoly)
             {
-                flagReachablePolys = FindReachableMeshPolys(sourcePoly);
-                flagSourcePoly     = sourcePoly;
+                floorReachablePolys = FindReachableMeshPolys(sourcePoly);
+                floorSourcePoly     = sourcePoly;
             }
         }
 
-        var marker = map->FlagMapMarkers[0];
         var query = new MeshFloorPointQuery
         (
             NavmeshData.Mesh,
-            new(marker.XFloat, float.MaxValue, marker.YFloat),
+            p.ToRecast(),
             flight,
             sourceVoxel,
             flight == null ?
-                flagReachablePolys :
+                floorReachablePolys :
                 null
         );
         MeshQuery.QueryPolygons
         (
-            new(marker.XFloat, 0, marker.YFloat),
-            new(0, float.MaxValue, 0),
-            AllTraversableFilter,
+            new(p.X, 0, p.Z),
+            new(halfExtentXZ, float.MaxValue, halfExtentXZ),
+            allowUnreachable ?
+                AllTraversableFilter :
+                GroundAreaFilter,
             query
         );
         return query.Point;
