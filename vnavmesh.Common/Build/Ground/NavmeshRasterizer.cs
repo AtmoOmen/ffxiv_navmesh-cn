@@ -449,6 +449,8 @@ public class NavmeshRasterizer
 
         public IReadOnlyList<int> TouchedCells => _touchedCells;
 
+        public bool ContainsCell(int cellIndex) => _firstIndices[cellIndex] != 0;
+
         public IntersectionSet
         (
             int numCellsX,
@@ -2123,21 +2125,22 @@ public class NavmeshRasterizer
         if (_iset == null)
             return; // interior filling is disabled
 
-        FillInteriorCells(_iset, z0, z1, x0, x1, yBelowNonManifold, !aggregateVolume, fillGroundInteriors);
         if (aggregateVolume && volumeIntersections != null)
-            FillInteriorCells(volumeIntersections, z0, z1, x0, x1, yBelowNonManifold, true, false);
+            FillInteriorCells(volumeIntersections, z0, z1, x0, x1, yBelowNonManifold, true, false, _iset);
+        FillInteriorCells(_iset, z0, z1, x0, x1, yBelowNonManifold, !aggregateVolume, fillGroundInteriors);
     }
 
     private void FillInteriorCells
     (
-        IntersectionSet intersections,
-        int             z0,
-        int             z1,
-        int             x0,
-        int             x1,
-        int             yBelowNonManifold,
-        bool            includeInVolume,
-        bool            includeInGround
+        IntersectionSet  intersections,
+        int              z0,
+        int              z1,
+        int              x0,
+        int              x1,
+        int              yBelowNonManifold,
+        bool             includeInVolume,
+        bool             includeInGround,
+        IntersectionSet? downwardFillIntersections = null
     )
     {
         var cells = intersections.TouchedCells;
@@ -2159,10 +2162,14 @@ public class NavmeshRasterizer
 
             if (solidVoxel[idx] > yBelowNonManifold)
             {
+                if (includeInVolume && downwardFillIntersections?.ContainsCell(cell) == true)
+                    AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, true, false, false);
+
                 // non-manifold mesh, assume everything below is interior
                 while (idx + 1 < cnt && solidVoxel[idx + 1] > yBelowNonManifold)
                     ++idx; // well i dunno, some terrain (eg south thanalan) is really _that_ fucked
-                AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, includeInVolume, false, includeInGround);
+                if (includeInGround)
+                    AddSpan(x, z, yBelowNonManifold, solidVoxel[idx], 0, false, false);
                 ++idx;
             }
 
