@@ -3,7 +3,6 @@ using FFXIVClientStructs.FFXIV.Common.Component.BGCollision.Math;
 using vnavmesh.Build;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Query.Utils;
 
 namespace vnavmesh.Internal;
 
@@ -107,9 +106,7 @@ internal class PluginIPC : IDisposable
         RegisterFunc
         (
             "Query.Mesh.FlagToPoint",
-            () => navmeshManager.Query is { } q ?
-                      MapUtil.FlagToPoint(q) :
-                      null
+            () => navmeshManager.Query?.FindFlagPoint()
         );
 
         // 体素

@@ -1,6 +1,7 @@
 using System.Numerics;
 using DotRecast.Core;
 using DotRecast.Detour;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using vnavmesh.Common.Build;
 using vnavmesh.Common.Build.Flight;
 using vnavmesh.Common.Extensions;
@@ -88,6 +89,8 @@ public class NavmeshQuery
     private DtNavMeshQuery? meshQuery;
     private VoxelPathfind?  volumeQuery;
     private bool            released;
+    private long            flagSourcePoly;
+    private HashSet<long>?  flagReachablePolys;
 
     public NavmeshQuery
     (
@@ -108,7 +111,8 @@ public class NavmeshQuery
     {
         LastPath.Clear();
         LastPath.TrimExcess();
-        meshQuery = null;
+        meshQuery          = null;
+        flagReachablePolys = null;
         volumeQuery?.ReleaseRetainedState();
         volumeQuery = null;
         released    = true;
@@ -373,6 +377,58 @@ public class NavmeshQuery
         return status.Succeeded() ?
                    point.ToSystem() :
                    null;
+    }
+
+    internal unsafe Vector3? FindFlagPoint()
+    {
+        var map = AgentMap.Instance();
+        if (map                  == null ||
+            map->FlagMarkerCount == 0    ||
+            Service.ObjectTable.LocalPlayer is not { } player)
+            return null;
+
+        var flight      = VolumeQuery;
+        var sourceVoxel = VoxelMap.INVALID_VOXEL;
+
+        if (flight != null)
+        {
+            sourceVoxel = FindNearestVolumeVoxelSurfaceAware(player.Position).Voxel;
+            if (sourceVoxel == VoxelMap.INVALID_VOXEL)
+                return null;
+        }
+        else
+        {
+            var sourcePoly = FindNearestMeshPoly(player.Position, allowUnreachable: false);
+            if (sourcePoly == 0)
+                return null;
+
+            if (flagReachablePolys == null ||
+                flagSourcePoly     != sourcePoly)
+            {
+                flagReachablePolys = FindReachableMeshPolys(sourcePoly);
+                flagSourcePoly     = sourcePoly;
+            }
+        }
+
+        var marker = map->FlagMapMarkers[0];
+        var query = new MeshFloorPointQuery
+        (
+            NavmeshData.Mesh,
+            new(marker.XFloat, float.MaxValue, marker.YFloat),
+            flight,
+            sourceVoxel,
+            flight == null ?
+                flagReachablePolys :
+                null
+        );
+        MeshQuery.QueryPolygons
+        (
+            new(marker.XFloat, 0, marker.YFloat),
+            new(0, float.MaxValue, 0),
+            AllTraversableFilter,
+            query
+        );
+        return query.Point;
     }
 
     internal Vector3? FindPointOnFloor

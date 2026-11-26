@@ -15,7 +15,6 @@ using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
 using vnavmesh.Query;
 using vnavmesh.Query.Models;
-using vnavmesh.Query.Utils;
 using vnavmesh.UI.Debug.Common;
 using vnavmesh.UI.Debug.Common.Components;
 using vnavmesh.UI.Debug.Volume;
@@ -154,7 +153,7 @@ internal class DebugNavmeshManager : IDisposable
                 using (ImRaii.Disabled(AgentMap.Instance()->FlagMarkerCount == 0))
                 {
                     if (ImGui.Button("地图标记位置"))
-                        target = MapUtil.FlagToPoint(manager.Query) ?? default;
+                        target = manager.Query.FindFlagPoint() ?? default;
                 }
             }
 
@@ -227,7 +226,7 @@ internal class DebugNavmeshManager : IDisposable
 
             if (target != Vector3.Zero)
                 DrawPosition("目标", target);
-            var flag = MapUtil.FlagToPoint(manager.Query);
+            var flag = manager.Query.FindFlagPoint();
             if (flag != null)
                 DrawPosition("标点", flag.Value);
         }
@@ -313,7 +312,7 @@ internal class DebugNavmeshManager : IDisposable
     (
         Vector3? value
     ) => value is { } point ?
-             point.ToString("f3") :
+             point.ToString("f3", CultureInfo.InvariantCulture) :
              "<none>";
 
     private void ExportBitmap

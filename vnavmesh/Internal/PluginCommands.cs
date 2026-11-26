@@ -6,7 +6,6 @@ using Lumina.Data;
 using vnavmesh.Build;
 using vnavmesh.Movement;
 using vnavmesh.Movement.Execution;
-using vnavmesh.Query.Utils;
 
 namespace vnavmesh.Internal;
 
@@ -172,10 +171,7 @@ internal sealed class PluginCommands : IDisposable
         bool fly
     )
     {
-        if (navmeshManager.Query == null)
-            return;
-
-        var point = MapUtil.FlagToPoint(navmeshManager.Query);
+        var point = navmeshManager.Query?.FindFlagPoint();
         if (point == null)
             return;
 
